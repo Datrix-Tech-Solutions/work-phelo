@@ -8,6 +8,8 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import {
   MarketingTransportRequestStatus as Status,
+  MarketingTransportStopKind as StopKind,
+  MarketingTransportStopSource as StopSource,
   Prisma,
 } from '../../prisma/generated/client';
 import { HrFleetClient, HrVehicleAsset } from '../fleet/hr-fleet.client';
@@ -16,6 +18,7 @@ import { callHr } from '../hr/call-hr';
 import { HrDirectoryClient } from '../hr/hr-directory.client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  canComplete,
   isOverdue,
   minutesBetween,
   tripState,
@@ -29,10 +32,12 @@ import {
   ApproveTransportRequestDto,
   CompleteTransportRequestDto,
   CreateTransportRequestDto,
+  DestinationOptionsQueryDto,
   QueryTransportRequestsDto,
   RequestStatusFilter,
   RescheduleTransportRequestDto,
   ReviewTransportRequestDto,
+  TransportStopDto,
   UpdateTransportRequestDto,
 } from './dto/transport-request.dto';
 
@@ -41,9 +46,43 @@ const NOT_FOUND_MESSAGE = 'Transport request not found';
 
 type RequestRow = Prisma.MarketingTransportRequestGetPayload<object>;
 
+/** Everything a request response is built from. */
+const REQUEST_INCLUDE = {
+  passengers: { orderBy: { name: 'asc' as const } },
+  stops: {
+    orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
+  },
+} satisfies Prisma.MarketingTransportRequestInclude;
+
 type RequestWithPassengers = Prisma.MarketingTransportRequestGetPayload<{
-  include: { passengers: true };
+  include: typeof REQUEST_INCLUDE;
 }>;
+
+/** What is read from a client or prospect to describe a place. */
+interface PlaceRow {
+  id: string;
+  companyName: string;
+  locationLabel: string;
+  latitude: Prisma.Decimal;
+  longitude: Prisma.Decimal;
+}
+
+/** A client or prospect as stored on a request: name and location are snapshots. */
+export interface StopSnapshot {
+  kind: StopKind;
+  refId: string;
+  name: string;
+  locationLabel: string;
+  latitude: number;
+  longitude: number;
+  sortOrder: number;
+}
+
+/** "10:00–12:00", or "from 10:00, no return time" when no return time was given. */
+const windowText = (departureTime: string, returnTime: string | null) =>
+  returnTime
+    ? `${departureTime}–${returnTime}`
+    : `from ${departureTime}, no return time`;
 
 @Injectable()
 export class RequestsService {
@@ -101,7 +140,7 @@ export class RequestsService {
       this.prisma.marketingTransportRequest.count({ where }),
       this.prisma.marketingTransportRequest.findMany({
         where,
-        include: { passengers: { orderBy: { name: 'asc' } } },
+        include: REQUEST_INCLUDE,
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -122,7 +161,7 @@ export class RequestsService {
   async findOne(user: RequestUser, id: string) {
     const row = await this.prisma.marketingTransportRequest.findFirst({
       where: { id, tenantId: user.tenantId, ...this.visibilityWhere(user) },
-      include: { passengers: { orderBy: { name: 'asc' } } },
+      include: REQUEST_INCLUDE,
     });
     if (!row) throw new NotFoundException(NOT_FOUND_MESSAGE);
     return this.toResponse(row, this.trips.now());
@@ -156,12 +195,15 @@ export class RequestsService {
       true,
     );
 
-    const resolved = await this.callHr(() =>
-      this.directory.resolve(user.tenantId, {
-        userId: user.id,
-        employeeIds: dto.passengerIds,
-      }),
-    );
+    const [resolved, stops] = await Promise.all([
+      this.callHr(() =>
+        this.directory.resolve(user.tenantId, {
+          userId: user.id,
+          employeeIds: dto.passengerIds,
+        }),
+      ),
+      this.resolveStops(user, dto.stops ?? []),
+    ]);
     const requester = this.requesterFrom(user, resolved.person);
     const passengers = resolved.people.filter(
       (person) => person.employeeId !== requester.employeeId,
@@ -174,11 +216,11 @@ export class RequestsService {
         requesterEmployeeId: requester.employeeId,
         requesterName: requester.name,
         requesterDepartment: requester.department,
-        businessPurpose: dto.businessPurpose,
+        purpose: dto.purpose,
         travelDate: this.toDate(dto.travelDate),
         departureTime: dto.departureTime,
-        returnTime: dto.returnTime,
-        destination: dto.destination,
+        returnTime: dto.returnTime ?? null,
+        destination: this.summarize(stops),
         notes: dto.notes || null,
         passengers: {
           create: passengers.map((person) => ({
@@ -188,8 +230,15 @@ export class RequestsService {
             department: person.department,
           })),
         },
+        stops: {
+          create: stops.map((stop) => ({
+            tenantId: user.tenantId,
+            ...stop,
+            source: StopSource.PLANNED,
+          })),
+        },
       },
-      include: { passengers: { orderBy: { name: 'asc' } } },
+      include: REQUEST_INCLUDE,
     });
 
     const response = this.toResponse(created, this.trips.now());
@@ -207,7 +256,9 @@ export class RequestsService {
     const schedule = {
       travelDate: dto.travelDate ?? this.fromDate(existing.travelDate),
       departureTime: dto.departureTime ?? existing.departureTime,
-      returnTime: dto.returnTime ?? existing.returnTime,
+      // null clears the return time; undefined leaves it alone.
+      returnTime:
+        dto.returnTime !== undefined ? dto.returnTime : existing.returnTime,
     };
     this.assertSchedule(
       schedule.travelDate,
@@ -230,6 +281,10 @@ export class RequestsService {
         (person) => person.employeeId !== existing.requesterEmployeeId,
       );
     }
+    const stops =
+      dto.stops !== undefined
+        ? await this.resolveStops(user, dto.stops)
+        : undefined;
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (passengers) {
@@ -237,12 +292,16 @@ export class RequestsService {
           where: { requestId: id },
         });
       }
+      // A pending request has only planned destinations, so replacing them all is safe.
+      if (stops) {
+        await tx.marketingTransportRequestStop.deleteMany({
+          where: { requestId: id },
+        });
+      }
       return tx.marketingTransportRequest.update({
         where: { id },
         data: {
-          ...(dto.businessPurpose !== undefined
-            ? { businessPurpose: dto.businessPurpose }
-            : {}),
+          ...(dto.purpose !== undefined ? { purpose: dto.purpose } : {}),
           ...(dto.travelDate !== undefined
             ? { travelDate: this.toDate(dto.travelDate) }
             : {}),
@@ -251,9 +310,6 @@ export class RequestsService {
             : {}),
           ...(dto.returnTime !== undefined
             ? { returnTime: dto.returnTime }
-            : {}),
-          ...(dto.destination !== undefined
-            ? { destination: dto.destination }
             : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
           ...(passengers
@@ -268,8 +324,20 @@ export class RequestsService {
                 },
               }
             : {}),
+          ...(stops
+            ? {
+                destination: this.summarize(stops),
+                stops: {
+                  create: stops.map((stop) => ({
+                    tenantId: user.tenantId,
+                    ...stop,
+                    source: StopSource.PLANNED,
+                  })),
+                },
+              }
+            : {}),
         },
-        include: { passengers: { orderBy: { name: 'asc' } } },
+        include: REQUEST_INCLUDE,
       });
     });
 
@@ -371,14 +439,14 @@ export class RequestsService {
       window: {
         travelDate: this.toDate(dto.travelDate),
         departureTime: dto.departureTime,
-        returnTime: dto.returnTime,
+        returnTime: dto.returnTime ?? null,
       },
       expectedStatus: Status.APPROVED,
       staleMessage: 'This trip is no longer approved',
       data: ({ reviewerName }) => ({
         travelDate: this.toDate(dto.travelDate),
         departureTime: dto.departureTime,
-        returnTime: dto.returnTime,
+        returnTime: dto.returnTime ?? null,
         previousTravelDate: existing.travelDate,
         previousDepartureTime: existing.departureTime,
         previousReturnTime: existing.returnTime,
@@ -395,8 +463,9 @@ export class RequestsService {
   }
 
   /**
-   * Closes a trip once it is overdue, recording when it really got back so
-   * on-time returns can be seen. Final: a completed trip can't be changed.
+   * Closes a trip once it can be closed (its return time has passed, or it never had one),
+   * recording when it really got back so on-time returns can be seen, and any further places
+   * that were visited. Final: a completed trip can't be changed.
    */
   async complete(
     user: RequestUser,
@@ -417,9 +486,11 @@ export class RequestsService {
       departureTime: existing.departureTime,
       returnTime: existing.returnTime,
     };
-    if (!isOverdue(now, window)) {
+    if (!canComplete(now, window)) {
       throw new ConflictException(
-        'A trip can only be completed after its return time',
+        existing.returnTime
+          ? 'A trip can only be completed after its return time'
+          : 'A trip can only be completed once it has departed',
       );
     }
     if (dto.actualReturnTime <= existing.departureTime) {
@@ -433,22 +504,52 @@ export class RequestsService {
       );
     }
 
+    // Places visited that weren't planned. Ones already on the trip are skipped.
+    const [visited, planned] = await Promise.all([
+      this.resolveStops(user, dto.stops ?? []),
+      this.prisma.marketingTransportRequestStop.findMany({
+        where: { requestId: id },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        select: { kind: true, refId: true, name: true },
+      }),
+    ]);
+    const known = new Set(planned.map((stop) => `${stop.kind}:${stop.refId}`));
+    const added = visited
+      .filter((stop) => !known.has(`${stop.kind}:${stop.refId}`))
+      .map((stop, index) => ({ ...stop, sortOrder: planned.length + index }));
+
     const resolved = await this.callHr(() =>
       this.directory.resolve(user.tenantId, { userId: user.id }),
     );
-    const result = await this.prisma.marketingTransportRequest.updateMany({
-      where: { id, tenantId: user.tenantId, status: Status.APPROVED },
-      data: {
-        status: Status.COMPLETED,
-        completedAt: new Date(),
-        completedByUserId: user.id,
-        completedByName: this.requesterFrom(user, resolved.person).name,
-        actualReturnTime: dto.actualReturnTime,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const result = await tx.marketingTransportRequest.updateMany({
+        where: { id, tenantId: user.tenantId, status: Status.APPROVED },
+        data: {
+          status: Status.COMPLETED,
+          completedAt: new Date(),
+          completedByUserId: user.id,
+          completedByName: this.requesterFrom(user, resolved.person).name,
+          actualReturnTime: dto.actualReturnTime,
+        },
+      });
+      if (result.count === 0) {
+        throw new ConflictException('This trip can no longer be completed');
+      }
+      if (added.length) {
+        await tx.marketingTransportRequestStop.createMany({
+          data: added.map((stop) => ({
+            tenantId: user.tenantId,
+            requestId: id,
+            ...stop,
+            source: StopSource.VISITED,
+          })),
+        });
+        await tx.marketingTransportRequest.update({
+          where: { id },
+          data: { destination: this.summarize([...planned, ...added]) },
+        });
+      }
     });
-    if (result.count === 0) {
-      throw new ConflictException('This trip can no longer be completed');
-    }
     return this.findOne(user, id);
   }
 
@@ -494,9 +595,10 @@ export class RequestsService {
 
     const custom = query.travelDate || query.departureTime || query.returnTime;
     if (custom) {
-      if (!query.travelDate || !query.departureTime || !query.returnTime) {
+      // The return time is optional, but the day and departure are needed to check anything.
+      if (!query.travelDate || !query.departureTime) {
         throw new BadRequestException(
-          'Give the date, departure time and return time together',
+          'Give the date and departure time together',
         );
       }
       this.assertSchedule(
@@ -512,7 +614,7 @@ export class RequestsService {
           tenantId: request.tenantId,
           travelDate: this.toDate(query.travelDate),
           departureTime: query.departureTime,
-          returnTime: query.returnTime,
+          returnTime: query.returnTime ?? null,
         }
       : request;
     const now = this.trips.now();
@@ -535,7 +637,7 @@ export class RequestsService {
           },
         }),
         this.prisma.marketingTransportRequest.findMany({
-          where: this.overdueWhere(user.tenantId, request.id, now),
+          where: this.staleWhere(user.tenantId, request.id, now),
           select: {
             vehicleAssetId: true,
             driverEmployeeId: true,
@@ -550,9 +652,9 @@ export class RequestsService {
       fleetDetails.map((row) => [row.assetId, row]),
     );
     const bookedText = (row: (typeof overlapping)[number]) =>
-      `Already allocated to ${row.requesterName}'s trip (${row.departureTime}–${row.returnTime})`;
+      `Already allocated to ${row.requesterName}'s trip (${windowText(row.departureTime, row.returnTime)})`;
     const overdueText = (row: (typeof stale)[number]) =>
-      `Still out on ${row.requesterName}'s trip (${this.fromDate(row.travelDate)} ${row.departureTime}–${row.returnTime}). Complete it first`;
+      `Still out on ${row.requesterName}'s trip (${this.fromDate(row.travelDate)} ${windowText(row.departureTime, row.returnTime)}). Complete it first`;
 
     type Kind = 'MAINTENANCE' | 'OVERDUE' | 'BOOKED';
     const verdict = (
@@ -613,7 +715,11 @@ export class RequestsService {
     user: RequestUser;
     existing: RequestRow;
     dto: ApproveTransportRequestDto;
-    window: { travelDate: Date; departureTime: string; returnTime: string };
+    window: {
+      travelDate: Date;
+      departureTime: string;
+      returnTime: string | null;
+    };
     expectedStatus: Status;
     staleMessage: string;
     data: (ctx: {
@@ -685,11 +791,15 @@ export class RequestsService {
               ? `${vehicleName} is`
               : `${driver.name} is`;
 
-          // A trip that is overdue and unresolved still has its vehicle and driver out.
+          // A trip that is overdue (or, with no return time, already out) and unresolved still has
+          // its vehicle and driver. The time test and the owners test are separate AND terms: they
+          // are both `OR`s, so spreading one over the other would silently drop the time test.
           const stale = await tx.marketingTransportRequest.findFirst({
             where: {
-              ...this.overdueWhere(user.tenantId, existing.id, now),
-              OR: owners,
+              AND: [
+                this.staleWhere(user.tenantId, existing.id, now),
+                { OR: owners },
+              ],
             },
             select: {
               vehicleAssetId: true,
@@ -702,18 +812,20 @@ export class RequestsService {
           if (stale) {
             throw new ConflictException(
               `${who(stale.vehicleAssetId)} still out on ${stale.requesterName}'s trip ` +
-                `(${this.fromDate(stale.travelDate)} ${stale.departureTime}–${stale.returnTime}). Complete it first`,
+                `(${this.fromDate(stale.travelDate)} ${windowText(stale.departureTime, stale.returnTime)}). Complete it first`,
             );
           }
 
           const clash = await tx.marketingTransportRequest.findFirst({
             where: {
-              ...this.overlapWhere({
-                id: existing.id,
-                tenantId: user.tenantId,
-                ...window,
-              }),
-              OR: owners,
+              AND: [
+                this.overlapWhere({
+                  id: existing.id,
+                  tenantId: user.tenantId,
+                  ...window,
+                }),
+                { OR: owners },
+              ],
             },
             select: {
               vehicleAssetId: true,
@@ -725,7 +837,7 @@ export class RequestsService {
           if (clash) {
             throw new ConflictException(
               `${who(clash.vehicleAssetId)} already allocated to ${clash.requesterName}'s trip ` +
-                `(${clash.departureTime}–${clash.returnTime}) on that day`,
+                `(${windowText(clash.departureTime, clash.returnTime)}) on that day`,
             );
           }
 
@@ -778,21 +890,46 @@ export class RequestsService {
     return existing;
   }
 
-  /** Approved trips on the same day whose time window overlaps this one. */
-  private overlapWhere(request: {
+  /**
+   * Approved trips whose window overlaps `w`. A trip with no return time runs on until
+   * someone completes it, so it overlaps everything from its departure onwards.
+   * Both halves are separate terms of an AND so neither can overwrite the other.
+   */
+  private overlapWhere(w: {
     id: string;
     tenantId: string;
     travelDate: Date;
     departureTime: string;
-    returnTime: string;
+    returnTime: string | null;
   }): Prisma.MarketingTransportRequestWhereInput {
+    // The other trip ends after this one starts (or has no end).
+    const endsAfterStart: Prisma.MarketingTransportRequestWhereInput = {
+      OR: [
+        { returnTime: null },
+        { travelDate: { gt: w.travelDate } },
+        { travelDate: w.travelDate, returnTime: { gt: w.departureTime } },
+      ],
+    };
+    // The other trip starts before this one ends (always true if this one has no end).
+    const startsBeforeEnd: Prisma.MarketingTransportRequestWhereInput[] =
+      w.returnTime
+        ? [
+            {
+              OR: [
+                { travelDate: { lt: w.travelDate } },
+                {
+                  travelDate: w.travelDate,
+                  departureTime: { lt: w.returnTime },
+                },
+              ],
+            },
+          ]
+        : [];
     return {
-      tenantId: request.tenantId,
+      tenantId: w.tenantId,
       status: Status.APPROVED,
-      id: { not: request.id },
-      travelDate: request.travelDate,
-      departureTime: { lt: request.returnTime },
-      returnTime: { gt: request.departureTime },
+      id: { not: w.id },
+      AND: [endsAfterStart, ...startsBeforeEnd],
     };
   }
 
@@ -805,8 +942,11 @@ export class RequestsService {
     }
   }
 
-  /** Approved trips whose return time has passed and that nobody has resolved. */
-  private overdueWhere(
+  /**
+   * Approved trips that are still out and nobody has resolved: past their return time, or, with
+   * no return time, already departed. They keep their vehicle and driver occupied.
+   */
+  private staleWhere(
     tenantId: string,
     excludeId: string,
     now: WallClock,
@@ -817,8 +957,20 @@ export class RequestsService {
       status: Status.APPROVED,
       id: { not: excludeId },
       OR: [
-        { travelDate: { lt: today } },
-        { travelDate: today, returnTime: { lte: now.time } },
+        {
+          returnTime: { not: null },
+          OR: [
+            { travelDate: { lt: today } },
+            { travelDate: today, returnTime: { lte: now.time } },
+          ],
+        },
+        {
+          returnTime: null,
+          OR: [
+            { travelDate: { lt: today } },
+            { travelDate: today, departureTime: { lte: now.time } },
+          ],
+        },
       ],
     };
   }
@@ -888,7 +1040,7 @@ export class RequestsService {
   private assertSchedule(
     travelDate: string,
     departureTime: string,
-    returnTime: string,
+    returnTime: string | null | undefined,
     checkPast: boolean,
   ) {
     const date = this.toDate(travelDate);
@@ -902,7 +1054,8 @@ export class RequestsService {
         throw new BadRequestException('Travel date cannot be in the past');
       }
     }
-    if (returnTime <= departureTime) {
+    // The return time is optional; when given it must come after the departure.
+    if (returnTime && returnTime <= departureTime) {
       throw new BadRequestException(
         'Return time must be after the departure time',
       );
@@ -990,16 +1143,196 @@ export class RequestsService {
     };
   }
 
+  /** "Acme Ltd, Beta Co": what is stored as the request's destination. */
+  private summarize(stops: { name: string }[]) {
+    return stops.map((stop) => stop.name).join(', ');
+  }
+
+  /**
+   * Which clients and prospects a person can choose: everyone's if they can view all of them
+   * (admins included), otherwise only the ones assigned to them, like the Clients and
+   * Prospects pages themselves. Someone with none assigned simply gets an empty list.
+   */
+  private destinationScope(user: RequestUser) {
+    return {
+      allClients: this.hasPermission(
+        user,
+        MarketingCrmSettingsPermission.CLIENTS_VIEW_ALL,
+      ),
+      allProspects: this.hasPermission(
+        user,
+        MarketingCrmSettingsPermission.PROSPECTS_VIEW_ALL,
+      ),
+    };
+  }
+
+  private normalizeText(value: string) {
+    return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  }
+
+  /** Clients and prospects the person could choose as destinations, optionally matching a name. */
+  async destinationOptions(
+    user: RequestUser,
+    query: DestinationOptionsQueryDto = {},
+  ) {
+    const limit = query.limit ?? 20;
+    const scope = this.destinationScope(user);
+    const nameFilter = query.search
+      ? {
+          normalizedCompanyName: { contains: this.normalizeText(query.search) },
+        }
+      : {};
+    const select = {
+      id: true,
+      companyName: true,
+      locationLabel: true,
+      latitude: true,
+      longitude: true,
+    } as const;
+
+    const [clients, prospects] = await Promise.all([
+      this.prisma.marketingClient.findMany({
+        where: {
+          tenantId: user.tenantId,
+          ...(scope.allClients ? {} : { assignedUserId: user.id }),
+          ...nameFilter,
+        },
+        select,
+        orderBy: { companyName: 'asc' },
+        take: limit,
+      }),
+      this.prisma.marketingProspect.findMany({
+        where: {
+          tenantId: user.tenantId,
+          // A converted prospect is listed as the client it became.
+          client: { is: null },
+          ...(scope.allProspects ? {} : { assignedUserId: user.id }),
+          ...nameFilter,
+        },
+        select,
+        orderBy: { companyName: 'asc' },
+        take: limit,
+      }),
+    ]);
+
+    const toOption = (
+      kind: StopKind,
+      row: PlaceRow,
+    ): Omit<StopSnapshot, 'refId' | 'sortOrder'> & { id: string } => ({
+      kind,
+      id: row.id,
+      name: row.companyName,
+      locationLabel: row.locationLabel,
+      latitude: Number(row.latitude),
+      longitude: Number(row.longitude),
+    });
+    const data = [
+      ...clients.map((row) => toOption(StopKind.CLIENT, row)),
+      ...prospects.map((row) => toOption(StopKind.PROSPECT, row)),
+    ]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, limit);
+    return { data };
+  }
+
+  /**
+   * Turns chosen clients and prospects into the snapshots stored on a request. Only ones the
+   * person is allowed to see can be chosen, so an id from elsewhere is refused.
+   */
+  private async resolveStops(
+    user: RequestUser,
+    refs: TransportStopDto[],
+  ): Promise<StopSnapshot[]> {
+    const seen = new Set<string>();
+    const unique = refs.filter((ref) => {
+      const key = `${ref.kind}:${ref.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (unique.length === 0) return [];
+
+    const scope = this.destinationScope(user);
+    const idsOf = (kind: StopKind) =>
+      unique.filter((ref) => ref.kind === kind).map((ref) => ref.id);
+    const select = {
+      id: true,
+      companyName: true,
+      locationLabel: true,
+      latitude: true,
+      longitude: true,
+    } as const;
+    const clientIds = idsOf(StopKind.CLIENT);
+    const prospectIds = idsOf(StopKind.PROSPECT);
+
+    const [clients, prospects]: [PlaceRow[], PlaceRow[]] = await Promise.all([
+      clientIds.length
+        ? this.prisma.marketingClient.findMany({
+            where: {
+              tenantId: user.tenantId,
+              id: { in: clientIds },
+              ...(scope.allClients ? {} : { assignedUserId: user.id }),
+            },
+            select,
+          })
+        : Promise.resolve([] as PlaceRow[]),
+      prospectIds.length
+        ? this.prisma.marketingProspect.findMany({
+            where: {
+              tenantId: user.tenantId,
+              id: { in: prospectIds },
+              ...(scope.allProspects ? {} : { assignedUserId: user.id }),
+            },
+            select,
+          })
+        : Promise.resolve([] as PlaceRow[]),
+    ]);
+
+    const byKey = new Map<string, PlaceRow>([
+      ...clients.map((row) => [`${StopKind.CLIENT}:${row.id}`, row] as const),
+      ...prospects.map(
+        (row) => [`${StopKind.PROSPECT}:${row.id}`, row] as const,
+      ),
+    ]);
+    return unique.map((ref, index) => {
+      const row = byKey.get(`${ref.kind}:${ref.id}`);
+      if (!row) {
+        throw new BadRequestException('One or more locations were not found');
+      }
+      return {
+        kind: ref.kind,
+        refId: ref.id,
+        name: row.companyName,
+        locationLabel: row.locationLabel,
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        sortOrder: index,
+      };
+    });
+  }
+
   private toResponse(row: RequestWithPassengers, now: WallClock) {
     const occupants = this.occupants(row);
     return {
       id: row.id,
       status: this.displayStatus(row, now),
+      purpose: row.purpose,
+      // Older requests kept a free-text purpose here; new ones leave it empty.
       businessPurpose: row.businessPurpose,
       travelDate: this.fromDate(row.travelDate),
       departureTime: row.departureTime,
       returnTime: row.returnTime,
+      // A summary of the stops (or the old typed destination on older requests).
       destination: row.destination,
+      stops: row.stops.map((stop) => ({
+        kind: stop.kind,
+        refId: stop.refId,
+        name: stop.name,
+        locationLabel: stop.locationLabel,
+        latitude: Number(stop.latitude),
+        longitude: Number(stop.longitude),
+        source: stop.source,
+      })),
       notes: row.notes,
       requester: {
         userId: row.requesterUserId,
@@ -1021,6 +1354,14 @@ export class RequestsService {
             note: row.reviewNote,
           }
         : null,
+      // The trip can be completed now: it has departed and its return time passed (or it had none).
+      completable:
+        row.status === Status.APPROVED &&
+        canComplete(now, {
+          travelDate: this.fromDate(row.travelDate),
+          departureTime: row.departureTime,
+          returnTime: row.returnTime,
+        }),
       // Return time has passed on a trip nobody has completed yet.
       overdue:
         row.status === Status.APPROVED &&
@@ -1035,9 +1376,10 @@ export class RequestsService {
             byName: row.completedByName,
             actualReturnTime: row.actualReturnTime,
             // Positive = came back late, negative = early, null = never recorded.
-            minutesLate: row.actualReturnTime
-              ? minutesBetween(row.returnTime, row.actualReturnTime)
-              : null,
+            minutesLate:
+              row.actualReturnTime && row.returnTime
+                ? minutesBetween(row.returnTime, row.actualReturnTime)
+                : null,
           }
         : null,
       reschedule:

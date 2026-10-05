@@ -17,7 +17,8 @@ export interface ScheduledTrip {
   requestId: string;
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  /** Null when the trip had no planned return time. */
+  returnTime: string | null;
   destination: string;
   requesterName: string;
   vehicle: {
@@ -37,7 +38,7 @@ export interface CompletedTrip {
   requestId: string;
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  returnTime: string | null;
   /** When the vehicle really got back (HH:mm); null for trips completed before this was recorded. */
   actualReturnTime: string | null;
   /** Positive = late, negative = early, null = not recorded. */
@@ -167,9 +168,10 @@ export class TripScheduleService {
       departureTime: row.departureTime,
       returnTime: row.returnTime,
       actualReturnTime: row.actualReturnTime,
-      minutesLate: row.actualReturnTime
-        ? minutesBetween(row.returnTime, row.actualReturnTime)
-        : null,
+      minutesLate:
+        row.actualReturnTime && row.returnTime
+          ? minutesBetween(row.returnTime, row.actualReturnTime)
+          : null,
       destination: row.destination,
       requesterName: row.requesterName,
       vehicleName: row.vehicleName,

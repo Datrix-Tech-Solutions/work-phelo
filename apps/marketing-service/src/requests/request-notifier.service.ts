@@ -8,7 +8,9 @@ export interface NotifiableTransportRequest {
   id: string;
   travelDate: string; // YYYY-MM-DD
   departureTime: string;
-  returnTime: string;
+  /** Null when the trip has no planned return time. */
+  returnTime: string | null;
+  /** Empty when no destination was chosen. */
   destination: string;
   requester: { userId: string; name: string };
   review: { note: string | null } | null;
@@ -23,6 +25,14 @@ const [APPROVE_RESOURCE, APPROVE_ACTION] =
   MarketingCrmSettingsPermission.REQUESTS_APPROVE_ALL.split(':');
 
 const dayMonthYear = (iso: string) => iso.split('-').reverse().join('/');
+
+/** " to Kumasi", or nothing when the request has no destination. */
+const toPlace = (req: NotifiableTransportRequest) =>
+  req.destination ? ` to ${req.destination}` : '';
+
+/** "08:00–17:00", or just "08:00" when there is no return time. */
+const timeRange = (req: NotifiableTransportRequest) =>
+  req.returnTime ? `${req.departureTime}–${req.returnTime}` : req.departureTime;
 
 /** Where a request lives in the UI: live ones in the active tab, finished ones in history. */
 const ACTIVE_PATH = '/marketing/requests/all-requests';
@@ -43,7 +53,7 @@ export class RequestNotifier {
     await this.toApprovers(tenantId, req, req.requester.userId, 'requested', {
       type: 'TRANSPORT_REQUESTED',
       title: 'Transport Request Awaiting Approval',
-      message: `${req.requester.name} requested transport to ${req.destination} on ${dayMonthYear(req.travelDate)}, ${req.departureTime}–${req.returnTime}.`,
+      message: `${req.requester.name} requested transport${toPlace(req)} on ${dayMonthYear(req.travelDate)}, ${timeRange(req)}.`,
       path: ACTIVE_PATH,
     });
   }
@@ -62,7 +72,7 @@ export class RequestNotifier {
     await this.toRequester(tenantId, req, actorUserId, 'approved', {
       type: 'TRANSPORT_APPROVED',
       title: 'Transport Request Approved',
-      message: `Your trip to ${req.destination} on ${dayMonthYear(req.travelDate)} was approved${allocated ? `: ${allocated}` : ''}.`,
+      message: `Your trip${toPlace(req)} on ${dayMonthYear(req.travelDate)} was approved${allocated ? `: ${allocated}` : ''}.`,
       path: ACTIVE_PATH,
     });
   }
@@ -76,7 +86,7 @@ export class RequestNotifier {
     await this.toRequester(tenantId, req, actorUserId, 'rejected', {
       type: 'TRANSPORT_REJECTED',
       title: 'Transport Request Rejected',
-      message: `Your trip to ${req.destination} on ${dayMonthYear(req.travelDate)} was rejected${note ? `: ${note}` : '.'}`,
+      message: `Your trip${toPlace(req)} on ${dayMonthYear(req.travelDate)} was rejected${note ? `: ${note}` : '.'}`,
       priority: 'HIGH',
       path: HISTORY_PATH,
     });
@@ -90,7 +100,7 @@ export class RequestNotifier {
     await this.toRequester(tenantId, req, actorUserId, 'rescheduled', {
       type: 'TRANSPORT_RESCHEDULED',
       title: 'Trip Rescheduled',
-      message: `Your trip to ${req.destination} was moved to ${dayMonthYear(req.travelDate)}, ${req.departureTime}–${req.returnTime}.`,
+      message: `Your trip${toPlace(req)} was moved to ${dayMonthYear(req.travelDate)}, ${timeRange(req)}.`,
       priority: 'HIGH',
       path: ACTIVE_PATH,
     });
@@ -106,7 +116,7 @@ export class RequestNotifier {
       await this.toApprovers(tenantId, req, actorUserId, 'cancelled', {
         type: 'TRANSPORT_CANCELLED',
         title: 'Transport Request Cancelled',
-        message: `${req.requester.name} cancelled their trip to ${req.destination} on ${dayMonthYear(req.travelDate)}.`,
+        message: `${req.requester.name} cancelled their trip${toPlace(req)} on ${dayMonthYear(req.travelDate)}.`,
         path: HISTORY_PATH,
       });
       return;
@@ -114,7 +124,7 @@ export class RequestNotifier {
     await this.toRequester(tenantId, req, actorUserId, 'cancelled', {
       type: 'TRANSPORT_CANCELLED',
       title: 'Transport Request Cancelled',
-      message: `Your trip to ${req.destination} on ${dayMonthYear(req.travelDate)} was cancelled.`,
+      message: `Your trip${toPlace(req)} on ${dayMonthYear(req.travelDate)} was cancelled.`,
       priority: 'HIGH',
       path: HISTORY_PATH,
     });

@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsInt,
   IsOptional,
@@ -14,9 +15,13 @@ import {
   Max,
   MaxLength,
   Min,
-  MinLength,
+  ValidateNested,
 } from 'class-validator';
-import { MarketingTransportRequestStatus } from '../../../prisma/generated/client';
+import {
+  MarketingTransportPurpose,
+  MarketingTransportRequestStatus,
+  MarketingTransportStopKind,
+} from '../../../prisma/generated/client';
 
 /**
  * Statuses a request can be filtered by. ON_ROUTE is not stored: it is an approved
@@ -31,19 +36,31 @@ export type RequestStatusFilter = (typeof REQUEST_STATUS_FILTERS)[number];
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_PASSENGERS = 20;
+const MAX_STOPS = 10;
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/[ \t]+/g, ' ') : value;
 const trimOnly = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
+/** A client or prospect a trip goes to. */
+export class TransportStopDto {
+  @ApiProperty({ enum: MarketingTransportStopKind })
+  @IsEnum(MarketingTransportStopKind)
+  kind!: MarketingTransportStopKind;
+
+  @ApiProperty({ format: 'uuid', description: 'The client or prospect ID.' })
+  @IsUUID()
+  id!: string;
+}
+
 export class CreateTransportRequestDto {
-  @ApiProperty({ example: 'Client site visit and contract signing' })
-  @Transform(trimOnly)
-  @IsString()
-  @MinLength(3)
-  @MaxLength(1000)
-  businessPurpose!: string;
+  @ApiProperty({
+    enum: MarketingTransportPurpose,
+    description: 'Whether the trip is personal or official.',
+  })
+  @IsEnum(MarketingTransportPurpose)
+  purpose!: MarketingTransportPurpose;
 
   @ApiProperty({
     example: '2026-10-20',
@@ -59,19 +76,25 @@ export class CreateTransportRequestDto {
   @Matches(TIME_PATTERN, { message: 'departureTime must be in HH:mm format' })
   departureTime!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '17:00',
-    description: 'Expected return time (24h HH:mm).',
+    description:
+      'Expected return time (24h HH:mm). Optional: a trip without one holds its vehicle and driver until it is completed.',
   })
+  @IsOptional()
   @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
-  returnTime!: string;
+  returnTime?: string;
 
-  @ApiProperty({ example: 'Kumasi' })
-  @Transform(trim)
-  @IsString()
-  @MinLength(2)
-  @MaxLength(200)
-  destination!: string;
+  @ApiPropertyOptional({
+    type: [TransportStopDto],
+    description: 'Clients or prospects the trip goes to.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_STOPS)
+  @ValidateNested({ each: true })
+  @Type(() => TransportStopDto)
+  stops?: TransportStopDto[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -93,13 +116,10 @@ export class CreateTransportRequestDto {
 }
 
 export class UpdateTransportRequestDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: MarketingTransportPurpose })
   @IsOptional()
-  @Transform(trimOnly)
-  @IsString()
-  @MinLength(3)
-  @MaxLength(1000)
-  businessPurpose?: string;
+  @IsEnum(MarketingTransportPurpose)
+  purpose?: MarketingTransportPurpose;
 
   @ApiPropertyOptional({ example: '2026-10-20' })
   @IsOptional()
@@ -111,18 +131,25 @@ export class UpdateTransportRequestDto {
   @Matches(TIME_PATTERN, { message: 'departureTime must be in HH:mm format' })
   departureTime?: string;
 
-  @ApiPropertyOptional({ example: '17:00' })
+  @ApiPropertyOptional({
+    example: '17:00',
+    nullable: true,
+    description: 'Null clears the return time.',
+  })
   @IsOptional()
   @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
-  returnTime?: string;
+  returnTime?: string | null;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    type: [TransportStopDto],
+    description: 'Replaces the destinations; an empty array removes them all.',
+  })
   @IsOptional()
-  @Transform(trim)
-  @IsString()
-  @MinLength(2)
-  @MaxLength(200)
-  destination?: string;
+  @IsArray()
+  @ArrayMaxSize(MAX_STOPS)
+  @ValidateNested({ each: true })
+  @Type(() => TransportStopDto)
+  stops?: TransportStopDto[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -199,12 +226,14 @@ export class RescheduleTransportRequestDto extends ApproveTransportRequestDto {
   @Matches(TIME_PATTERN, { message: 'departureTime must be in HH:mm format' })
   departureTime!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '17:00',
-    description: 'New return time (24h HH:mm).',
+    description:
+      'New return time (24h HH:mm). Optional; leave out for a trip with no planned return.',
   })
+  @IsOptional()
   @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
-  returnTime!: string;
+  returnTime?: string;
 }
 
 export class CompleteTransportRequestDto {
@@ -217,6 +246,34 @@ export class CompleteTransportRequestDto {
     message: 'actualReturnTime must be in HH:mm format',
   })
   actualReturnTime!: string;
+
+  @ApiPropertyOptional({
+    type: [TransportStopDto],
+    description:
+      'Further clients or prospects actually visited, added to the ones planned.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_STOPS)
+  @ValidateNested({ each: true })
+  @Type(() => TransportStopDto)
+  stops?: TransportStopDto[];
+}
+
+export class DestinationOptionsQueryDto {
+  @ApiPropertyOptional({ description: 'Matches the company name.' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ example: 20, minimum: 1, maximum: 50, default: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
 }
 
 export class AllocationOptionsQueryDto {

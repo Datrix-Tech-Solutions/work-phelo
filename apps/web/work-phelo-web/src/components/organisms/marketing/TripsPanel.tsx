@@ -1,7 +1,7 @@
 'use client';
 
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { describeReturn, formatClock, formatTravelDate } from '@/lib/requestOptions';
+import { describeReturn, formatClock, formatTravelDate, formatWindow } from '@/lib/requestOptions';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/atoms/Button';
 import type { CompletedTrip, TripState } from '@/types/marketing';
@@ -13,7 +13,7 @@ export interface TripListItem {
   overdue: boolean;
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  returnTime: string | null;
   destination: string;
   requesterName: string;
   /** The other party on the trip, e.g. "Driver: Ama Mensah" or "Vehicle: Toyota Hilux". */
@@ -60,14 +60,15 @@ function HistoryRow({ trip, withText }: { trip: CompletedTrip; withText: string 
   return (
     <div className="flex flex-col gap-1 rounded-xl border border-gray-200 p-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-gray-900 truncate">{trip.destination}</span>
+        <span className="text-sm font-semibold text-gray-900 truncate">
+          {trip.destination || 'No destination'}
+        </span>
         <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold shrink-0 bg-gray-100 text-gray-600">
           Completed
         </span>
       </div>
       <span className="text-xs text-gray-700">
-        {formatTravelDate(trip.travelDate)} · {formatClock(trip.departureTime)} –{' '}
-        {formatClock(trip.returnTime)}
+        {formatTravelDate(trip.travelDate)} · {formatWindow(trip.departureTime, trip.returnTime)}
       </span>
       <span
         className={cn(
@@ -109,7 +110,7 @@ export function TripsPanel({ trips, totalCount, history, title, subtitle, onClos
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold text-gray-900 truncate">
-                    {trip.destination}
+                    {trip.destination || 'No destination'}
                   </span>
                   <span
                     className={cn(
@@ -122,8 +123,8 @@ export function TripsPanel({ trips, totalCount, history, title, subtitle, onClos
                   </span>
                 </div>
                 <span className="text-xs text-gray-700">
-                  {formatTravelDate(trip.travelDate)} · {formatClock(trip.departureTime)} –{' '}
-                  {formatClock(trip.returnTime)}
+                  {formatTravelDate(trip.travelDate)} ·{' '}
+                  {formatWindow(trip.departureTime, trip.returnTime)}
                 </span>
                 <span className="text-xs text-gray-500">Requested by {trip.requesterName}</span>
                 {trip.with && <span className="text-xs text-gray-500">{trip.with}</span>}

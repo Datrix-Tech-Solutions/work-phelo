@@ -1,4 +1,5 @@
 import {
+  canComplete,
   isOverdue,
   minutesBetween,
   strongestState,
@@ -42,6 +43,36 @@ describe('isOverdue', () => {
     ['a future trip', '2026-10-19', '23:59', false],
   ])('is %s → %s', (_label, date, time, expected) => {
     expect(isOverdue(clock(date, time), trip)).toBe(expected);
+  });
+});
+
+describe('trips with no return time', () => {
+  const open = { ...trip, returnTime: null };
+
+  it('is never overdue, however long ago it left', () => {
+    expect(isOverdue(clock('2026-10-20', '23:59'), open)).toBe(false);
+    expect(isOverdue(clock('2026-12-01', '09:00'), open)).toBe(false);
+  });
+
+  it('still goes on route at departure', () => {
+    expect(tripState(clock('2026-10-20', '09:59'), open)).toBe('BOOKED');
+    expect(tripState(clock('2026-10-20', '10:00'), open)).toBe('ON_ROUTE');
+  });
+});
+
+describe('canComplete', () => {
+  it('needs the return time to have passed when there is one', () => {
+    expect(canComplete(clock('2026-10-20', '09:00'), trip)).toBe(false);
+    expect(canComplete(clock('2026-10-20', '11:59'), trip)).toBe(false);
+    expect(canComplete(clock('2026-10-20', '12:00'), trip)).toBe(true);
+    expect(canComplete(clock('2026-10-21', '08:00'), trip)).toBe(true);
+  });
+
+  it('needs only the departure to have passed when there is no return time', () => {
+    const open = { ...trip, returnTime: null };
+    expect(canComplete(clock('2026-10-20', '09:59'), open)).toBe(false);
+    expect(canComplete(clock('2026-10-20', '10:00'), open)).toBe(true);
+    expect(canComplete(clock('2026-10-25', '08:00'), open)).toBe(true);
   });
 });
 

@@ -8,7 +8,7 @@ import {
   VEHICLE_TYPE_OPTIONS,
   labelFor,
 } from '@/lib/fleetOptions';
-import { formatClock, formatTravelDate } from '@/lib/requestOptions';
+import { formatTravelDate, formatWindow } from '@/lib/requestOptions';
 import { cn } from '@/lib/utils';
 import type { FleetVehicle } from '@/types/marketing';
 
@@ -112,7 +112,12 @@ export function FleetCard({
               ? 'On route'
               : 'Next trip',
           value: value(
-            `${nextTrip.destination} · ${formatTravelDate(nextTrip.travelDate)} ${formatClock(nextTrip.departureTime)}–${formatClock(nextTrip.returnTime)}`,
+            [
+              nextTrip.destination,
+              `${formatTravelDate(nextTrip.travelDate)} ${formatWindow(nextTrip.departureTime, nextTrip.returnTime)}`,
+            ]
+              .filter(Boolean)
+              .join(' · '),
             nextTrip.overdue
               ? 'text-amber-600'
               : nextTrip.state === 'ON_ROUTE'

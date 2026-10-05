@@ -13,6 +13,8 @@ type CallArg = {
   where: Record<string, unknown>;
   data: Record<string, unknown> & {
     passengers: { create: { employeeId: string }[] };
+    stops: { create: unknown[] };
+    destination: string;
   };
 };
 const callArg = (fn: jest.Mock): CallArg => (fn.mock.calls[0] as [CallArg])[0];
@@ -21,6 +23,14 @@ type WhereCall = [{ where: Record<string, unknown> }];
 /** The Nth lookup made inside the allocation transaction: 0 = overdue trips, 1 = overlapping trips. */
 const txLookup = (fn: jest.Mock, n: number) =>
   (fn.mock.calls[n] as WhereCall)[0].where;
+
+const at = (date: string) => new Date(`${date}T00:00:00.000Z`);
+/** The time/status half of a lookup made inside the allocation transaction (first AND term). */
+const timeTerm = (where: Record<string, unknown>) =>
+  (where.AND as Record<string, unknown>[])[0];
+/** The vehicle/driver half (second AND term's OR). */
+const ownersTerm = (where: Record<string, unknown>) =>
+  (where.AND as { OR: unknown[] }[])[1].OR;
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const today = new Date().toISOString().slice(0, 10);
@@ -42,11 +52,10 @@ const ama = { employeeId: 'e1', name: 'Ama Mensah', department: 'Operations' };
 const kofi = { employeeId: 'e2', name: 'Kofi Boateng', department: null };
 
 const createDto = {
-  businessPurpose: 'Client site visit',
+  purpose: 'OFFICIAL' as const,
   travelDate: future,
   departureTime: '08:00',
   returnTime: '17:00',
-  destination: 'Kumasi',
 };
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -57,7 +66,8 @@ function row(overrides: Record<string, unknown> = {}) {
     requesterEmployeeId: 'e1',
     requesterName: 'Ama Mensah',
     requesterDepartment: 'Operations',
-    businessPurpose: 'Client site visit',
+    purpose: 'OFFICIAL',
+    businessPurpose: null,
     travelDate: new Date(`${future}T00:00:00.000Z`),
     departureTime: '08:00',
     returnTime: '17:00',
@@ -78,6 +88,7 @@ function row(overrides: Record<string, unknown> = {}) {
     createdAt: new Date('2026-10-01T00:00:00.000Z'),
     updatedAt: new Date('2026-10-01T00:00:00.000Z'),
     passengers: [],
+    stops: [],
     ...overrides,
   };
 }
@@ -85,6 +96,10 @@ function row(overrides: Record<string, unknown> = {}) {
 describe('RequestsService', () => {
   const tx = {
     marketingTransportRequestPassenger: { deleteMany: jest.fn() },
+    marketingTransportRequestStop: {
+      deleteMany: jest.fn(),
+      createMany: jest.fn(),
+    },
     marketingTransportRequest: {
       update: jest.fn(),
       findMany: jest.fn(),
@@ -101,6 +116,9 @@ describe('RequestsService', () => {
       updateMany: jest.fn(),
     },
     marketingFleetVehicle: { findUnique: jest.fn(), findMany: jest.fn() },
+    marketingClient: { findMany: jest.fn() },
+    marketingProspect: { findMany: jest.fn() },
+    marketingTransportRequestStop: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
   const directory = { list: jest.fn(), resolve: jest.fn() };
@@ -138,6 +156,9 @@ describe('RequestsService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     officers.assertActiveOfficer.mockResolvedValue(undefined);
+    prisma.marketingClient.findMany.mockResolvedValue([]);
+    prisma.marketingProspect.findMany.mockResolvedValue([]);
+    prisma.marketingTransportRequestStop.findMany.mockResolvedValue([]);
     trips.now.mockReturnValue({ date: today, time: '12:00' });
     prisma.$transaction.mockImplementation((arg: unknown) =>
       typeof arg === 'function'
@@ -593,9 +614,7 @@ describe('RequestsService', () => {
         person: { employeeId: 'e1', name: 'Ama Mensah', department: null },
         people: [],
       });
-      prisma.marketingTransportRequest.updateMany.mockResolvedValue({
-        count: 1,
-      });
+      tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 1 });
     }
 
     it('lets the requester complete an overdue trip and records the actual return', async () => {
@@ -605,9 +624,7 @@ describe('RequestsService', () => {
         actualReturnTime: '11:40',
       });
 
-      expect(
-        callArg(prisma.marketingTransportRequest.updateMany),
-      ).toMatchObject({
+      expect(callArg(tx.marketingTransportRequest.updateMany)).toMatchObject({
         where: { id: 'req-1', tenantId: TENANT, status: 'APPROVED' },
         data: {
           status: 'COMPLETED',
@@ -720,9 +737,7 @@ describe('RequestsService', () => {
         overdueTrip(),
       );
       directory.resolve.mockResolvedValue({ person: null, people: [] });
-      prisma.marketingTransportRequest.updateMany.mockResolvedValue({
-        count: 0,
-      });
+      tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(
         service.complete(user(), 'req-1', { actualReturnTime: '11:30' }),
@@ -748,7 +763,7 @@ describe('RequestsService', () => {
       prisma.marketingTransportRequest.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.update(user(), 'req-1', { destination: 'Tamale' }),
+        service.update(user(), 'req-1', { purpose: 'PERSONAL' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -758,7 +773,7 @@ describe('RequestsService', () => {
       );
 
       await expect(
-        service.update(user(), 'req-1', { destination: 'Tamale' }),
+        service.update(user(), 'req-1', { purpose: 'PERSONAL' }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -781,7 +796,7 @@ describe('RequestsService', () => {
       ).toHaveBeenCalledWith({ where: { requestId: 'req-1' } });
 
       tx.marketingTransportRequestPassenger.deleteMany.mockClear();
-      await service.update(user(), 'req-1', { destination: 'Tamale' });
+      await service.update(user(), 'req-1', { purpose: 'PERSONAL' });
       expect(
         tx.marketingTransportRequestPassenger.deleteMany,
       ).not.toHaveBeenCalled();
@@ -1010,10 +1025,8 @@ describe('RequestsService', () => {
           service.approve(reviewer(), 'req-1', selfDrivenDto),
         ).rejects.toThrow(/Ama Mensah is already allocated/);
         expect(
-          txLookup(tx.marketingTransportRequest.findFirst, 1),
-        ).toMatchObject({
-          OR: [{ vehicleAssetId: 'veh-1' }, { driverEmployeeId: 'e1' }],
-        });
+          ownersTerm(txLookup(tx.marketingTransportRequest.findFirst, 1)),
+        ).toEqual([{ vehicleAssetId: 'veh-1' }, { driverEmployeeId: 'e1' }]);
       });
 
       it('skips the driver clash check when the requester has no employee record', async () => {
@@ -1032,10 +1045,8 @@ describe('RequestsService', () => {
         await service.approve(reviewer(), 'req-1', selfDrivenDto);
 
         expect(
-          txLookup(tx.marketingTransportRequest.findFirst, 1),
-        ).toMatchObject({
-          OR: [{ vehicleAssetId: 'veh-1' }],
-        });
+          ownersTerm(txLookup(tx.marketingTransportRequest.findFirst, 1)),
+        ).toEqual([{ vehicleAssetId: 'veh-1' }]);
       });
 
       it('still checks the vehicle', async () => {
@@ -1151,20 +1162,38 @@ describe('RequestsService', () => {
       expect(fleet.updateVehicle).not.toHaveBeenCalled();
     });
 
-    it('checks clashes against approved trips overlapping on that day', async () => {
+    it('checks clashes against approved trips whose window overlaps', async () => {
       arrangeApprove();
 
       await service.approve(reviewer(), 'req-1', approveDto);
 
       const where = txLookup(tx.marketingTransportRequest.findFirst, 1);
-      expect(where).toMatchObject({
+      expect(timeTerm(where)).toMatchObject({
         tenantId: TENANT,
         status: 'APPROVED',
         id: { not: 'req-1' },
-        departureTime: { lt: '17:00' },
-        returnTime: { gt: '08:00' },
-        OR: [{ vehicleAssetId: 'veh-1' }, { driverEmployeeId: 'e5' }],
+        AND: [
+          {
+            // The other trip ends after this one starts, or has no end.
+            OR: [
+              { returnTime: null },
+              { travelDate: { gt: at(future) } },
+              { travelDate: at(future), returnTime: { gt: '08:00' } },
+            ],
+          },
+          {
+            // The other trip starts before this one ends.
+            OR: [
+              { travelDate: { lt: at(future) } },
+              { travelDate: at(future), departureTime: { lt: '17:00' } },
+            ],
+          },
+        ],
       });
+      expect(ownersTerm(where)).toEqual([
+        { vehicleAssetId: 'veh-1' },
+        { driverEmployeeId: 'e5' },
+      ]);
     });
 
     it.each([
@@ -1213,19 +1242,29 @@ describe('RequestsService', () => {
       expect(tx.marketingTransportRequest.updateMany).not.toHaveBeenCalled();
     });
 
-    it('looks for overdue trips for this vehicle and driver, ignoring the request itself', async () => {
+    it('looks for still-out trips for this vehicle or driver, keeping the time test (regression)', async () => {
       arrangeApprove();
 
       await service.approve(reviewer(), 'req-1', approveDto);
 
-      expect(txLookup(tx.marketingTransportRequest.findFirst, 0)).toMatchObject(
-        {
-          tenantId: TENANT,
-          status: 'APPROVED',
-          id: { not: 'req-1' },
-          OR: [{ vehicleAssetId: 'veh-1' }, { driverEmployeeId: 'e5' }],
-        },
-      );
+      const where = txLookup(tx.marketingTransportRequest.findFirst, 0);
+      const stale = timeTerm(where);
+      expect(stale).toMatchObject({
+        tenantId: TENANT,
+        status: 'APPROVED',
+        id: { not: 'req-1' },
+      });
+      // Two cases: past the return time, or (no return time) already departed. These used to be
+      // overwritten by the vehicle/driver OR, so ANY other approved trip blocked the approval.
+      expect(stale.OR).toHaveLength(2);
+      expect(stale.OR).toEqual([
+        expect.objectContaining({ returnTime: { not: null } }),
+        expect.objectContaining({ returnTime: null }),
+      ]);
+      expect(ownersTerm(where)).toEqual([
+        { vehicleAssetId: 'veh-1' },
+        { driverEmployeeId: 'e5' },
+      ]);
     });
 
     it.each([
@@ -1491,9 +1530,21 @@ describe('RequestsService', () => {
       const [overlap] = prisma.marketingTransportRequest.findMany.mock
         .calls as [{ where: Record<string, unknown> }][];
       expect(overlap[0].where).toMatchObject({
-        travelDate: at(future),
-        departureTime: { lt: '17:00' },
-        returnTime: { gt: '14:00' },
+        AND: [
+          {
+            OR: [
+              { returnTime: null },
+              { travelDate: { gt: at(future) } },
+              { travelDate: at(future), returnTime: { gt: '14:00' } },
+            ],
+          },
+          {
+            OR: [
+              { travelDate: { lt: at(future) } },
+              { travelDate: at(future), departureTime: { lt: '17:00' } },
+            ],
+          },
+        ],
       });
     });
 
@@ -1600,15 +1651,29 @@ describe('RequestsService', () => {
 
       await service.reschedule(reviewer(), 'req-1', dto);
 
-      expect(txLookup(tx.marketingTransportRequest.findFirst, 1)).toMatchObject(
-        {
-          id: { not: 'req-1' },
-          travelDate: at(future),
-          departureTime: { lt: '17:00' },
-          returnTime: { gt: '14:00' },
-          OR: [{ vehicleAssetId: 'veh-1' }, { driverEmployeeId: 'e5' }],
-        },
-      );
+      const where = txLookup(tx.marketingTransportRequest.findFirst, 1);
+      expect(timeTerm(where)).toMatchObject({
+        id: { not: 'req-1' },
+        AND: [
+          {
+            OR: [
+              { returnTime: null },
+              { travelDate: { gt: at(future) } },
+              { travelDate: at(future), returnTime: { gt: '14:00' } },
+            ],
+          },
+          {
+            OR: [
+              { travelDate: { lt: at(future) } },
+              { travelDate: at(future), departureTime: { lt: '17:00' } },
+            ],
+          },
+        ],
+      });
+      expect(ownersTerm(where)).toEqual([
+        { vehicleAssetId: 'veh-1' },
+        { driverEmployeeId: 'e5' },
+      ]);
     });
 
     it('lets the trip’s own overdue window stop blocking itself', async () => {
@@ -1616,12 +1681,12 @@ describe('RequestsService', () => {
 
       await service.reschedule(reviewer(), 'req-1', dto);
 
-      expect(txLookup(tx.marketingTransportRequest.findFirst, 0)).toMatchObject(
-        {
-          id: { not: 'req-1' },
-          status: 'APPROVED',
-        },
-      );
+      expect(
+        timeTerm(txLookup(tx.marketingTransportRequest.findFirst, 0)),
+      ).toMatchObject({
+        id: { not: 'req-1' },
+        status: 'APPROVED',
+      });
     });
 
     it('can switch the trip to self-driven', async () => {
@@ -1709,6 +1774,822 @@ describe('RequestsService', () => {
       await expect(
         service.reschedule(reviewer(), 'req-1', dto),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('destinations', () => {
+    const acme = {
+      id: 'c1',
+      companyName: 'Acme Ltd',
+      locationLabel: 'Osu, Accra',
+      latitude: '5.556000',
+      longitude: '-0.187000',
+    };
+    const newco = {
+      id: 'c2',
+      companyName: 'Newco',
+      locationLabel: 'Adum, Kumasi',
+      latitude: '6.693000',
+      longitude: '-1.623000',
+    };
+    const beta = {
+      id: 'p1',
+      companyName: 'Beta Co',
+      locationLabel: 'Takoradi',
+      latitude: '4.898000',
+      longitude: '-1.760000',
+    };
+    const savedStop = (overrides: Record<string, unknown> = {}) => ({
+      id: 's1',
+      kind: 'CLIENT',
+      refId: 'c1',
+      name: 'Acme Ltd',
+      locationLabel: 'Osu, Accra',
+      latitude: '5.556000',
+      longitude: '-0.187000',
+      source: 'PLANNED',
+      ...overrides,
+    });
+    const clientQuery = () =>
+      (
+        prisma.marketingClient.findMany.mock.calls[0] as [
+          { where: Record<string, unknown> },
+        ]
+      )[0].where;
+
+    beforeEach(() => {
+      directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      prisma.marketingTransportRequest.create.mockResolvedValue(row());
+    });
+
+    describe('when creating', () => {
+      it('saves the chosen clients and prospects with their locations and summarises them as the destination', async () => {
+        prisma.marketingClient.findMany.mockResolvedValue([acme]);
+        prisma.marketingProspect.findMany.mockResolvedValue([beta]);
+
+        await service.create(user({ role: 'TENANT_ADMIN' }), {
+          ...createDto,
+          stops: [
+            { kind: 'CLIENT', id: 'c1' },
+            { kind: 'PROSPECT', id: 'p1' },
+          ],
+        });
+
+        const { data } = callArg(prisma.marketingTransportRequest.create) as {
+          data: Record<string, unknown> & { stops: { create: unknown[] } };
+        };
+        expect(data.destination).toBe('Acme Ltd, Beta Co');
+        expect(data.stops.create).toEqual([
+          {
+            tenantId: TENANT,
+            kind: 'CLIENT',
+            refId: 'c1',
+            name: 'Acme Ltd',
+            locationLabel: 'Osu, Accra',
+            latitude: 5.556,
+            longitude: -0.187,
+            sortOrder: 0,
+            source: 'PLANNED',
+          },
+          {
+            tenantId: TENANT,
+            kind: 'PROSPECT',
+            refId: 'p1',
+            name: 'Beta Co',
+            locationLabel: 'Takoradi',
+            latitude: 4.898,
+            longitude: -1.76,
+            sortOrder: 1,
+            source: 'PLANNED',
+          },
+        ]);
+      });
+
+      it('keeps the order they were picked in, not the order the database returns', async () => {
+        prisma.marketingClient.findMany.mockResolvedValue([acme, newco]);
+
+        await service.create(user({ role: 'TENANT_ADMIN' }), {
+          ...createDto,
+          stops: [
+            { kind: 'CLIENT', id: 'c2' },
+            { kind: 'CLIENT', id: 'c1' },
+          ],
+        });
+
+        const { data } = callArg(prisma.marketingTransportRequest.create) as {
+          data: { destination: string };
+        };
+        expect(data.destination).toBe('Newco, Acme Ltd');
+      });
+
+      it('lists a place picked twice only once', async () => {
+        prisma.marketingClient.findMany.mockResolvedValue([acme]);
+
+        await service.create(user({ role: 'TENANT_ADMIN' }), {
+          ...createDto,
+          stops: [
+            { kind: 'CLIENT', id: 'c1' },
+            { kind: 'CLIENT', id: 'c1' },
+          ],
+        });
+
+        const { data } = callArg(prisma.marketingTransportRequest.create) as {
+          data: { stops: { create: unknown[] } };
+        };
+        expect(data.stops.create).toHaveLength(1);
+      });
+
+      it('refuses a client or prospect the person cannot see, creating nothing', async () => {
+        prisma.marketingClient.findMany.mockResolvedValue([]);
+
+        await expect(
+          service.create(user(), {
+            ...createDto,
+            stops: [{ kind: 'CLIENT', id: 'someone-elses' }],
+          }),
+        ).rejects.toThrow(/locations were not found/);
+        expect(prisma.marketingTransportRequest.create).not.toHaveBeenCalled();
+      });
+
+      it('allows a request with no destination for now, leaving it empty', async () => {
+        await service.create(user(), createDto);
+
+        const { data } = callArg(prisma.marketingTransportRequest.create) as {
+          data: { destination: string; stops: { create: unknown[] } };
+        };
+        expect(data.destination).toBe('');
+        expect(data.stops.create).toEqual([]);
+        expect(prisma.marketingClient.findMany).not.toHaveBeenCalled();
+      });
+
+      it('only lets someone without view-all pick clients assigned to them', async () => {
+        prisma.marketingClient.findMany.mockResolvedValue([acme]);
+
+        await service.create(user(), {
+          ...createDto,
+          stops: [{ kind: 'CLIENT', id: 'c1' }],
+        });
+
+        expect(clientQuery()).toMatchObject({
+          tenantId: TENANT,
+          id: { in: ['c1'] },
+          assignedUserId: 'user-1',
+        });
+      });
+
+      it.each([
+        [
+          'view-all on clients',
+          { permissions: ['marketing.clients.all:VIEW'] },
+        ],
+        ['an admin role', { role: 'TENANT_ADMIN' }],
+      ])('lets %s pick any client in the tenant', async (_label, overrides) => {
+        prisma.marketingClient.findMany.mockResolvedValue([acme]);
+
+        await service.create(user(overrides as never), {
+          ...createDto,
+          stops: [{ kind: 'CLIENT', id: 'c1' }],
+        });
+
+        expect(clientQuery()).not.toHaveProperty('assignedUserId');
+      });
+
+      it('scopes prospects separately, by view-all on prospects', async () => {
+        prisma.marketingProspect.findMany.mockResolvedValue([beta]);
+
+        await service.create(
+          user({ permissions: ['marketing.clients.all:VIEW'] }),
+          { ...createDto, stops: [{ kind: 'PROSPECT', id: 'p1' }] },
+        );
+
+        const where = (
+          prisma.marketingProspect.findMany.mock.calls[0] as [
+            { where: Record<string, unknown> },
+          ]
+        )[0].where;
+        expect(where).toMatchObject({ assignedUserId: 'user-1' });
+      });
+    });
+
+    describe('in the response', () => {
+      it('shows each stop with its location as numbers, and the summary as the destination', async () => {
+        prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+          row({
+            destination: 'Acme Ltd',
+            stops: [savedStop()],
+          }),
+        );
+
+        const result = await service.findOne(user(), 'req-1');
+
+        expect(result.destination).toBe('Acme Ltd');
+        expect(result.stops).toEqual([
+          {
+            kind: 'CLIENT',
+            refId: 'c1',
+            name: 'Acme Ltd',
+            locationLabel: 'Osu, Accra',
+            latitude: 5.556,
+            longitude: -0.187,
+            source: 'PLANNED',
+          },
+        ]);
+      });
+
+      it('keeps the typed destination of an older request that has no stops', async () => {
+        prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+          row({ destination: 'Kumasi', stops: [] }),
+        );
+
+        const result = await service.findOne(user(), 'req-1');
+
+        expect(result.destination).toBe('Kumasi');
+        expect(result.stops).toEqual([]);
+      });
+    });
+
+    describe('when editing a pending request', () => {
+      it('replaces the destinations and updates the summary', async () => {
+        prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+        prisma.marketingClient.findMany.mockResolvedValue([newco]);
+        tx.marketingTransportRequest.update.mockResolvedValue(row());
+
+        await service.update(user(), 'req-1', {
+          stops: [{ kind: 'CLIENT', id: 'c2' }],
+        });
+
+        expect(
+          tx.marketingTransportRequestStop.deleteMany,
+        ).toHaveBeenCalledWith({
+          where: { requestId: 'req-1' },
+        });
+        const { data } = callArg(tx.marketingTransportRequest.update) as {
+          data: { destination: string };
+        };
+        expect(data.destination).toBe('Newco');
+      });
+
+      it('clears them all with an empty list', async () => {
+        prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+        tx.marketingTransportRequest.update.mockResolvedValue(row());
+
+        await service.update(user(), 'req-1', { stops: [] });
+
+        expect(tx.marketingTransportRequestStop.deleteMany).toHaveBeenCalled();
+        const { data } = callArg(tx.marketingTransportRequest.update) as {
+          data: { destination: string };
+        };
+        expect(data.destination).toBe('');
+      });
+
+      it('leaves them alone when not mentioned', async () => {
+        prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+        tx.marketingTransportRequest.update.mockResolvedValue(row());
+
+        await service.update(user(), 'req-1', { purpose: 'PERSONAL' });
+
+        expect(
+          tx.marketingTransportRequestStop.deleteMany,
+        ).not.toHaveBeenCalled();
+        const { data } = callArg(tx.marketingTransportRequest.update) as {
+          data: Record<string, unknown>;
+        };
+        expect(data).not.toHaveProperty('destination');
+      });
+    });
+
+    describe('destinationOptions', () => {
+      const queryOf = (fn: jest.Mock) =>
+        (
+          fn.mock.calls[0] as [{ where: Record<string, unknown>; take: number }]
+        )[0];
+
+      it('shows only the clients and prospects assigned to someone without view-all', async () => {
+        await service.destinationOptions(user());
+
+        expect(queryOf(prisma.marketingClient.findMany).where).toMatchObject({
+          tenantId: TENANT,
+          assignedUserId: 'user-1',
+        });
+        expect(queryOf(prisma.marketingProspect.findMany).where).toMatchObject({
+          tenantId: TENANT,
+          assignedUserId: 'user-1',
+        });
+      });
+
+      it('shows everyone’s to someone with view-all, each kind on its own permission', async () => {
+        await service.destinationOptions(
+          user({ permissions: ['marketing.prospects.all:VIEW'] }),
+        );
+
+        expect(queryOf(prisma.marketingClient.findMany).where).toMatchObject({
+          assignedUserId: 'user-1',
+        });
+        expect(
+          queryOf(prisma.marketingProspect.findMany).where,
+        ).not.toHaveProperty('assignedUserId');
+      });
+
+      it('shows everything to an admin', async () => {
+        await service.destinationOptions(user({ role: 'TENANT_ADMIN' }));
+
+        expect(
+          queryOf(prisma.marketingClient.findMany).where,
+        ).not.toHaveProperty('assignedUserId');
+        expect(
+          queryOf(prisma.marketingProspect.findMany).where,
+        ).not.toHaveProperty('assignedUserId');
+      });
+
+      it('leaves out a prospect that has already become a client', async () => {
+        await service.destinationOptions(user());
+
+        expect(queryOf(prisma.marketingProspect.findMany).where).toMatchObject({
+          client: { is: null },
+        });
+      });
+
+      it('matches the company name however it is typed', async () => {
+        await service.destinationOptions(user(), { search: '  Acme   LTD ' });
+
+        const nameFilter = { normalizedCompanyName: { contains: 'acme ltd' } };
+        expect(queryOf(prisma.marketingClient.findMany).where).toMatchObject(
+          nameFilter,
+        );
+        expect(queryOf(prisma.marketingProspect.findMany).where).toMatchObject(
+          nameFilter,
+        );
+      });
+
+      it('returns clients and prospects together, by name, with their locations', async () => {
+        prisma.marketingClient.findMany.mockResolvedValue([newco, acme]);
+        prisma.marketingProspect.findMany.mockResolvedValue([beta]);
+
+        const { data } = await service.destinationOptions(user());
+
+        expect(data.map((d) => [d.kind, d.name])).toEqual([
+          ['CLIENT', 'Acme Ltd'],
+          ['PROSPECT', 'Beta Co'],
+          ['CLIENT', 'Newco'],
+        ]);
+        expect(data[0]).toMatchObject({
+          id: 'c1',
+          locationLabel: 'Osu, Accra',
+          latitude: 5.556,
+          longitude: -0.187,
+        });
+      });
+
+      it('caps the list', async () => {
+        prisma.marketingClient.findMany.mockResolvedValue([acme, newco]);
+        prisma.marketingProspect.findMany.mockResolvedValue([beta]);
+
+        const { data } = await service.destinationOptions(user(), { limit: 2 });
+
+        expect(data).toHaveLength(2);
+        expect(queryOf(prisma.marketingClient.findMany).take).toBe(2);
+      });
+    });
+
+    describe('places visited, added when completing', () => {
+      const overdueTrip = (overrides: Record<string, unknown> = {}) =>
+        row({
+          status: 'APPROVED',
+          travelDate: at(today),
+          departureTime: '08:00',
+          returnTime: '11:00',
+          ...overrides,
+        });
+
+      function arrange(
+        planned: unknown[] = [
+          { kind: 'CLIENT', refId: 'c1', name: 'Acme Ltd' },
+        ],
+      ) {
+        prisma.marketingTransportRequest.findFirst
+          .mockResolvedValueOnce(overdueTrip())
+          .mockResolvedValueOnce(row({ status: 'COMPLETED' }));
+        prisma.marketingTransportRequestStop.findMany.mockResolvedValue(
+          planned,
+        );
+        directory.resolve.mockResolvedValue({ person: null, people: [] });
+        tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 1 });
+      }
+
+      it('records new places as visited and skips ones already planned', async () => {
+        arrange();
+        prisma.marketingClient.findMany.mockResolvedValue([acme, newco]);
+
+        await service.complete(user({ role: 'TENANT_ADMIN' }), 'req-1', {
+          actualReturnTime: '11:00',
+          stops: [
+            { kind: 'CLIENT', id: 'c1' },
+            { kind: 'CLIENT', id: 'c2' },
+          ],
+        });
+
+        const { data } = callArg(
+          tx.marketingTransportRequestStop.createMany,
+        ) as unknown as { data: Record<string, unknown>[] };
+        expect(data).toHaveLength(1);
+        expect(data[0]).toMatchObject({
+          tenantId: TENANT,
+          requestId: 'req-1',
+          kind: 'CLIENT',
+          refId: 'c2',
+          name: 'Newco',
+          source: 'VISITED',
+          // After the one already planned.
+          sortOrder: 1,
+        });
+      });
+
+      it('adds the new places to the destination summary', async () => {
+        arrange();
+        prisma.marketingClient.findMany.mockResolvedValue([newco]);
+
+        await service.complete(user({ role: 'TENANT_ADMIN' }), 'req-1', {
+          actualReturnTime: '11:00',
+          stops: [{ kind: 'CLIENT', id: 'c2' }],
+        });
+
+        const { data } = callArg(tx.marketingTransportRequest.update) as {
+          data: { destination: string };
+        };
+        expect(data.destination).toBe('Acme Ltd, Newco');
+      });
+
+      it('changes nothing about places when none are added', async () => {
+        arrange();
+
+        await service.complete(user(), 'req-1', { actualReturnTime: '11:00' });
+
+        expect(
+          tx.marketingTransportRequestStop.createMany,
+        ).not.toHaveBeenCalled();
+        expect(tx.marketingTransportRequest.update).not.toHaveBeenCalled();
+      });
+
+      it('refuses a place the person cannot see, and does not complete the trip', async () => {
+        arrange();
+        prisma.marketingClient.findMany.mockResolvedValue([]);
+
+        await expect(
+          service.complete(user(), 'req-1', {
+            actualReturnTime: '11:00',
+            stops: [{ kind: 'CLIENT', id: 'someone-elses' }],
+          }),
+        ).rejects.toThrow(/locations were not found/);
+        expect(tx.marketingTransportRequest.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('uses the visibility of whoever completes it', async () => {
+        arrange();
+        prisma.marketingClient.findMany.mockResolvedValue([newco]);
+
+        await service.complete(user({ id: 'user-1' }), 'req-1', {
+          actualReturnTime: '11:00',
+          stops: [{ kind: 'CLIENT', id: 'c2' }],
+        });
+
+        expect(clientQuery()).toMatchObject({ assignedUserId: 'user-1' });
+      });
+    });
+  });
+
+  describe('purpose', () => {
+    it('saves whether the trip is personal or official', async () => {
+      directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      prisma.marketingTransportRequest.create.mockResolvedValue(
+        row({ purpose: 'PERSONAL' }),
+      );
+
+      const result = await service.create(user(), {
+        ...createDto,
+        purpose: 'PERSONAL',
+      });
+
+      expect(
+        callArg(prisma.marketingTransportRequest.create).data,
+      ).toMatchObject({
+        purpose: 'PERSONAL',
+      });
+      expect(result.purpose).toBe('PERSONAL');
+    });
+
+    it('no longer stores a free-text purpose on new requests', async () => {
+      directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      prisma.marketingTransportRequest.create.mockResolvedValue(row());
+
+      await service.create(user(), createDto);
+
+      expect(
+        callArg(prisma.marketingTransportRequest.create).data,
+      ).not.toHaveProperty('businessPurpose');
+    });
+
+    it('can be changed while the request is pending', async () => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+      tx.marketingTransportRequest.update.mockResolvedValue(
+        row({ purpose: 'PERSONAL' }),
+      );
+
+      const result = await service.update(user(), 'req-1', {
+        purpose: 'PERSONAL',
+      });
+
+      expect(callArg(tx.marketingTransportRequest.update).data).toMatchObject({
+        purpose: 'PERSONAL',
+      });
+      expect(result.purpose).toBe('PERSONAL');
+    });
+
+    it('still shows the old free-text purpose of requests made before this changed', async () => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+        row({ businessPurpose: 'Client site visit', purpose: 'OFFICIAL' }),
+      );
+
+      const result = await service.findOne(user(), 'req-1');
+
+      expect(result.purpose).toBe('OFFICIAL');
+      expect(result.businessPurpose).toBe('Client site visit');
+    });
+  });
+
+  describe('trips with no return time', () => {
+    const noReturn = (overrides: Record<string, unknown> = {}) =>
+      row({
+        status: 'APPROVED',
+        travelDate: at(today),
+        departureTime: '08:00',
+        returnTime: null,
+        ...overrides,
+      });
+    const viewOne = async (overrides: Record<string, unknown>) => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+        noReturn(overrides),
+      );
+      return service.findOne(user(), 'req-1');
+    };
+
+    it('can be requested without one', async () => {
+      directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      prisma.marketingTransportRequest.create.mockResolvedValue(
+        row({ returnTime: null }),
+      );
+
+      const { returnTime, ...withoutReturn } = createDto;
+      void returnTime;
+      const result = await service.create(user(), withoutReturn);
+
+      expect(
+        callArg(prisma.marketingTransportRequest.create).data,
+      ).toMatchObject({ returnTime: null });
+      expect(result.returnTime).toBeNull();
+    });
+
+    it('still rejects a return time that is not after the departure when one is given', async () => {
+      await expect(
+        service.create(user(), {
+          ...createDto,
+          departureTime: '17:00',
+          returnTime: '09:00',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('can be edited to remove the return time, or to leave it as it was', async () => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+      tx.marketingTransportRequest.update.mockResolvedValue(
+        row({ returnTime: null }),
+      );
+
+      await service.update(user(), 'req-1', { returnTime: null });
+      expect(callArg(tx.marketingTransportRequest.update).data).toMatchObject({
+        returnTime: null,
+      });
+
+      tx.marketingTransportRequest.update.mockClear();
+      await service.update(user(), 'req-1', { purpose: 'PERSONAL' });
+      expect(
+        callArg(tx.marketingTransportRequest.update).data,
+      ).not.toHaveProperty('returnTime');
+    });
+
+    it('goes on route at departure but is never overdue', async () => {
+      const result = await viewOne({ travelDate: at('2020-01-01') });
+
+      expect(result.status).toBe('ON_ROUTE');
+      expect(result.overdue).toBe(false);
+    });
+
+    it('can be completed any time after it departs, but not before', async () => {
+      expect((await viewOne({ departureTime: '08:00' })).completable).toBe(
+        true,
+      );
+      expect((await viewOne({ departureTime: '12:01' })).completable).toBe(
+        false,
+      );
+    });
+
+    it('only becomes completable after the return time when it has one', async () => {
+      expect((await viewOne({ returnTime: '12:01' })).completable).toBe(false);
+      expect((await viewOne({ returnTime: '12:00' })).completable).toBe(true);
+    });
+
+    it('is completed without a planned return to compare against', async () => {
+      prisma.marketingTransportRequest.findFirst
+        .mockResolvedValueOnce(noReturn())
+        .mockResolvedValueOnce(
+          row({
+            status: 'COMPLETED',
+            returnTime: null,
+            actualReturnTime: '11:30',
+            completedAt: new Date(),
+          }),
+        );
+      directory.resolve.mockResolvedValue({ person: null, people: [] });
+      tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.complete(user(), 'req-1', {
+        actualReturnTime: '11:30',
+      });
+
+      expect(result.status).toBe('COMPLETED');
+      expect(result.completion).toMatchObject({
+        actualReturnTime: '11:30',
+        minutesLate: null,
+      });
+    });
+
+    it('cannot be completed before it has departed, and says why', async () => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+        noReturn({ departureTime: '12:01' }),
+      );
+
+      await expect(
+        service.complete(user(), 'req-1', { actualReturnTime: '12:30' }),
+      ).rejects.toThrow(/once it has departed/);
+    });
+
+    it('holds its vehicle and driver from departure onwards: nothing starts-before-end is required of the other trip', async () => {
+      directory.resolve.mockResolvedValue({
+        person: { employeeId: 'e9', name: 'Kojo', department: null },
+        people: [{ employeeId: 'e5', name: 'Yaw', department: null }],
+      });
+      fleet.getVehicle.mockResolvedValue({
+        id: 'veh-1',
+        assetNumber: 'VEH-1',
+        name: 'Hilux',
+        status: 'AVAILABLE',
+      });
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(null);
+      prisma.marketingTransportRequest.findFirst
+        .mockResolvedValueOnce(
+          noReturn({ status: 'PENDING', travelDate: at(future) }),
+        )
+        .mockResolvedValueOnce(row({ status: 'APPROVED' }));
+      tx.marketingTransportRequest.findFirst.mockResolvedValue(null);
+      tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.approve(
+        user({ id: 'user-2', firstName: 'Kojo' }),
+        'req-1',
+        {
+          vehicleAssetId: 'veh-1',
+          driverEmployeeId: 'e5',
+        },
+      );
+
+      const overlap = timeTerm(
+        txLookup(tx.marketingTransportRequest.findFirst, 1),
+      );
+      // Only "the other trip ends after this one starts": with no end of its own there is
+      // no "starts before it ends" half.
+      expect(overlap.AND).toHaveLength(1);
+    });
+
+    it('is blocked by an earlier open-ended trip for any later booking', async () => {
+      directory.resolve.mockResolvedValue({
+        person: { employeeId: 'e9', name: 'Kojo', department: null },
+        people: [{ employeeId: 'e5', name: 'Yaw', department: null }],
+      });
+      fleet.getVehicle.mockResolvedValue({
+        id: 'veh-1',
+        assetNumber: 'VEH-1',
+        name: 'Hilux',
+        status: 'AVAILABLE',
+      });
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(null);
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+      tx.marketingTransportRequest.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          vehicleAssetId: 'veh-1',
+          departureTime: '09:00',
+          returnTime: null,
+          requesterName: 'Efua',
+        });
+
+      await expect(
+        service.approve(user({ id: 'user-2' }), 'req-1', {
+          vehicleAssetId: 'veh-1',
+          driverEmployeeId: 'e5',
+        }),
+      ).rejects.toThrow(
+        /allocated to Efua's trip \(from 09:00, no return time\)/,
+      );
+    });
+
+    it('is reported as still out once it has departed, with no return time to wait for', async () => {
+      directory.resolve.mockResolvedValue({
+        person: { employeeId: 'e9', name: 'Kojo', department: null },
+        people: [{ employeeId: 'e5', name: 'Yaw', department: null }],
+      });
+      fleet.getVehicle.mockResolvedValue({
+        id: 'veh-1',
+        assetNumber: 'VEH-1',
+        name: 'Hilux',
+        status: 'AVAILABLE',
+      });
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(null);
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+      tx.marketingTransportRequest.findFirst.mockResolvedValueOnce({
+        vehicleAssetId: 'veh-1',
+        travelDate: at('2026-10-01'),
+        departureTime: '09:00',
+        returnTime: null,
+        requesterName: 'Efua',
+      });
+
+      await expect(
+        service.approve(user({ id: 'user-2' }), 'req-1', {
+          vehicleAssetId: 'veh-1',
+          driverEmployeeId: 'e5',
+        }),
+      ).rejects.toThrow(
+        /still out on Efua's trip \(2026-10-01 from 09:00, no return time\)\. Complete it first/,
+      );
+    });
+
+    it('can be rescheduled to one with no return time, keeping the old schedule', async () => {
+      directory.resolve.mockResolvedValue({
+        person: { employeeId: 'e9', name: 'Kojo', department: null },
+        people: [{ employeeId: 'e5', name: 'Yaw', department: null }],
+      });
+      fleet.getVehicle.mockResolvedValue({
+        id: 'veh-1',
+        assetNumber: 'VEH-1',
+        name: 'Hilux',
+        status: 'AVAILABLE',
+      });
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(null);
+      prisma.marketingTransportRequest.findFirst
+        .mockResolvedValueOnce(
+          row({
+            status: 'APPROVED',
+            travelDate: at('2020-01-01'),
+            departureTime: '10:00',
+            returnTime: '12:00',
+          }),
+        )
+        .mockResolvedValueOnce(row({ status: 'APPROVED' }));
+      tx.marketingTransportRequest.findFirst.mockResolvedValue(null);
+      tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.reschedule(user({ id: 'user-2' }), 'req-1', {
+        travelDate: future,
+        departureTime: '14:00',
+        vehicleAssetId: 'veh-1',
+        driverEmployeeId: 'e5',
+      });
+
+      expect(
+        callArg(tx.marketingTransportRequest.updateMany).data,
+      ).toMatchObject({
+        departureTime: '14:00',
+        returnTime: null,
+        previousReturnTime: '12:00',
+      });
+    });
+
+    it('can have its availability checked for a window with no return time', async () => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(row());
+      fleet.listVehicles.mockResolvedValue([]);
+      officers.activeDrivers.mockResolvedValue([]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([]);
+      prisma.marketingTransportRequest.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.allocationOptions(user(), 'req-1', {
+          travelDate: future,
+          departureTime: '14:00',
+        }),
+      ).resolves.toBeDefined();
+
+      const [overlap] = prisma.marketingTransportRequest.findMany.mock
+        .calls as [{ where: { AND: unknown[] } }][];
+      expect(overlap[0].where.AND).toHaveLength(1);
     });
   });
 

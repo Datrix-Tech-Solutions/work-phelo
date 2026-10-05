@@ -35,6 +35,7 @@ import {
   ApproveTransportRequestDto,
   CompleteTransportRequestDto,
   CreateTransportRequestDto,
+  DestinationOptionsQueryDto,
   QueryTransportRequestsDto,
   RescheduleTransportRequestDto,
   ReviewTransportRequestDto,
@@ -89,6 +90,21 @@ export class RequestsController {
   })
   formOptions(@Req() request: AuthedRequest) {
     return this.service.formOptions(request.user);
+  }
+
+  @Get('destination-options')
+  // Open to everyone, like the rest of the request form: the service limits it to the clients and
+  // prospects the caller could already see (their own, or all with view-all access).
+  @ApiOperation({
+    summary: 'Clients and prospects to choose as trip destinations',
+    description:
+      'Search by company name. Only the clients and prospects the caller can already see are returned, each with its location.',
+  })
+  destinationOptions(
+    @Query() query: DestinationOptionsQueryDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.destinationOptions(request.user, query);
   }
 
   @Get(':id/allocation-options')
@@ -169,9 +185,10 @@ export class RequestsController {
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
   // lets approvers act on any).
   @ApiOperation({
-    summary: 'Complete a trip once its return time has passed',
+    summary:
+      'Complete a trip once its return time has passed (or it has departed, if it had none)',
     description:
-      'Records when the vehicle actually got back. The requester can complete their own; anyone who can approve can complete any. Final: a completed trip cannot be changed.',
+      'Records when the vehicle actually got back and any further places visited. The requester can complete their own; anyone who can approve can complete any. Final: a completed trip cannot be changed.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   complete(

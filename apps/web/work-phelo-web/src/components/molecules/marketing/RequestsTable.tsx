@@ -3,7 +3,12 @@
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { REQUEST_STATUS_BADGES, formatClock, formatTravelDate } from '@/lib/requestOptions';
+import {
+  PURPOSE_LABELS,
+  REQUEST_STATUS_BADGES,
+  formatTravelDate,
+  formatWindow,
+} from '@/lib/requestOptions';
 import type { TransportRequest, TransportRequestStatus } from '@/types/marketing';
 
 const dash = <span className="text-gray-400">—</span>;
@@ -23,14 +28,32 @@ const COLUMNS: Column<TransportRequest>[] = [
     ),
   },
   {
-    key: 'businessPurpose',
-    label: 'Business Purpose',
-    width: 'minmax(120px, 1fr)',
+    key: 'purpose',
+    label: 'Purpose',
+    width: 'minmax(100px, 0.6fr)',
     render: (row) => (
-      <span className="font-semibold line-clamp-2 max-w-64">{row.businessPurpose}</span>
+      <div className="flex flex-col">
+        <span className="font-semibold text-gray-900">{PURPOSE_LABELS[row.purpose]}</span>
+        {/* Requests made before purpose became personal / official keep their typed reason. */}
+        {row.businessPurpose && (
+          <span className="text-xs text-gray-500 line-clamp-1 max-w-56">{row.businessPurpose}</span>
+        )}
+      </div>
     ),
   },
-  { key: 'destination', label: 'Destination', width: 'minmax(120px, 0.8fr)' },
+  {
+    key: 'destination',
+    label: 'Destination',
+    width: 'minmax(120px, 0.8fr)',
+    render: (row) =>
+      row.destination ? (
+        <span className="line-clamp-2 max-w-64" title={row.destination}>
+          {row.destination}
+        </span>
+      ) : (
+        dash
+      ),
+  },
   {
     key: 'travelDate',
     label: 'Travel Date',
@@ -41,7 +64,7 @@ const COLUMNS: Column<TransportRequest>[] = [
     key: 'time',
     label: 'Departure – Return',
     width: '140px',
-    render: (row) => `${formatClock(row.departureTime)} – ${formatClock(row.returnTime)}`,
+    render: (row) => formatWindow(row.departureTime, row.returnTime),
   },
   {
     key: 'passengers',

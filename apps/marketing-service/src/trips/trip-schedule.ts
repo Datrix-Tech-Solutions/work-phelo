@@ -16,7 +16,8 @@ export interface TripWindow {
   /** YYYY-MM-DD */
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  /** Planned return (HH:mm). Null when none was given: the trip then holds its vehicle until completed. */
+  returnTime: string | null;
 }
 
 export const DEFAULT_TRANSPORT_TIMEZONE = 'Africa/Accra';
@@ -55,11 +56,26 @@ export function tripState(now: WallClock, trip: TripWindow): TripState {
   return now.time >= trip.departureTime ? 'ON_ROUTE' : 'BOOKED';
 }
 
-/** True once the return time has passed while the trip is still unresolved. */
+/**
+ * True once the return time has passed while the trip is still unresolved. A trip with no
+ * planned return time can't be overdue: it simply stays on route until someone completes it.
+ */
 export function isOverdue(now: WallClock, trip: TripWindow): boolean {
+  if (!trip.returnTime) return false;
   if (trip.travelDate < now.date) return true;
   if (trip.travelDate > now.date) return false;
   return now.time >= trip.returnTime;
+}
+
+/**
+ * A trip can be completed once it has departed and either its return time has passed, or it never
+ * had one.
+ */
+export function canComplete(now: WallClock, trip: TripWindow): boolean {
+  return (
+    tripState(now, trip) === 'ON_ROUTE' &&
+    (!trip.returnTime || isOverdue(now, trip))
+  );
 }
 
 /** Whole minutes from one HH:mm to another on the same day (negative if `to` is earlier). */

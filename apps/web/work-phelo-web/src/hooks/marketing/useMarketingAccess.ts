@@ -1,7 +1,12 @@
 import { useAuthStore } from '@/store/auth.store';
 import { useClients } from '@/hooks/marketing/useClients';
 import { useProspects } from '@/hooks/marketing/useProspects';
-import { MARKETING_PAGE_TABS, MARKETING_RECORD_PAGES } from '@/lib/marketingAccess';
+import {
+  MARKETING_OPEN_PAGES,
+  MARKETING_PAGE_TABS,
+  MARKETING_PERMISSION_PREFIX,
+  MARKETING_RECORD_PAGES,
+} from '@/lib/marketingAccess';
 
 type RecordPage = keyof typeof MARKETING_RECORD_PAGES;
 
@@ -12,17 +17,21 @@ export function useMarketingAccess() {
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'TENANT_ADMIN';
   const has = (required: readonly string[]) =>
     isAdmin || required.some((permission) => permissions.includes(permission));
+  // A marketer is a module user. Anyone else only gets the pages open to every employee.
+  const isMarketer =
+    isAdmin || permissions.some((permission) => permission.startsWith(MARKETING_PERMISSION_PREFIX));
 
   // Being assigned a client or prospect is access enough to its page. Only asked when the user holds
   // none of the permissions, and the list is already limited to their own records.
-  const needsClientCheck = !!user && !has(MARKETING_RECORD_PAGES.clients.main);
-  const needsProspectCheck = !!user && !has(MARKETING_RECORD_PAGES.prospects.all);
+  const needsClientCheck = !!user && isMarketer && !has(MARKETING_RECORD_PAGES.clients.main);
+  const needsProspectCheck = !!user && isMarketer && !has(MARKETING_RECORD_PAGES.prospects.all);
   const ownClients = useClients({ limit: 1 }, needsClientCheck);
   const ownProspects = useProspects({ limit: 1 }, needsProspectCheck);
   const hasOwnClients = (ownClients.data?.meta.total ?? 0) > 0;
   const hasOwnProspects = (ownProspects.data?.meta.total ?? 0) > 0;
 
   function canSeeTab(page: string, tab: string): boolean {
+    if (!isMarketer) return MARKETING_OPEN_PAGES.includes(page);
     if (page === 'clients') return has(MARKETING_RECORD_PAGES.clients.main) || hasOwnClients;
     if (page === 'prospects') {
       const required = MARKETING_RECORD_PAGES.prospects[tab as 'all' | 'upcoming-reminders'];
@@ -43,6 +52,7 @@ export function useMarketingAccess() {
 
   /** A page shows when at least one of its tabs does. */
   function canSeePage(page: string): boolean {
+    if (!isMarketer) return MARKETING_OPEN_PAGES.includes(page);
     if (page !== 'clients' && page !== 'prospects' && !MARKETING_PAGE_TABS[page]) return true;
     return tabsOf(page).some((tab) => canSeeTab(page, tab));
   }
@@ -57,7 +67,7 @@ export function useMarketingAccess() {
     (needsClientCheck && ownClients.isLoading) ||
     (needsProspectCheck && ownProspects.isLoading);
 
-  return { canSeePage, canSeeTab, tabsOf, firstTab, isResolving };
+  return { canSeePage, canSeeTab, tabsOf, firstTab, isResolving, isMarketer };
 }
 
 export type { RecordPage };

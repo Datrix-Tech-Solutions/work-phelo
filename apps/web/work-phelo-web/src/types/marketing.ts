@@ -499,7 +499,8 @@ export interface FleetTrip {
   /** YYYY-MM-DD */
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  /** Null when the trip had no planned return time. */
+  returnTime: string | null;
   destination: string;
   requesterName: string;
   driverName: string | null;
@@ -597,16 +598,47 @@ export interface TransportRequestPerson {
   jobTitle?: string | null;
 }
 
+export type TransportPurpose = 'PERSONAL' | 'OFFICIAL';
+
+/** A client or prospect a trip goes to, with the location saved when it was chosen. */
+export interface TransportStop {
+  kind: 'CLIENT' | 'PROSPECT';
+  refId: string;
+  name: string;
+  locationLabel: string;
+  latitude: number;
+  longitude: number;
+  /** PLANNED when the request was made; VISITED when added while completing the trip. */
+  source: 'PLANNED' | 'VISITED';
+}
+
+/** A client or prospect that can be chosen as a destination. */
+export interface DestinationOption {
+  kind: 'CLIENT' | 'PROSPECT';
+  id: string;
+  name: string;
+  locationLabel: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface TransportRequest {
   id: string;
   status: TransportRequestStatus;
-  businessPurpose: string;
+  purpose: TransportPurpose;
+  /** Free-text purpose that requests made before purpose became personal / official still carry. */
+  businessPurpose: string | null;
   /** YYYY-MM-DD */
   travelDate: string;
   /** 24h HH:mm */
   departureTime: string;
-  returnTime: string;
+  /** Null when no return time was given; the trip then stays out until it is completed. */
+  returnTime: string | null;
+  /** The places chosen, joined into one line (or the old typed destination). */
   destination: string;
+  stops: TransportStop[];
+  /** The trip has departed and its return time has passed (or it had none). */
+  completable: boolean;
   notes: string | null;
   requester: { userId: string; name: string; department: string | null };
   /** People in the vehicle excluding the driver; the requester counts unless they drive. */
@@ -659,17 +691,27 @@ export interface TransportRequestFormOptions {
   employees: TransportRequestPerson[];
 }
 
+export interface TransportStopRef {
+  kind: 'CLIENT' | 'PROSPECT';
+  id: string;
+}
+
 export interface CreateTransportRequestPayload {
-  businessPurpose: string;
+  purpose: TransportPurpose;
   travelDate: string;
   departureTime: string;
-  returnTime: string;
-  destination: string;
+  returnTime?: string;
+  stops?: TransportStopRef[];
   passengerIds?: string[];
   notes?: string;
 }
 
-export type UpdateTransportRequestPayload = Partial<CreateTransportRequestPayload>;
+export type UpdateTransportRequestPayload = Partial<
+  Omit<CreateTransportRequestPayload, 'returnTime'>
+> & {
+  /** Null clears the return time. */
+  returnTime?: string | null;
+};
 
 export interface TransportRequestAllocationOptions {
   vehicles: {
@@ -696,7 +738,8 @@ export type AllocationBlock = 'MAINTENANCE' | 'OVERDUE' | 'BOOKED';
 export interface TransportRequestWindow {
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  /** Optional: a trip without one stays out until it is completed. */
+  returnTime?: string;
 }
 
 export interface RescheduleTransportRequestPayload
@@ -705,6 +748,8 @@ export interface RescheduleTransportRequestPayload
 export interface CompleteTransportRequestPayload {
   /** HH:mm on the travel date. */
   actualReturnTime: string;
+  /** Further places visited, added to the planned ones. */
+  stops?: TransportStopRef[];
 }
 
 export interface ApproveTransportRequestPayload {
@@ -725,7 +770,7 @@ export interface OfficerTrip {
   overdue: boolean;
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  returnTime: string | null;
   destination: string;
   requesterName: string;
   vehicleName: string | null;
@@ -782,7 +827,7 @@ export interface CompletedTrip {
   /** YYYY-MM-DD */
   travelDate: string;
   departureTime: string;
-  returnTime: string;
+  returnTime: string | null;
   /** When it really got back (HH:mm); null for trips completed before this was recorded. */
   actualReturnTime: string | null;
   /** Positive = late, negative = early, null = not recorded. */
