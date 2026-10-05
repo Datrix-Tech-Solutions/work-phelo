@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   ApproveTransportRequestPayload,
+  DestinationOption,
   CompleteTransportRequestPayload,
   CreateTransportRequestPayload,
   TransportRequest,
@@ -41,6 +42,21 @@ export function useRequest(id: string | undefined) {
     },
     enabled: !!id,
     retry: false,
+  });
+}
+
+/** Clients and prospects the person can choose as destinations, matching `search`. */
+export function useDestinationOptions(search: string, enabled = true) {
+  return useQuery({
+    queryKey: [...REQUESTS_KEY, 'destination-options', search] as const,
+    queryFn: async () => {
+      const res = await api.get<{ data: DestinationOption[] }>(`${ENDPOINT}/destination-options`, {
+        params: search.trim() ? { search: search.trim() } : undefined,
+      });
+      return res.data.data;
+    },
+    enabled,
+    placeholderData: (previous) => previous,
   });
 }
 

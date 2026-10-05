@@ -17,6 +17,7 @@ describe('RequestsController authorization contract', () => {
     'list',
     'findOne',
     'formOptions',
+    'destinationOptions',
     'create',
     'update',
     'cancel',
@@ -49,6 +50,7 @@ describe('RequestsController authorization contract', () => {
       [
         'list',
         'formOptions',
+        'destinationOptions',
         'findOne',
         'allocationOptions',
         'create',

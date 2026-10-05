@@ -13,7 +13,7 @@ import {
 } from '@/hooks/marketing/useRequests';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
-import { formatClock, formatTravelDate } from '@/lib/requestOptions';
+import { formatTravelDate, formatWindow } from '@/lib/requestOptions';
 import { inputClass } from '@/lib/utils';
 import type { AllocationBlock, TransportRequest } from '@/types/marketing';
 
@@ -68,7 +68,8 @@ function ApproveForm({
   const current = isReschedule ? request.allocation : null;
   const [travelDate, setTravelDate] = useState(request.travelDate);
   const [departureTime, setDepartureTime] = useState(request.departureTime);
-  const [returnTime, setReturnTime] = useState(request.returnTime);
+  // Blank means no planned return time, which is allowed.
+  const [returnTime, setReturnTime] = useState(request.returnTime ?? '');
   const [vehicleAssetId, setVehicleAssetId] = useState(current?.vehicle.assetId ?? '');
   const [driverEmployeeId, setDriverEmployeeId] = useState(
     current && !current.driver.selfDriven ? (current.driver.employeeId ?? '') : '',
@@ -84,11 +85,14 @@ function ApproveForm({
   }>({});
 
   // Availability is worked out for the date and times being chosen, so it follows edits to them.
-  const windowValid = !!travelDate && !!departureTime && !!returnTime && returnTime > departureTime;
+  const windowValid =
+    !!travelDate && !!departureTime && (!returnTime || returnTime > departureTime);
   const { data: options } = useRequestAllocationOptions(
     request.id,
     !isReschedule || windowValid,
-    isReschedule && windowValid ? { travelDate, departureTime, returnTime } : undefined,
+    isReschedule && windowValid
+      ? { travelDate, departureTime, ...(returnTime ? { returnTime } : {}) }
+      : undefined,
   );
 
   // Unavailable vehicles and drivers stay in the list, greyed out and tagged with why,
@@ -136,7 +140,6 @@ function ApproveForm({
     if (isReschedule) {
       if (!travelDate) next.date = 'Travel date is required.';
       if (!departureTime) next.departure = 'Departure time is required.';
-      if (!returnTime) next.return = 'Return time is required.';
       if (departureTime && returnTime && returnTime <= departureTime) {
         next.return = 'Return time must be after the departure time.';
       }
@@ -169,7 +172,13 @@ function ApproveForm({
 
     if (isReschedule) {
       reschedule.mutate(
-        { id: request.id, ...allocation, travelDate, departureTime, returnTime },
+        {
+          id: request.id,
+          ...allocation,
+          travelDate,
+          departureTime,
+          ...(returnTime ? { returnTime } : {}),
+        },
         done,
       );
     } else {
@@ -200,10 +209,10 @@ function ApproveForm({
               {isReschedule ? 'Reschedule Trip' : 'Approve Request'}
             </p>
             <p className="text-xs text-gray-500 mt-0.5 truncate">
-              {request.requester.name} · {request.destination}
-              {isReschedule
-                ? ` · now ${formatTravelDate(request.travelDate)} ${formatClock(request.departureTime)}–${formatClock(request.returnTime)}`
-                : ` · ${formatTravelDate(request.travelDate)} ${formatClock(request.departureTime)}–${formatClock(request.returnTime)}`}
+              {[request.requester.name, request.destination].filter(Boolean).join(' · ')}
+              {isReschedule ? ' · now ' : ' · '}
+              {formatTravelDate(request.travelDate)}{' '}
+              {formatWindow(request.departureTime, request.returnTime)}
             </p>
           </div>
         </div>
@@ -229,7 +238,7 @@ function ApproveForm({
                 {errors.departure && <p className="text-xs text-red-500">{errors.departure}</p>}
               </div>
               <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-                <label className="text-sm font-bold text-gray-900">Return</label>
+                <label className="text-sm font-bold text-gray-900">Return (optional)</label>
                 <input
                   type="time"
                   value={returnTime}

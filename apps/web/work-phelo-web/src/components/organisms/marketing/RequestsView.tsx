@@ -81,7 +81,7 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
   const canCancelRow = (row: TransportRequest) =>
     isLive(row) && ((isOwn(row) && canCancel) || canApprove);
   const canCompleteRow = (row: TransportRequest) =>
-    row.status === 'ON_ROUTE' && row.overdue && ((isOwn(row) && canEdit) || canApprove);
+    row.completable && ((isOwn(row) && canEdit) || canApprove);
   const canRescheduleRow = (row: TransportRequest) =>
     canApprove && (row.status === 'APPROVED' || row.status === 'ON_ROUTE');
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { use, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { use, useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
@@ -11,6 +11,7 @@ import { MARKETING_NAV_GROUPS } from '@/config/marketing-nav';
 import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { useModuleThemeScope } from '@/hooks';
+import { MARKETING_OPEN_PAGES } from '@/lib/marketingAccess';
 import { useMarketingAccess } from '@/hooks/marketing/useMarketingAccess';
 import { MarketingNoAccess } from '@/components/molecules/marketing/MarketingNoAccess';
 
@@ -42,7 +43,7 @@ export default function MarketingLayout({
   }
 
   // A page shows in the menu only when the user can open at least one of its tabs.
-  const { canSeePage, canSeeTab, tabsOf, isResolving } = useMarketingAccess();
+  const { canSeePage, canSeeTab, tabsOf, isResolving, isMarketer } = useMarketingAccess();
   const groups = MARKETING_NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.map(prefixItem).map((item) => ({
@@ -59,6 +60,13 @@ export default function MarketingLayout({
     !!page &&
     (!canSeePage(page) ||
       (!!tab && tabsOf(page).includes(tab) && page !== 'clients' && !canSeeTab(page, tab)));
+
+  // Anyone who is not a module user lands on, and stays within, the pages open to every employee.
+  const router = useRouter();
+  const redirecting = !isResolving && !isMarketer && !MARKETING_OPEN_PAGES.includes(page ?? '');
+  useEffect(() => {
+    if (redirecting) router.replace(`${BASE}/requests`);
+  }, [redirecting, router, BASE]);
 
   // Parked, icon-only HR rail — shown once the user has visited HR, sitting
   // next to Marketing's own sidebar (which behaves exactly as before).
@@ -88,7 +96,7 @@ export default function MarketingLayout({
             if (!collapsed) setCollapsed(true);
           }}
         >
-          {blocked ? <MarketingNoAccess /> : children}
+          {redirecting ? null : blocked ? <MarketingNoAccess /> : children}
         </main>
       </div>
     </AppBackground>

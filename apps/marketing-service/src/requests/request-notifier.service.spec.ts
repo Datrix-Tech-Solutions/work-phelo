@@ -186,4 +186,56 @@ describe('RequestNotifier', () => {
       expect(rabbit.inAppCreate).not.toHaveBeenCalled();
     });
   });
+
+  describe('trips with no destination or return time', () => {
+    const open = () =>
+      request({ destination: '', returnTime: null, departureTime: '08:00' });
+
+    it('words a new request without "to " or a dangling dash', async () => {
+      await notifier.requested(TENANT, open());
+
+      const message = sentMany()[0].message as string;
+      expect(message).toBe(
+        'Ama Mensah requested transport on 20/10/2026, 08:00.',
+      );
+      expect(message).not.toMatch(/null|undefined| to /);
+    });
+
+    it('keeps the full wording when both are given', async () => {
+      await notifier.requested(TENANT, request());
+
+      expect(sentMany()[0].message).toBe(
+        'Ama Mensah requested transport to Kumasi on 20/10/2026, 08:00–17:00.',
+      );
+    });
+
+    it('words approval, rejection and cancellation without a destination', async () => {
+      await notifier.approved(TENANT, open(), KOJO);
+      expect(sentOne().message).toBe('Your trip on 20/10/2026 was approved.');
+
+      rabbit.inAppCreate.mockClear();
+      await notifier.rejected(TENANT, open(), KOJO);
+      expect(sentOne().message).toBe('Your trip on 20/10/2026 was rejected.');
+
+      rabbit.inAppCreate.mockClear();
+      await notifier.cancelled(TENANT, open(), KOJO);
+      expect(sentOne().message).toBe('Your trip on 20/10/2026 was cancelled.');
+    });
+
+    it('words a reschedule to a trip with no return time', async () => {
+      await notifier.rescheduled(
+        TENANT,
+        request({
+          travelDate: '2026-10-22',
+          departureTime: '09:30',
+          returnTime: null,
+        }),
+        KOJO,
+      );
+
+      expect(sentOne().message).toBe(
+        'Your trip to Kumasi was moved to 22/10/2026, 09:30.',
+      );
+    });
+  });
 });

@@ -5,8 +5,17 @@
  */
 
 /**
- * Pages that take a permission. Anything not listed (dashboard, appointments, transport requests) is
- * open to everyone - each person sees their own, and approvers see more.
+ * A marketer is a module user: someone holding at least one marketing permission (or an admin).
+ * Everyone else in the company can only use the pages in MARKETING_OPEN_PAGES.
+ */
+export const MARKETING_PERMISSION_PREFIX = 'marketing.';
+
+/** Pages open to every employee, marketer or not: each person raises and sees their own, approvers see more. */
+export const MARKETING_OPEN_PAGES: readonly string[] = ['requests'];
+
+/**
+ * Pages that take a permission. A marketer sees anything not listed here (dashboard, appointments,
+ * transport requests); a non-marketer only sees MARKETING_OPEN_PAGES.
  */
 export const MARKETING_PAGE_TABS: Record<string, Record<string, string[]>> = {
   campaigns: { main: ['marketing.campaigns:VIEW'] },

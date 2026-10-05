@@ -4,11 +4,14 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import {
+  PURPOSE_LABELS,
   REQUEST_STATUS_BADGES,
   describeReturn,
   formatClock,
   formatTravelDate,
+  formatWindow,
 } from '@/lib/requestOptions';
+import { MapPin } from 'lucide-react';
 import type { TransportRequest } from '@/types/marketing';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -102,10 +105,11 @@ export function RequestDetailPanel({
     >
       {request && (
         <div className="flex flex-col gap-4">
-          {request.status === 'ON_ROUTE' && request.overdue && (
+          {request.status === 'ON_ROUTE' && request.completable && (
             <p className="text-xs text-amber-700 bg-amber-50 rounded-input px-3 py-2">
-              This trip is past its planned return time. Complete it once the vehicle is back,
-              cancel it if nobody went, or reschedule it.
+              {request.returnTime
+                ? 'This trip is past its planned return time. Complete it once the vehicle is back, cancel it if nobody went, or reschedule it.'
+                : 'This trip has no planned return time, so it stays out until it is completed. Complete it once the vehicle is back, or cancel it if nobody went.'}
             </p>
           )}
 
@@ -113,17 +117,45 @@ export function RequestDetailPanel({
             {request.requester.name}
             {request.requester.department ? ` · ${request.requester.department}` : ''}
           </Field>
-          <Field label="Business Purpose">{request.businessPurpose}</Field>
-          <Field label="Destination">{request.destination}</Field>
+          <Field label="Purpose">{PURPOSE_LABELS[request.purpose]}</Field>
+          {/* Requests made before purpose became personal / official keep their typed reason. */}
+          {request.businessPurpose && <Field label="Details">{request.businessPurpose}</Field>}
+          {request.stops.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Destinations
+              </span>
+              {request.stops.map((stop) => (
+                <div
+                  key={`${stop.kind}:${stop.refId}`}
+                  className="rounded-xl border border-gray-200 px-3 py-2"
+                >
+                  <p className="text-sm font-semibold text-gray-900">
+                    {stop.name}
+                    <span className="ml-2 text-[11px] font-semibold uppercase tracking-tight text-gray-400">
+                      {stop.kind === 'CLIENT' ? 'Client' : 'Prospect'}
+                      {stop.source === 'VISITED' ? ' · added on completion' : ''}
+                    </span>
+                  </p>
+                  <p className="flex items-center gap-1 text-xs text-gray-500">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    {stop.locationLabel}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : request.destination ? (
+            <Field label="Destination">{request.destination}</Field>
+          ) : null}
           <Field label="Travel Date">{formatTravelDate(request.travelDate)}</Field>
           <Field label="Departure – Return">
-            {formatClock(request.departureTime)} – {formatClock(request.returnTime)}
+            {formatWindow(request.departureTime, request.returnTime)}
           </Field>
           {request.reschedule && (
             <Field label="Rescheduled">
               {`From ${formatTravelDate(request.reschedule.previous.travelDate)}${
-                request.reschedule.previous.departureTime && request.reschedule.previous.returnTime
-                  ? ` ${formatClock(request.reschedule.previous.departureTime)} – ${formatClock(request.reschedule.previous.returnTime)}`
+                request.reschedule.previous.departureTime
+                  ? ` ${formatWindow(request.reschedule.previous.departureTime, request.reschedule.previous.returnTime)}`
                   : ''
               }`}
               {request.reschedule.byName ? `\nBy ${request.reschedule.byName}` : ''}

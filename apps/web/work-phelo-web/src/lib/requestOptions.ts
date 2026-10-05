@@ -1,4 +1,4 @@
-import type { TransportRequestStatus } from '@/types/marketing';
+import type { TransportPurpose, TransportRequestStatus } from '@/types/marketing';
 
 export const REQUEST_STATUS_BADGES: Record<
   TransportRequestStatus,
@@ -60,4 +60,21 @@ export function minutesBetween(from: string, to: string): number {
     return hours * 60 + minutes;
   };
   return toMinutes(to) - toMinutes(from);
+}
+
+export const PURPOSE_OPTIONS: { value: TransportPurpose; label: string }[] = [
+  { value: 'OFFICIAL', label: 'Official' },
+  { value: 'PERSONAL', label: 'Personal' },
+];
+
+export const PURPOSE_LABELS: Record<TransportPurpose, string> = {
+  OFFICIAL: 'Official',
+  PERSONAL: 'Personal',
+};
+
+/** "08:00 AM – 05:00 PM", or "08:00 AM · no return time" when none was given. */
+export function formatWindow(departureTime: string, returnTime: string | null): string {
+  return returnTime
+    ? `${formatClock(departureTime)} – ${formatClock(returnTime)}`
+    : `${formatClock(departureTime)} · no return time`;
 }

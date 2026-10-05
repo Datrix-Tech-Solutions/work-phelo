@@ -6,7 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { useRejectRequest } from '@/hooks/marketing/useRequests';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
-import { formatClock, formatTravelDate } from '@/lib/requestOptions';
+import { formatTravelDate, formatWindow } from '@/lib/requestOptions';
 import type { TransportRequest } from '@/types/marketing';
 
 const textareaClass =
@@ -53,9 +53,13 @@ function RejectForm({ request, onClose }: { request: TransportRequest; onClose: 
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900">Reject Request</p>
             <p className="text-xs text-gray-500 mt-0.5 truncate">
-              {request.requester.name} · {request.destination} ·{' '}
-              {formatTravelDate(request.travelDate)} {formatClock(request.departureTime)}–
-              {formatClock(request.returnTime)}
+              {[
+                request.requester.name,
+                request.destination,
+                `${formatTravelDate(request.travelDate)} ${formatWindow(request.departureTime, request.returnTime)}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
           </div>
         </div>

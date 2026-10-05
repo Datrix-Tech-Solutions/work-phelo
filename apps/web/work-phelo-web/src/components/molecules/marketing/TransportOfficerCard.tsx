@@ -3,7 +3,7 @@
 import { DataCard, DataCardAction, DataCardDetail } from '@/components/organisms/shared/DataCard';
 import { Avatar } from '@/components/atoms/Avatar';
 import { OFFICER_STATUS_STYLES } from '@/lib/fleetOptions';
-import { formatClock, formatTravelDate } from '@/lib/requestOptions';
+import { formatTravelDate, formatWindow } from '@/lib/requestOptions';
 import { cn } from '@/lib/utils';
 import type { TransportOfficer } from '@/types/marketing';
 
@@ -55,7 +55,12 @@ export function TransportOfficerCard({ officer, onViewTrips, onToggleActive }: P
                 ? 'On route'
                 : 'Next trip',
             value: value(
-              `${nextTrip.destination} · ${formatTravelDate(nextTrip.travelDate)} ${formatClock(nextTrip.departureTime)}–${formatClock(nextTrip.returnTime)}`,
+              [
+                nextTrip.destination,
+                `${formatTravelDate(nextTrip.travelDate)} ${formatWindow(nextTrip.departureTime, nextTrip.returnTime)}`,
+              ]
+                .filter(Boolean)
+                .join(' · '),
               nextTrip.overdue
                 ? 'text-amber-600'
                 : nextTrip.state === 'ON_ROUTE'

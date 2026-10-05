@@ -5,7 +5,10 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
+import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { Icons } from '@/components/atoms/icons';
+import { MapPin } from 'lucide-react';
+import { useDestinationPicker } from '@/hooks/marketing/useDestinationPicker';
 import {
   useCreateRequest,
   useRequestFormOptions,
@@ -13,32 +16,41 @@ import {
 } from '@/hooks/marketing/useRequests';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
+import { PURPOSE_OPTIONS } from '@/lib/requestOptions';
 import { inputClass } from '@/lib/utils';
-import type { TransportRequest } from '@/types/marketing';
+import type { DestinationOption, TransportPurpose, TransportRequest } from '@/types/marketing';
 
 interface FormValues {
-  businessPurpose: string;
+  purpose: TransportPurpose;
   travelDate: string;
   departureTime: string;
+  /** Optional: blank means no planned return, and the trip stays out until it is completed. */
   returnTime: string;
-  destination: string;
   passengerIds: string[];
   notes: string;
 }
 
-type FormErrors = Partial<
-  Record<'businessPurpose' | 'travelDate' | 'departureTime' | 'returnTime' | 'destination', string>
->;
+type FormErrors = Partial<Record<'travelDate' | 'departureTime' | 'returnTime', string>>;
 
 const EMPTY: FormValues = {
-  businessPurpose: '',
+  purpose: 'OFFICIAL',
   travelDate: '',
   departureTime: '',
   returnTime: '',
-  destination: '',
   passengerIds: [],
   notes: '',
 };
+
+/** The places already saved on a request, in the shape the picker works with. */
+const savedPlaces = (request: TransportRequest): DestinationOption[] =>
+  request.stops.map((stop) => ({
+    kind: stop.kind,
+    id: stop.refId,
+    name: stop.name,
+    locationLabel: stop.locationLabel,
+    latitude: stop.latitude,
+    longitude: stop.longitude,
+  }));
 
 const todayIso = () => {
   const now = new Date();
@@ -73,20 +85,21 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
 
   const [values, setValues] = useState<FormValues>(EMPTY);
   const [errors, setErrors] = useState<FormErrors>({});
+  const destinations = useDestinationPicker();
   // Re-seed the form whenever the panel opens for a different request (or for create).
   const seedKey = isOpen ? (request?.id ?? 'new') : null;
   const [seededFor, setSeededFor] = useState<string | null>(null);
   if (seedKey !== seededFor) {
     setSeededFor(seedKey);
     setErrors({});
+    destinations.reset(request ? savedPlaces(request) : []);
     setValues(
       request
         ? {
-            businessPurpose: request.businessPurpose,
+            purpose: request.purpose,
             travelDate: request.travelDate,
             departureTime: request.departureTime,
-            returnTime: request.returnTime,
-            destination: request.destination,
+            returnTime: request.returnTime ?? '',
             passengerIds: request.passengers.map((p) => p.employeeId),
             notes: request.notes ?? '',
           }
@@ -125,35 +138,37 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
 
   function validate(): boolean {
     const next: FormErrors = {};
-    if (values.businessPurpose.trim().length < 3) {
-      next.businessPurpose = 'Describe the business purpose of the trip.';
-    }
     if (!values.travelDate) next.travelDate = 'Travel date is required.';
     if (!values.departureTime) next.departureTime = 'Departure time is required.';
-    if (!values.returnTime) next.returnTime = 'Return time is required.';
+    // The return time is optional, but when given it must come after the departure.
     if (values.departureTime && values.returnTime && values.returnTime <= values.departureTime) {
       next.returnTime = 'Return time must be after the departure time.';
     }
-    if (values.destination.trim().length < 2) next.destination = 'Destination is required.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
 
   function handleSubmit() {
     if (!validate()) return;
-    const payload = {
-      businessPurpose: values.businessPurpose.trim(),
+    const common = {
+      purpose: values.purpose,
       travelDate: values.travelDate,
       departureTime: values.departureTime,
-      returnTime: values.returnTime,
-      destination: values.destination.trim(),
       passengerIds: values.passengerIds,
-      notes: values.notes.trim(),
     };
+    const notes = values.notes.trim();
 
     if (request) {
       updateRequest.mutate(
-        { id: request.id, ...payload },
+        {
+          id: request.id,
+          ...common,
+          notes,
+          // Clearing the field removes the return time.
+          returnTime: values.returnTime || null,
+          // Only sent when changed, so an older request's typed destination is left alone.
+          ...(destinations.touched ? { stops: destinations.refs } : {}),
+        },
         {
           onSuccess: () => {
             toast.success('Request updated');
@@ -166,7 +181,12 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
     }
 
     createRequest.mutate(
-      { ...payload, notes: payload.notes || undefined },
+      {
+        ...common,
+        ...(notes ? { notes } : {}),
+        ...(values.returnTime ? { returnTime: values.returnTime } : {}),
+        ...(destinations.refs.length ? { stops: destinations.refs } : {}),
+      },
       {
         onSuccess: () => {
           toast.success('Request submitted for approval');
@@ -219,30 +239,62 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
         <SectionTitle>Trip</SectionTitle>
 
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">Business Purpose</label>
-          <textarea
-            rows={3}
-            placeholder="eg; Client site visit and contract signing"
-            value={values.businessPurpose}
-            onChange={(e) => set('businessPurpose', e.target.value)}
-            className={textareaClass}
+          <label className="text-sm font-bold text-gray-900">Purpose</label>
+          <SegmentedToggle
+            value={values.purpose}
+            onChange={(v) => set('purpose', v)}
+            options={PURPOSE_OPTIONS}
           />
-          {errors.businessPurpose && (
-            <p className="text-xs text-red-500">{errors.businessPurpose}</p>
-          )}
         </div>
 
-        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">Destination</label>
-          <input
-            type="text"
-            placeholder="eg; Kumasi"
-            value={values.destination}
-            onChange={(e) => set('destination', e.target.value)}
-            className={inputClass(errors.destination)}
-          />
-          {errors.destination && <p className="text-xs text-red-500">{errors.destination}</p>}
-        </div>
+        <MultiSelect
+          label="Destination (client or prospect)"
+          placeholder={destinations.isLoading ? 'Loading…' : 'Search clients and prospects'}
+          options={destinations.options}
+          value={destinations.selectedKeys}
+          onChange={destinations.onChange}
+          onQueryChange={destinations.setSearch}
+          hideChips
+        />
+
+        {destinations.selected.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {destinations.selected.map((place) => (
+              <div
+                key={`${place.kind}:${place.id}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
+                    {place.name}
+                    <span className="ml-2 text-[11px] font-semibold uppercase tracking-tight text-gray-400">
+                      {place.kind === 'CLIENT' ? 'Client' : 'Prospect'}
+                    </span>
+                  </p>
+                  <p className="flex items-center gap-1 text-xs text-gray-500 truncate">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    {place.locationLabel}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => destinations.remove(place)}
+                  className="text-gray-400 hover:text-red-400 transition-colors shrink-0"
+                >
+                  <Icons.X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {destinations.isEmpty && (
+          <p className="text-xs text-gray-400 -mt-2">
+            You have no clients or prospects to choose from. The destination can be left blank.
+          </p>
+        )}
+        {request && request.stops.length === 0 && request.destination && !destinations.touched && (
+          <p className="text-xs text-gray-500 -mt-2">Previously entered: {request.destination}</p>
+        )}
 
         <DatePicker
           label="Travel Date"
@@ -267,7 +319,7 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
             {errors.departureTime && <p className="text-xs text-red-500">{errors.departureTime}</p>}
           </div>
           <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-            <label className="text-sm font-bold text-gray-900">Expected Return</label>
+            <label className="text-sm font-bold text-gray-900">Expected Return (optional)</label>
             <input
               type="time"
               value={values.returnTime}

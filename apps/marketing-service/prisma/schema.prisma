@@ -81,6 +81,28 @@ enum MarketingCampaignRecipientStatus {
   @@schema("marketing")
 }
 
+enum MarketingTransportPurpose {
+  PERSONAL
+  OFFICIAL
+
+  @@schema("marketing")
+}
+
+enum MarketingTransportStopKind {
+  CLIENT
+  PROSPECT
+
+  @@schema("marketing")
+}
+
+/// PLANNED stops are chosen when the request is made; VISITED ones are added when the trip is completed.
+enum MarketingTransportStopSource {
+  PLANNED
+  VISITED
+
+  @@schema("marketing")
+}
+
 enum MarketingTransportRequestStatus {
   PENDING
   APPROVED
@@ -415,10 +437,12 @@ model MarketingTransportRequest {
   requesterEmployeeId   String?
   requesterName         String
   requesterDepartment   String?
-  businessPurpose       String
+  /// Personal or official. Replaces the old free-text purpose, which older requests keep in businessPurpose.
+  purpose               MarketingTransportPurpose       @default(OFFICIAL)
+  businessPurpose       String?
   travelDate            DateTime                        @db.Date
   departureTime         String
-  returnTime            String
+  returnTime            String?
   destination           String
   notes                 String?
   status                MarketingTransportRequestStatus @default(PENDING)
@@ -453,6 +477,7 @@ model MarketingTransportRequest {
   updatedAt             DateTime                        @updatedAt
 
   passengers MarketingTransportRequestPassenger[]
+  stops      MarketingTransportRequestStop[]
 
   @@index([tenantId, status, travelDate])
   @@index([tenantId, requesterUserId, createdAt], map: "MarketingTransportRequest_requester_created_idx")
@@ -608,5 +633,28 @@ model MarketingClientBilling {
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, clientId])
   @@index([tenantId, clientId, productId, state])
+  @@schema("marketing")
+}
+
+/// A client or prospect a trip goes to. Name and location are snapshots so the request stays
+/// accurate if the client or prospect is edited or deleted later.
+model MarketingTransportRequestStop {
+  id            String                       @id @default(uuid())
+  tenantId      String
+  requestId     String
+  kind          MarketingTransportStopKind
+  refId         String
+  name          String
+  locationLabel String
+  latitude      Decimal                      @db.Decimal(9, 6)
+  longitude     Decimal                      @db.Decimal(9, 6)
+  source        MarketingTransportStopSource @default(PLANNED)
+  sortOrder     Int                          @default(0)
+  createdAt     DateTime                     @default(now())
+
+  request MarketingTransportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, kind, refId])
+  @@index([tenantId, refId])
   @@schema("marketing")
 }
