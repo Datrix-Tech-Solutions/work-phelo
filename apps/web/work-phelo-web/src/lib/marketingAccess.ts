@@ -4,17 +4,16 @@
  * shown it; a page whose tabs are all out of reach is not shown at all.
  */
 
-/** Pages that take a permission. Anything not listed (dashboard, appointments) is open to everyone. */
+/**
+ * Pages that take a permission. Anything not listed (dashboard, appointments, transport requests) is
+ * open to everyone - each person sees their own, and approvers see more.
+ */
 export const MARKETING_PAGE_TABS: Record<string, Record<string, string[]>> = {
   campaigns: { main: ['marketing.campaigns:VIEW'] },
   'fleet-management': { main: ['marketing.fleet:VIEW'] },
   'transport-officers': {
     details: ['marketing.transport-officers:VIEW'],
     location: ['marketing.transport-officers:VIEW'],
-  },
-  requests: {
-    'all-requests': ['marketing.requests:VIEW', 'marketing.requests.all:VIEW'],
-    'request-history': ['marketing.requests:VIEW', 'marketing.requests.all:VIEW'],
   },
   settings: {
     'sales-pipeline': ['marketing.crm-settings:VIEW', 'marketing.pipeline-stages:VIEW'],

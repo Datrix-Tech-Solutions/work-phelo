@@ -14,13 +14,23 @@ describe('RequestsController authorization contract', () => {
   });
 
   it.each([
-    ['list', [P.REQUESTS_VIEW, P.REQUESTS_VIEW_ALL]],
-    ['findOne', [P.REQUESTS_VIEW, P.REQUESTS_VIEW_ALL]],
-    ['formOptions', [P.REQUESTS_CREATE, P.REQUESTS_EDIT]],
-    ['create', [P.REQUESTS_CREATE]],
-    ['update', [P.REQUESTS_EDIT]],
-    ['cancel', [P.REQUESTS_CANCEL, P.REQUESTS_APPROVE_ALL]],
-    ['complete', [P.REQUESTS_EDIT, P.REQUESTS_APPROVE_ALL]],
+    'list',
+    'findOne',
+    'formOptions',
+    'create',
+    'update',
+    'cancel',
+    'complete',
+  ] as const)(
+    'leaves %s open to everyone: the service limits it to their own requests',
+    (method) => {
+      expect(
+        anyPermissions(RequestsController.prototype[method]),
+      ).toBeUndefined();
+    },
+  );
+
+  it.each([
     ['reschedule', [P.REQUESTS_APPROVE_ALL]],
     ['allocationOptions', [P.REQUESTS_APPROVE_ALL]],
     ['approve', [P.REQUESTS_APPROVE_ALL]],
@@ -31,7 +41,7 @@ describe('RequestsController authorization contract', () => {
     );
   });
 
-  it('leaves no route handler ungated', () => {
+  it('lists every route handler', () => {
     const declared = Object.getOwnPropertyNames(RequestsController.prototype)
       .filter((name) => name !== 'constructor')
       .sort();

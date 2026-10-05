@@ -31,9 +31,11 @@ interface Props {
 export function RequestsView({ statuses, allowCreate = false }: Props) {
   const toast = useToast();
   const userId = useAuthStore((s) => s.user?.id);
-  const canCreate = usePermissionRule('marketing.requests:CREATE');
-  const canEdit = usePermissionRule('marketing.requests:EDIT');
-  const canCancel = usePermissionRule('marketing.requests:CANCEL');
+  // Everyone can raise, edit, complete and cancel their own requests (the rows below are limited to
+  // their own); only approving, and acting on other people's requests, needs a permission.
+  const canCreate = true;
+  const canEdit = true;
+  const canCancel = true;
   const canApprove = usePermissionRule('marketing.requests.all:APPROVE');
 
   const [search, setSearch] = useState('');

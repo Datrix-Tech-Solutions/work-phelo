@@ -1,7 +1,15 @@
 'use client';
 
-import { MarketingTabRedirect } from '@/components/molecules/marketing/MarketingTabRedirect';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
-export default function Page() {
-  return <MarketingTabRedirect page="requests" />;
+export default function RequestsPage() {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace(`/${tenantSlug}/marketing/requests/all-requests`);
+  }, [tenantSlug, router]);
+
+  return null;
 }
