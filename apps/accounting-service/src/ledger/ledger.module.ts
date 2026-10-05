@@ -23,6 +23,7 @@ import { PayablesController } from './payables.controller';
 import { PayablesService } from './payables.service';
 import { PayrollIntegrationController } from './payroll-integration.controller';
 import { PayrollIntegrationService } from './payroll-integration.service';
+import { PayrollSetupService } from './payroll-setup.service';
 import { RecurringJournalsController } from './recurring-journals.controller';
 import { RecurringJournalsCron } from './recurring-journals.cron';
 import { RecurringJournalsService } from './recurring-journals.service';
@@ -80,6 +81,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     PayablesService,
     PaymentRequestsService,
     PayrollIntegrationService,
+    PayrollSetupService,
     RecurringJournalsCron,
     RecurringJournalsService,
     ReceivablesService,

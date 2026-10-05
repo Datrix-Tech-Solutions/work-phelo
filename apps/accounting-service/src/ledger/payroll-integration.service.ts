@@ -1,11 +1,15 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   AdjustmentCategory,
   GLAccountCategory,
   JournalEntryType,
   NormalBalance,
-  SourceModule,
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,44 +22,25 @@ import {
 } from './dto/payroll-integration.dto';
 import { JournalLineDto } from './dto/accounting.dto';
 import { JournalsService } from './journals.service';
+import {
+  PAYROLL_ACCOUNT_ROLES,
+  PayrollAccountRole,
+  payrollRole,
+} from './payroll-account-roles';
+import { PayrollSetupService } from './payroll-setup.service';
 import { SourceLedgerService } from './source-ledger.service';
-import { SourceTypesService } from './source-types.service';
-
-const PAYROLL_LIABILITIES_GROUP_NAME = 'Payroll Liabilities';
-const PAYROLL_EXPENSE_GROUP_NAME = 'Payroll Expense';
-
-type PayrollGlAccountKey =
-  | 'salariesWagesExpense'
-  | 'employerSocialSecurityExpense'
-  | 'netPayPayable'
-  | 'incomeTaxPayable'
-  | 'socialSecurityPayable'
-  | 'statutoryPensionPayable'
-  | 'otherDeductionsPayable';
-
-const PAYROLL_GL_ACCOUNT_NAMES: Record<PayrollGlAccountKey, string> = {
-  salariesWagesExpense: 'Salaries and Wages Expense',
-  employerSocialSecurityExpense:
-    'Employer Social Security Contribution Expense',
-  netPayPayable: 'Net Pay Payable',
-  incomeTaxPayable: 'Income Tax Payable',
-  socialSecurityPayable: 'Social Security Payable',
-  statutoryPensionPayable: 'Statutory Pension Payable',
-  otherDeductionsPayable: 'Other Deductions Payable',
-};
 
 // Short label for each liability's SourceLedgerEntry description — each settles on its own
 // schedule (net pay this week, tax remittance next month, ...), so every one gets its own
 // entry rather than one lump entry per accrual.
-const PAYROLL_LEDGER_ENTRY_LABELS: Partial<
-  Record<PayrollGlAccountKey, string>
-> = {
-  netPayPayable: 'Net Pay',
-  incomeTaxPayable: 'Income Tax',
-  socialSecurityPayable: 'Social Security',
-  statutoryPensionPayable: 'Statutory Pension',
-  otherDeductionsPayable: 'Other Deductions',
-};
+const PAYROLL_LEDGER_ENTRY_LABELS: Partial<Record<PayrollAccountRole, string>> =
+  {
+    netPayPayable: 'Net Pay',
+    incomeTaxPayable: 'Income Tax',
+    socialSecurityPayable: 'Social Security',
+    statutoryPensionPayable: 'Statutory Pension',
+    otherDeductionsPayable: 'Other Deductions',
+  };
 
 const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
   [GLAccountCategory.ASSET]: NormalBalance.DEBIT,
@@ -68,8 +53,6 @@ const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
 const PAYROLL_ENTITY_TYPE_NAME = 'Employee';
 const PAYROLL_ENTITY_CODE = 'PAYROLL-EMP';
 const PAYROLL_ENTITY_NAME = 'Employees (Payroll)';
-const SOURCE_MODULE_HR = SourceModule.HR;
-const SOURCE_TYPE_PAYROLL = 'Payroll';
 
 // A toggleable seed item alongside the GL accounts — same include/exclude pattern, just
 // creating a TransactionType instead of a GLAccount. Money out to settle a liability, so
@@ -176,7 +159,7 @@ export class PayrollIntegrationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly masterData: AccountingMasterDataService,
-    private readonly sourceTypes: SourceTypesService,
+    private readonly setup: PayrollSetupService,
     private readonly journals: JournalsService,
     private readonly sourceLedger: SourceLedgerService,
     private readonly hrClient: AccountingHrClient,
@@ -188,11 +171,7 @@ export class PayrollIntegrationService {
    *  aggregate entity of that type, and the "HR / Payroll" source type entry. */
   async seedAccounts(user: RequestUser, dto: SeedPayrollAccountsDto) {
     await this.masterData.seedStandardAccountHierarchy(user);
-    const sourceType = await this.sourceTypes.ensureExists(
-      user.tenantId,
-      SOURCE_MODULE_HR,
-      SOURCE_TYPE_PAYROLL,
-    );
+    const sourceType = await this.setup.getSource(user.tenantId);
 
     const itemByKey = new Map(dto.items.map((item) => [item.key, item]));
     const [existingGroups, existingAccounts] = await Promise.all([
@@ -215,6 +194,7 @@ export class PayrollIntegrationService {
       name: string;
       status: 'created' | 'existing' | 'excluded';
     }[] = [];
+    const accountIdByKey = new Map<string, string>();
 
     for (const template of PAYROLL_ACCOUNT_GROUPS) {
       const classification = await this.prisma.accountClassification.findUnique(
@@ -290,6 +270,7 @@ export class PayrollIntegrationService {
           where: { tenantId: user.tenantId, accountGroupId: group.id, name },
         });
         if (existing) {
+          accountIdByKey.set(child.key, existing.id);
           accountResults.push({
             key: child.key,
             code: existing.code,
@@ -318,12 +299,22 @@ export class PayrollIntegrationService {
             updatedByUserId: user.id,
           },
         });
+        accountIdByKey.set(child.key, account.id);
         accountResults.push({
           key: child.key,
           code: account.code,
           name: account.name,
           status: 'created',
         });
+      }
+    }
+
+    // The shortcut also points each payroll function at the account it made (or found), but
+    // never over a choice the accountant already made.
+    for (const role of PAYROLL_ACCOUNT_ROLES) {
+      const accountId = accountIdByKey.get(role.seedKey);
+      if (accountId) {
+        await this.setup.mapIfUnmapped(user.tenantId, role.key, accountId);
       }
     }
 
@@ -346,24 +337,141 @@ export class PayrollIntegrationService {
     };
   }
 
+  /** Creates a new account for one payroll function - under the standard payroll group, with
+   *  the next free code - and maps the function to it. For tenants that have no account of their
+   *  own to choose for it. */
+  async createAccountForRole(
+    user: RequestUser,
+    roleKey: string,
+    name?: string,
+  ) {
+    const role = this.setup.requireRole(roleKey);
+    const template = PAYROLL_ACCOUNT_GROUPS.find((group) =>
+      group.children.some((child) => child.key === role.seedKey),
+    );
+    if (!template) {
+      throw new BadRequestException(
+        `${role.label} has no standard group to create an account in.`,
+      );
+    }
+    const accountName = name?.trim() || role.standardName;
+
+    await this.masterData.seedStandardAccountHierarchy(user);
+    const classification = await this.prisma.accountClassification.findUnique({
+      where: {
+        tenantId_code: {
+          tenantId: user.tenantId,
+          code: template.classificationCode,
+        },
+      },
+    });
+    if (!classification) {
+      throw new BadRequestException(
+        `The ${template.classificationCode} account classification does not exist for this tenant.`,
+      );
+    }
+
+    const [groups, accounts] = await Promise.all([
+      this.prisma.accountGroup.findMany({
+        where: { tenantId: user.tenantId },
+        select: { code: true },
+      }),
+      this.prisma.gLAccount.findMany({
+        where: { tenantId: user.tenantId },
+        select: { code: true },
+      }),
+    ]);
+    const usedCodes = new Set(
+      [...groups, ...accounts].map((a) => Number(a.code)),
+    );
+
+    let group = await this.prisma.accountGroup.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        classificationId: classification.id,
+        name: template.groupName,
+      },
+    });
+    if (!group) {
+      const groupCode = findAvailableGroupCode(
+        Number(template.groupCode),
+        template.children.length,
+        usedCodes,
+      );
+      usedCodes.add(groupCode);
+      group = await this.prisma.accountGroup.create({
+        data: {
+          tenantId: user.tenantId,
+          classificationId: classification.id,
+          code: String(groupCode),
+          name: template.groupName,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+    }
+
+    const duplicate = await this.prisma.gLAccount.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        name: { equals: accountName, mode: 'insensitive' },
+      },
+    });
+    if (duplicate) {
+      throw new BadRequestException(
+        `An account named ${duplicate.name} already exists - choose it from the list instead.`,
+      );
+    }
+
+    const code = findAvailableGroupCode(Number(group.code) + 1, 0, usedCodes);
+    const account = await this.prisma.gLAccount.create({
+      data: {
+        tenantId: user.tenantId,
+        code: String(code),
+        name: accountName,
+        category: template.category,
+        normalBalance: NORMAL_BALANCE_BY_CATEGORY[template.category],
+        classificationId: classification.id,
+        accountGroupId: group.id,
+        createdByUserId: user.id,
+        updatedByUserId: user.id,
+      },
+    });
+    return this.setup.setMapping(user, role.key, account.id);
+  }
+
   /** Called by hr-service (via the internal service-to-service auth surface) once a payroll
-   *  run is approved. Idempotent per run — a repeated call for the same `payrollRunId` is a
-   *  no-op if the journal already exists. Requires the payroll GL accounts to already be
-   *  seeded (via `seedAccounts` above); throws a clear error if they aren't. */
-  async postAccrual(callingService: string, dto: PostPayrollAccrualDto) {
-    const user = this.internalRequestUser(dto.tenantId, callingService);
-    const accounts = await this.findPayrollGlAccounts(dto.tenantId);
+   *  run is approved, for the user who approved it. Idempotent per run — a repeated call for
+   *  the same `payrollRunId` is a no-op if the journal already exists. Posts to the accounts
+   *  the accountant mapped in Accounting; throws a clear error naming any that are missing. */
+  async postAccrual(
+    callingService: string,
+    actingUserId: string,
+    dto: PostPayrollAccrualDto,
+  ) {
+    const source = await this.setup.getSource(dto.tenantId);
+    if (!source.isActive) {
+      throw new ConflictException(
+        'Payroll is not linked to Accounting. Link it from Accounting > Source Types first.',
+      );
+    }
+    const user = this.internalRequestUser(
+      dto.tenantId,
+      callingService,
+      actingUserId,
+    );
+    const accounts = await this.setup.getMappedAccounts(dto.tenantId);
 
     const employerSSNIT = round2(dto.totalEmployerCost - dto.totalGross);
     const socialSecurityPayable = round2(
       dto.totalTier1 + dto.totalTier2 + employerSSNIT,
     );
 
-    const debitLines: { key: PayrollGlAccountKey; amount: number }[] = [
+    const debitLines: { key: PayrollAccountRole; amount: number }[] = [
       { key: 'salariesWagesExpense', amount: round2(dto.totalGross) },
       { key: 'employerSocialSecurityExpense', amount: employerSSNIT },
     ];
-    const creditLines: { key: PayrollGlAccountKey; amount: number }[] = [
+    const creditLines: { key: PayrollAccountRole; amount: number }[] = [
       { key: 'netPayPayable', amount: round2(dto.totalNet) },
       { key: 'incomeTaxPayable', amount: round2(dto.totalPAYE) },
       { key: 'socialSecurityPayable', amount: socialSecurityPayable },
@@ -376,11 +484,11 @@ export class PayrollIntegrationService {
 
     const missing = [...debitLines, ...creditLines]
       .filter((line) => line.amount > 0 && !accounts[line.key])
-      .map((line) => PAYROLL_GL_ACCOUNT_NAMES[line.key]);
+      .map((line) => payrollRole(line.key)!.label);
     if (missing.length > 0) {
       throw new BadRequestException(
-        `Payroll GL accounts are not set up (missing: ${missing.join(', ')}) — visit ` +
-          'Payroll Settings and click "Create Payroll GL Accounts" first.',
+        `No account is chosen for ${missing.join(', ')}. In Accounting, open Source Types, ` +
+          'Manage Payroll, and choose an account for each.',
       );
     }
 
@@ -434,7 +542,10 @@ export class PayrollIntegrationService {
       lines,
     });
 
-    if (dto.autoPost && journal.status !== 'POSTED') {
+    if (
+      (await this.setup.autoPostEnabled(dto.tenantId)) &&
+      journal.status !== 'POSTED'
+    ) {
       journal = await this.journals.post(user, journal.id);
     }
 
@@ -447,20 +558,16 @@ export class PayrollIntegrationService {
       where: { tenantId: dto.tenantId, journalEntryId: journal.id },
     });
     if (existingEntries === 0) {
-      const sourceType = await this.sourceTypes.ensureExists(
-        dto.tenantId,
-        SOURCE_MODULE_HR,
-        SOURCE_TYPE_PAYROLL,
-      );
       for (const line of creditLines) {
         const label = PAYROLL_LEDGER_ENTRY_LABELS[line.key];
         if (line.amount <= 0 || !label) continue;
         await this.sourceLedger.createEntry({
           tenantId: dto.tenantId,
-          sourceTypeId: sourceType.id,
+          sourceTypeId: source.id,
           glAccountId: accounts[line.key]!.id,
           journalEntryId: journal.id,
           sourceRecordId: dto.payrollRunId,
+          sourceRole: line.key,
           description: `${label} — ${dto.periodLabel}`,
           amount: line.amount,
           currency: config.baseCurrency,
@@ -474,16 +581,14 @@ export class PayrollIntegrationService {
   /** Per-liability-line settlement status for one payroll run — used by hr-service to show
    *  the employer a settlement progress view once the run is linked to Accounting. */
   async getSettlementStatus(tenantId: string, payrollRunId: string) {
-    const accounts = await this.findPayrollGlAccounts(tenantId);
     const entries = await this.sourceLedger.listBySourceRecord(
       tenantId,
       payrollRunId,
     );
-    const byGlAccountId = new Map(entries.map((e) => [e.glAccount.id, e]));
+    const byRole = new Map(entries.map((e) => [e.sourceRole, e]));
 
-    const pick = (key: PayrollGlAccountKey) => {
-      const accountId = accounts[key]?.id;
-      const entry = accountId ? byGlAccountId.get(accountId) : undefined;
+    const pick = (key: PayrollAccountRole) => {
+      const entry = byRole.get(key);
       if (!entry) return null;
       return {
         paymentState: entry.paymentState,
@@ -506,13 +611,12 @@ export class PayrollIntegrationService {
    *  payment itself already succeeded and must not be rolled back over a side effect. */
   async handleSourceLedgerEntrySettled(
     tenantId: string,
-    entry: { sourceRecordId: string | null; glAccount: { id: string } },
+    entry: { sourceRecordId: string | null; sourceRole: string | null },
   ) {
     const payrollRunId = entry.sourceRecordId;
     if (!payrollRunId) return;
 
-    const accounts = await this.findPayrollGlAccounts(tenantId);
-    if (entry.glAccount.id === accounts.netPayPayable?.id) {
+    if (entry.sourceRole === 'netPayPayable') {
       try {
         await this.hrClient.notifyNetPaySettled(tenantId, payrollRunId);
       } catch (error) {
@@ -542,40 +646,13 @@ export class PayrollIntegrationService {
     }
   }
 
-  private async findPayrollGlAccounts(
-    tenantId: string,
-  ): Promise<Record<PayrollGlAccountKey, { id: string } | null>> {
-    const accounts = await this.prisma.gLAccount.findMany({
-      where: {
-        tenantId,
-        accountGroup: {
-          name: {
-            in: [PAYROLL_LIABILITIES_GROUP_NAME, PAYROLL_EXPENSE_GROUP_NAME],
-          },
-        },
-      },
-      select: { id: true, name: true },
-    });
-    const byName = new Map(
-      accounts.map((a) => [a.name.trim().toLowerCase(), a]),
-    );
-
-    return Object.fromEntries(
-      (
-        Object.entries(PAYROLL_GL_ACCOUNT_NAMES) as [
-          PayrollGlAccountKey,
-          string,
-        ][]
-      ).map(([key, name]) => [key, byName.get(name.toLowerCase()) ?? null]),
-    ) as Record<PayrollGlAccountKey, { id: string } | null>;
-  }
-
   private internalRequestUser(
     tenantId: string,
     callingService: string,
+    actingUserId: string,
   ): RequestUser {
     return {
-      id: `service:${callingService.slice(0, 80)}`,
+      id: actingUserId,
       email: '',
       role: 'SYSTEM',
       tenantId,

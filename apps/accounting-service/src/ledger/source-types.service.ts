@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { SourceModule } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PayrollSetupService } from './payroll-setup.service';
 import { SourceLedgerService } from './source-ledger.service';
 import { SourceProvisioningService } from './source-transactions/source-provisioning.service';
 
@@ -11,6 +12,7 @@ export class SourceTypesService {
     private readonly prisma: PrismaService,
     private readonly sourceLedger: SourceLedgerService,
     private readonly provisioning: SourceProvisioningService,
+    private readonly payrollSetup: PayrollSetupService,
   ) {}
 
   async list(user: RequestUser) {
@@ -44,38 +46,17 @@ export class SourceTypesService {
       where: { id, tenantId: user.tenantId },
     });
     if (!sourceType) throw new NotFoundException('Source type not found');
+    if (sourceType.module === 'HR') {
+      // Payroll is linked only once its accounts are chosen, and not unlinked while runs are
+      // still being settled here.
+      if (isActive) await this.payrollSetup.assertReadyToLink(user.tenantId);
+      else await this.payrollSetup.assertCanUnlink(user.tenantId, id);
+    }
     const updated = await this.prisma.sourceType.update({
       where: { id_tenantId: { id, tenantId: user.tenantId } },
       data: { isActive },
     });
     return this.toSourceTypeDto(updated);
-  }
-
-  /** Called by a module's own integration setup once it completes (e.g. HR's payroll GL
-   *  account seed) — a source type is never created from the accounting settings UI itself.
-   *  Idempotent: creates the row the first time only. If it already exists, its `isActive`
-   *  is left exactly as the tenant last set it — an explicit unlink must stick, not get
-   *  silently reversed just because the owning module's setup ran again. */
-  async ensureExists(
-    tenantId: string,
-    sourceModule: SourceModule,
-    name: string,
-  ) {
-    const existing = await this.prisma.sourceType.findFirst({
-      where: { tenantId, module: sourceModule, name },
-    });
-    if (existing) return existing;
-    try {
-      return await this.prisma.sourceType.create({
-        data: { tenantId, module: sourceModule, name },
-      });
-    } catch {
-      const existingAfterRace = await this.prisma.sourceType.findFirst({
-        where: { tenantId, module: sourceModule, name },
-      });
-      if (existingAfterRace) return existingAfterRace;
-      throw new Error('Failed to ensure source type exists');
-    }
   }
 
   private toSourceTypeDto(

@@ -1164,16 +1164,15 @@ export class PayrollService {
       );
     }
 
-    // When linked to accounting, posting the accrual must succeed BEFORE the run is marked
-    // APPROVED — the run stays PENDING_APPROVAL on failure, so the approver can retry (safe:
-    // the accounting call is idempotent per run) or just leave it and come back later, rather
-    // than the approval silently going through with no accounting record created.
-    const config = await this.prisma.tenantConfig.findUnique({
-      where: { tenantId },
-      select: { linkedToAccounting: true, autoPostOnApproval: true },
-    });
-    if (config?.linkedToAccounting) {
-      await this.postPayrollAccrual(tenantId, run, config.autoPostOnApproval);
+    // When payroll is linked to Accounting (decided there, not here), posting the accrual must
+    // succeed BEFORE the run is marked APPROVED — the run stays PENDING_APPROVAL on failure, so
+    // the approver can retry (safe: the accounting call is idempotent per run) or just leave it
+    // and come back later, rather than the approval silently going through with no accounting
+    // record created. If Accounting cannot be asked, the approval stops too: it must never fall
+    // back to running on its own for a tenant that may be linked.
+    const accounting = await this.resolveAccountingForApproval(tenantId);
+    if (accounting.mode === 'ACCOUNTING') {
+      await this.postPayrollAccrual(tenantId, run, actor.id);
     }
 
     const updatedRun = await this.prisma.payrollRun.update({
@@ -1184,6 +1183,7 @@ export class PayrollService {
         approvedAt: new Date(),
         approvalNote: note,
         returnToDraftNote: null,
+        postedToAccounting: accounting.mode === 'ACCOUNTING',
       },
     });
 
@@ -1198,21 +1198,87 @@ export class PayrollService {
     return {
       ...updatedRun,
       notificationSummary,
-      accountingPosting: config?.linkedToAccounting
-        ? { posted: true as const }
-        : { posted: false as const, reason: 'not_linked' as const },
+      accountingPosting:
+        accounting.mode === 'ACCOUNTING'
+          ? { posted: true as const }
+          : { posted: false as const, reason: 'not_linked' as const },
     };
   }
 
+  /** What the approve screen shows: whether this payroll will be posted to Accounting. Unlike
+   *  approval itself, an unreachable Accounting is reported (UNKNOWN) rather than thrown, so the
+   *  screen can say so and offer a retry. */
+  async getAccountingStatus(tenantId: string) {
+    const check = await this.checkAccounting(tenantId);
+    if (check.mode === 'UNKNOWN') {
+      return { mode: 'UNKNOWN' as const, ready: false, missingRoles: [] };
+    }
+    if (check.mode === 'STANDALONE') {
+      return { mode: 'STANDALONE' as const, ready: true, missingRoles: [] };
+    }
+    return {
+      mode: 'ACCOUNTING' as const,
+      ready: check.ready,
+      missingRoles: check.missingRoles,
+    };
+  }
+
+  /** Asks Accounting whether payroll is linked. A deployment with no accounting-service, or a
+   *  tenant whose Payroll source is not linked, simply runs payroll on its own. */
+  private async checkAccounting(
+    tenantId: string,
+  ): Promise<
+    | { mode: 'STANDALONE' }
+    | { mode: 'UNKNOWN'; message: string }
+    | { mode: 'ACCOUNTING'; ready: boolean; missingRoles: string[] }
+  > {
+    if (!this.accountingClient.isConfigured()) return { mode: 'STANDALONE' };
+    try {
+      const status =
+        await this.accountingClient.getPayrollAccountingStatus(tenantId);
+      if (!status.linked) return { mode: 'STANDALONE' };
+      return {
+        mode: 'ACCOUNTING',
+        ready: status.ready,
+        missingRoles: status.missingRoles.map((role) => role.label),
+      };
+    } catch (error) {
+      return {
+        mode: 'UNKNOWN',
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private async resolveAccountingForApproval(tenantId: string) {
+    const check = await this.checkAccounting(tenantId);
+    if (check.mode === 'UNKNOWN') {
+      throw new UnprocessableEntityException({
+        code: 'ACCOUNTING_STATUS_UNAVAILABLE',
+        message: `Could not check whether payroll is linked to Accounting (${check.message}). Nothing was approved — try again.`,
+      });
+    }
+    if (check.mode === 'ACCOUNTING' && !check.ready) {
+      throw new UnprocessableEntityException({
+        code: 'ACCOUNTING_NOT_READY',
+        message:
+          'Payroll is linked to Accounting, but no account is chosen for ' +
+          `${check.missingRoles.join(', ')}. Ask an accountant to choose ` +
+          'them in Accounting under Source Types, then try again.',
+      });
+    }
+    return check;
+  }
+
   /** Posts (or drafts) the payroll accrual journal in accounting-service. Only called when
-   *  this tenant has turned on "Link Payroll to Accounting" — throws on any failure (an
-   *  accounting-service outage or misconfiguration, e.g. GL accounts not yet seeded), which
+   *  payroll is linked to Accounting — throws on any failure (an accounting-service outage or
+   *  misconfiguration, e.g. a payroll account not yet chosen), which
    *  the controller surfaces as a distinguishable error the frontend offers to retry or stop
    *  on, rather than letting the approval silently go through with nothing posted. */
   private async postPayrollAccrual(
     tenantId: string,
     run: { id: string; month: number; year: number },
-    autoPost: boolean,
+    actingUserId: string,
   ): Promise<void> {
     try {
       const [totals, otherDeductions] = await Promise.all([
@@ -1235,21 +1301,25 @@ export class PayrollService {
       ]);
       const { end } = this.getMonthBounds(run.month, run.year);
 
-      await this.accountingClient.postPayrollAccrual({
-        tenantId,
-        payrollRunId: run.id,
-        periodLabel: `${run.month}/${run.year}`,
-        transactionDate: end.toISOString().slice(0, 10),
-        totalGross: Number(totals.totalGross),
-        totalNet: Number(totals.totalNet),
-        totalPAYE: Number(totals.totalPAYE),
-        totalTier1: Number(totals.totalTier1),
-        totalTier2: Number(totals.totalTier2),
-        totalTier3: Number(totals.totalTier3),
-        totalEmployerCost: Number(totals.totalEmployerCost),
-        totalOtherDeductions: Number(otherDeductions._sum.otherDeductions ?? 0),
-        autoPost,
-      });
+      await this.accountingClient.postPayrollAccrual(
+        {
+          tenantId,
+          payrollRunId: run.id,
+          periodLabel: `${run.month}/${run.year}`,
+          transactionDate: end.toISOString().slice(0, 10),
+          totalGross: Number(totals.totalGross),
+          totalNet: Number(totals.totalNet),
+          totalPAYE: Number(totals.totalPAYE),
+          totalTier1: Number(totals.totalTier1),
+          totalTier2: Number(totals.totalTier2),
+          totalTier3: Number(totals.totalTier3),
+          totalEmployerCost: Number(totals.totalEmployerCost),
+          totalOtherDeductions: Number(
+            otherDeductions._sum.otherDeductions ?? 0,
+          ),
+        },
+        actingUserId,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new UnprocessableEntityException({
@@ -1309,18 +1379,6 @@ export class PayrollService {
   }
 
   async markAsPaid(tenantId: string, id: string) {
-    const config = await this.prisma.tenantConfig.findUnique({
-      where: { tenantId },
-      select: { linkedToAccounting: true },
-    });
-    if (config?.linkedToAccounting) {
-      throw new BadRequestException(
-        'This payroll is linked to Accounting — it is marked as paid automatically once ' +
-          'Net Pay, Income Tax, and Social Security are all settled there, rather than by a ' +
-          'manual action here.',
-      );
-    }
-
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, tenantId },
       include: {
@@ -1332,6 +1390,13 @@ export class PayrollService {
       },
     });
     if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.postedToAccounting) {
+      throw new BadRequestException(
+        'This payroll was posted to Accounting — it is marked as paid automatically once ' +
+          'Net Pay, Income Tax, and Social Security are all settled there, rather than by a ' +
+          'manual action here.',
+      );
+    }
     if (run.status !== 'APPROVED') {
       throw new BadRequestException('Payroll must be approved first');
     }
@@ -1362,19 +1427,16 @@ export class PayrollService {
     return paidRun;
   }
 
-  /** Per-liability-line settlement status for a linked tenant's run — powers the settlement
-   *  progress view that replaces the manual Mark as Paid button once linked. Returns null
-   *  for an unlinked tenant, where the run's own `status` is the only signal that matters. */
+  /** Per-liability-line settlement status for a run that was posted to Accounting — powers the
+   *  settlement progress view that replaces the manual Mark as Paid button. Returns null for a
+   *  run that runs on its own, where the run's own `status` is the only signal that matters. */
   async getSettlementStatusForRun(tenantId: string, id: string) {
-    const [run, config] = await Promise.all([
-      this.prisma.payrollRun.findFirst({ where: { id, tenantId } }),
-      this.prisma.tenantConfig.findUnique({
-        where: { tenantId },
-        select: { linkedToAccounting: true },
-      }),
-    ]);
+    const run = await this.prisma.payrollRun.findFirst({
+      where: { id, tenantId },
+      select: { postedToAccounting: true },
+    });
     if (!run) throw new NotFoundException('Payroll run not found');
-    if (!config?.linkedToAccounting) return null;
+    if (!run.postedToAccounting) return null;
 
     return this.accountingClient.getPayrollSettlementStatus(tenantId, id);
   }

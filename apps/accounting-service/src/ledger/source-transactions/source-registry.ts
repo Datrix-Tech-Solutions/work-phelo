@@ -17,6 +17,11 @@ export interface SourceRegistration {
   serviceName: string;
   /** Where Accounting reports what happened to a transaction (the module's own service). */
   callback?: { baseUrlEnv: string; path: string };
+  /**
+   * False for a module that only uses the registry for its source, caller pin and callback, and
+   * keeps its own flow (payroll). The generic source-transaction routes then do not serve it.
+   */
+  raisesTransactions?: boolean;
 }
 
 export const SOURCE_REGISTRY: Partial<
@@ -32,9 +37,30 @@ export const SOURCE_REGISTRY: Partial<
       path: '/internal/accounting-events',
     },
   },
+  HR: {
+    module: 'HR',
+    moduleConfigKey: 'hr',
+    sourceName: 'Payroll',
+    serviceName: 'hr-service',
+    // Payroll posts its own accrual and open items; its callbacks name the run in the path.
+    callback: {
+      baseUrlEnv: 'HR_SERVICE_URL',
+      path: '/internal/payroll-settlement',
+    },
+    raisesTransactions: false,
+  },
 };
 
+/** The modules that raise transactions through the generic source-transaction routes. */
 export function registrationFor(
+  module: string,
+): SourceRegistration | undefined {
+  const registration = SOURCE_REGISTRY[module as SourceModule];
+  return registration?.raisesTransactions === false ? undefined : registration;
+}
+
+/** Any registered module, whether or not it raises transactions this way. */
+export function registeredModuleFor(
   module: string,
 ): SourceRegistration | undefined {
   return SOURCE_REGISTRY[module as SourceModule];

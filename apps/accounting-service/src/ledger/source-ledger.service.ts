@@ -38,6 +38,7 @@ const ledgerEntryInclude = {
 type LedgerEntryWithRelations = {
   id: string;
   sourceRecordId: string | null;
+  sourceRole: string | null;
   description: string;
   amount: { toString(): string };
   currency: string;
@@ -64,6 +65,8 @@ export interface CreateSourceLedgerEntryInput {
   glAccountId: string;
   journalEntryId: string;
   sourceRecordId?: string;
+  /** Which of the module's accounts this item belongs to (e.g. payroll's "netPayPayable"). */
+  sourceRole?: string;
   description: string;
   amount: number;
   currency: string;
@@ -89,6 +92,7 @@ export class SourceLedgerService {
         glAccountId: input.glAccountId,
         journalEntryId: input.journalEntryId,
         sourceRecordId: input.sourceRecordId,
+        sourceRole: input.sourceRole,
         description: input.description,
         amount: input.amount,
         currency: input.currency,
@@ -321,6 +325,7 @@ export class SourceLedgerService {
     return {
       id: entry.id,
       sourceRecordId: entry.sourceRecordId,
+      sourceRole: entry.sourceRole,
       description: entry.description,
       amount,
       outstandingAmount: outstanding,
