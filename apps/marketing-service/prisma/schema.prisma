@@ -62,10 +62,13 @@ enum MarketingCampaignDispatchMode {
 }
 
 enum MarketingCampaignStatus {
+  DRAFT
   PENDING_DISPATCH
   SCHEDULED
+  QUEUED
   SENDING
   COMPLETED
+  PARTIALLY_COMPLETED
   FAILED
   CANCELLED
 
@@ -74,9 +77,50 @@ enum MarketingCampaignStatus {
 
 enum MarketingCampaignRecipientStatus {
   PENDING
+  QUEUED
+  SENDING
+  ACCEPTED
+  DELIVERED
   SENT
   FAILED
   SKIPPED
+  CANCELLED
+
+  @@schema("marketing")
+}
+
+enum MarketingSmsSenderIdentityStatus {
+  DRAFT
+  PENDING_PROVIDER_APPROVAL
+  APPROVED
+  REJECTED
+  SUSPENDED
+  ARCHIVED
+
+  @@schema("marketing")
+}
+
+enum MarketingSmsCreditLedgerEntryType {
+  INITIAL_ALLOCATION
+  PLAN_ALLOCATION
+  PURCHASE
+  ADMIN_GRANT
+  PROMOTIONAL
+  CAMPAIGN_RESERVATION
+  CAMPAIGN_CONSUMPTION
+  CAMPAIGN_RELEASE
+  CAMPAIGN_REFUND
+  ADMIN_ADJUSTMENT
+
+  @@schema("marketing")
+}
+
+enum MarketingSmsCreditReservationStatus {
+  ACTIVE
+  PARTIALLY_CONSUMED
+  CONSUMED
+  RELEASED
+  EXPIRED
 
   @@schema("marketing")
 }
@@ -542,11 +586,19 @@ model MarketingCampaign {
   channels          MarketingCampaignChannel[]
   businessTypeIds   String[]
   businessTypeNames String[]
+  senderIdentityId  String?
+  senderIdSnapshot  String?
   subject           String
   message           String
   dispatchMode      MarketingCampaignDispatchMode
   scheduledDate     DateTime?                     @db.Date
   status            MarketingCampaignStatus
+  estimatedCredits  Int?
+  smsReservationId  String?
+  reservedCredits   Int                           @default(0)
+  consumedCredits   Int                           @default(0)
+  dispatchedAt      DateTime?
+  completedAt       DateTime?
   cancelledAt       DateTime?
   cancelledByUserId String?
   createdByUserId   String?
@@ -554,34 +606,148 @@ model MarketingCampaign {
   updatedAt         DateTime                      @updatedAt
 
   recipients MarketingCampaignRecipient[]
+  sender     MarketingSmsSenderIdentity?  @relation(fields: [senderIdentityId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
+  @@index([tenantId, senderIdentityId])
   @@schema("marketing")
 }
 
 /// One row per prospect primary contact per channel, fixed when the campaign is created.
 model MarketingCampaignRecipient {
-  id             String                           @id @default(uuid())
-  tenantId       String
-  campaignId     String
-  prospectId     String
-  contactId      String
-  companyName    String
-  contactName    String
-  channel        MarketingCampaignChannel
+  id               String                           @id @default(uuid())
+  tenantId         String
+  campaignId       String
+  prospectId       String
+  contactId        String
+  companyName      String
+  contactName      String
+  channel          MarketingCampaignChannel
   /// Phone or email at creation time; null when the contact has none (row is SKIPPED).
-  address        String?
-  status         MarketingCampaignRecipientStatus @default(PENDING)
-  providerDetail String?
-  sentAt         DateTime?
-  createdAt      DateTime                         @default(now())
-  updatedAt      DateTime                         @updatedAt
+  address          String?
+  status           MarketingCampaignRecipientStatus @default(PENDING)
+  segmentCount     Int?
+  estimatedCredits Int?
+  senderIdSnapshot String?
+  senderIdentityId String?
+  smsReservationId String?
+  provider         String?
+  providerMessageId String?
+  attemptCount     Int                              @default(0)
+  lastAttemptAt    DateTime?
+  acceptedAt       DateTime?
+  deliveredAt      DateTime?
+  failedAt         DateTime?
+  failureCode      String?
+  failureReason    String?
+  creditConsumedAt DateTime?
+  creditReleasedAt DateTime?
+  providerDetail   String?
+  sentAt           DateTime?
+  createdAt        DateTime                         @default(now())
+  updatedAt        DateTime                         @updatedAt
 
-  campaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign MarketingCampaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  sender   MarketingSmsSenderIdentity? @relation(fields: [senderIdentityId], references: [id], onDelete: Restrict)
 
   @@unique([campaignId, contactId, channel])
   @@index([tenantId, campaignId, status])
+  @@index([tenantId, senderIdentityId])
+  @@schema("marketing")
+}
+
+model MarketingSmsSenderIdentity {
+  id                 String                           @id @default(uuid())
+  tenantId           String
+  senderId           String
+  normalizedSenderId String
+  displayName        String?
+  provider           String?
+  providerReference  String?
+  status             MarketingSmsSenderIdentityStatus @default(DRAFT)
+  isDefault          Boolean                          @default(false)
+  requestedBy        String?
+  requestedAt        DateTime?
+  approvedBy         String?
+  approvedAt         DateTime?
+  rejectedBy         String?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  createdBy          String?
+  createdAt          DateTime                         @default(now())
+  updatedAt          DateTime                         @updatedAt
+
+  campaigns  MarketingCampaign[]
+  recipients MarketingCampaignRecipient[]
+
+  @@unique([tenantId, normalizedSenderId])
+  @@index([tenantId, status])
+  @@index([tenantId, isDefault])
+  @@schema("marketing")
+}
+
+model MarketingSmsWallet {
+  id               String   @id @default(uuid())
+  tenantId         String   @unique
+  availableCredits Int      @default(0)
+  reservedCredits  Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  ledgerEntries MarketingSmsCreditLedgerEntry[]
+  reservations  MarketingSmsCreditReservation[]
+
+  @@schema("marketing")
+}
+
+model MarketingSmsCreditLedgerEntry {
+  id              String                            @id @default(uuid())
+  tenantId        String
+  walletId        String
+  type            MarketingSmsCreditLedgerEntryType
+  credits         Int
+  availableBefore Int
+  availableAfter  Int
+  reservedBefore  Int
+  reservedAfter   Int
+  campaignId      String?
+  recipientId     String?
+  reservationId   String?
+  idempotencyKey  String?
+  reason          String?
+  metadata        Json?
+  createdBy       String?
+  createdAt       DateTime                          @default(now())
+
+  wallet MarketingSmsWallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, walletId, createdAt])
+  @@index([tenantId, campaignId])
+  @@index([tenantId, reservationId])
+  @@schema("marketing")
+}
+
+model MarketingSmsCreditReservation {
+  id              String                              @id @default(uuid())
+  tenantId        String
+  walletId        String
+  campaignId      String?
+  status          MarketingSmsCreditReservationStatus @default(ACTIVE)
+  reservedCredits Int
+  consumedCredits Int                                 @default(0)
+  releasedCredits Int                                 @default(0)
+  idempotencyKey  String
+  expiresAt       DateTime?
+  createdAt       DateTime                            @default(now())
+  updatedAt       DateTime                            @updatedAt
+
+  wallet MarketingSmsWallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, walletId, status])
+  @@index([tenantId, campaignId])
   @@schema("marketing")
 }
 

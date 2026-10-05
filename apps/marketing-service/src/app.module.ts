@@ -10,6 +10,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProspectsModule } from './prospects/prospects.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { RequestsModule } from './requests/requests.module';
+import { SmsModule } from './sms/sms.module';
 import { TransportOfficersModule } from './transport-officers/transport-officers.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { TransportOfficersModule } from './transport-officers/transport-officers
     FleetModule,
     AppointmentsModule,
     RequestsModule,
+    SmsModule,
     TransportOfficersModule,
   ],
 })

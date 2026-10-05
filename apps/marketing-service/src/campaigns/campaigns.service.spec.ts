@@ -5,6 +5,7 @@ import { CreateCampaignDto } from './dto/campaign.dto';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const BUSINESS_TYPE = '22222222-2222-4222-8222-222222222222';
+const SENDER = '44444444-4444-4444-8444-444444444444';
 const user = { id: 'user-1', tenantId: TENANT } as RequestUser;
 
 const prospect = (
@@ -28,11 +29,19 @@ function campaignRow(overrides: Record<string, unknown> = {}) {
     channels: ['SMS'],
     businessTypeIds: [BUSINESS_TYPE],
     businessTypeNames: ['Insurance'],
+    senderIdentityId: SENDER,
+    senderIdSnapshot: 'WORKPHELO',
     subject: 'Hello',
     message: 'Body',
     dispatchMode: 'INSTANT',
     scheduledDate: null,
     status: 'PENDING_DISPATCH',
+    estimatedCredits: 1,
+    smsReservationId: null,
+    reservedCredits: 0,
+    consumedCredits: 0,
+    dispatchedAt: null,
+    completedAt: null,
     cancelledAt: null,
     createdAt: new Date('2026-10-05T00:00:00.000Z'),
     ...overrides,
@@ -46,6 +55,7 @@ const baseDto: CreateCampaignDto = {
   subject: 'Hello',
   message: 'Body',
   dispatchMode: 'INSTANT',
+  senderIdentityId: SENDER,
 };
 
 /** Typed wrapper so nested matchers don't leak `any` into object literals. */
@@ -57,13 +67,18 @@ describe('CampaignsService', () => {
     marketingCampaign: {
       create: jest.fn(),
       updateMany: jest.fn(),
+      update: jest.fn(),
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
       findUniqueOrThrow: jest.fn(),
-      update: jest.fn(),
     },
     marketingCampaignRecipient: {
       createMany: jest.fn(),
       updateMany: jest.fn(),
+      update: jest.fn(),
+      aggregate: jest.fn(),
+      groupBy: jest.fn(),
+      findFirst: jest.fn(),
       count: jest.fn(),
     },
   };
@@ -72,14 +87,30 @@ describe('CampaignsService', () => {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      update: jest.fn(),
+      findUnique: jest.fn(),
     },
-    marketingCampaignRecipient: { groupBy: jest.fn() },
+    marketingCampaignRecipient: { groupBy: jest.fn(), aggregate: jest.fn() },
     marketingCrmSettingOption: { findMany: jest.fn() },
     marketingProspect: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
   const dispatcher = { dispatch: jest.fn(), cancel: jest.fn() };
-  const service = new CampaignsService(prisma as never, dispatcher as never);
+  const senderIdentities = {
+    findApprovedForCampaign: jest.fn(),
+  };
+  const wallet = {
+    getBalance: jest.fn(),
+    reserveCreditsInTransaction: jest.fn(),
+    consumeReservationInTransaction: jest.fn(),
+    releaseReservationInTransaction: jest.fn(),
+  };
+  const service = new CampaignsService(
+    prisma as never,
+    senderIdentities as never,
+    wallet as never,
+    dispatcher as never,
+  );
 
   const createdRows = () =>
     (
@@ -98,10 +129,35 @@ describe('CampaignsService', () => {
     ]);
     prisma.marketingCampaignRecipient.groupBy.mockResolvedValue([]);
     tx.marketingCampaign.create.mockResolvedValue(campaignRow());
+    tx.marketingCampaign.update.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(campaignRow(data)),
+    );
+    prisma.marketingCampaign.update.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(campaignRow(data)),
+    );
+    senderIdentities.findApprovedForCampaign.mockResolvedValue({
+      id: SENDER,
+      senderId: 'WORKPHELO',
+      displayName: 'WorkPhelo',
+      isDefault: true,
+    });
+    wallet.getBalance.mockResolvedValue({
+      availableCredits: 100,
+      reservedCredits: 0,
+      totalCredits: 100,
+    });
+    wallet.reserveCreditsInTransaction.mockResolvedValue({
+      id: 'reservation-1',
+      reservedCredits: 2,
+    });
+    wallet.consumeReservationInTransaction.mockResolvedValue({});
+    wallet.releaseReservationInTransaction.mockResolvedValue({});
   });
 
   describe('create', () => {
-    it('queues the primary contact of every prospect and hands off to the dispatcher', async () => {
+    it('queues the primary contact of every prospect without dispatching yet', async () => {
       prisma.marketingProspect.findMany.mockResolvedValue([
         prospect('1', '0240000001', 'a@x.com'),
         prospect('2', '0240000002', null),
@@ -119,6 +175,9 @@ describe('CampaignsService', () => {
           status: 'PENDING_DISPATCH',
           businessTypeIds: [BUSINESS_TYPE],
           businessTypeNames: ['Insurance'],
+          senderIdentityId: SENDER,
+          senderIdSnapshot: 'WORKPHELO',
+          estimatedCredits: 2,
           createdByUserId: 'user-1',
         }),
       });
@@ -130,8 +189,12 @@ describe('CampaignsService', () => {
         tenantId: TENANT,
         address: '0240000001',
         status: 'PENDING',
+        segmentCount: 1,
+        estimatedCredits: 1,
+        senderIdentityId: SENDER,
+        senderIdSnapshot: 'WORKPHELO',
       });
-      expect(dispatcher.dispatch).toHaveBeenCalledWith('camp-1');
+      expect(dispatcher.dispatch).not.toHaveBeenCalled();
       expect(result.status).toBe('PENDING_DISPATCH');
     });
 
@@ -152,6 +215,39 @@ describe('CampaignsService', () => {
           providerDetail: 'Primary contact has no email address',
         }),
       ]);
+    });
+
+    it('rejects SMS campaigns without an approved sender identity', async () => {
+      senderIdentities.findApprovedForCampaign.mockResolvedValue(null);
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospect('1', '0240000001', null),
+      ]);
+
+      await expect(service.create(user, baseDto)).rejects.toThrow(
+        'SMS campaigns require an approved sender identity',
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('allows email-only campaigns without a sender identity', async () => {
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospect('1', null, 'a@x.com'),
+      ]);
+
+      await service.create(user, {
+        ...baseDto,
+        channels: ['EMAIL'],
+        senderIdentityId: undefined,
+      });
+
+      expect(senderIdentities.findApprovedForCampaign).not.toHaveBeenCalled();
+      expect(tx.marketingCampaign.create).toHaveBeenCalledWith({
+        data: like({
+          senderIdentityId: null,
+          senderIdSnapshot: null,
+          estimatedCredits: 0,
+        }),
+      });
     });
 
     it('skips a repeated address instead of messaging it twice', async () => {
@@ -306,28 +402,152 @@ describe('CampaignsService', () => {
     });
   });
 
+  describe('estimate', () => {
+    it('estimates SMS segments, wallet sufficiency and sender summary without saving', async () => {
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospect('1', '0240000001', 'a@x.com'),
+        prospect('2', '0240000002', null),
+      ]);
+
+      const result = await service.estimate(user, {
+        businessTypeIds: [BUSINESS_TYPE],
+        channels: ['SMS'],
+        senderIdentityId: SENDER,
+        subject: 'Hello',
+        message: 'Body',
+      });
+
+      expect(result.smsEncoding).toBe('GSM7');
+      expect(result.segmentsPerMessage).toBe(1);
+      expect(result.estimatedCredits).toBe(2);
+      expect(result.wallet.sufficientCredits).toBe(true);
+      expect(result.senderIdentity?.senderId).toBe('WORKPHELO');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('warns when SMS credits are insufficient', async () => {
+      wallet.getBalance.mockResolvedValue({
+        availableCredits: 1,
+        reservedCredits: 0,
+        totalCredits: 1,
+      });
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospect('1', '0240000001', null),
+        prospect('2', '0240000002', null),
+      ]);
+
+      const result = await service.estimate(user, {
+        businessTypeIds: [BUSINESS_TYPE],
+        channels: ['SMS'],
+        senderIdentityId: SENDER,
+        subject: 'Hello',
+        message: 'Body',
+      });
+
+      expect(result.wallet.sufficientCredits).toBe(false);
+      expect(result.wallet.shortfallCredits).toBe(1);
+      expect(result.warnings.map((warning) => warning.code)).toContain(
+        'INSUFFICIENT_SMS_CREDITS',
+      );
+    });
+  });
+
+  describe('send', () => {
+    beforeEach(() => {
+      prisma.marketingCampaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.marketingCampaignRecipient.aggregate.mockResolvedValue({
+        _sum: { estimatedCredits: 2 },
+        _count: { _all: 2 },
+      });
+      tx.marketingCampaign.updateMany.mockResolvedValue({ count: 1 });
+    });
+
+    it('reserves credits and dispatches pending SMS campaigns', async () => {
+      const result = await service.send(user, 'camp-1');
+
+      expect(senderIdentities.findApprovedForCampaign).toHaveBeenCalledWith(
+        TENANT,
+        SENDER,
+      );
+      expect(wallet.reserveCreditsInTransaction).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          tenantId: TENANT,
+          campaignId: 'camp-1',
+          credits: 2,
+          idempotencyKey: 'campaign:camp-1:sms',
+        }),
+      );
+      expect(tx.marketingCampaign.update).toHaveBeenCalledWith({
+        where: { id: 'camp-1' },
+        data: like({
+          smsReservationId: 'reservation-1',
+          reservedCredits: 2,
+          senderIdSnapshot: 'WORKPHELO',
+        }),
+      });
+      expect(dispatcher.dispatch).toHaveBeenCalledWith('camp-1');
+      expect(prisma.marketingCampaign.update).toHaveBeenCalledWith({
+        where: { id: 'camp-1' },
+        data: like({ status: 'SENDING' }),
+      });
+      expect(result.status).toBe('SENDING');
+    });
+
+    it('does not dispatch when credits are insufficient', async () => {
+      wallet.reserveCreditsInTransaction.mockRejectedValueOnce(
+        new BadRequestException('Insufficient SMS credits'),
+      );
+
+      await expect(service.send(user, 'camp-1')).rejects.toThrow(
+        'Insufficient SMS credits',
+      );
+      expect(dispatcher.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('releases reserved credits when dispatch publishing fails', async () => {
+      dispatcher.dispatch.mockRejectedValueOnce(new Error('broker down'));
+
+      await expect(service.send(user, 'camp-1')).rejects.toThrow('broker down');
+      expect(wallet.releaseReservationInTransaction).toHaveBeenCalledWith(
+        tx,
+        TENANT,
+        'reservation-1',
+      );
+      expect(tx.marketingCampaign.update).toHaveBeenLastCalledWith({
+        where: { id: 'camp-1' },
+        data: like({
+          status: 'PENDING_DISPATCH',
+          smsReservationId: null,
+          reservedCredits: 0,
+        }),
+      });
+    });
+  });
+
   describe('cancel', () => {
-    it('cancels a scheduled campaign, skips its pending recipients and tells the dispatcher', async () => {
+    it('cancels a scheduled campaign, cancels its pending recipients and tells the dispatcher', async () => {
       prisma.marketingCampaign.findFirst.mockResolvedValue(
         campaignRow({ status: 'SCHEDULED' }),
       );
-      tx.marketingCampaign.updateMany.mockResolvedValue({ count: 1 });
-      tx.marketingCampaign.findUniqueOrThrow.mockResolvedValue(
+      tx.marketingCampaign.findFirst.mockResolvedValue(
+        campaignRow({ status: 'SCHEDULED' }),
+      );
+      tx.marketingCampaignRecipient.aggregate.mockResolvedValue({
+        _sum: { estimatedCredits: 0 },
+      });
+      tx.marketingCampaign.update.mockResolvedValue(
         campaignRow({ status: 'CANCELLED' }),
       );
 
       const result = await service.cancel(user, 'camp-1');
 
-      expect(tx.marketingCampaign.updateMany).toHaveBeenCalledWith({
-        where: { id: 'camp-1', tenantId: TENANT, status: 'SCHEDULED' },
-        data: like({
-          status: 'CANCELLED',
-          cancelledByUserId: 'user-1',
-        }),
-      });
       expect(tx.marketingCampaignRecipient.updateMany).toHaveBeenCalledWith({
         where: { campaignId: 'camp-1', status: 'PENDING' },
-        data: { status: 'SKIPPED', providerDetail: 'Campaign cancelled' },
+        data: like({
+          status: 'CANCELLED',
+          providerDetail: 'Campaign cancelled',
+        }),
       });
       expect(dispatcher.cancel).toHaveBeenCalledWith('camp-1');
       expect(result.status).toBe('CANCELLED');
@@ -339,7 +559,7 @@ describe('CampaignsService', () => {
       );
 
       await expect(service.cancel(user, 'camp-1')).rejects.toThrow(
-        'Only scheduled campaigns can be cancelled',
+        'Only campaigns that have not started sending can be cancelled',
       );
       expect(dispatcher.cancel).not.toHaveBeenCalled();
     });
@@ -348,7 +568,7 @@ describe('CampaignsService', () => {
       prisma.marketingCampaign.findFirst.mockResolvedValue(
         campaignRow({ status: 'SCHEDULED' }),
       );
-      tx.marketingCampaign.updateMany.mockResolvedValue({ count: 0 });
+      tx.marketingCampaign.findFirst.mockResolvedValue(null);
 
       await expect(service.cancel(user, 'camp-1')).rejects.toThrow(
         BadRequestException,
@@ -379,9 +599,14 @@ describe('CampaignsService', () => {
       expect(result.data[0].recipients).toEqual({
         total: 5,
         pending: 4,
+        queued: 0,
+        sending: 0,
+        accepted: 0,
+        delivered: 0,
         sent: 0,
         failed: 0,
         skipped: 1,
+        cancelled: 0,
       });
       expect(result.meta).toEqual({
         page: 1,
@@ -393,13 +618,59 @@ describe('CampaignsService', () => {
   });
 
   describe('applyDeliveryResults', () => {
-    const setup = (status: string, pending: number, sent: number) => {
-      tx.marketingCampaign.findUnique.mockResolvedValue(
-        campaignRow({ status }),
+    const recipient = (overrides: Record<string, unknown> = {}) => ({
+      id: 'r1',
+      tenantId: TENANT,
+      campaignId: 'camp-1',
+      prospectId: 'p-1',
+      contactId: 'c-1',
+      companyName: 'Company 1',
+      contactName: 'Contact 1',
+      channel: 'SMS',
+      address: '0240000001',
+      status: 'QUEUED',
+      segmentCount: 1,
+      estimatedCredits: 1,
+      senderIdSnapshot: 'WORKPHELO',
+      senderIdentityId: SENDER,
+      smsReservationId: 'reservation-1',
+      provider: null,
+      providerMessageId: null,
+      attemptCount: 0,
+      lastAttemptAt: null,
+      acceptedAt: null,
+      deliveredAt: null,
+      failedAt: null,
+      failureCode: null,
+      failureReason: null,
+      creditConsumedAt: null,
+      creditReleasedAt: null,
+      providerDetail: null,
+      sentAt: null,
+      createdAt: new Date('2026-10-05T00:00:00.000Z'),
+      updatedAt: new Date('2026-10-05T00:00:00.000Z'),
+      ...overrides,
+    });
+    const setup = (
+      status: string,
+      groups: Array<{ status: string; count: number }>,
+    ) => {
+      prisma.marketingCampaign.findUnique.mockResolvedValue(
+        campaignRow({ status, smsReservationId: 'reservation-1' }),
       );
-      tx.marketingCampaignRecipient.count
-        .mockResolvedValueOnce(pending)
-        .mockResolvedValueOnce(sent);
+      tx.marketingCampaign.findUnique.mockResolvedValue(
+        campaignRow({ status, smsReservationId: 'reservation-1' }),
+      );
+      tx.marketingCampaign.findFirst.mockResolvedValue(
+        campaignRow({ status, smsReservationId: 'reservation-1' }),
+      );
+      tx.marketingCampaignRecipient.findFirst.mockResolvedValue(recipient());
+      tx.marketingCampaignRecipient.groupBy.mockResolvedValue(
+        groups.map((group) => ({
+          status: group.status,
+          _count: { _all: group.count },
+        })),
+      );
       tx.marketingCampaign.update.mockImplementation(
         ({ data }: { data: { status: string } }) =>
           Promise.resolve(campaignRow({ status: data.status })),
@@ -407,33 +678,36 @@ describe('CampaignsService', () => {
     };
 
     it('marks the campaign COMPLETED once nothing is pending and something was sent', async () => {
-      setup('SENDING', 0, 3);
+      setup('SENDING', [{ status: 'ACCEPTED', count: 3 }]);
 
       const result = await service.applyDeliveryResults('camp-1', [
         { recipientId: 'r1', status: 'SENT' },
-        { recipientId: 'r2', status: 'FAILED', providerDetail: 'bounced' },
       ]);
 
-      expect(tx.marketingCampaignRecipient.updateMany).toHaveBeenCalledTimes(2);
-      expect(tx.marketingCampaignRecipient.updateMany).toHaveBeenCalledWith({
-        where: { id: 'r1', campaignId: 'camp-1', status: 'PENDING' },
-        data: like({ status: 'SENT', providerDetail: null }),
+      expect(tx.marketingCampaignRecipient.update).toHaveBeenCalledWith({
+        where: { id: 'r1' },
+        data: like({ status: 'ACCEPTED', providerDetail: undefined }),
       });
+      expect(wallet.consumeReservationInTransaction).toHaveBeenCalled();
       expect(result.status).toBe('COMPLETED');
     });
 
     it('marks the campaign FAILED when nothing was delivered', async () => {
-      setup('SENDING', 0, 0);
+      setup('SENDING', [{ status: 'FAILED', count: 1 }]);
 
       const result = await service.applyDeliveryResults('camp-1', [
         { recipientId: 'r1', status: 'FAILED' },
       ]);
 
+      expect(wallet.releaseReservationInTransaction).toHaveBeenCalled();
       expect(result.status).toBe('FAILED');
     });
 
     it('stays SENDING while recipients are still pending', async () => {
-      setup('PENDING_DISPATCH', 2, 1);
+      setup('SENDING', [
+        { status: 'QUEUED', count: 2 },
+        { status: 'ACCEPTED', count: 1 },
+      ]);
 
       const result = await service.applyDeliveryResults('camp-1', [
         { recipientId: 'r1', status: 'SENT' },
@@ -443,7 +717,13 @@ describe('CampaignsService', () => {
     });
 
     it('leaves a cancelled campaign untouched', async () => {
+      prisma.marketingCampaign.findUnique.mockResolvedValue(
+        campaignRow({ status: 'CANCELLED' }),
+      );
       tx.marketingCampaign.findUnique.mockResolvedValue(
+        campaignRow({ status: 'CANCELLED' }),
+      );
+      tx.marketingCampaign.findFirst.mockResolvedValue(
         campaignRow({ status: 'CANCELLED' }),
       );
 
@@ -452,7 +732,7 @@ describe('CampaignsService', () => {
       ]);
 
       expect(result.status).toBe('CANCELLED');
-      expect(tx.marketingCampaignRecipient.updateMany).not.toHaveBeenCalled();
+      expect(tx.marketingCampaignRecipient.update).not.toHaveBeenCalled();
     });
   });
 });

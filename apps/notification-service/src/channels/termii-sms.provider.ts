@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { SmsProvider, SmsSendResult } from './sms-provider.interface';
+import type {
+  SmsProvider,
+  SmsSendOptions,
+  SmsSendResult,
+} from './sms-provider.interface';
 
 @Injectable()
 export class TermiiSmsProvider implements SmsProvider {
@@ -9,7 +13,11 @@ export class TermiiSmsProvider implements SmsProvider {
   private readonly senderId = process.env.TERMII_SENDER_ID || 'WorkPhelo';
   private readonly baseUrl = 'https://api.ng.termii.com/api';
 
-  async sendMessage(to: string, message: string): Promise<SmsSendResult> {
+  async sendMessage(
+    to: string,
+    message: string,
+    options?: SmsSendOptions,
+  ): Promise<SmsSendResult> {
     if (!this.apiKey) {
       return {
         success: false,
@@ -25,7 +33,7 @@ export class TermiiSmsProvider implements SmsProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to,
-          from: this.senderId,
+          from: options?.senderId || this.senderId,
           sms: message,
           type: 'plain',
           api_key: this.apiKey,

@@ -289,6 +289,22 @@ export const RESOURCES = [
     description:
       'Marketing SMS and email campaigns to prospects by business type',
   },
+  {
+    name: 'marketing.sms-sender-identities',
+    module: 'MARKETING',
+    description: 'Tenant SMS sender identities used by Marketing campaigns',
+  },
+  {
+    name: 'marketing.sms-wallet',
+    module: 'MARKETING',
+    description: 'Tenant SMS credit wallet balance and ledger visibility',
+  },
+  {
+    name: 'marketing.sms-credits',
+    module: 'MARKETING',
+    description:
+      'Administrative SMS credit adjustments for Marketing campaigns',
+  },
 
   {
     name: 'operations.reinsurance.dashboard',

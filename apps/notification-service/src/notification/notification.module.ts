@@ -6,6 +6,7 @@ import { PiloSmsProvider } from '../channels/pilosms.provider';
 import { SmsService } from '../channels/sms.service';
 import { TermiiSmsProvider } from '../channels/termii-sms.provider';
 import { InAppNotificationsModule } from '../in-app-notifications/in-app-notifications.module';
+import { MarketingRabbitPublisher } from '../messaging/marketing-rabbit.publisher';
 
 @Module({
   imports: [InAppNotificationsModule],
@@ -16,6 +17,7 @@ import { InAppNotificationsModule } from '../in-app-notifications/in-app-notific
     SmsService,
     TermiiSmsProvider,
     PiloSmsProvider,
+    MarketingRabbitPublisher,
   ],
 })
 export class NotificationModule {}

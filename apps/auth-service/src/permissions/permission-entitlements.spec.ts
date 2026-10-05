@@ -70,6 +70,9 @@ describe('permission entitlements', () => {
     'marketing.appointments.all',
     'marketing.transport-officers',
     'marketing.campaigns',
+    'marketing.sms-sender-identities',
+    'marketing.sms-wallet',
+    'marketing.sms-credits',
   ])('scopes %s to the Marketing module only', (name) => {
     const resource = { name, module: 'MARKETING' };
 

@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { SmsProvider, SmsSendResult } from './sms-provider.interface';
+import type {
+  SmsProvider,
+  SmsSendOptions,
+  SmsSendResult,
+} from './sms-provider.interface';
 
 type PiloSmsResponse = {
   status?: string | number;
@@ -14,7 +18,11 @@ export class PiloSmsProvider implements SmsProvider {
   private readonly senderId = process.env.PILOSMS_SENDER_ID || 'WorkPhelo';
   private readonly baseUrl = 'https://api.pilosms.com/v1';
 
-  async sendMessage(to: string, message: string): Promise<SmsSendResult> {
+  async sendMessage(
+    to: string,
+    message: string,
+    options?: SmsSendOptions,
+  ): Promise<SmsSendResult> {
     if (!this.apiKey) {
       return {
         success: false,
@@ -37,7 +45,7 @@ export class PiloSmsProvider implements SmsProvider {
     }
 
     const body = new URLSearchParams({
-      sender: this.senderId,
+      sender: options?.senderId || this.senderId,
       message,
       receipients: recipient,
     });

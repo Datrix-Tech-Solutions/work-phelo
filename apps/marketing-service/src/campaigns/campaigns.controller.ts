@@ -32,11 +32,12 @@ import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto
 import { CampaignsService } from './campaigns.service';
 import {
   CreateCampaignDto,
+  EstimateCampaignDto,
   PreviewCampaignRecipientsDto,
   QueryCampaignsDto,
 } from './dto/campaign.dto';
 
-const { CAMPAIGNS_VIEW, CAMPAIGNS_CREATE, CAMPAIGNS_CANCEL } =
+const { CAMPAIGNS_VIEW, CAMPAIGNS_CREATE, CAMPAIGNS_SEND, CAMPAIGNS_CANCEL } =
   MarketingCrmSettingsPermission;
 
 type AuthedRequest = Request & { user: RequestUser };
@@ -80,6 +81,18 @@ export class CampaignsController {
     return this.service.preview(request.user, dto);
   }
 
+  @Post('estimate')
+  @HttpCode(HttpStatus.OK)
+  @RequireAnyPermission(CAMPAIGNS_CREATE)
+  @ApiOperation({
+    summary: 'Estimate campaign recipients and SMS credit requirements',
+    description:
+      'Calculates recipient counts, SMS encoding/segments, wallet sufficiency, sender identity validity and non-blocking warnings. Nothing is saved or reserved.',
+  })
+  estimate(@Body() dto: EstimateCampaignDto, @Req() request: AuthedRequest) {
+    return this.service.estimate(request.user, dto);
+  }
+
   @Get(':id')
   @RequireAnyPermission(CAMPAIGNS_VIEW)
   @ApiOperation({ summary: 'Get a campaign with its delivery counts' })
@@ -99,13 +112,26 @@ export class CampaignsController {
     return this.service.create(request.user, dto);
   }
 
+  @Post(':id/send')
+  @HttpCode(HttpStatus.OK)
+  @RequireAnyPermission(CAMPAIGNS_SEND)
+  @ApiOperation({
+    summary: 'Send a pending SMS campaign',
+    description:
+      'Atomically reserves SMS credits, queues recipient batches for Notification, and records provider results asynchronously.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  send(@Param('id', ParseUUIDPipe) id: string, @Req() request: AuthedRequest) {
+    return this.service.send(request.user, id);
+  }
+
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
   @RequireAnyPermission(CAMPAIGNS_CANCEL)
   @ApiOperation({
-    summary: 'Cancel a scheduled campaign',
+    summary: 'Cancel a campaign before dispatch starts',
     description:
-      'Only campaigns that have not started sending can be cancelled.',
+      'Only pending or scheduled campaigns that have not started dispatching can be cancelled.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   cancel(

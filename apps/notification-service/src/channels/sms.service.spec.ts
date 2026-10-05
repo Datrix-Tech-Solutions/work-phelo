@@ -1,5 +1,9 @@
 import { PiloSmsProvider } from './pilosms.provider';
-import type { SmsProvider, SmsSendResult } from './sms-provider.interface';
+import type {
+  SmsProvider,
+  SmsSendOptions,
+  SmsSendResult,
+} from './sms-provider.interface';
 import { SmsService } from './sms.service';
 import { TermiiSmsProvider } from './termii-sms.provider';
 
@@ -21,17 +25,23 @@ describe('SmsService provider routing', () => {
 
   let termiiProvider: SmsProvider;
   let piloProvider: SmsProvider;
-  let termiiSendMessage: jest.Mock<Promise<SmsSendResult>, [string, string]>;
-  let piloSendMessage: jest.Mock<Promise<SmsSendResult>, [string, string]>;
+  let termiiSendMessage: jest.Mock<
+    Promise<SmsSendResult>,
+    [string, string, SmsSendOptions?]
+  >;
+  let piloSendMessage: jest.Mock<
+    Promise<SmsSendResult>,
+    [string, string, SmsSendOptions?]
+  >;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
     termiiSendMessage = jest
-      .fn<Promise<SmsSendResult>, [string, string]>()
+      .fn<Promise<SmsSendResult>, [string, string, SmsSendOptions?]>()
       .mockImplementation(() => Promise.resolve(termiiResult));
     piloSendMessage = jest
-      .fn<Promise<SmsSendResult>, [string, string]>()
+      .fn<Promise<SmsSendResult>, [string, string, SmsSendOptions?]>()
       .mockImplementation(() => Promise.resolve(piloResult));
     termiiProvider = {
       provider: 'termii',
@@ -55,7 +65,11 @@ describe('SmsService provider routing', () => {
       termiiResult,
     );
 
-    expect(termiiSendMessage).toHaveBeenCalledWith('+233244000001', 'Hello');
+    expect(termiiSendMessage).toHaveBeenCalledWith(
+      '+233244000001',
+      'Hello',
+      undefined,
+    );
     expect(piloSendMessage).not.toHaveBeenCalled();
   });
 
@@ -67,7 +81,11 @@ describe('SmsService provider routing', () => {
       piloResult,
     );
 
-    expect(piloSendMessage).toHaveBeenCalledWith('+233244000001', 'Hello');
+    expect(piloSendMessage).toHaveBeenCalledWith(
+      '+233244000001',
+      'Hello',
+      undefined,
+    );
     expect(termiiSendMessage).not.toHaveBeenCalled();
   });
 
@@ -80,6 +98,7 @@ describe('SmsService provider routing', () => {
     expect(termiiSendMessage).toHaveBeenCalledWith(
       '+233244000001',
       expect.stringContaining('Your WorkPhelo login code is: 123456'),
+      undefined,
     );
     expect(piloSendMessage).not.toHaveBeenCalled();
   });

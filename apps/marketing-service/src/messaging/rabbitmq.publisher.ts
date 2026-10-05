@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'crypto';
 import { firstValueFrom, timeout } from 'rxjs';
 import {
+  CampaignDispatchBatchEvent,
   EventPatterns,
   InAppNotificationCreateEvent,
   PermissionRecipient,
@@ -95,6 +96,19 @@ export class MarketingRabbitPublisher implements OnModuleDestroy {
 
   async inAppCreateMany(events: InAppNotificationCreateEvent[]): Promise<void> {
     await Promise.all(events.map((event) => this.inAppCreate(event)));
+  }
+
+  async campaignDispatchBatch(data: CampaignDispatchBatchEvent): Promise<void> {
+    const client = this.client('notification_queue');
+    if (!client) {
+      throw new Error('RABBITMQ_URL is required for campaign dispatch');
+    }
+    await firstValueFrom(
+      client
+        .emit(EventPatterns.NOTIFY_CAMPAIGN_DISPATCH, this.envelope(data))
+        .pipe(timeout(this.timeoutMs)),
+      { defaultValue: undefined },
+    );
   }
 
   onModuleDestroy() {

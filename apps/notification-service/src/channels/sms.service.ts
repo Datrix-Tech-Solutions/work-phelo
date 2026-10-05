@@ -3,6 +3,7 @@ import { PiloSmsProvider } from './pilosms.provider';
 import type {
   SmsProvider,
   SmsProviderName,
+  SmsSendOptions,
   SmsSendResult,
 } from './sms-provider.interface';
 import { TermiiSmsProvider } from './termii-sms.provider';
@@ -27,8 +28,12 @@ export class SmsService {
     this.logger.log(`SMS provider selected: ${this.provider.provider}`);
   }
 
-  async sendMessage(to: string, message: string): Promise<SmsSendResult> {
-    return this.provider.sendMessage(to, message);
+  async sendMessage(
+    to: string,
+    message: string,
+    options?: SmsSendOptions,
+  ): Promise<SmsSendResult> {
+    return this.provider.sendMessage(to, message, options);
   }
 
   async sendOtp(

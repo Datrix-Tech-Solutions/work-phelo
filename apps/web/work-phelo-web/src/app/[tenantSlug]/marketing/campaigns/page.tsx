@@ -5,7 +5,12 @@ import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CampaignsTable } from '@/components/molecules/marketing/CampaignsTable';
 import { AddCampaignPanel, CampaignForm } from '@/components/organisms/marketing/AddCampaignPanel';
-import { useCampaigns, useCancelCampaign, useCreateCampaign } from '@/hooks/marketing/useCampaigns';
+import {
+  useCampaigns,
+  useCancelCampaign,
+  useCreateCampaign,
+  useSendCampaign,
+} from '@/hooks/marketing/useCampaigns';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -21,8 +26,10 @@ export default function CampaignsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [sending, setSending] = useState<Campaign | null>(null);
   const [cancelling, setCancelling] = useState<Campaign | null>(null);
   const canCreate = usePermissionRule('marketing.campaigns:CREATE');
+  const canSend = usePermissionRule('marketing.campaigns:RUN');
   const canCancel = usePermissionRule('marketing.campaigns:CANCEL');
 
   const { data, isLoading, isError } = useCampaigns({
@@ -31,6 +38,7 @@ export default function CampaignsPage() {
     ...(search.trim() ? { search: search.trim() } : {}),
   });
   const createCampaign = useCreateCampaign();
+  const sendCampaign = useSendCampaign();
   const cancelCampaign = useCancelCampaign();
 
   function handleSubmit(form: CampaignForm) {
@@ -42,6 +50,9 @@ export default function CampaignsPage() {
         subject: form.subject.trim(),
         message: form.message.trim(),
         dispatchMode: form.dispatch === 'schedule' ? 'SCHEDULED' : 'INSTANT',
+        ...(form.outreachChannel.includes('SMS') && form.senderIdentityId
+          ? { senderIdentityId: form.senderIdentityId }
+          : {}),
         ...(form.dispatch === 'schedule' && form.scheduledDate
           ? { scheduledDate: form.scheduledDate }
           : {}),
@@ -64,6 +75,17 @@ export default function CampaignsPage() {
         setCancelling(null);
       },
       onError: (error) => toast.error(apiErrorMessage(error, 'Failed to cancel campaign')),
+    });
+  }
+
+  function handleSend() {
+    if (!sending) return;
+    sendCampaign.mutate(sending.id, {
+      onSuccess: () => {
+        toast.success('Campaign queued for sending');
+        setSending(null);
+      },
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to send campaign')),
     });
   }
 
@@ -90,6 +112,7 @@ export default function CampaignsPage() {
           totalPages={Math.max(1, data?.meta.totalPages ?? 1)}
           onPageChange={setPage}
           onAdd={canCreate ? () => setPanelOpen(true) : undefined}
+          onSend={canSend ? setSending : undefined}
           onCancel={canCancel ? setCancelling : undefined}
         />
       </div>
@@ -99,6 +122,25 @@ export default function CampaignsPage() {
         onClose={() => setPanelOpen(false)}
         onSubmit={handleSubmit}
         isSubmitting={createCampaign.isPending}
+      />
+
+      <Modal
+        isOpen={!!sending}
+        onClose={() => setSending(null)}
+        title="Send Campaign"
+        description={`Send "${sending?.name ?? ''}" now? This will reserve ${sending?.estimatedCredits ?? 0} SMS credits and submit messages to the approved sender provider.`}
+        width="max-w-sm"
+        height="max-h-fit"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setSending(null)}>
+              Keep Draft
+            </Button>
+            <Button onClick={handleSend} isLoading={sendCampaign.isPending}>
+              Send Campaign
+            </Button>
+          </>
+        }
       />
 
       <Modal

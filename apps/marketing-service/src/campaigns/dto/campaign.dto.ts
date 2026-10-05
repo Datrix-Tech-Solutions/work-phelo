@@ -25,10 +25,13 @@ export const CAMPAIGN_DISPATCH_MODES = ['INSTANT', 'SCHEDULED'] as const;
 export type CampaignDispatchMode = (typeof CAMPAIGN_DISPATCH_MODES)[number];
 
 export const CAMPAIGN_STATUSES = [
+  'DRAFT',
   'PENDING_DISPATCH',
   'SCHEDULED',
+  'QUEUED',
   'SENDING',
   'COMPLETED',
+  'PARTIALLY_COMPLETED',
   'FAILED',
   'CANCELLED',
 ] as const;
@@ -80,6 +83,15 @@ export class CreateCampaignDto {
   @ApiProperty({ enum: CAMPAIGN_DISPATCH_MODES })
   @IsEnum(CAMPAIGN_DISPATCH_MODES)
   dispatchMode!: CampaignDispatchMode;
+
+  @ApiPropertyOptional({
+    description:
+      'Required for SMS campaigns. Must reference an approved sender identity.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  senderIdentityId?: string;
 
   @ApiPropertyOptional({
     example: '2026-10-20',
@@ -138,4 +150,29 @@ export class PreviewCampaignRecipientsDto {
   @ArrayUnique()
   @IsEnum(CAMPAIGN_CHANNELS, { each: true })
   channels!: CampaignChannel[];
+}
+
+export class EstimateCampaignDto extends PreviewCampaignRecipientsDto {
+  @ApiProperty({ example: 'Introducing our new product', maxLength: 200 })
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  subject!: string;
+
+  @ApiProperty({ maxLength: 2000 })
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  message!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Approved SMS sender identity to use for SMS campaign estimates.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  senderIdentityId?: string;
 }

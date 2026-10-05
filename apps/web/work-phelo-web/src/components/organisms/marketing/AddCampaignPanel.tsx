@@ -9,7 +9,8 @@ import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
-import { useCampaignPreview } from '@/hooks/marketing/useCampaigns';
+import { useCampaignEstimate, useCampaignPreview } from '@/hooks/marketing/useCampaigns';
+import { useSmsSenderIdentities } from '@/hooks/marketing/useSmsMarketing';
 import type { CampaignChannel, ProspectingSetting } from '@/types/marketing';
 
 export type CampaignDispatch = 'instant' | 'schedule';
@@ -20,6 +21,7 @@ export interface CampaignForm {
   targetSegment: string[];
   subject: string;
   message: string;
+  senderIdentityId?: string;
   dispatch: CampaignDispatch;
   scheduledDate?: string;
 }
@@ -30,6 +32,7 @@ const DEFAULT_VALUES: CampaignForm = {
   targetSegment: [],
   subject: '',
   message: '',
+  senderIdentityId: '',
   dispatch: 'instant',
   scheduledDate: '',
 };
@@ -57,7 +60,17 @@ interface Props {
 
 export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Props) {
   const { data: businessTypes = [] } = useProspectingSettings('business-types');
+  const { data: approvedSenders = [] } = useSmsSenderIdentities({ status: 'APPROVED' });
   const segmentOptions = useMemo(() => toOptions(businessTypes), [businessTypes]);
+  const senderOptions = useMemo(
+    () =>
+      approvedSenders.map((sender) => ({
+        value: sender.id,
+        label: sender.displayName ? `${sender.senderId} · ${sender.displayName}` : sender.senderId,
+        isDefault: sender.isDefault,
+      })),
+    [approvedSenders],
+  );
 
   const {
     register,
@@ -72,9 +85,11 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
   const segmentValue = useWatch({ control, name: 'targetSegment' });
   const subjectValue = useWatch({ control, name: 'subject' }) ?? '';
   const messageValue = useWatch({ control, name: 'message' }) ?? '';
+  const senderIdentityId = useWatch({ control, name: 'senderIdentityId' });
   const characterCount = subjectValue.length + messageValue.length;
   const dispatchValue = useWatch({ control, name: 'dispatch' });
   const scheduledDateValue = useWatch({ control, name: 'scheduledDate' });
+  const usesSms = channelValue?.includes('SMS') ?? false;
 
   // The caller closes the panel after a successful save, so reset on close rather than on submit:
   // a failed save keeps what the user typed.
@@ -86,6 +101,19 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
     businessTypeIds: segmentValue,
     channels: channelValue,
   });
+  const estimate = useCampaignEstimate({
+    businessTypeIds: segmentValue,
+    channels: channelValue,
+    subject: subjectValue,
+    message: messageValue,
+    senderIdentityId,
+  });
+
+  useEffect(() => {
+    if (!usesSms || senderIdentityId || senderOptions.length === 0) return;
+    const defaultSender = senderOptions.find((sender) => sender.isDefault) ?? senderOptions[0];
+    setValue('senderIdentityId', defaultSender.value, { shouldValidate: true });
+  }, [senderIdentityId, senderOptions, setValue, usesSms]);
 
   const handleClose = () => onClose();
 
@@ -163,6 +191,35 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
           </p>
         )}
 
+        {usesSms && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <label className="text-sm font-bold text-gray-900">Approved SMS Sender ID</label>
+            <select
+              {...register('senderIdentityId', {
+                validate: (v) => !usesSms || !!v || 'Select an approved SMS sender ID',
+              })}
+              className="mt-2 w-full rounded-input border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20"
+            >
+              <option value="">Select sender ID</option>
+              {senderOptions.map((sender) => (
+                <option key={sender.value} value={sender.value}>
+                  {sender.label}
+                  {sender.isDefault ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+            {errors.senderIdentityId && (
+              <p className="mt-1 text-xs text-red-500">{errors.senderIdentityId.message}</p>
+            )}
+            {senderOptions.length === 0 && (
+              <p className="mt-2 text-xs text-amber-700">
+                No approved SMS sender ID is available. Create and approve one in Marketing settings
+                before creating an SMS campaign.
+              </p>
+            )}
+          </div>
+        )}
+
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">
           Message
         </p>
@@ -195,6 +252,51 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
             </span>
           </span>
         </div>
+
+        {usesSms && estimate.data && (
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <p>
+                <span className="font-bold">SMS encoding:</span> {estimate.data.smsEncoding}
+              </p>
+              <p>
+                <span className="font-bold">Segments/message:</span>{' '}
+                {estimate.data.segmentsPerMessage}
+              </p>
+              <p>
+                <span className="font-bold">SMS recipients:</span> {estimate.data.smsRecipientCount}
+              </p>
+              <p>
+                <span className="font-bold">Estimated credits:</span>{' '}
+                {estimate.data.estimatedCredits.toLocaleString()}
+              </p>
+              <p>
+                <span className="font-bold">Available credits:</span>{' '}
+                {estimate.data.wallet.availableCredits.toLocaleString()}
+              </p>
+              <p>
+                <span className="font-bold">Reserved credits:</span>{' '}
+                {estimate.data.wallet.reservedCredits.toLocaleString()}
+              </p>
+            </div>
+            {!estimate.data.wallet.sufficientCredits && (
+              <p className="mt-3 rounded-xl bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-800">
+                Insufficient SMS credits. Shortfall:{' '}
+                {estimate.data.wallet.shortfallCredits.toLocaleString()}
+              </p>
+            )}
+            {estimate.data.warnings.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs text-blue-800">
+                {estimate.data.warnings.map((warning) => (
+                  <li key={`${warning.code}-${warning.count ?? 0}`}>
+                    {warning.message}
+                    {warning.count ? ` (${warning.count})` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">
           Dispatch Timeline

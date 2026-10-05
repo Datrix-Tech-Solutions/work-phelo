@@ -86,6 +86,7 @@ export const EventPatterns = {
 
   // Marketing → Notification
   NOTIFY_CAMPAIGN_DISPATCH: 'notify.campaign_dispatch',
+  MARKETING_CAMPAIGN_DELIVERY_RESULT: 'marketing.campaign_delivery_result',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -702,14 +703,46 @@ export interface CampaignRecipientEvent {
   /** Phone number for SMS, email address for EMAIL. */
   address: string;
   contactName: string;
+  segmentCount?: number;
+  estimatedCredits?: number;
+  idempotencyKey?: string;
 }
 
 /** One batch of a campaign's pending recipients. Large campaigns are sent as several events. */
 export interface CampaignDispatchEvent {
   tenantId: string;
   campaignId: string;
+  batchId?: string;
+  senderIdentityId?: string;
+  senderId?: string;
+  reservationId?: string;
   tenantName?: string;
   subject: string;
   message: string;
   recipients: CampaignRecipientEvent[];
+}
+
+export interface CampaignDispatchBatchEvent extends CampaignDispatchEvent {
+  batchId: string;
+  channel: CampaignDeliveryChannel;
+  senderIdentityId?: string;
+  senderId?: string;
+  reservationId?: string;
+}
+
+export interface CampaignDeliveryResultEvent {
+  tenantId: string;
+  campaignId: string;
+  recipientId: string;
+  channel: CampaignDeliveryChannel;
+  reservationId?: string;
+  accepted: boolean;
+  provider: string;
+  providerMessageId?: string;
+  providerStatus?: string;
+  providerDetail?: string;
+  failureCode?: string;
+  failureReason?: string;
+  chargedCredits: number;
+  idempotencyKey: string;
 }

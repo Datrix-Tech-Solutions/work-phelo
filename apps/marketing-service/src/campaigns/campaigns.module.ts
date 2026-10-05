@@ -1,20 +1,24 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { MessagingModule } from '../messaging/messaging.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { SmsModule } from '../sms/sms.module';
 import {
   CAMPAIGN_DISPATCHER,
-  NoopCampaignDispatcher,
+  RabbitMqCampaignDispatcher,
 } from './campaign-dispatcher';
+import { CampaignDeliveryResultsController } from './campaign-delivery-results.controller';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsService } from './campaigns.service';
+import { CampaignSchedulerService } from './campaign-scheduler.service';
 
 @Module({
-  imports: [AuthModule, PrismaModule],
-  controllers: [CampaignsController],
+  imports: [AuthModule, PrismaModule, SmsModule, MessagingModule],
+  controllers: [CampaignsController, CampaignDeliveryResultsController],
   providers: [
     CampaignsService,
-    // Swap for the RabbitMQ/BullMQ dispatcher once SMS and email delivery exist.
-    { provide: CAMPAIGN_DISPATCHER, useClass: NoopCampaignDispatcher },
+    CampaignSchedulerService,
+    { provide: CAMPAIGN_DISPATCHER, useClass: RabbitMqCampaignDispatcher },
   ],
   exports: [CampaignsService],
 })
