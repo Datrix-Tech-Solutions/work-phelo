@@ -10,6 +10,7 @@ import { EmployeesModule } from './employees/employees.module';
 import { LeaveModule } from './leave/leave.module';
 import { TimeModule } from './time/time.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { PayrollConfigurationModule } from './payroll-configuration/payroll-configuration.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
@@ -47,6 +48,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     LeaveModule,
     TimeModule,
     PayrollModule,
+    PayrollConfigurationModule,
     AppraisalsModule,
     DashboardModule,
     AssetsModule,

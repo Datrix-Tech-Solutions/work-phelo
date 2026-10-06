@@ -1150,6 +1150,72 @@ model PayrollItemDeduction {
   @@schema("hr")
 }
 
+/// The kind of payslip a payroll configuration is used for.
+enum PayrollPayslipType {
+  MONTHLY
+  COMMISSION
+  MONTHLY_COMMISSION
+
+  @@schema("hr")
+}
+
+/// A set of pay components (earnings, deductions, tax credits, employer contributions) that
+/// decides how a payslip type is calculated. Its history of versions holds the components; a
+/// payroll run uses the version in force on its date.
+model PayrollConfiguration {
+  id          String              @id @default(uuid())
+  tenantId    String
+  name        String
+  /// The payslip type this configuration is used for. Null once another configuration took the
+  /// type over. A type has at most one configuration per tenant.
+  payslipType PayrollPayslipType?
+  createdBy   String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  versions PayrollConfigurationVersion[]
+
+  @@unique([tenantId, payslipType])
+  @@index([tenantId])
+  @@schema("hr")
+}
+
+/// One published state of a configuration. Versions are never edited, only added.
+model PayrollConfigurationVersion {
+  id              String   @id @default(uuid())
+  tenantId        String
+  configurationId String
+  version         Int
+  /// The date the version starts to apply. Runs dated earlier keep the earlier version.
+  effectiveFrom   DateTime @db.Date
+  note            String   @default("")
+  /// The components, as validated by the payroll configuration service.
+  components      Json
+  createdBy       String
+  createdAt       DateTime @default(now())
+
+  configuration PayrollConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+
+  @@unique([configurationId, version])
+  @@index([tenantId, configurationId, effectiveFrom])
+  @@schema("hr")
+}
+
+/// A pay component kept for reuse. Adding it to a configuration copies it, so later edits never
+/// change components already added.
+model PayrollSavedComponent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  component Json
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@schema("hr")
+}
+
 // ── Appraisal ─────────────────────────────────────────────────────────────
 
 model AppraisalTemplate {
