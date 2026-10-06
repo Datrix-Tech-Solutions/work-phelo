@@ -1,4 +1,4 @@
-export type SmsProviderName = 'termii' | 'pilosms';
+export type SmsProviderName = 'termii' | 'pilosms' | 'sasusync' | 'agoosms';
 
 export type SmsDeliveryStatus = 'SENT' | 'FAILED' | 'SKIPPED';
 

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { AgooSmsProvider } from './agoosms-sms.provider';
 import { PiloSmsProvider } from './pilosms.provider';
+import { SasuSyncSmsProvider } from './sasusync-sms.provider';
 import type {
   SmsProvider,
   SmsProviderName,
@@ -16,13 +18,19 @@ export class SmsService {
   constructor(
     termiiProvider: TermiiSmsProvider,
     piloSmsProvider: PiloSmsProvider,
+    sasuSyncProvider: SasuSyncSmsProvider,
+    agooSmsProvider: AgooSmsProvider,
   ) {
     const providerName = this.resolveProviderName();
 
     if (providerName === 'termii') {
       this.provider = termiiProvider;
-    } else {
+    } else if (providerName === 'pilosms') {
       this.provider = piloSmsProvider;
+    } else if (providerName === 'sasusync') {
+      this.provider = sasuSyncProvider;
+    } else {
+      this.provider = agooSmsProvider;
     }
 
     this.logger.log(`SMS provider selected: ${this.provider.provider}`);
@@ -52,12 +60,17 @@ export class SmsService {
       .trim()
       .toLowerCase();
 
-    if (provider === 'termii' || provider === 'pilosms') {
+    if (
+      provider === 'termii' ||
+      provider === 'pilosms' ||
+      provider === 'sasusync' ||
+      provider === 'agoosms'
+    ) {
       return provider;
     }
 
     throw new Error(
-      `Unsupported SMS_PROVIDER "${process.env.SMS_PROVIDER}". Expected "termii" or "pilosms".`,
+      `Unsupported SMS_PROVIDER "${process.env.SMS_PROVIDER}". Expected "termii", "pilosms", "sasusync", or "agoosms".`,
     );
   }
 }

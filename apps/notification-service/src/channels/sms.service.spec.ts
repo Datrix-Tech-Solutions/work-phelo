@@ -1,4 +1,6 @@
+import { AgooSmsProvider } from './agoosms-sms.provider';
 import { PiloSmsProvider } from './pilosms.provider';
+import { SasuSyncSmsProvider } from './sasusync-sms.provider';
 import type {
   SmsProvider,
   SmsSendOptions,
@@ -22,14 +24,38 @@ describe('SmsService provider routing', () => {
     providerStatus: '1001',
     providerDetail: 'Message(s) processed successfully',
   };
+  const sasuSyncResult: SmsSendResult = {
+    success: true,
+    status: 'SENT',
+    provider: 'sasusync',
+    providerStatus: 'queued',
+    providerMessageId: 'job-123',
+  };
+  const agooSmsResult: SmsSendResult = {
+    success: true,
+    status: 'SENT',
+    provider: 'agoosms',
+    providerStatus: 'accepted',
+    providerMessageId: 'agoo-123',
+  };
 
   let termiiProvider: SmsProvider;
   let piloProvider: SmsProvider;
+  let sasuSyncProvider: SmsProvider;
+  let agooSmsProvider: SmsProvider;
   let termiiSendMessage: jest.Mock<
     Promise<SmsSendResult>,
     [string, string, SmsSendOptions?]
   >;
   let piloSendMessage: jest.Mock<
+    Promise<SmsSendResult>,
+    [string, string, SmsSendOptions?]
+  >;
+  let sasuSyncSendMessage: jest.Mock<
+    Promise<SmsSendResult>,
+    [string, string, SmsSendOptions?]
+  >;
+  let agooSmsSendMessage: jest.Mock<
     Promise<SmsSendResult>,
     [string, string, SmsSendOptions?]
   >;
@@ -43,6 +69,12 @@ describe('SmsService provider routing', () => {
     piloSendMessage = jest
       .fn<Promise<SmsSendResult>, [string, string, SmsSendOptions?]>()
       .mockImplementation(() => Promise.resolve(piloResult));
+    sasuSyncSendMessage = jest
+      .fn<Promise<SmsSendResult>, [string, string, SmsSendOptions?]>()
+      .mockImplementation(() => Promise.resolve(sasuSyncResult));
+    agooSmsSendMessage = jest
+      .fn<Promise<SmsSendResult>, [string, string, SmsSendOptions?]>()
+      .mockImplementation(() => Promise.resolve(agooSmsResult));
     termiiProvider = {
       provider: 'termii',
       sendMessage: termiiSendMessage,
@@ -50,6 +82,14 @@ describe('SmsService provider routing', () => {
     piloProvider = {
       provider: 'pilosms',
       sendMessage: piloSendMessage,
+    };
+    sasuSyncProvider = {
+      provider: 'sasusync',
+      sendMessage: sasuSyncSendMessage,
+    };
+    agooSmsProvider = {
+      provider: 'agoosms',
+      sendMessage: agooSmsSendMessage,
     };
   });
 
@@ -73,6 +113,24 @@ describe('SmsService provider routing', () => {
     expect(piloSendMessage).not.toHaveBeenCalled();
   });
 
+  it('routes through AgooSMS when SMS_PROVIDER=agoosms', async () => {
+    process.env.SMS_PROVIDER = 'agoosms';
+
+    const service = createService();
+    await expect(service.sendMessage('+233244000001', 'Hello')).resolves.toBe(
+      agooSmsResult,
+    );
+
+    expect(agooSmsSendMessage).toHaveBeenCalledWith(
+      '+233244000001',
+      'Hello',
+      undefined,
+    );
+    expect(termiiSendMessage).not.toHaveBeenCalled();
+    expect(piloSendMessage).not.toHaveBeenCalled();
+    expect(sasuSyncSendMessage).not.toHaveBeenCalled();
+  });
+
   it('routes through PiloSMS when SMS_PROVIDER=pilosms', async () => {
     process.env.SMS_PROVIDER = 'pilosms';
 
@@ -87,6 +145,23 @@ describe('SmsService provider routing', () => {
       undefined,
     );
     expect(termiiSendMessage).not.toHaveBeenCalled();
+  });
+
+  it('routes through SasuSync when SMS_PROVIDER=sasusync', async () => {
+    process.env.SMS_PROVIDER = 'sasusync';
+
+    const service = createService();
+    await expect(service.sendMessage('+233244000001', 'Hello')).resolves.toBe(
+      sasuSyncResult,
+    );
+
+    expect(sasuSyncSendMessage).toHaveBeenCalledWith(
+      '+233244000001',
+      'Hello',
+      undefined,
+    );
+    expect(termiiSendMessage).not.toHaveBeenCalled();
+    expect(piloSendMessage).not.toHaveBeenCalled();
   });
 
   it('defaults to Termii for backward compatibility', async () => {
@@ -107,7 +182,7 @@ describe('SmsService provider routing', () => {
     process.env.SMS_PROVIDER = 'other-provider';
 
     expect(() => createService()).toThrow(
-      'Unsupported SMS_PROVIDER "other-provider". Expected "termii" or "pilosms".',
+      'Unsupported SMS_PROVIDER "other-provider". Expected "termii", "pilosms", "sasusync", or "agoosms".',
     );
   });
 
@@ -115,6 +190,8 @@ describe('SmsService provider routing', () => {
     return new SmsService(
       termiiProvider as TermiiSmsProvider,
       piloProvider as PiloSmsProvider,
+      sasuSyncProvider as SasuSyncSmsProvider,
+      agooSmsProvider as AgooSmsProvider,
     );
   }
 });
