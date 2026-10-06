@@ -1,6 +1,6 @@
 'use client';
 
-import { SearchIcon, Upload } from 'lucide-react';
+import { SearchIcon, Trash2, Upload } from 'lucide-react';
 import { cardClass, inputClass } from '@/lib/utils';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { ActionMenuButton, ActionMenuItem } from '@/components/organisms/shared/ActionMenuButton';
@@ -18,6 +18,7 @@ interface ChartOfAccountsToolbarProps {
   onStatusChange: (value: string) => void;
   registerActions: ActionMenuItem[];
   onImport: () => void;
+  onClearUnused: () => void;
 }
 
 /** Search + status filter + "Register Account" menu for the Chart of Accounts page header. */
@@ -28,6 +29,7 @@ export function ChartOfAccountsToolbar({
   onStatusChange,
   registerActions,
   onImport,
+  onClearUnused,
 }: ChartOfAccountsToolbarProps) {
   return (
     <div className={cardClass('px-4 py-2')}>
@@ -55,6 +57,14 @@ export function ChartOfAccountsToolbar({
 
         <div className="flex-1" />
 
+        <Button
+          variant="outline"
+          size="sm"
+          icon={<Trash2 className="h-3.5 w-3.5" />}
+          onClick={onClearUnused}
+        >
+          Clear Unused
+        </Button>
         <Button
           variant="outline"
           size="sm"

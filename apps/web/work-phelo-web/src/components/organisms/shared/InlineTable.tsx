@@ -24,6 +24,8 @@ interface InlineTableProps {
   footerNote?: React.ReactNode;
   /** Tighter spacing between the card header and the column headers. */
   compact?: boolean;
+  /** Hides the header add button when the caller renders its own add control elsewhere. */
+  hideAddButton?: boolean;
 }
 
 export function InlineTable({
@@ -35,6 +37,7 @@ export function InlineTable({
   onRemoveRow,
   footerNote,
   compact,
+  hideAddButton,
 }: InlineTableProps) {
   const colTemplate = [...columns.map((c) => c.width ?? '1fr'), '44px'].join(' ');
   const hasFooter = columns.some((c) => c.renderFooter);
@@ -44,15 +47,17 @@ export function InlineTable({
       {/* Card header */}
       <div className={cn('flex items-center justify-between px-6', compact ? 'pt-2 pb-0' : 'py-2')}>
         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">{title}</h3>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={onAddRow}
-          icon={<Icons.Plus className="w-4 h-4" />}
-        >
-          {addLabel}
-        </Button>
+        {!hideAddButton && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onAddRow}
+            icon={<Icons.Plus className="w-4 h-4" />}
+          >
+            {addLabel}
+          </Button>
+        )}
       </div>
 
       {/* Scrollable table body */}

@@ -6,9 +6,14 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
+import {
+  ImportJournalLinesDialog,
+  ImportMode,
+} from '@/components/organisms/accounting/ImportJournalLinesDialog';
 import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
 import { CATEGORIES } from '@/components/organisms/accounting/ChartOfAccountsTree';
 import { GLAccountCategory, JournalEntryFormValues, JournalLine } from '@/types/accounting';
+import { JournalTotalsSection } from '@/components/molecules/accounting/JournalTotalsSection';
 import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
 
 const EMPTY_LINE: JournalLine = {
@@ -33,15 +38,30 @@ export function JournalLinesSection({ form, allowedClasses }: JournalLinesSectio
     control,
     formState: { errors },
   } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
+  const { fields, append, remove, replace } = useFieldArray({ control, name: 'lines' });
 
   const [createAccountForIndex, setCreateAccountForIndex] = useState<number | null>(null);
   const [createAccountQuery, setCreateAccountQuery] = useState('');
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   const lines = useWatch({ control, name: 'lines' });
   const { data: glAccounts = [], isLoading: isLoadingAccounts } = useGLAccounts({
     status: 'ACTIVE',
   });
+  const hasExistingLines = (lines ?? []).some(
+    (l) => l?.targetAccount || l?.description || l?.debit || l?.credit,
+  );
+  const handleImport = (imported: JournalLine[], mode: ImportMode) => {
+    if (mode === 'append') {
+      // Drop untouched blank rows so appending doesn't leave empty lines in the middle
+      const kept = (lines ?? []).filter(
+        (l) => l?.targetAccount || l?.description || l?.debit || l?.credit,
+      );
+      replace([...kept, ...imported]);
+    } else {
+      replace(imported);
+    }
+  };
   const postingAccounts = glAccounts.filter((a) => a.allowPosting);
   const optionsFor = (accountClass: string) =>
     postingAccounts
@@ -181,11 +201,26 @@ export function JournalLinesSection({ form, allowedClasses }: JournalLinesSectio
       <InlineTable
         title="Journal Lines"
         compact
-        addLabel="Add Line"
+        hideAddButton
         columns={columns}
         fieldIds={fields.map((f) => f.id)}
         onAddRow={() => append({ ...EMPTY_LINE })}
         onRemoveRow={(index) => remove(index)}
+      />
+
+      <JournalTotalsSection
+        form={form}
+        onAddLine={() => append({ ...EMPTY_LINE })}
+        onImport={() => setIsImportOpen(true)}
+      />
+
+      <ImportJournalLinesDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        accounts={glAccounts}
+        allowedClasses={allowedClasses}
+        hasExistingLines={hasExistingLines}
+        onImport={handleImport}
       />
 
       <AddLeafAccountPanel

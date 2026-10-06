@@ -1,6 +1,8 @@
 import type { TrialBalanceReport } from '@/types/accounting';
 
-export function buildAccountBalanceMap(report: TrialBalanceReport | undefined): Map<string, number> {
+export function buildAccountBalanceMap(
+  report: TrialBalanceReport | undefined,
+): Map<string, number> {
   const balances = new Map<string, number>();
   if (!report) return balances;
   for (const entries of Object.values(report.accounts)) {

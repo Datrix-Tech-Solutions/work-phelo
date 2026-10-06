@@ -9,6 +9,7 @@ import type {
 import {
   CASH_FLOW_VALUE_BY_LABEL,
   CATEGORY_VALUE_BY_LABEL,
+  outOfRangeFor,
 } from '@/lib/accounting/glAccountImportShared';
 
 export type ImportRowStatus = 'existing' | 'new' | 'invalid';
@@ -47,6 +48,9 @@ export interface ParsedGLAccountRow {
   description: string;
   cashFlowCategoryLabel: string;
   cashFlowCategory?: CashFlowCategory;
+  /** Set when the code is numeric but outside the block for the account's type. Kept out of
+   *  `errors` because the preview lets the user fix it in place by editing the code. */
+  codeRange?: { min: number; max: number };
   status: ImportRowStatus;
   errors: string[];
 }
@@ -57,7 +61,7 @@ export interface GLAccountImportResult {
   accounts: ParsedGLAccountRow[];
 }
 
-function cellText(
+export function cellText(
   row: ExcelJS.Row,
   columnIndexByHeader: Map<string, number>,
   header: string,
@@ -75,7 +79,7 @@ function cellText(
   return String(value).trim();
 }
 
-function headerIndex(sheet: ExcelJS.Worksheet): Map<string, number> {
+export function headerIndex(sheet: ExcelJS.Worksheet): Map<string, number> {
   const map = new Map<string, number>();
   sheet.getRow(1).eachCell((cell, colNumber) => {
     const text = String(cell.value ?? '').trim();
@@ -272,15 +276,17 @@ export async function parseGLAccountImportFile(
       const codeLower = code.trim().toLowerCase();
       const errors: string[] = [];
 
+      const category = CATEGORY_VALUE_BY_LABEL[categoryLabel.trim().toLowerCase()];
+      const codeRange = outOfRangeFor(code, category);
+
       if (!code) errors.push('Account code is required');
       else if (existingAccountCodes.has(codeLower))
         errors.push(`Account code "${code}" already exists`);
-      else if (seenCodes.has(codeLower))
+      else if (!codeRange && seenCodes.has(codeLower))
         errors.push(`Duplicate account code "${code}" in this file`);
 
       if (!name) errors.push('Account name is required');
 
-      const category = CATEGORY_VALUE_BY_LABEL[categoryLabel.trim().toLowerCase()];
       if (!categoryLabel) errors.push('Account type is required');
       else if (!category) errors.push(`Unknown account type "${categoryLabel}"`);
 
@@ -317,7 +323,7 @@ export async function parseGLAccountImportFile(
 
       const cashFlowCategory = resolveCashFlowCategory(cashFlowCategoryLabel, errors);
 
-      if (code) seenCodes.add(codeLower);
+      if (code && !codeRange) seenCodes.add(codeLower);
 
       accountRows.push({
         rowNumber,
@@ -330,7 +336,8 @@ export async function parseGLAccountImportFile(
         description,
         cashFlowCategoryLabel,
         cashFlowCategory,
-        status: errors.length === 0 ? 'new' : 'invalid',
+        codeRange,
+        status: errors.length === 0 && !codeRange ? 'new' : 'invalid',
         errors,
       });
     });
@@ -548,15 +555,17 @@ function parseBasicGLAccountWorkbook(
     const codeLower = row.code.trim().toLowerCase();
     const errors: string[] = [...(conflictErrorsByRowNumber.get(row.rowNumber) ?? [])];
 
+    const category = CATEGORY_VALUE_BY_LABEL[row.categoryLabel.trim().toLowerCase()];
+    const codeRange = outOfRangeFor(row.code, category);
+
     if (!row.code) errors.push('Account code is required');
     else if (existingAccountCodes.has(codeLower))
       errors.push(`Account code "${row.code}" already exists`);
-    else if (seenAccountCodes.has(codeLower))
+    else if (!codeRange && seenAccountCodes.has(codeLower))
       errors.push(`Duplicate account code "${row.code}" in this file`);
 
     if (!row.name) errors.push('Account name is required');
 
-    const category = CATEGORY_VALUE_BY_LABEL[row.categoryLabel.trim().toLowerCase()];
     if (!row.categoryLabel) errors.push('Account type is required');
     else if (!category) errors.push(`Unknown account type "${row.categoryLabel}"`);
 
@@ -593,7 +602,7 @@ function parseBasicGLAccountWorkbook(
 
     const cashFlowCategory = resolveCashFlowCategory(row.cashFlowCategoryLabel, errors);
 
-    if (row.code) seenAccountCodes.add(codeLower);
+    if (row.code && !codeRange) seenAccountCodes.add(codeLower);
 
     accountRows.push({
       rowNumber: row.rowNumber,
@@ -606,7 +615,8 @@ function parseBasicGLAccountWorkbook(
       description: row.description,
       cashFlowCategoryLabel: row.cashFlowCategoryLabel,
       cashFlowCategory,
-      status: errors.length === 0 ? 'new' : 'invalid',
+      codeRange,
+      status: errors.length === 0 && !codeRange ? 'new' : 'invalid',
       errors,
     });
   }

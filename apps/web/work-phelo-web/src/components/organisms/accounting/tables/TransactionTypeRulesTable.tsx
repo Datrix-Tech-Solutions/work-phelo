@@ -50,7 +50,7 @@ export function TransactionTypeRulesTable() {
         if (!query) return true;
         if (`${type.name} ${type.code}`.toLowerCase().includes(query)) return true;
         return !!rule?.lines.some((line) =>
-          `${line.account.code} ${line.account.name} ${line.description ?? ''}`
+          `${line.account?.code ?? ''} ${line.account?.name ?? ''} ${line.scopeClassification?.name ?? ''} ${line.scopeCategory ?? ''} ${line.description ?? ''}`
             .toLowerCase()
             .includes(query),
         );
@@ -210,7 +210,7 @@ function RuleCard({
             <span>Account</span>
             <span>Description</span>
             <span>Dir</span>
-            <span>Tax / Subledger</span>
+            <span>Tax</span>
           </div>
           {rule.lines.map((line) => (
             <div
@@ -219,15 +219,16 @@ function RuleCard({
               style={{ gridTemplateColumns: columns }}
             >
               <span className="min-w-0 truncate">
-                {line.account.code} – {line.account.name}
+                {line.account
+                  ? `${line.account.code} – ${line.account.name}`
+                  : line.scopeClassification
+                    ? `Any ${line.scopeClassification.name} account`
+                    : `Any ${line.scopeCategory?.toLowerCase() ?? ''} account`}
               </span>
               <span className="min-w-0 truncate text-gray-600">{line.description ?? '—'}</span>
               <TypeChip label={line.direction} color={line.direction === 'DR' ? 'blue' : 'green'} />
               <span className="min-w-0 truncate text-gray-600">
-                {line.taxType ? `${line.taxType.name} (${line.taxType.rate}%)` : ''}
-                {line.taxType && line.subledgerType ? ' · ' : ''}
-                {line.subledgerType ?? ''}
-                {!line.taxType && !line.subledgerType ? '—' : ''}
+                {line.taxType ? `${line.taxType.name} (${line.taxType.rate}%)` : '—'}
               </span>
             </div>
           ))}

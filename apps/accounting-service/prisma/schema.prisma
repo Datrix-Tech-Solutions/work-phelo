@@ -374,23 +374,24 @@ enum CashFlowCategory {
 }
 
 model AccountClassification {
-  id               String            @id @default(uuid())
+  id               String                    @id @default(uuid())
   tenantId         String
   code             String
   name             String
   category         GLAccountCategory
-  displayOrder     Int               @default(0)
-  isSystemTemplate Boolean           @default(false)
-  isActive         Boolean           @default(true)
+  displayOrder     Int                       @default(0)
+  isSystemTemplate Boolean                   @default(false)
+  isActive         Boolean                   @default(true)
   /// Cash-flow default for accounts under this classification; a group or account below it
   /// can override. Null falls back to the category-based default (see GLAccount).
   cashFlowCategory CashFlowCategory?
   createdByUserId  String
   updatedByUserId  String
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
   accountGroups    AccountGroup[]
   glAccounts       GLAccount[]
+  ruleLineScopes   TransactionTypeRuleLine[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -934,24 +935,32 @@ model TransactionTypeRule {
 }
 
 model TransactionTypeRuleLine {
-  id            String              @id @default(uuid())
-  tenantId      String
-  ruleId        String
-  sequence      Int
-  direction     PostingDirection
-  accountId     String
-  taxTypeId     String?
-  subledgerType String?
-  description   String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  rule          TransactionTypeRule @relation(fields: [ruleId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  account       GLAccount           @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  taxType       TaxType?            @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  id                    String                 @id @default(uuid())
+  tenantId              String
+  ruleId                String
+  sequence              Int
+  direction             PostingDirection
+  /// A fixed account. Null only on the main line of a Receivable/Payable rule that is scoped
+  /// instead (scopeCategory / scopeClassificationId) — the user picks the account on the form.
+  accountId             String?
+  /// Scope of a main line that lets the user choose the account: a whole category, or one
+  /// classification within it. At most one of accountId / scopeCategory / scopeClassificationId.
+  scopeCategory         GLAccountCategory?
+  scopeClassificationId String?
+  taxTypeId             String?
+  subledgerType         String?
+  description           String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  rule                  TransactionTypeRule    @relation(fields: [ruleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  account               GLAccount?             @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  scopeClassification   AccountClassification? @relation(fields: [scopeClassificationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  taxType               TaxType?               @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, ruleId, sequence])
   @@index([tenantId, accountId])
+  @@index([tenantId, scopeClassificationId])
   @@schema("accounting")
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type ChangeEvent } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ACCOUNTING_DOCUMENT_OPTIONS } from '@/lib/accounting/documents';
+import { suggestTransactionTypeCode } from '@/lib/accounting/transactionTypeCode';
 import type { TransactionTypeCategory, TransactionTypeDefinition } from '@/types/accounting';
 
 // Neutral/None types (Transfer, Bank Charge, Adjustment) have no working form yet —
@@ -89,7 +90,7 @@ export function TransactionTypePanel({
     handleSubmit,
     reset,
     setValue,
-    formState: { errors },
+    formState: { errors, dirtyFields },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
   const category = useWatch({ control, name: 'category' });
 
@@ -169,6 +170,11 @@ export function TransactionTypePanel({
           registration={register('name', {
             required: 'Name is required',
             maxLength: { value: 160, message: 'Name must be 160 characters or fewer' },
+            // A typed code is dirty, so it is left alone; clearing it resumes suggesting.
+            onChange: (e: ChangeEvent<HTMLInputElement>) => {
+              if (!isEditing && !dirtyFields.code)
+                setValue('code', suggestTransactionTypeCode(e.target.value));
+            },
           })}
           error={errors.name}
           placeholder="e.g. Customer Receipt"

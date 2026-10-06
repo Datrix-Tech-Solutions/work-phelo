@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -663,6 +664,19 @@ export class BulkImportAccountsDto {
   @ValidateNested({ each: true })
   @Type(() => BulkImportGLAccountDto)
   accounts!: BulkImportGLAccountDto[];
+}
+
+export class BulkDeleteAccountsDto {
+  @ApiProperty({
+    type: [String],
+    description:
+      'IDs of unused GL accounts to delete, as returned by GET accounts/unused.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(1000)
+  @IsUUID('all', { each: true })
+  accountIds!: string[];
 }
 
 export class CreateCostCentreDto {

@@ -6,14 +6,12 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
-import { FileUpload } from '@/components/atoms/FileUpload';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { JournalEntryDetailsSection } from '@/components/molecules/accounting/JournalEntryDetailsSection';
 import { RecurringEntryDetailsSection } from '@/components/molecules/accounting/RecurringEntryDetailsSection';
 import { ReversingEntryForm } from '@/components/molecules/accounting/ReversingEntryForm';
 import { JournalLinesSection } from '@/components/molecules/accounting/JournalLinesSection';
-import { JournalTotalsSection } from '@/components/molecules/accounting/JournalTotalsSection';
 import {
   AdjustmentCategoryCode,
   GLAccountCategory,
@@ -54,7 +52,6 @@ export default function NewJournalEntryPage() {
 
   const form = useForm<JournalEntryFormValues>({ defaultValues: JOURNAL_ENTRY_DEFAULTS });
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [attachment, setAttachment] = useState<File | null>(null);
 
   // "Reverse & correct" lands here with ?correct=<journal id>: load that journal and pre-fill a
   // replacement from its lines, starting from the same entry type unless the user picks another.
@@ -207,9 +204,6 @@ export default function NewJournalEntryPage() {
               clearable={false}
             />
           </div>
-          <div className="w-56">
-            <FileUpload value={attachment} onChange={setAttachment} />
-          </div>
           <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isPending}>
             Cancel
           </Button>
@@ -253,8 +247,6 @@ export default function NewJournalEntryPage() {
             form={form}
             allowedClasses={entryType === 'opening' ? BALANCE_SHEET_CLASSES : undefined}
           />
-
-          <JournalTotalsSection form={form} />
         </>
       )}
 

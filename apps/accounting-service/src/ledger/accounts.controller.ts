@@ -27,6 +27,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingPermission } from './accounting.permissions';
 import {
+  BulkDeleteAccountsDto,
   BulkImportAccountsDto,
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
@@ -277,6 +278,33 @@ export class AccountsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.masterData.bulkImportAccounts(request.user, dto);
+  }
+
+  @Get('accounts/unused')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary: 'List GL accounts that are safe to delete',
+    description:
+      'Accounts nothing references (no journal activity, rules, cash accounts, entities, documents, budgets or mappings) whose child accounts are all unused too. Preview only — nothing is deleted.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_DELETE)
+  listUnusedAccounts(@Req() request: Request & { user: RequestUser }) {
+    return this.masterData.listUnusedGLAccounts(request.user.tenantId);
+  }
+
+  @Post('accounts/bulk-delete')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary: 'Delete several unused GL accounts',
+    description:
+      'Each account is re-checked at delete time and removed deepest-first. Accounts that were used since the preview are skipped, never deleted.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_DELETE)
+  bulkDeleteAccounts(
+    @Body() dto: BulkDeleteAccountsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.bulkDeleteGLAccounts(request.user, dto);
   }
 
   @Get('accounts')

@@ -42,6 +42,7 @@ import {
 } from './dto/receivables.dto';
 import { JournalsService } from './journals.service';
 import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import { resolveMainLineAccount } from './rule-account-scope';
 import {
   SourceTransactionEvent,
   SourceEventsNotifier,
@@ -327,6 +328,8 @@ export class ReceivablesService {
       TransactionTypeCategory.RECEIVABLE,
       subtotalAmount,
       dto.selectedTaxTypeIds,
+      false,
+      { offsetGlAccountId: dto.offsetGlAccountId },
     );
     await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
     const totalAmount = subtotalAmount.plus(taxAmount);
@@ -518,6 +521,7 @@ export class ReceivablesService {
       subtotalAmount,
       dto.selectedTaxTypeIds,
       true,
+      { offsetGlAccountId: dto.offsetGlAccountId },
     );
     await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
     const totalAmount = subtotalAmount.plus(taxAmount);
@@ -740,6 +744,8 @@ export class ReceivablesService {
         TransactionTypeCategory.RECEIVABLE,
         document.subtotalAmount,
         dto.selectedTaxTypeIds,
+        false,
+        { taxOnly: true },
       );
       data.taxAmount = posting.taxAmount;
       data.taxBreakdown = posting.taxBreakdown;
@@ -2044,6 +2050,7 @@ export class ReceivablesService {
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
     expectLinked = false,
+    options: { offsetGlAccountId?: string; taxOnly?: boolean } = {},
   ): Promise<{
     arAccountId: string;
     offsetGlAccountId: string;
@@ -2113,14 +2120,35 @@ export class ReceivablesService {
       );
     }
 
+    if (!arLine.accountId) {
+      throw new ConflictException(
+        "This transaction type's rule has no fixed control account configured",
+      );
+    }
+    const controlAccountId = arLine.accountId;
+    // A scoped main line (the user picks the account) is resolved against the scope; the
+    // tax-only path keeps the accounts the draft already holds, so it needs no pick.
+    const offsetGlAccountId = options.taxOnly
+      ? (mainLine.accountId ?? '')
+      : await resolveMainLineAccount(
+          this.prisma,
+          tenantId,
+          mainLine,
+          options.offsetGlAccountId,
+          [
+            controlAccountId,
+            ...explicitLines.flatMap((l) => (l.accountId ? [l.accountId] : [])),
+          ],
+        );
+
     const selected = new Set(selectedTaxTypeIds ?? []);
     const taxBreakdown = explicitLines
-      .filter((l) => l.taxTypeId && selected.has(l.taxTypeId))
+      .filter((l) => l.taxTypeId && l.accountId && selected.has(l.taxTypeId))
       .map((line) => {
         const rate = new Prisma.Decimal(line.taxType!.rate);
         const amount = subtotal.times(rate).dividedBy(100).toDecimalPlaces(2);
         return {
-          glAccountId: line.accountId,
+          glAccountId: line.accountId!,
           taxTypeId: line.taxTypeId!,
           amount: amount.toString(),
           direction: line.direction,
@@ -2132,8 +2160,8 @@ export class ReceivablesService {
     );
 
     return {
-      arAccountId: arLine.accountId,
-      offsetGlAccountId: mainLine.accountId,
+      arAccountId: controlAccountId,
+      offsetGlAccountId,
       taxAmount,
       taxBreakdown,
       transactionTypeCode: transactionType.code,

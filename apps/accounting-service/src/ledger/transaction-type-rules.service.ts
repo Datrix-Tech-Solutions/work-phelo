@@ -40,7 +40,18 @@ const ruleInclude = {
   lines: {
     orderBy: { sequence: 'asc' as const },
     include: {
-      account: { select: { id: true, code: true, name: true } },
+      account: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          category: true,
+          classificationId: true,
+        },
+      },
+      scopeClassification: {
+        select: { id: true, code: true, name: true, category: true },
+      },
       taxType: { select: { id: true, name: true, rate: true } },
     },
   },
@@ -313,7 +324,9 @@ export class TransactionTypeRulesService {
     return lines.map((line, index) => ({
       sequence: index + 1,
       direction: line.direction,
-      accountId: line.accountId,
+      accountId: line.accountId ?? null,
+      scopeCategory: line.scopeCategory ?? null,
+      scopeClassificationId: line.scopeClassificationId ?? null,
       taxTypeId: line.taxTypeId,
       subledgerType: line.subledgerType,
       description: this.optional(line.description),
@@ -342,13 +355,25 @@ export class TransactionTypeRulesService {
       postsToCashbook: boolean;
       isLinked: boolean;
       category: TransactionTypeCategory;
+      sourceTypeId: string | null;
     },
     lines: TransactionTypeRuleLineDto[],
   ) {
     if (transactionType.postsToCashbook) {
       this.validateCashbookLine(transactionType.category, lines);
+      if (
+        !lines[0].accountId ||
+        lines[0].scopeCategory ||
+        lines[0].scopeClassificationId
+      ) {
+        throw new BadRequestException(
+          'The offset line of a cashbook type needs a fixed account.',
+        );
+      }
       return;
     }
+
+    this.validateAccountOrScope(transactionType, lines);
 
     const debitLines = lines.filter((l) => l.direction === PostingDirection.DR);
     const creditLines = lines.filter(
@@ -379,6 +404,53 @@ export class TransactionTypeRulesService {
     if (balancingLines[0].taxTypeId) {
       throw new BadRequestException(
         'The auto-balancing line cannot itself be a tax line.',
+      );
+    }
+  }
+
+  /** Exactly one of a fixed account, a category scope or a classification scope per line.
+   *  Only a Receivable/Payable type's main line (not the control line, not a tax line) may be
+   *  scoped — the control account and tax accounts stay fixed, and a source-linked type
+   *  has no form to pick from. */
+  private validateAccountOrScope(
+    transactionType: {
+      isLinked: boolean;
+      category: TransactionTypeCategory;
+      sourceTypeId: string | null;
+    },
+    lines: TransactionTypeRuleLineDto[],
+  ) {
+    const autoBalanceDirection = this.autoBalanceDirection(
+      transactionType.category,
+      transactionType.isLinked,
+    );
+    for (const line of lines) {
+      const chosen = [
+        line.accountId,
+        line.scopeCategory,
+        line.scopeClassificationId,
+      ].filter(Boolean).length;
+      if (chosen !== 1) {
+        throw new BadRequestException(
+          'Each line needs exactly one of a fixed account, a category or a classification.',
+        );
+      }
+      const scoped = !line.accountId;
+      if (!scoped) continue;
+      if (
+        !autoBalanceDirection ||
+        transactionType.sourceTypeId ||
+        line.taxTypeId ||
+        line.direction === autoBalanceDirection
+      ) {
+        throw new BadRequestException(
+          'Only the main (non-tax, non-control) line of a Receivable or Payable rule can be a category or classification.',
+        );
+      }
+    }
+    if (lines.filter((l) => !l.accountId).length > 1) {
+      throw new BadRequestException(
+        'Only one line of a rule can let the user choose the account.',
       );
     }
   }
@@ -438,11 +510,21 @@ export class TransactionTypeRulesService {
           ? GLAccountCategory.LIABILITY
           : null;
     for (const line of lines) {
-      const account = await this.masterData.findGLAccount(
-        tenantId,
-        line.accountId,
-      );
+      if (line.scopeClassificationId) {
+        const classification =
+          await this.prisma.accountClassification.findFirst({
+            where: { id: line.scopeClassificationId, tenantId, isActive: true },
+            select: { id: true },
+          });
+        if (!classification) {
+          throw new BadRequestException('Classification not found or inactive');
+        }
+      }
+      const account = line.accountId
+        ? await this.masterData.findGLAccount(tenantId, line.accountId)
+        : null;
       if (
+        account &&
         requiredCategory &&
         line.direction === autoBalanceDirection &&
         account.category !== requiredCategory
@@ -498,6 +580,9 @@ export class TransactionTypeRulesService {
         sequence: line.sequence,
         direction: line.direction,
         account: line.account,
+        scopeCategory:
+          line.scopeCategory ?? line.scopeClassification?.category ?? null,
+        scopeClassification: line.scopeClassification,
         taxType: line.taxType
           ? {
               id: line.taxType.id,

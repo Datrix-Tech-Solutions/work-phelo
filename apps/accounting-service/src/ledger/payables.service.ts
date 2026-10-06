@@ -36,6 +36,7 @@ import {
 } from './dto/payables.dto';
 import { JournalsService } from './journals.service';
 import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import { resolveMainLineAccount } from './rule-account-scope';
 
 const zero = new Prisma.Decimal(0);
 // SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
@@ -310,6 +311,8 @@ export class PayablesService {
       TransactionTypeCategory.PAYABLE,
       subtotalAmount,
       dto.selectedTaxTypeIds,
+      false,
+      { offsetGlAccountId: dto.offsetGlAccountId },
     );
     await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
     const totalAmount = subtotalAmount.plus(taxAmount);
@@ -498,6 +501,7 @@ export class PayablesService {
       subtotalAmount,
       dto.selectedTaxTypeIds,
       true,
+      { offsetGlAccountId: dto.offsetGlAccountId },
     );
     await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
     const totalAmount = subtotalAmount.plus(taxAmount);
@@ -1814,6 +1818,7 @@ export class PayablesService {
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
     expectLinked = false,
+    options: { offsetGlAccountId?: string; taxOnly?: boolean } = {},
   ): Promise<{
     apAccountId: string;
     offsetGlAccountId: string;
@@ -1883,14 +1888,35 @@ export class PayablesService {
       );
     }
 
+    if (!apLine.accountId) {
+      throw new ConflictException(
+        "This transaction type's rule has no fixed control account configured",
+      );
+    }
+    const controlAccountId = apLine.accountId;
+    // A scoped main line (the user picks the account) is resolved against the scope; the
+    // tax-only path keeps the accounts the draft already holds, so it needs no pick.
+    const offsetGlAccountId = options.taxOnly
+      ? (mainLine.accountId ?? '')
+      : await resolveMainLineAccount(
+          this.prisma,
+          tenantId,
+          mainLine,
+          options.offsetGlAccountId,
+          [
+            controlAccountId,
+            ...explicitLines.flatMap((l) => (l.accountId ? [l.accountId] : [])),
+          ],
+        );
+
     const selected = new Set(selectedTaxTypeIds ?? []);
     const taxBreakdown = explicitLines
-      .filter((l) => l.taxTypeId && selected.has(l.taxTypeId))
+      .filter((l) => l.taxTypeId && l.accountId && selected.has(l.taxTypeId))
       .map((line) => {
         const rate = new Prisma.Decimal(line.taxType!.rate);
         const amount = subtotal.times(rate).dividedBy(100).toDecimalPlaces(2);
         return {
-          glAccountId: line.accountId,
+          glAccountId: line.accountId!,
           taxTypeId: line.taxTypeId!,
           amount: amount.toString(),
           direction: line.direction,
@@ -1902,8 +1928,8 @@ export class PayablesService {
     );
 
     return {
-      apAccountId: apLine.accountId,
-      offsetGlAccountId: mainLine.accountId,
+      apAccountId: controlAccountId,
+      offsetGlAccountId,
       taxAmount,
       taxBreakdown,
       transactionTypeCode: transactionType.code,
