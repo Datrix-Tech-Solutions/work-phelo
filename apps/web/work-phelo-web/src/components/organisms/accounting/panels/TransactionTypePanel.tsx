@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, type ChangeEvent } from 'react';
+import { useEffect, useMemo, type ChangeEvent } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -90,13 +90,11 @@ export function TransactionTypePanel({
     handleSubmit,
     reset,
     setValue,
-    formState: { errors },
+    formState: { errors, dirtyFields },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
   const category = useWatch({ control, name: 'category' });
-  const codeEdited = useRef(false);
 
   useEffect(() => {
-    codeEdited.current = false;
     if (transactionType)
       reset({
         name: transactionType.name,
@@ -172,8 +170,9 @@ export function TransactionTypePanel({
           registration={register('name', {
             required: 'Name is required',
             maxLength: { value: 160, message: 'Name must be 160 characters or fewer' },
+            // A typed code is dirty, so it is left alone; clearing it resumes suggesting.
             onChange: (e: ChangeEvent<HTMLInputElement>) => {
-              if (!isEditing && !codeEdited.current)
+              if (!isEditing && !dirtyFields.code)
                 setValue('code', suggestTransactionTypeCode(e.target.value));
             },
           })}
@@ -186,10 +185,6 @@ export function TransactionTypePanel({
             required: 'Code is required',
             maxLength: { value: 30, message: 'Code must be 30 characters or fewer' },
             setValueAs: (value: string) => value.toUpperCase(),
-            // Once the user types their own code, stop overwriting it; clearing it resumes suggesting.
-            onChange: (e: ChangeEvent<HTMLInputElement>) => {
-              codeEdited.current = e.target.value !== '';
-            },
           })}
           error={errors.code}
           placeholder="e.g. CUST-RCPT"
