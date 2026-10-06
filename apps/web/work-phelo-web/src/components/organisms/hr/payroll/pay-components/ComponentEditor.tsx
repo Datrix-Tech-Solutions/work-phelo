@@ -124,11 +124,18 @@ function Notes({ component: c, all }: { component: PayComponent; all: PayCompone
       );
     }
   }
+  let deps: PayComponent[] | null = null;
+  let depsError: string | null = null;
   try {
-    const deps = dependenciesOf(
+    deps = dependenciesOf(
       c,
       all.filter((x) => x.enabled),
     );
+  } catch (e) {
+    depsError =
+      e instanceof PayrollEngineError ? e.message : 'This component cannot be calculated.';
+  }
+  if (deps) {
     notes.push(
       <Note key="deps" tone="info">
         {deps.length
@@ -136,10 +143,10 @@ function Notes({ component: c, all }: { component: PayComponent; all: PayCompone
           : "Calculated first. It doesn't depend on any other component."}
       </Note>,
     );
-  } catch (e) {
+  } else {
     notes.push(
       <Note key="err" tone="err">
-        {e instanceof PayrollEngineError ? e.message : 'This component cannot be calculated.'}
+        {depsError}
       </Note>,
     );
   }
