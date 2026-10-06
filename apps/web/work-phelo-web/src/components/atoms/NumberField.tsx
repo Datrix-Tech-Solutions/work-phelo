@@ -14,6 +14,8 @@ interface NumberFieldProps {
   label?: string;
   error?: string;
   disabled?: boolean;
+  /** Accessible name for a field that has no visible label of its own. */
+  ariaLabel?: string;
 }
 
 /** Text input that shows raw digits while focused and a thousands-formatted,
@@ -27,6 +29,7 @@ export function NumberField({
   label,
   error,
   disabled,
+  ariaLabel,
 }: NumberFieldProps) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
   const [focused, setFocused] = useState(false);
@@ -62,6 +65,7 @@ export function NumberField({
         onChange(raw === '' ? 0 : Number(raw));
       }}
       disabled={disabled}
+      aria-label={ariaLabel}
       className={inputClass(error, cn(label ? 'w-full' : 'w-28 py-1.5', className))}
     />
   );

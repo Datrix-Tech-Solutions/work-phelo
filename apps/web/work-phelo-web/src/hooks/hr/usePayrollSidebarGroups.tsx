@@ -1,4 +1,4 @@
-import { ClipboardList, Landmark, CheckCircle2, History } from 'lucide-react';
+import { ClipboardList, Landmark, CheckCircle2, History, Layers, Coins } from 'lucide-react';
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { usePayrollSettings } from '@/hooks';
@@ -10,6 +10,8 @@ const ManageIcon = () => <ClipboardList className="w-5 h-5" />;
 const ContributionsIcon = () => <Landmark className="w-5 h-5" />;
 const ApproveIcon = () => <CheckCircle2 className="w-5 h-5" />;
 const HistoryIcon = () => <History className="w-5 h-5" />;
+const PayrollGroupsIcon = () => <Layers className="w-5 h-5" />;
+const PayComponentsIcon = () => <Coins className="w-5 h-5" />;
 
 /**
  * Payroll's own sidebar — management-side tabs it used to have on one page
@@ -23,10 +25,12 @@ export function usePayrollSidebarGroups(tenantSlug: string): {
   canManagePayroll: boolean;
   canApprovePayroll: boolean;
   canViewHistory: boolean;
+  canConfigurePayroll: boolean;
 } {
   const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
   const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
   const canViewHistory = canManagePayroll || canApprovePayroll;
+  const canConfigurePayroll = usePermission(Permission.MANAGE_PAYROLL_SETTINGS);
 
   const { data: payrollSettings } = usePayrollSettings();
   const contributionsLabel = getPayrollLabels(payrollSettings?.payrollCountry).tabLabel;
@@ -76,7 +80,28 @@ export function usePayrollSidebarGroups(tenantSlug: string): {
         },
       ],
     },
+    {
+      label: 'Configuration',
+      items: [
+        {
+          key: 'payroll-groups',
+          label: 'Payroll Groups',
+          icon: <PayrollGroupsIcon />,
+          href: `${base}/payroll-groups`,
+          enabled: canConfigurePayroll,
+          active: true,
+        },
+        {
+          key: 'pay-components',
+          label: 'Pay Components',
+          icon: <PayComponentsIcon />,
+          href: `${base}/pay-components`,
+          enabled: canConfigurePayroll,
+          active: true,
+        },
+      ],
+    },
   ];
 
-  return { groups, canManagePayroll, canApprovePayroll, canViewHistory };
+  return { groups, canManagePayroll, canApprovePayroll, canViewHistory, canConfigurePayroll };
 }
