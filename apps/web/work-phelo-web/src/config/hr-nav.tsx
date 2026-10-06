@@ -9,7 +9,6 @@ import {
   UserCircle,
   Megaphone,
   Briefcase,
-  UserPlus,
   Wallet,
   // Trophy,
   // CalendarRange,

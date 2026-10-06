@@ -15,7 +15,10 @@ import { useRouter } from 'next/navigation';
 export function useUnsavedChangesGuard(dirty: boolean, onBlocked: (proceed: () => void) => void) {
   const router = useRouter();
   const blocked = useRef(onBlocked);
-  blocked.current = onBlocked;
+
+  useEffect(() => {
+    blocked.current = onBlocked;
+  });
 
   useEffect(() => {
     if (!dirty) return;

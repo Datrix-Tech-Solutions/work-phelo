@@ -25,7 +25,7 @@ export function dependenciesOf(c: PayComponent, comps: PayComponent[]): PayCompo
   let needEarnings = false;
   let needReducers = false;
 
-  const useBase = (b: PayBase) => {
+  const addBase = (b: PayBase) => {
     if (b === 'gross' || b === 'pensionable') needEarnings = true;
     if (b === 'taxable_income') {
       needEarnings = true;
@@ -33,7 +33,7 @@ export function dependenciesOf(c: PayComponent, comps: PayComponent[]): PayCompo
     }
   };
 
-  if (c.method === 'percent' || c.method === 'bands') useBase(c.base);
+  if (c.method === 'percent' || c.method === 'bands') addBase(c.base);
   if (c.method === 'formula') {
     formulaRefs(c.params.expr).forEach((id) => {
       if (id === 'gross' || id === 'pensionable') needEarnings = true;
