@@ -604,8 +604,12 @@ export class SourceTransactionsService {
     const untaxed = lines.filter((l) => !l.taxTypeId);
     const receivable = untaxed.find((l) => l.direction === PostingDirection.DR);
     if (!receivable) return 'The rule needs a receivable (debit) line';
-    if (!untaxed.some((l) => l.id !== receivable.id)) {
+    const main = untaxed.find((l) => l.id !== receivable.id);
+    if (!main) {
       return 'The rule needs a main line besides the receivable line';
+    }
+    if (!main.accountId) {
+      return 'The rule lets the user choose the account — set a fixed account for invoices raised from other modules';
     }
     return null;
   }
@@ -712,7 +716,7 @@ export class SourceTransactionsService {
     const rule = transactionType.rule;
     const cashAccountId = rule?.defaultCashAccountId;
     const offset = rule?.lines[0];
-    if (!cashAccountId || !offset) {
+    if (!cashAccountId || !offset?.accountId) {
       throw new ConflictException(
         `${transactionType.name} has no default cash account or account to credit`,
       );

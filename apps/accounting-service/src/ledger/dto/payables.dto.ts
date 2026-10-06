@@ -90,6 +90,17 @@ export class CreatePayableBillDto {
   transactionTypeId!: string;
 
   @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      "Required when the type's rule scopes its main line to a category or classification " +
+      'instead of one fixed account: the account picked on the form, which must sit inside ' +
+      'that scope. Ignored (and must match) when the rule fixes the account.',
+  })
+  @IsOptional()
+  @IsUUID()
+  offsetGlAccountId?: string;
+
+  @ApiPropertyOptional({
     type: [String],
     description:
       "Which of the Rule's Deduction (tax) lines to apply, by TaxType id — each computes " +

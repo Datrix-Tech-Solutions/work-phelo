@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { runFiscalPeriodCloseChecks } from './fiscal-period-close-check';
 import { fiscalYearName, summarizeFiscalYear } from './fiscal-year';
 import {
+  BulkDeleteAccountsDto,
   BulkImportAccountsDto,
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
@@ -1256,6 +1257,122 @@ export class AccountingMasterDataService {
    *  them. Rows whose code already exists for the tenant are treated as a no-op — the
    *  existing record's id is reused to resolve any row elsewhere in the file that
    *  references it. */
+  /**
+   * GL accounts that are safe to delete: nothing references them (journal lines, posting
+   * and transaction rules, cash accounts, entities, documents, budgets, payroll mappings…)
+   * and every child account is itself unused, so a whole unused branch is cleared in one go.
+   * Mirrors what `deleteGLAccount` would accept, plus the foreign keys that would stop it.
+   */
+  async listUnusedGLAccounts(tenantId: string) {
+    const unreferenced = await this.prisma.gLAccount.findMany({
+      where: {
+        tenantId,
+        journalLines: { none: {} },
+        payrollAccountMappings: { none: {} },
+        postingRuleLines: { none: {} },
+        transactionRuleLines: { none: {} },
+        subledgers: { none: {} },
+        cashAccounts: { none: {} },
+        cashbookOffsets: { none: {} },
+        receivableOffsets: { none: {} },
+        receivableArAccounts: { none: {} },
+        receivableReceiptArAccounts: { none: {} },
+        payableOffsets: { none: {} },
+        payableApAccounts: { none: {} },
+        payablePaymentApAccounts: { none: {} },
+        budgetLines: { none: {} },
+        recurringLines: { none: {} },
+        sourceLedgerEntries: { none: {} },
+      },
+      include: this.glAccountHierarchyInclude(),
+      orderBy: { code: 'asc' },
+    });
+
+    // An account only qualifies if all of its children do too. Children outside the
+    // unreferenced set are used, so they pin their parent.
+    const candidateIds = new Set(unreferenced.map((a) => a.id));
+    const allParents = await this.prisma.gLAccount.findMany({
+      where: { tenantId, parentAccountId: { not: null } },
+      select: { id: true, parentAccountId: true },
+    });
+    const childrenOf = new Map<string, string[]>();
+    for (const { id, parentAccountId } of allParents) {
+      if (!parentAccountId) continue;
+      childrenOf.set(parentAccountId, [
+        ...(childrenOf.get(parentAccountId) ?? []),
+        id,
+      ]);
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const id of [...candidateIds]) {
+        const children = childrenOf.get(id) ?? [];
+        if (children.some((childId) => !candidateIds.has(childId))) {
+          candidateIds.delete(id);
+          changed = true;
+        }
+      }
+    }
+
+    return unreferenced
+      .filter((account) => candidateIds.has(account.id))
+      .map((account) => this.withAccountHierarchy(account));
+  }
+
+  async bulkDeleteGLAccounts(user: RequestUser, dto: BulkDeleteAccountsDto) {
+    // Recomputed now, not trusted from the earlier preview: an account may have been used
+    // since the dialog was opened.
+    const unused = await this.listUnusedGLAccounts(user.tenantId);
+    const unusedById = new Map(unused.map((a) => [a.id, a]));
+    const requested = [...new Set(dto.accountIds)];
+
+    const results: {
+      id: string;
+      code?: string;
+      status: 'deleted' | 'skipped' | 'failed';
+      message?: string;
+    }[] = [];
+    const toDelete = requested.filter((id) => unusedById.has(id));
+    for (const id of requested) {
+      if (!unusedById.has(id)) {
+        results.push({
+          id,
+          status: 'skipped',
+          message: 'No longer unused (or not found) — left in place',
+        });
+      }
+    }
+
+    // Deepest first so a parent goes after the children that pinned it.
+    const depth = (id: string): number => {
+      let d = 0;
+      let current = unusedById.get(id)?.parentAccountId;
+      while (current) {
+        d += 1;
+        current = unusedById.get(current)?.parentAccountId ?? null;
+      }
+      return d;
+    };
+    toDelete.sort((a, b) => depth(b) - depth(a));
+
+    for (const id of toDelete) {
+      const code = unusedById.get(id)?.code;
+      try {
+        await this.deleteGLAccount(user, id);
+        results.push({ id, code, status: 'deleted' });
+      } catch (error) {
+        results.push({
+          id,
+          code,
+          status: 'failed',
+          message: this.bulkImportErrorMessage(error),
+        });
+      }
+    }
+    return { results };
+  }
+
   async bulkImportAccounts(user: RequestUser, dto: BulkImportAccountsDto) {
     const tenantId = user.tenantId;
 

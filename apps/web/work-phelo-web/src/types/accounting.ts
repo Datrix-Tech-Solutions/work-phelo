@@ -92,6 +92,13 @@ export interface BulkImportRowResult {
   message?: string;
 }
 
+export interface BulkDeleteAccountResult {
+  id: string;
+  code?: string;
+  status: 'deleted' | 'skipped' | 'failed';
+  message?: string;
+}
+
 export interface BulkImportAccountsResult {
   classifications: BulkImportRowResult[];
   groups: BulkImportRowResult[];
@@ -465,7 +472,23 @@ export interface TransactionTypeRuleLine {
   id: string;
   sequence: number;
   direction: PostingLineDirection;
-  account: { id: string; code: string; name: string };
+  /** Null on a scoped main line — the user picks the account on the transaction form. */
+  account: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+    classificationId: string | null;
+  } | null;
+  /** Set when the main line lets the user choose any posting account in this category
+   *  (or in `scopeClassification`, which narrows it). */
+  scopeCategory: GLAccountCategory | null;
+  scopeClassification: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+  } | null;
   /** Set only on a tax line — which TaxType drives this line's computed amount. */
   taxType: { id: string; name: string; rate: number } | null;
   /** Set only when this line also posts to a party's subledger account under the
@@ -492,7 +515,10 @@ export interface TransactionTypeRule {
 
 export interface TransactionTypeRuleLineInput {
   direction: PostingLineDirection;
-  accountId: string;
+  /** Exactly one of accountId / scopeCategory / scopeClassificationId. */
+  accountId?: string;
+  scopeCategory?: GLAccountCategory;
+  scopeClassificationId?: string;
   taxTypeId?: string;
   subledgerType?: SubledgerType;
   description?: string;
@@ -1062,6 +1088,9 @@ export interface CreateTradeInvoicePayload {
   /** The Receivable/Payable-category Transaction Type driving this document — its
    *  Rule resolves the offset account and any tax lines. A Rule must exist for it. */
   transactionTypeId: string;
+  /** Required when the rule scopes its main line to a category or classification: the
+   *  account picked on the form, which the backend re-checks against that scope. */
+  offsetGlAccountId?: string;
   /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
   selectedTaxTypeIds?: string[];
   /** Optional active cost centre (department) — tags the offset (P&L) line, not the AR/AP or tax lines. */
@@ -1170,7 +1199,8 @@ export interface CreateTradeCreditNotePayload {
   documentDate: string;
   currency: string;
   amount: number;
-  /** Manual path only — omitted when a linked `transactionTypeId` drives the posting. */
+  /** Manual path: the offset account. Linked path: only when the rule scopes its main line,
+   *  the account picked within that scope. */
   offsetGlAccountId?: string;
   /** Posts to the AR (Receivable) or AP (Payable) account, whichever this side is —
    *  manually picked on the manual path only. */

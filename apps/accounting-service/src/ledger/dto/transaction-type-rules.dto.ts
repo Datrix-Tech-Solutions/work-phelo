@@ -15,7 +15,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { PostingDirection } from '../../../prisma/generated/client';
+import {
+  GLAccountCategory,
+  PostingDirection,
+} from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -69,9 +72,33 @@ export class TransactionTypeRuleLineDto {
   @IsEnum(PostingDirection)
   direction!: PostingDirection;
 
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'A fixed account. Omit on a Receivable/Payable main line that is scoped instead ' +
+      '(scopeCategory / scopeClassificationId) — exactly one of the three is required.',
+  })
+  @IsOptional()
   @IsUUID()
-  accountId!: string;
+  accountId?: string;
+
+  @ApiPropertyOptional({
+    enum: GLAccountCategory,
+    description:
+      'Main line only: lets the user pick any posting account in this category on the form.',
+  })
+  @IsOptional()
+  @IsEnum(GLAccountCategory)
+  scopeCategory?: GLAccountCategory;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Main line only: lets the user pick any posting account in this classification on the form.',
+  })
+  @IsOptional()
+  @IsUUID()
+  scopeClassificationId?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',

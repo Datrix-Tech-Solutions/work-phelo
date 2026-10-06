@@ -14,6 +14,7 @@ import { AccountingCashbookSettlementMethod, TransactionTypeDefinition } from '@
 import {
   useAccountingCurrencyOptions,
   useCashAccountOptions,
+  useCashAccounts,
   useCostCentres,
   useCreateCashbookPayment,
   useCreateCashbookReceipt,
@@ -189,18 +190,55 @@ export function NewTransactionPanel({
         .sort((a, b) => a.label.localeCompare(b.label)),
     [costCentres],
   );
-  // The department tag lands on the rule's main (non-tax, non-control) line — hide the field
-  // when that account is a balance-sheet one (e.g. an asset purchase), since there is no
-  // P&L cost to attribute. While accounts are still loading, err on the side of showing it.
-  const showCostCentre = useMemo(() => {
-    // A linked type's rule is written in the note's own direction, so its control line flips.
-    const controlDirection = isReceivable !== isLinked ? 'DR' : 'CR';
-    const mainLine = (rule?.lines ?? []).find(
-      (l) => !l.taxType && l.direction !== controlDirection,
+  // The rule's main (non-tax, non-control) line. A linked type's rule is written in the note's
+  // own direction, so its control line flips.
+  const controlDirection = isReceivable !== isLinked ? 'DR' : 'CR';
+  const mainLine = useMemo(
+    () => (rule?.lines ?? []).find((l) => !l.taxType && l.direction !== controlDirection),
+    [rule, controlDirection],
+  );
+  // A scoped main line has no fixed account — the user picks one inside its category or
+  // classification, and the backend re-checks the pick against the same scope.
+  const isScopedMainLine = !isCashbookType && !!mainLine && !mainLine.account;
+  const controlAccountId = (rule?.lines ?? []).find(
+    (l) => !l.taxType && l.direction === controlDirection,
+  )?.account?.id;
+  const { data: cashAccounts = [] } = useCashAccounts();
+  const scopedAccountOptions = useMemo<SearchSelectOption[]>(() => {
+    if (!isScopedMainLine || !mainLine) return [];
+    const cashGlIds = new Set(cashAccounts.map((c) => c.glAccountId));
+    // The backend only accepts leaf accounts, so a parent account is never offered.
+    const parentIds = new Set(
+      glAccounts.flatMap((a) => (a.parentAccountId ? [a.parentAccountId] : [])),
     );
-    const category = glAccounts.find((a) => a.id === mainLine?.account.id)?.category;
+    return glAccounts
+      .filter(
+        (a) =>
+          a.status === 'ACTIVE' &&
+          a.allowPosting &&
+          !parentIds.has(a.id) &&
+          a.id !== controlAccountId &&
+          !cashGlIds.has(a.id) &&
+          (mainLine.scopeClassification
+            ? a.classificationId === mainLine.scopeClassification.id
+            : a.category === mainLine.scopeCategory),
+      )
+      .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
+  }, [isScopedMainLine, mainLine, glAccounts, cashAccounts, controlAccountId]);
+  const pickedOffsetAccountId = useWatch({ control, name: 'offsetGlAccountId' });
+  // The department tag lands on the main line — hide the field when that account is a
+  // balance-sheet one (e.g. an asset purchase), since there is no P&L cost to attribute.
+  // While accounts are still loading, err on the side of showing it.
+  const showCostCentre = useMemo(() => {
+    const category = mainLine?.account
+      ? glAccounts.find((a) => a.id === mainLine.account?.id)?.category
+      : isScopedMainLine
+        ? (glAccounts.find((a) => a.id === pickedOffsetAccountId)?.category ??
+          mainLine?.scopeClassification?.category ??
+          mainLine?.scopeCategory)
+        : undefined;
     return !category || category === 'EXPENSE' || category === 'REVENUE';
-  }, [rule, glAccounts, isReceivable, isLinked]);
+  }, [mainLine, glAccounts, isScopedMainLine, pickedOffsetAccountId]);
   const [selectedTaxTypeIds, setSelectedTaxTypeIds] = useState<string[]>([]);
   const [successInfo, setSuccessInfo] = useState<{ name: string; posted: boolean } | null>(null);
 
@@ -208,11 +246,14 @@ export function NewTransactionPanel({
   // Entity Types list — and any of them works now, not just the old fixed enum names.
   const businessRoleOptions = useMemo<SearchSelectOption[]>(() => {
     const configured = transactionType?.businessRoles ?? [];
+    if (isCashbookType && configured.length === 0) {
+      return entityTypesData.map((t) => ({ value: t.name.trim().toUpperCase(), label: t.name }));
+    }
     return configured.map((role) => ({
       value: role,
       label: entityTypesData.find((t) => t.name.trim().toUpperCase() === role)?.name ?? role,
     }));
-  }, [transactionType, entityTypesData]);
+  }, [transactionType, entityTypesData, isCashbookType]);
 
   const businessRole = useWatch({ control, name: 'businessRole' });
   const businessEntity = useWatch({ control, name: 'businessEntity' });
@@ -246,7 +287,7 @@ export function NewTransactionPanel({
       businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
       entryDate: today(),
       cashAccountId: rule?.defaultCashAccountId ?? '',
-      offsetGlAccountId: rule?.lines?.[0]?.account.id ?? '',
+      offsetGlAccountId: rule?.lines?.[0]?.account?.id ?? '',
     });
     setSelectedTaxTypeIds([]);
   }
@@ -350,6 +391,9 @@ export function NewTransactionPanel({
             currency: values.currency,
             transactionDate: values.entryDate || today(),
             settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
+            ...(values.businessEntity && values.businessRole
+              ? { counterpartyType: values.businessRole, counterpartyId: values.businessEntity }
+              : {}),
             reference: values.reference || undefined,
             description: values.description || transactionType.name,
           });
@@ -372,6 +416,11 @@ export function NewTransactionPanel({
       toast.error('Select a business entity');
       return;
     }
+    if (isScopedMainLine && !values.offsetGlAccountId) {
+      toast.error('Select the account for this transaction');
+      return;
+    }
+    const scopedOffset = isScopedMainLine ? { offsetGlAccountId: values.offsetGlAccountId } : {};
 
     if (isLinked) {
       const original = originalDocuments.find((doc) => doc.id === values.originalDocumentId);
@@ -394,6 +443,7 @@ export function NewTransactionPanel({
           quantity: Number(values.quantity),
           unitPrice: Number(values.unitPrice),
           transactionTypeId: transactionType.id,
+          ...scopedOffset,
           originalDocumentId: values.originalDocumentId,
           selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
           costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
@@ -417,6 +467,7 @@ export function NewTransactionPanel({
         ? {}
         : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
       transactionTypeId: transactionType.id,
+      ...scopedOffset,
       selectedTaxTypeIds: selectedTaxTypeIds.length ? selectedTaxTypeIds : undefined,
       costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
       description: values.description || undefined,
@@ -593,6 +644,51 @@ export function NewTransactionPanel({
                 No rule configured for this type yet — pick the accounts below directly, or add a
                 default rule under Settings → Transaction Types.
               </p>
+            )}
+
+            {!transactionType?.sourceTypeId && (
+              <>
+                <Controller
+                  name="businessRole"
+                  control={control}
+                  render={({ field }) => (
+                    <SearchSelect
+                      label="Business Role"
+                      placeholder="Optional — select a business role…"
+                      options={businessRoleOptions}
+                      value={field.value}
+                      onChange={(value) => {
+                        field.onChange(value);
+                        setValue('businessEntity', '');
+                      }}
+                    />
+                  )}
+                />
+                <Controller
+                  name="businessEntity"
+                  control={control}
+                  render={({ field }) => (
+                    <SearchSelect
+                      label="Business Entity"
+                      placeholder={
+                        !businessRole
+                          ? 'Select a business role first…'
+                          : isLoadingEntities
+                            ? 'Loading…'
+                            : 'Optional — select an entity…'
+                      }
+                      options={entityOptions}
+                      value={field.value}
+                      onChange={(value) => {
+                        field.onChange(value);
+                        const entity = entities.find((e) => e.id === value);
+                        if (entity?.currency) setValue('currency', entity.currency);
+                      }}
+                      disabled={!businessRole}
+                    />
+                  )}
+                />
+              </>
             )}
 
             {transactionType?.sourceTypeId && (
@@ -781,6 +877,28 @@ export function NewTransactionPanel({
                     }}
                     disabled={!businessEntity}
                     error={errors.originalDocumentId?.message}
+                  />
+                )}
+              />
+            )}
+
+            {isScopedMainLine && (
+              <Controller
+                name="offsetGlAccountId"
+                control={control}
+                rules={{ required: 'Account is required' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label={`Account to ${controlDirection === 'CR' ? 'Debit' : 'Credit'}`}
+                    placeholder={
+                      scopedAccountOptions.length === 0
+                        ? 'No accounts available for this transaction type'
+                        : 'Select account…'
+                    }
+                    options={scopedAccountOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.offsetGlAccountId?.message}
                   />
                 )}
               />

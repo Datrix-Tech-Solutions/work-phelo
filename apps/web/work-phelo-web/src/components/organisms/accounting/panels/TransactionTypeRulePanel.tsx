@@ -14,20 +14,23 @@ import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { CATEGORIES } from '@/components/organisms/accounting/ChartOfAccountsTree';
 import {
+  useAccountClassifications,
   useCashAccountOptions,
   useCreateTransactionTypeRule,
   useGLAccountOptions,
+  useGLAccounts,
   useTaxTypes,
   useTransactionTypes,
   useUpdateTransactionTypeRule,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { SUBLEDGER_TYPE_LABELS } from '@/types/accounting';
 import type {
+  GLAccount,
+  GLAccountCategory,
   PostingLineDirection,
-  SubledgerType,
   TransactionTypeCategory,
   TransactionTypeRule,
   TransactionTypeRuleLineInput,
@@ -52,9 +55,12 @@ type LineFormValues = {
    *  (e.g. output VAT is a credit, input VAT is a debit). */
   deductionDirection: PostingLineDirection | '';
   accountId: string;
+  /** Main line only (see isMainLine): where the user may pick the account from. The deepest
+   *  one chosen is what's saved — an account, else a classification, else the category. */
+  scopeCategory: GLAccountCategory | '';
+  scopeClassificationId: string;
   /** Only used when kind is DEDUCTION. */
   taxTypeId: string;
-  subledgerType: SubledgerType | '';
   description: string;
 };
 
@@ -69,8 +75,9 @@ const EMPTY_LINE: LineFormValues = {
   kind: 'DEBIT',
   deductionDirection: '',
   accountId: '',
+  scopeCategory: '',
+  scopeClassificationId: '',
   taxTypeId: '',
-  subledgerType: '',
   description: '',
 };
 
@@ -103,23 +110,36 @@ function directionOf(line: LineFormValues): PostingLineDirection | '' {
   return '';
 }
 
+/** What a main line saves: the deepest level picked. */
+function scopeInput(
+  line: LineFormValues,
+): Pick<TransactionTypeRuleLineInput, 'accountId' | 'scopeCategory' | 'scopeClassificationId'> {
+  if (line.accountId) return { accountId: line.accountId };
+  if (line.scopeClassificationId) return { scopeClassificationId: line.scopeClassificationId };
+  return { scopeCategory: (line.scopeCategory || undefined) as GLAccountCategory | undefined };
+}
+
 function lineToFormValues(line: TransactionTypeRule['lines'][number]): LineFormValues {
   if (line.taxType) {
     return {
       kind: 'DEDUCTION',
       deductionDirection: line.direction,
-      accountId: line.account.id,
+      accountId: line.account?.id ?? '',
+      scopeCategory: '',
+      scopeClassificationId: '',
       taxTypeId: line.taxType.id,
-      subledgerType: line.subledgerType ?? '',
       description: line.description ?? '',
     };
   }
   return {
     kind: line.direction === 'DR' ? 'DEBIT' : 'CREDIT',
     deductionDirection: '',
-    accountId: line.account.id,
+    accountId: line.account?.id ?? '',
+    // A fixed account still opens the main line's category / classification pickers filled in.
+    scopeCategory:
+      line.account?.category ?? line.scopeCategory ?? line.scopeClassification?.category ?? '',
+    scopeClassificationId: line.account?.classificationId ?? line.scopeClassification?.id ?? '',
     taxTypeId: '',
-    subledgerType: line.subledgerType ?? '',
     description: line.description ?? '',
   };
 }
@@ -165,10 +185,6 @@ export function TransactionTypeRulePanel({
     () => transactionTypes.find((t) => t.id === activeTransactionTypeId),
     [transactionTypes, activeTransactionTypeId],
   );
-  const businessRoles = selectedType?.businessRoles ?? [];
-  const subledgerTypeOptions: SearchSelectOption[] = businessRoles
-    .filter((role): role is SubledgerType => role in SUBLEDGER_TYPE_LABELS)
-    .map((role) => ({ value: role, label: SUBLEDGER_TYPE_LABELS[role] }));
   const taxTypeOptions: SearchSelectOption[] = taxTypes.map((t) => ({
     value: t.id,
     label: `${t.name} (${t.rate}%)`,
@@ -195,6 +211,19 @@ export function TransactionTypeRulePanel({
           ? 'CR'
           : 'DR'
         : null;
+
+  // The main line of a Receivable/Payable rule — not the control line, not a deduction — is
+  // where a scope applies. Its side is the opposite of the control line's (see the
+  // deduction direction above). Cashbook and source-linked types keep a fixed account.
+  const mainLineDirection: PostingLineDirection | null =
+    fixedDeductionDirection === 'CR' ? 'DR' : fixedDeductionDirection === 'DR' ? 'CR' : null;
+  const allowsScope = !isCashbookType && !selectedType?.sourceTypeId && mainLineDirection !== null;
+  const watchedLines = useWatch({ control, name: 'lines' });
+  const mainLineIndex = allowsScope
+    ? (watchedLines ?? []).findIndex(
+        (l) => (l.kind === 'DEBIT' || l.kind === 'CREDIT') && directionOf(l) === mainLineDirection,
+      )
+    : -1;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -270,11 +299,10 @@ export function TransactionTypeRulePanel({
       }
     }
 
-    const lines: TransactionTypeRuleLineInput[] = values.lines.map((line) => ({
+    const lines: TransactionTypeRuleLineInput[] = values.lines.map((line, index) => ({
       direction: directionOf(line) as PostingLineDirection,
-      accountId: line.accountId,
+      ...(index === mainLineIndex ? scopeInput(line) : { accountId: line.accountId }),
       taxTypeId: line.kind === 'DEDUCTION' ? line.taxTypeId || undefined : undefined,
-      subledgerType: (line.subledgerType || undefined) as SubledgerType | undefined,
       description: line.description || undefined,
     }));
 
@@ -438,9 +466,9 @@ export function TransactionTypeRulePanel({
                 onRemove={() => remove(index)}
                 accountOptions={accountOptions}
                 isLoadingAccounts={isLoadingAccounts}
-                subledgerTypeOptions={subledgerTypeOptions}
                 taxTypeOptions={taxTypeOptions}
                 fixedDeductionDirection={fixedDeductionDirection}
+                isMainLine={index === mainLineIndex}
               />
             ))}
           </div>
@@ -460,9 +488,9 @@ function RuleLineEditor({
   onRemove,
   accountOptions,
   isLoadingAccounts,
-  subledgerTypeOptions,
   taxTypeOptions,
   fixedDeductionDirection,
+  isMainLine,
 }: {
   control: Control<FormValues>;
   register: ReturnType<typeof useForm<FormValues>>['register'];
@@ -473,11 +501,57 @@ function RuleLineEditor({
   onRemove: () => void;
   accountOptions: SearchSelectOption[];
   isLoadingAccounts: boolean;
-  subledgerTypeOptions: SearchSelectOption[];
   taxTypeOptions: SearchSelectOption[];
   fixedDeductionDirection: PostingLineDirection | null;
+  isMainLine: boolean;
 }) {
   const kind = useWatch({ control, name: `lines.${index}.kind` });
+  const scopeCategory = useWatch({ control, name: `lines.${index}.scopeCategory` });
+  const scopeClassificationId = useWatch({ control, name: `lines.${index}.scopeClassificationId` });
+  const { data: allAccounts = [] } = useGLAccounts();
+  // Every level works on its own, like the journal entry lines: a level that's set narrows the
+  // ones below it, and picking a lower level fills in the ones above.
+  const { data: classificationsData } = useAccountClassifications({ isActive: true });
+  const classifications = classificationsData?.items ?? [];
+  const classificationOptions: SearchSelectOption[] = classifications
+    .filter((c) => !scopeCategory || c.category === scopeCategory)
+    .map((c) => ({ value: c.id, label: c.name }));
+  const scopedAccountOptions: SearchSelectOption[] = allAccounts
+    .filter(
+      (a: GLAccount) =>
+        a.status === 'ACTIVE' &&
+        a.allowPosting &&
+        (!scopeCategory || a.category === scopeCategory) &&
+        (!scopeClassificationId || a.classificationId === scopeClassificationId),
+    )
+    .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
+  const accountId = useWatch({ control, name: `lines.${index}.accountId` });
+
+  const pickCategory = (category: GLAccountCategory) => {
+    setValue(`lines.${index}.scopeCategory`, category);
+    // Keep a lower level only while it still sits under the new category.
+    const classification = classifications.find((c) => c.id === scopeClassificationId);
+    if (classification && classification.category !== category) {
+      setValue(`lines.${index}.scopeClassificationId`, '');
+    }
+    const account = allAccounts.find((a) => a.id === accountId);
+    if (account && account.category !== category) setValue(`lines.${index}.accountId`, '');
+  };
+  const pickClassification = (id: string) => {
+    setValue(`lines.${index}.scopeClassificationId`, id);
+    const classification = classifications.find((c) => c.id === id);
+    if (classification) setValue(`lines.${index}.scopeCategory`, classification.category);
+    const account = allAccounts.find((a) => a.id === accountId);
+    if (id && account && account.classificationId !== id) setValue(`lines.${index}.accountId`, '');
+  };
+  const pickAccount = (id: string) => {
+    setValue(`lines.${index}.accountId`, id);
+    const account = allAccounts.find((a) => a.id === id);
+    if (account) {
+      setValue(`lines.${index}.scopeCategory`, account.category);
+      setValue(`lines.${index}.scopeClassificationId`, account.classificationId ?? '');
+    }
+  };
 
   useEffect(() => {
     if (kind === 'DEDUCTION' && fixedDeductionDirection) {
@@ -559,33 +633,67 @@ function RuleLineEditor({
         </div>
       )}
 
-      <Controller
-        name={`lines.${index}.accountId`}
-        control={control}
-        rules={{ required: 'Required' }}
-        render={({ field: f }) => (
-          <SearchSelect
-            label="Account"
-            placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
-            options={accountOptions}
-            value={f.value}
-            onChange={f.onChange}
-            error={errors.lines?.[index]?.accountId?.message}
+      {isMainLine ? (
+        <>
+          <p className="text-xs text-gray-500">
+            Choose how far to narrow where this line posts. Stop at a category or classification and
+            the user picks the account when making the transaction; pick an account and it is fixed.
+          </p>
+          <Controller
+            name={`lines.${index}.scopeCategory`}
+            control={control}
+            rules={{ required: 'Choose a category, classification or account' }}
+            render={({ field: f }) => (
+              <SearchSelect
+                label="Category"
+                placeholder="Select a category…"
+                options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+                value={f.value}
+                onChange={(value) => pickCategory(value as GLAccountCategory)}
+                error={errors.lines?.[index]?.scopeCategory?.message}
+              />
+            )}
           />
-        )}
-      />
-
-      {subledgerTypeOptions.length > 0 && (
+          <Controller
+            name={`lines.${index}.scopeClassificationId`}
+            control={control}
+            render={({ field: f }) => (
+              <SearchSelect
+                label="Classification (optional)"
+                placeholder="Any classification"
+                options={classificationOptions}
+                value={f.value}
+                onChange={pickClassification}
+              />
+            )}
+          />
+          <Controller
+            name={`lines.${index}.accountId`}
+            control={control}
+            render={({ field: f }) => (
+              <SearchSelect
+                label="Account (optional)"
+                placeholder="Any account — chosen on the transaction"
+                options={scopedAccountOptions}
+                value={f.value}
+                onChange={pickAccount}
+              />
+            )}
+          />
+        </>
+      ) : (
         <Controller
-          name={`lines.${index}.subledgerType`}
+          name={`lines.${index}.accountId`}
           control={control}
+          rules={{ required: 'Required' }}
           render={({ field: f }) => (
             <SearchSelect
-              label="Subledger Type (optional)"
-              placeholder="None — this account alone"
-              options={subledgerTypeOptions}
+              label="Account"
+              placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
+              options={accountOptions}
               value={f.value}
               onChange={f.onChange}
+              error={errors.lines?.[index]?.accountId?.message}
             />
           )}
         />

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
+  BulkDeleteAccountResult,
   BulkImportAccountsPayload,
   BulkImportAccountsResult,
   CreateGLAccountPayload,
@@ -100,4 +101,33 @@ export function useGLAccountOptions(params: QueryGLAccountsParams = {}) {
       .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` })),
     isLoading,
   };
+}
+
+/** Accounts nothing references (and whose children are all unused too) — a delete preview. Only
+ *  fetched while the clear-unused dialog is open, and never cached, so it is always current. */
+export function useUnusedGLAccounts(enabled: boolean) {
+  return useQuery({
+    queryKey: [...GL_ACCOUNTS_KEY, 'unused'],
+    enabled,
+    gcTime: 0,
+    queryFn: async () => {
+      const res = await api.get<GLAccount[]>(`${BASE}/unused`);
+      return res.data;
+    },
+  });
+}
+
+export function useBulkDeleteGLAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (accountIds: string[]) => {
+      const res = await api.post<{ results: BulkDeleteAccountResult[] }>(`${BASE}/bulk-delete`, {
+        accountIds,
+      });
+      return res.data.results;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });
+    },
+  });
 }

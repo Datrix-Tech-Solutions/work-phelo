@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ACCOUNTING_DOCUMENT_OPTIONS } from '@/lib/accounting/documents';
+import { suggestTransactionTypeCode } from '@/lib/accounting/transactionTypeCode';
 import type { TransactionTypeCategory, TransactionTypeDefinition } from '@/types/accounting';
 
 // Neutral/None types (Transfer, Bank Charge, Adjustment) have no working form yet —
@@ -92,8 +93,10 @@ export function TransactionTypePanel({
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
   const category = useWatch({ control, name: 'category' });
+  const codeEdited = useRef(false);
 
   useEffect(() => {
+    codeEdited.current = false;
     if (transactionType)
       reset({
         name: transactionType.name,
@@ -169,6 +172,10 @@ export function TransactionTypePanel({
           registration={register('name', {
             required: 'Name is required',
             maxLength: { value: 160, message: 'Name must be 160 characters or fewer' },
+            onChange: (e: ChangeEvent<HTMLInputElement>) => {
+              if (!isEditing && !codeEdited.current)
+                setValue('code', suggestTransactionTypeCode(e.target.value));
+            },
           })}
           error={errors.name}
           placeholder="e.g. Customer Receipt"
@@ -179,6 +186,10 @@ export function TransactionTypePanel({
             required: 'Code is required',
             maxLength: { value: 30, message: 'Code must be 30 characters or fewer' },
             setValueAs: (value: string) => value.toUpperCase(),
+            // Once the user types their own code, stop overwriting it; clearing it resumes suggesting.
+            onChange: (e: ChangeEvent<HTMLInputElement>) => {
+              codeEdited.current = e.target.value !== '';
+            },
           })}
           error={errors.code}
           placeholder="e.g. CUST-RCPT"
