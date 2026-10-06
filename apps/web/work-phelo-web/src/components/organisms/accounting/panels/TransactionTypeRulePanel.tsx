@@ -213,10 +213,10 @@ export function TransactionTypeRulePanel({
         : null;
 
   // The main line of a Receivable/Payable rule — not the control line, not a deduction — is
-  // where a scope applies. Its side is the opposite of the control line's (see the
-  // deduction direction above). Cashbook and source-linked types keep a fixed account.
-  const mainLineDirection: PostingLineDirection | null =
-    fixedDeductionDirection === 'CR' ? 'DR' : fixedDeductionDirection === 'DR' ? 'CR' : null;
+  // where a scope applies. It sits on the side opposite the control line, which is the same
+  // side a deduction posts to (see above): debit for a bill, credit for an invoice, and the
+  // reverse for the linked notes. Cashbook and source-linked types keep a fixed account.
+  const mainLineDirection: PostingLineDirection | null = fixedDeductionDirection;
   const allowsScope = !isCashbookType && !selectedType?.sourceTypeId && mainLineDirection !== null;
   const watchedLines = useWatch({ control, name: 'lines' });
   const mainLineIndex = allowsScope
