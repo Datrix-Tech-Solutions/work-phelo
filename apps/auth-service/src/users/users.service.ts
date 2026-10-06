@@ -41,6 +41,11 @@ const DOCUMENT_ALLOWED_MIME_TYPES = new Set([
 ]);
 const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
+type InviteTiming = {
+  label: string;
+  ms: number;
+};
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -52,6 +57,32 @@ export class UsersService {
     private readonly audit: AuditService,
     private readonly storage: TenantAssetStorageService,
   ) {}
+
+  private async timeInviteStage<T>(
+    timings: InviteTiming[] | undefined,
+    label: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const startedAt = Date.now();
+    try {
+      return await operation();
+    } finally {
+      timings?.push({ label, ms: Date.now() - startedAt });
+    }
+  }
+
+  private logProvisionTimings(
+    email: string,
+    timings: InviteTiming[],
+    totalMs: number,
+  ) {
+    const stageSummary = timings
+      .map((timing) => `${timing.label}Ms=${timing.ms}`)
+      .join(' | ');
+    this.logger.log(
+      `[auth.provision_employee_invite] Timings | email=${normalizeEmail(email)} | totalMs=${totalMs}${stageSummary ? ` | ${stageSummary}` : ''}`,
+    );
+  }
 
   private async validateInvitedEmployeePermissionSets(
     tenantId: string,
@@ -81,11 +112,18 @@ export class UsersService {
     return permissionSets;
   }
 
-  async invite(tenantId: string, dto: InviteUserDto, invitedBy?: string) {
+  async invite(
+    tenantId: string,
+    dto: InviteUserDto,
+    invitedBy?: string,
+    timings?: InviteTiming[],
+  ) {
     const normalizedEmail = normalizeEmail(dto.email);
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-    });
+    const tenant = await this.timeInviteStage(timings, 'tenantLookup', () =>
+      this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+      }),
+    );
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     // Block superadmin email
@@ -97,12 +135,17 @@ export class UsersService {
       );
     }
 
-    const existing = await this.prisma.user.findFirst({
-      where: {
-        tenantId,
-        email: { equals: normalizedEmail, mode: 'insensitive' },
-      },
-    });
+    const existing = await this.timeInviteStage(
+      timings,
+      'duplicateLookup',
+      () =>
+        this.prisma.user.findFirst({
+          where: {
+            tenantId,
+            email: { equals: normalizedEmail, mode: 'insensitive' },
+          },
+        }),
+    );
     if (existing)
       throw new ConflictException('A user with this email already exists.');
 
@@ -132,51 +175,72 @@ export class UsersService {
 
     const selectedPermissionSets =
       userRole === UserSystemRole.EMPLOYEE
-        ? await this.validateInvitedEmployeePermissionSets(
-            tenantId,
-            permissionSetIds,
+        ? await this.timeInviteStage(
+            timings,
+            'selectedPermissionSetValidation',
+            () =>
+              this.validateInvitedEmployeePermissionSets(
+                tenantId,
+                permissionSetIds,
+              ),
           )
         : [];
 
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
 
-    const user = await this.prisma.user.create({
-      data: {
-        tenantId,
-        email: normalizedEmail,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        phone: dto.phone,
-        role: userRole,
-        status: 'PENDING_VERIFICATION',
-        forcePasswordReset: true,
-        inviteToken,
-        inviteExpiresAt,
-      },
+    const user = await this.prisma.$transaction(async (tx) => {
+      const createdUser = await this.timeInviteStage(
+        timings,
+        'userCreate',
+        () =>
+          tx.user.create({
+            data: {
+              tenantId,
+              email: normalizedEmail,
+              firstName: dto.firstName,
+              lastName: dto.lastName,
+              phone: dto.phone,
+              role: userRole,
+              status: 'PENDING_VERIFICATION',
+              forcePasswordReset: true,
+              inviteToken,
+              inviteExpiresAt,
+            },
+          }),
+      );
+
+      await this.timeInviteStage(timings, 'systemPermissionSync', () =>
+        syncUserSystemPermissionSet(
+          tx,
+          {
+            tenantId,
+            userId: createdUser.id,
+            role: userRole,
+            grantedBy: createdUser.id,
+          },
+          this.logger,
+        ),
+      );
+
+      if (selectedPermissionSets.length > 0) {
+        await this.timeInviteStage(
+          timings,
+          'baselinePermissionAssignment',
+          () =>
+            tx.userPermissionSet.createMany({
+              data: selectedPermissionSets.map((permissionSet) => ({
+                userId: createdUser.id,
+                permissionSetId: permissionSet.id,
+                grantedBy: invitedBy ?? createdUser.id,
+              })),
+              skipDuplicates: true,
+            }),
+        );
+      }
+
+      return createdUser;
     });
-
-    await syncUserSystemPermissionSet(
-      this.prisma,
-      {
-        tenantId,
-        userId: user.id,
-        role: userRole,
-        grantedBy: user.id,
-      },
-      this.logger,
-    );
-
-    if (selectedPermissionSets.length > 0) {
-      await this.prisma.userPermissionSet.createMany({
-        data: selectedPermissionSets.map((permissionSet) => ({
-          userId: user.id,
-          permissionSetId: permissionSet.id,
-          grantedBy: invitedBy ?? user.id,
-        })),
-        skipDuplicates: true,
-      });
-    }
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
@@ -198,25 +262,27 @@ export class UsersService {
         this.logger.error(`Failed to send invite for ${user.email}`, err),
       );
 
-    await this.audit.log({
-      tenantId,
-      action: 'CREATE',
-      resource: 'users',
-      resourceId: user.id,
-      changes: {
-        after: {
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          status: 'PENDING_VERIFICATION',
-          permissionSetIds: selectedPermissionSets.map(
-            (permissionSet) => permissionSet.id,
-          ),
+    await this.timeInviteStage(timings, 'auditLog', () =>
+      this.audit.log({
+        tenantId,
+        action: 'CREATE',
+        resource: 'users',
+        resourceId: user.id,
+        changes: {
+          after: {
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            status: 'PENDING_VERIFICATION',
+            permissionSetIds: selectedPermissionSets.map(
+              (permissionSet) => permissionSet.id,
+            ),
+          },
         },
-      },
-      status: 'SUCCESS',
-    });
+        status: 'SUCCESS',
+      }),
+    );
 
     const {
       password: _password,
@@ -236,29 +302,45 @@ export class UsersService {
       phone?: string;
     },
   ) {
-    // HR-provisioned employees (including bulk imports) start on the baseline
-    // Employee set so they get self-service access without a manual assignment.
-    const employeeSet = await this.prisma.permissionSet.findFirst({
-      where: {
+    const timings: InviteTiming[] = [];
+    const startedAt = Date.now();
+    try {
+      // HR-provisioned employees (including bulk imports) start on the baseline
+      // Employee set so they get self-service access without a manual assignment.
+      const employeeSet = await this.timeInviteStage(
+        timings,
+        'permissionSetLookup',
+        () =>
+          this.prisma.permissionSet.findFirst({
+            where: {
+              tenantId,
+              name: BASIC_EMPLOYEE_TEMPLATE_NAME,
+              isActive: true,
+              isSystem: false,
+            },
+            select: { id: true },
+          }),
+      );
+
+      const result = await this.invite(
         tenantId,
-        name: BASIC_EMPLOYEE_TEMPLATE_NAME,
-        isActive: true,
-        isSystem: false,
-      },
-      select: { id: true },
-    });
+        {
+          ...dto,
+          role: UserSystemRole.EMPLOYEE,
+          permissionSetIds: employeeSet ? [employeeSet.id] : undefined,
+        },
+        undefined,
+        timings,
+      );
 
-    const result = await this.invite(tenantId, {
-      ...dto,
-      role: UserSystemRole.EMPLOYEE,
-      permissionSetIds: employeeSet ? [employeeSet.id] : undefined,
-    });
-
-    return {
-      userId: result.user.id,
-      email: result.user.email,
-      inviteSent: true,
-    };
+      return {
+        userId: result.user.id,
+        email: result.user.email,
+        inviteSent: true,
+      };
+    } finally {
+      this.logProvisionTimings(dto.email, timings, Date.now() - startedAt);
+    }
   }
 
   async deletePendingEmployeeInvite(

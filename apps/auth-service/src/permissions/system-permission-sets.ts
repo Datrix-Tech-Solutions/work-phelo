@@ -547,19 +547,7 @@ export async function syncUserSystemPermissionSet(
   const log = getLogger(logger);
   const targetSetName = resolveSystemPermissionSetName(params.role);
 
-  const seededSetIds =
-    params.seededSetIds ??
-    (await seedSystemPermissionSets(prisma, params.tenantId, logger));
-
   if (!targetSetName) {
-    await prisma.userPermissionSet.deleteMany({
-      where: {
-        userId: params.userId,
-        permissionSetId: {
-          in: Object.values(seededSetIds),
-        },
-      },
-    });
     await prisma.userPermissionSet.deleteMany({
       where: {
         userId: params.userId,
@@ -571,16 +559,30 @@ export async function syncUserSystemPermissionSet(
     });
     return null;
   }
-  const targetSetId = seededSetIds[targetSetName];
 
-  await prisma.userPermissionSet.deleteMany({
-    where: {
-      userId: params.userId,
-      permissionSetId: {
-        in: Object.values(seededSetIds).filter((id) => id !== targetSetId),
+  const seededSetIds =
+    params.seededSetIds ??
+    (await findExistingSystemPermissionSets(prisma, params.tenantId));
+  const targetSetId = seededSetIds[targetSetName];
+  if (!targetSetId) {
+    throw new Error(
+      `System permission set "${targetSetName}" is not seeded for tenant ${params.tenantId}`,
+    );
+  }
+  const otherSystemSetIds = Object.values(seededSetIds).filter(
+    (id) => id !== targetSetId,
+  );
+
+  if (otherSystemSetIds.length > 0) {
+    await prisma.userPermissionSet.deleteMany({
+      where: {
+        userId: params.userId,
+        permissionSetId: {
+          in: otherSystemSetIds,
+        },
       },
-    },
-  });
+    });
+  }
 
   await prisma.userPermissionSet.upsert({
     where: {
@@ -602,6 +604,27 @@ export async function syncUserSystemPermissionSet(
   );
 
   return targetSetName;
+}
+
+async function findExistingSystemPermissionSets(
+  prisma: AuthPrisma,
+  tenantId: string,
+): Promise<Record<string, string>> {
+  if (ACTIVE_SYSTEM_PERMISSION_SET_NAMES.size === 0) {
+    return {};
+  }
+
+  const sets = await prisma.permissionSet.findMany({
+    where: {
+      tenantId,
+      name: { in: Array.from(ACTIVE_SYSTEM_PERMISSION_SET_NAMES) },
+      isSystem: true,
+      isActive: true,
+    },
+    select: { id: true, name: true },
+  });
+
+  return Object.fromEntries(sets.map((set) => [set.name, set.id]));
 }
 
 export async function backfillSystemPermissionState(
