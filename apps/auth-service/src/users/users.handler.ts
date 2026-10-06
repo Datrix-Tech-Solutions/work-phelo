@@ -35,7 +35,55 @@ export class UsersHandler {
   }
 
   private formatError(error: unknown) {
-    return error instanceof Error ? error.message : String(error);
+    const parts: string[] = [];
+    const maybeObject =
+      error && typeof error === 'object'
+        ? (error as {
+            constructor?: { name?: string };
+            name?: unknown;
+            message?: unknown;
+            code?: unknown;
+            meta?: unknown;
+          })
+        : undefined;
+
+    if (maybeObject?.constructor?.name) {
+      parts.push(`type=${maybeObject.constructor.name}`);
+    }
+    if (typeof maybeObject?.name === 'string') {
+      parts.push(`name=${maybeObject.name}`);
+    }
+
+    const message =
+      typeof maybeObject?.message === 'string'
+        ? maybeObject.message
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    parts.push(`message=${message || '<empty>'}`);
+
+    if (typeof maybeObject?.code === 'string') {
+      parts.push(`code=${maybeObject.code}`);
+    }
+    if (maybeObject?.meta !== undefined) {
+      parts.push(`meta=${this.safeStringify(maybeObject.meta)}`);
+    }
+
+    return parts.join(' ');
+  }
+
+  private formatStack(error: unknown) {
+    return error instanceof Error && error.stack
+      ? error.stack.replace(/\s+/g, ' ')
+      : undefined;
+  }
+
+  private safeStringify(value: unknown) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[unserializable]';
+    }
   }
 
   private shouldRequeue(error: unknown) {
@@ -87,8 +135,9 @@ export class UsersHandler {
     error: unknown,
     details: string,
   ) {
+    const stack = this.formatStack(error);
     this.logger.warn(
-      `[${pattern}] RPC failed | ${details} | error=${this.formatError(error)}`,
+      `[${pattern}] RPC failed | ${details} | error=${this.formatError(error)}${stack ? ` | stack=${stack}` : ''}`,
     );
     this.ack(context);
   }
