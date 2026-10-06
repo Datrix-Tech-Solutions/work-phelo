@@ -32,14 +32,23 @@ interface FormValues {
 
 type FormErrors = Partial<Record<'travelDate' | 'departureTime' | 'returnTime', string>>;
 
-const EMPTY: FormValues = {
+/** Local today as YYYY-MM-DD. */
+const todayIso = () => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+};
+
+/** A fresh form: today's date is worked out when the form opens, not when the page loaded. */
+const emptyValues = (): FormValues => ({
   purpose: 'OFFICIAL',
-  travelDate: '',
+  travelDate: todayIso(),
   departureTime: '',
   returnTime: '',
   passengerIds: [],
   notes: '',
-};
+});
 
 /** The places already saved on a request, in the shape the picker works with. */
 const savedPlaces = (request: TransportRequest): DestinationOption[] =>
@@ -51,13 +60,6 @@ const savedPlaces = (request: TransportRequest): DestinationOption[] =>
     latitude: stop.latitude,
     longitude: stop.longitude,
   }));
-
-const todayIso = () => {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${now.getFullYear()}-${month}-${day}`;
-};
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -83,7 +85,7 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
   const isEdit = !!request;
   const isPending = createRequest.isPending || updateRequest.isPending;
 
-  const [values, setValues] = useState<FormValues>(EMPTY);
+  const [values, setValues] = useState<FormValues>(emptyValues);
   const [errors, setErrors] = useState<FormErrors>({});
   const destinations = useDestinationPicker();
   // Re-seed the form whenever the panel opens for a different request (or for create).
@@ -103,7 +105,7 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
             passengerIds: request.passengers.map((p) => p.employeeId),
             notes: request.notes ?? '',
           }
-        : EMPTY,
+        : emptyValues(),
     );
   }
 
