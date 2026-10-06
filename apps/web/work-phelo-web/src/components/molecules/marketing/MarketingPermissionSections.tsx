@@ -55,6 +55,8 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     tags: [
       { key: 'manage_campaigns', label: 'Manage Campaigns' },
       { key: 'view_campaigns', label: 'View Campaigns' },
+      { key: 'manage_sms_sender_identities', label: 'Manage SMS Sender IDs' },
+      { key: 'view_sms_wallet', label: 'View SMS Wallet' },
     ],
   },
   {
@@ -159,6 +161,13 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
 
   // Campaigns — "view" is the read-only pill; "manage" is the umbrella below.
   view_campaigns: pairs('marketing.campaigns', ['VIEW']),
+  manage_sms_sender_identities: pairs('marketing.sms-sender-identities', [
+    'VIEW',
+    'CREATE',
+    'EDIT',
+    'DELETE',
+  ]),
+  view_sms_wallet: pairs('marketing.sms-wallet', ['VIEW']),
 
   // CRM Configuration
   manage_pipelines: pairs('marketing.pipeline-stages', CRUD),
@@ -173,7 +182,11 @@ const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_crm_configuration: pairs('marketing.crm-settings', CRUD),
   manage_prospects: [],
   manage_clients: [],
-  manage_campaigns: pairs('marketing.campaigns', ['VIEW', 'CREATE', 'CANCEL']),
+  manage_campaigns: [
+    ...pairs('marketing.campaigns', ['VIEW', 'CREATE', 'RUN', 'CANCEL']),
+    ...pairs('marketing.sms-sender-identities', ['VIEW', 'CREATE', 'EDIT', 'DELETE']),
+    ...pairs('marketing.sms-wallet', ['VIEW']),
+  ],
 };
 
 /** Pill key → backend resource/action pairs it grants (umbrellas grant their section's union). */

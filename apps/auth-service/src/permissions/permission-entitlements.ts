@@ -104,6 +104,15 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
   'marketing.campaigns': {
     moduleKey: 'marketing',
   },
+  'marketing.sms-sender-identities': {
+    moduleKey: 'marketing',
+  },
+  'marketing.sms-wallet': {
+    moduleKey: 'marketing',
+  },
+  'marketing.sms-credits': {
+    moduleKey: 'marketing',
+  },
   'operations.reinsurance.dashboard': {
     moduleKey: 'operations',
     featurePath: ['operations', 'reinsurance'],

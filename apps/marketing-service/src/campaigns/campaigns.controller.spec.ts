@@ -17,7 +17,9 @@ describe('CampaignsController authorization contract', () => {
     ['list', P.CAMPAIGNS_VIEW],
     ['get', P.CAMPAIGNS_VIEW],
     ['preview', P.CAMPAIGNS_CREATE],
+    ['estimate', P.CAMPAIGNS_CREATE],
     ['create', P.CAMPAIGNS_CREATE],
+    ['send', P.CAMPAIGNS_SEND],
     ['cancel', P.CAMPAIGNS_CANCEL],
   ] as const)('gates %s behind %s', (method, permission) => {
     expect(anyPermissions(CampaignsController.prototype[method])).toEqual([
@@ -30,7 +32,7 @@ describe('CampaignsController authorization contract', () => {
       .filter((name) => name !== 'constructor')
       .sort();
     expect(declared).toEqual(
-      ['list', 'get', 'preview', 'create', 'cancel'].sort(),
+      ['list', 'get', 'preview', 'estimate', 'create', 'send', 'cancel'].sort(),
     );
   });
 });

@@ -849,10 +849,13 @@ export interface TripHistoryResponse {
 export type CampaignChannel = 'SMS' | 'EMAIL';
 export type CampaignDispatchMode = 'INSTANT' | 'SCHEDULED';
 export type CampaignStatus =
+  | 'DRAFT'
   | 'PENDING_DISPATCH'
   | 'SCHEDULED'
+  | 'QUEUED'
   | 'SENDING'
   | 'COMPLETED'
+  | 'PARTIALLY_COMPLETED'
   | 'FAILED'
   | 'CANCELLED';
 
@@ -861,13 +864,31 @@ export interface Campaign {
   name: string;
   channels: CampaignChannel[];
   businessTypes: { id: string; name: string }[];
+  senderIdentityId: string | null;
+  senderIdSnapshot: string | null;
   subject: string;
   message: string;
   dispatchMode: CampaignDispatchMode;
   /** YYYY-MM-DD; null for instant campaigns. */
   scheduledDate: string | null;
+  estimatedCredits: number | null;
+  reservedCredits: number;
+  consumedCredits: number;
   status: CampaignStatus;
-  recipients: { total: number; pending: number; sent: number; failed: number; skipped: number };
+  recipients: {
+    total: number;
+    pending: number;
+    queued: number;
+    sending: number;
+    accepted: number;
+    delivered: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+    cancelled: number;
+  };
+  dispatchedAt: string | null;
+  completedAt: string | null;
   cancelledAt: string | null;
   createdAt: string;
 }
@@ -891,6 +912,7 @@ export interface CreateCampaignPayload {
   subject: string;
   message: string;
   dispatchMode: CampaignDispatchMode;
+  senderIdentityId?: string;
   scheduledDate?: string;
 }
 
@@ -905,6 +927,88 @@ export interface CampaignPreview {
   reachable: number;
   /** Contacts with no phone/email for a chosen channel, or a repeated address. */
   skipped: number;
+}
+
+export interface CampaignEstimatePayload extends CampaignPreviewPayload {
+  subject: string;
+  message: string;
+  senderIdentityId?: string;
+}
+
+export interface CampaignEstimateWarning {
+  code: string;
+  message: string;
+  count?: number;
+}
+
+export interface CampaignEstimate {
+  prospectCount: number;
+  recipientCount: number;
+  smsRecipientCount: number;
+  emailRecipientCount: number;
+  smsEncoding: 'GSM7' | 'UCS2';
+  segmentsPerMessage: number;
+  estimatedSmsSegments: number;
+  estimatedCredits: number;
+  wallet: {
+    availableCredits: number;
+    reservedCredits: number;
+    totalCredits: number;
+    sufficientCredits: boolean;
+    shortfallCredits: number;
+  };
+  senderIdentity: {
+    id: string;
+    senderId: string;
+    displayName: string | null;
+    isDefault: boolean;
+  } | null;
+  warnings: CampaignEstimateWarning[];
+}
+
+export type SmsSenderIdentityStatus =
+  | 'DRAFT'
+  | 'PENDING_PROVIDER_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SUSPENDED'
+  | 'ARCHIVED';
+
+export interface SmsSenderIdentity {
+  id: string;
+  senderId: string;
+  displayName: string | null;
+  provider: string | null;
+  providerReference: string | null;
+  status: SmsSenderIdentityStatus;
+  isDefault: boolean;
+  requestedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SmsSenderIdentityListResponse {
+  items: SmsSenderIdentity[];
+}
+
+export interface CreateSmsSenderIdentityPayload {
+  senderId: string;
+  displayName?: string;
+  provider?: string;
+  providerReference?: string;
+}
+
+export interface UpdateSmsSenderIdentityPayload extends Partial<CreateSmsSenderIdentityPayload> {
+  id: string;
+}
+
+export interface SmsWalletBalance {
+  availableCredits: number;
+  reservedCredits: number;
+  totalCredits: number;
 }
 
 // ── Client billing (transactions raised in Accounting) ───────────────────────

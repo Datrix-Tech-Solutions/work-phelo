@@ -28,12 +28,16 @@ import {
   ShiftSwapRejectedEvent,
   ShiftSwapExpiredEvent,
   AnnouncementPublishedEvent,
+  CampaignDeliveryResultEvent,
+  CampaignDispatchBatchEvent,
   PayrollApprovalRequestedEvent,
   PayrollDecisionEvent,
   InAppNotificationCreateEvent,
   EventPatterns,
 } from '@work-phelo/types';
 import { InAppNotificationsService } from '../in-app-notifications/in-app-notifications.service';
+import { MarketingRabbitPublisher } from '../messaging/marketing-rabbit.publisher';
+import { SmsService } from '../channels/sms.service';
 
 @Controller()
 export class NotificationHandler {
@@ -42,6 +46,8 @@ export class NotificationHandler {
   constructor(
     private readonly notificationService: NotificationService,
     private readonly inAppNotifications: InAppNotificationsService,
+    private readonly smsService: SmsService,
+    private readonly marketingEvents: MarketingRabbitPublisher,
   ) {}
 
   private ack(context: RmqContext) {
@@ -52,6 +58,12 @@ export class NotificationHandler {
 
   private formatError(error: unknown) {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private maskRecipient(recipient: string) {
+    const trimmed = recipient.trim();
+    if (trimmed.length <= 4) return '****';
+    return `${'*'.repeat(Math.max(trimmed.length - 4, 4))}${trimmed.slice(-4)}`;
   }
 
   private shouldRequeue(error: unknown) {
@@ -114,6 +126,75 @@ export class NotificationHandler {
         EventPatterns.NOTIFICATION_IN_APP_CREATE,
         err,
         `tenant=${data.tenantId} | recipient=${data.recipientUserId} | type=${data.type} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern(EventPatterns.NOTIFY_CAMPAIGN_DISPATCH)
+  async handleCampaignDispatch(
+    @Payload() data: WithMeta<CampaignDispatchBatchEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[${EventPatterns.NOTIFY_CAMPAIGN_DISPATCH}] Received | tenant=${data.tenantId} | campaign=${data.campaignId} | batch=${data.batchId} | recipients=${data.recipients.length} | channel=${data.channel} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      if (data.channel !== 'SMS') {
+        throw new HttpException('Only SMS campaigns are supported', 400);
+      }
+      if (!data.senderId) {
+        throw new HttpException('Campaign sender ID is required', 400);
+      }
+
+      for (const recipient of data.recipients) {
+        const idempotencyKey =
+          recipient.idempotencyKey ??
+          `${data.campaignId}:${recipient.recipientId}:sms`;
+        const result = await this.smsService.sendMessage(
+          recipient.address,
+          data.message,
+          {
+            senderId: data.senderId,
+            idempotencyKey,
+            metadata: {
+              tenantId: data.tenantId,
+              campaignId: data.campaignId,
+              recipientId: recipient.recipientId,
+            },
+          },
+        );
+        const accepted = result.success && result.status === 'SENT';
+        const event: CampaignDeliveryResultEvent = {
+          tenantId: data.tenantId,
+          campaignId: data.campaignId,
+          recipientId: recipient.recipientId,
+          channel: recipient.channel,
+          reservationId: data.reservationId,
+          accepted,
+          provider: result.provider,
+          providerMessageId: result.providerMessageId,
+          providerStatus: result.providerStatus,
+          providerDetail: result.providerDetail,
+          failureCode: accepted ? undefined : result.providerStatus,
+          failureReason: accepted
+            ? undefined
+            : (result.error ?? result.providerDetail),
+          chargedCredits: accepted ? (recipient.estimatedCredits ?? 1) : 0,
+          idempotencyKey,
+        };
+        await this.marketingEvents.campaignDeliveryResult(event);
+        this.logger.log(
+          `[${EventPatterns.NOTIFY_CAMPAIGN_DISPATCH}] Recipient result | campaign=${data.campaignId} | recipient=${recipient.recipientId} | to=${this.maskRecipient(recipient.address)} | accepted=${accepted} | provider=${result.provider}`,
+        );
+      }
+
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        EventPatterns.NOTIFY_CAMPAIGN_DISPATCH,
+        err,
+        `tenant=${data.tenantId} | campaign=${data.campaignId} | batch=${data.batchId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }

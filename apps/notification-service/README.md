@@ -39,6 +39,8 @@ Supported values:
 
 - `termii`
 - `pilosms`
+- `sasusync`
+- `agoosms`
 
 If `SMS_PROVIDER` is omitted, the service defaults to `termii` for backward compatibility.
 
@@ -71,7 +73,27 @@ PILOSMS_API_KEY=
 PILOSMS_SENDER_ID=WorkPhelo
 ```
 
-Runtime validation requires the API key and sender ID only for the selected SMS provider. Unsupported provider values fail fast during startup.
+SasuSync provider:
+
+```env
+SMS_PROVIDER=sasusync
+SASUSYNC_API_KEY=
+SASUSYNC_SENDER_ID=WorkPhelo
+SASUSYNC_BASE_URL=https://sms.sasusync.com
+SASUSYNC_SANDBOX=true
+```
+
+AgooSMS provider:
+
+```env
+SMS_PROVIDER=agoosms
+AGOOSMS_API_KEY=
+AGOOSMS_BASE_URL=https://api.agoosms.com
+AGOOSMS_SANDBOX=true
+```
+
+Runtime validation requires only the credentials documented for the selected SMS
+provider. Unsupported provider values fail fast during startup.
 
 Development deployment wiring can map GitHub environment values into the runtime
 names above:
@@ -80,12 +102,19 @@ names above:
 NOTIFY_SMS_PROVIDER=pilosms
 NOTIFY_PILOSMS_API_KEY=
 NOTIFY_PILOSMS_SENDER_ID=WorkPhelo
+NOTIFY_SASUSYNC_API_KEY=
+NOTIFY_SASUSYNC_SENDER_ID=WorkPhelo
+NOTIFY_SASUSYNC_BASE_URL=https://sms.sasusync.com
+NOTIFY_SASUSYNC_SANDBOX=true
+NOTIFY_AGOOSMS_API_KEY=
+NOTIFY_AGOOSMS_BASE_URL=https://api.agoosms.com
+NOTIFY_AGOOSMS_SANDBOX=true
 ```
 
-The deploy script writes `SMS_PROVIDER`, `PILOSMS_API_KEY`, and
-`PILOSMS_SENDER_ID` into the notification-service runtime env file when those
-values are configured. Production activation should be treated as an explicit
-environment/secrets rollout.
+The deploy script writes the selected provider credentials into the
+notification-service runtime env file when those values are configured.
+Production activation should be treated as an explicit environment/secrets
+rollout.
 
 ## PiloSMS Notes
 
@@ -104,6 +133,22 @@ PiloSMS response mapping:
 - `1007`: `FAILED`
 
 Provider status/detail metadata is stored in `NotificationLog.metadata` for SMS deliveries.
+
+## SasuSync Notes
+
+SasuSync expects Ghana numbers as `233XXXXXXXXX`; the SasuSync adapter accepts
+`+233XXXXXXXXX`, `233XXXXXXXXX`, and local `0XXXXXXXXX` formats, then normalizes
+them at the provider boundary. Sandbox mode sends to `/smssandbox/v1/send` and
+does not deliver or charge messages; live mode sends to `/api/v1/send`.
+
+## AgooSMS Notes
+
+Public AgooSMS documentation currently shows `POST /v1/sms/send` with
+`X-API-Key` and JSON fields `to` and `message`. The detailed developer
+documentation requires portal access, so the adapter intentionally does not send
+an undocumented per-request sender field. Tenant sender identity validation still
+happens in Marketing before dispatch; confirm the AgooSMS account/API contract
+before live tenant-specific sender testing.
 
 ## Announcement SMS Format
 

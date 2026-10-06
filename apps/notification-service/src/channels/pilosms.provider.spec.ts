@@ -43,6 +43,18 @@ describe('PiloSmsProvider', () => {
     expect(body.has('recipients')).toBe(false);
   });
 
+  it('uses the per-message sender ID when provided', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 1001 }));
+
+    await new PiloSmsProvider().sendMessage('+233244000001', 'Hello', {
+      senderId: 'TENANTSMS',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = init?.body as URLSearchParams;
+    expect(body.get('sender')).toBe('TENANTSMS');
+  });
+
   it('maps insufficient balance to failed', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({

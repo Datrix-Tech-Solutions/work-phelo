@@ -282,6 +282,10 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   'operations.reinsurance.claims.create-notification': ['RUN'],
   'operations.reinsurance.claims.record-recovery': ['RUN'],
   'operations.reinsurance.claims.void-claim': ['RUN'],
+  'marketing.campaigns': ['VIEW', 'CREATE', 'RUN', 'CANCEL'],
+  'marketing.sms-sender-identities': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
+  'marketing.sms-wallet': ['VIEW'],
+  'marketing.sms-credits': ['EDIT'],
 };
 
 // All seeded resource actions stay in RESOURCE_ACTIONS so hidden or future

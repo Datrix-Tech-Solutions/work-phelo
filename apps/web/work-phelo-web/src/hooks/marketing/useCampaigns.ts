@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   Campaign,
+  CampaignEstimate,
+  CampaignEstimatePayload,
   CampaignListResponse,
   CampaignPreview,
   CampaignPreviewPayload,
@@ -41,11 +43,54 @@ export function useCampaignPreview(payload: Partial<CampaignPreviewPayload>) {
   });
 }
 
+export function useCampaignEstimate(payload: Partial<CampaignEstimatePayload>) {
+  const { businessTypeIds, channels, subject, message, senderIdentityId } = payload;
+  const ready =
+    (businessTypeIds?.length ?? 0) > 0 &&
+    (channels?.length ?? 0) > 0 &&
+    Boolean(subject?.trim()) &&
+    Boolean(message?.trim());
+  return useQuery({
+    queryKey: [
+      ...CAMPAIGNS_KEY,
+      'estimate',
+      businessTypeIds,
+      channels,
+      subject,
+      message,
+      senderIdentityId,
+    ] as const,
+    queryFn: async () => {
+      const res = await api.post<CampaignEstimate>(`${ENDPOINT}/estimate`, {
+        businessTypeIds,
+        channels,
+        subject,
+        message,
+        senderIdentityId,
+      });
+      return res.data;
+    },
+    enabled: ready,
+    staleTime: 0,
+  });
+}
+
 export function useCreateCampaign() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: CreateCampaignPayload) => {
       const res = await api.post<Campaign>(ENDPOINT, payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CAMPAIGNS_KEY }),
+  });
+}
+
+export function useSendCampaign() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<Campaign>(`${ENDPOINT}/${id}/send`);
       return res.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: CAMPAIGNS_KEY }),

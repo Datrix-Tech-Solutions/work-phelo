@@ -15,6 +15,7 @@ export function ProspectingTabs({ base, className }: Props) {
     { key: 'decision-maker', label: 'Decision Maker', href: `${base}/decision-maker` },
     { key: 'source-type', label: 'Source Type', href: `${base}/source-type` },
     { key: 'interaction-medium', label: 'Interaction Medium', href: `${base}/interaction-medium` },
+    { key: 'sms-senders', label: 'SMS Senders', href: `${base}/sms-senders` },
     {
       key: 'prospect-business-type',
       label: 'Prospect Business Type',
