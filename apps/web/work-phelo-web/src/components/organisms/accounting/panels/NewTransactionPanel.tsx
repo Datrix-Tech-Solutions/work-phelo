@@ -1,5 +1,6 @@
 'use client';
 
+import { HandHelping, Package, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
   Control,
@@ -8,6 +9,7 @@ import {
   useFieldArray,
   useForm,
   UseFormRegister,
+  UseFormSetValue,
   useWatch,
 } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
@@ -63,6 +65,9 @@ type CashLineValues = {
   /** ITEM is what the entry is for; a deduction (discount, withholding tax) reduces the cash
    *  that moves, a charge (input VAT, bank charge) adds to it. */
   kind: CashbookLineKind;
+  /** Items only: work the amount out from quantity × unit price (true) or enter it straight.
+   *  Starts from the transaction type's setting and can be switched per line. */
+  useQtyPrice: boolean;
   glAccountId: string;
   quantity: string;
   unitPrice: string;
@@ -72,6 +77,7 @@ type CashLineValues = {
 
 const EMPTY_CASH_LINE: CashLineValues = {
   kind: 'ITEM',
+  useQtyPrice: true,
   glAccountId: '',
   quantity: '',
   unitPrice: '',
@@ -206,7 +212,7 @@ export function NewTransactionPanel({
   const taxLines = useMemo(
     () =>
       (rule?.lines ?? [])
-        .filter((line) => line.taxType)
+        .filter((line) => line.taxType && !line.settlementKind)
         .map((line) => ({
           taxTypeId: line.taxType!.id,
           name: line.taxType!.name,
@@ -230,14 +236,17 @@ export function NewTransactionPanel({
   // own direction, so its control line flips.
   const controlDirection = isReceivable !== isLinked ? 'DR' : 'CR';
   const mainLine = useMemo(
-    () => (rule?.lines ?? []).find((l) => !l.taxType && l.direction !== controlDirection),
+    () =>
+      (rule?.lines ?? []).find(
+        (l) => !l.taxType && !l.settlementKind && l.direction !== controlDirection,
+      ),
     [rule, controlDirection],
   );
   // A scoped main line has no fixed account — the user picks one inside its category or
   // classification, and the backend re-checks the pick against the same scope.
   const isScopedMainLine = !isCashbookType && !!mainLine && !mainLine.account;
   const controlAccountId = (rule?.lines ?? []).find(
-    (l) => !l.taxType && l.direction === controlDirection,
+    (l) => !l.taxType && !l.settlementKind && l.direction === controlDirection,
   )?.account?.id;
   const { data: cashAccounts = [] } = useCashAccounts();
   const scopedAccountOptions = useMemo<SearchSelectOption[]>(() => {
@@ -318,9 +327,10 @@ export function NewTransactionPanel({
     remove: removeCashLine,
   } = useFieldArray({ control, name: 'cashLines' });
   const cashLines = useWatch({ control, name: 'cashLines' });
-  // Quantity × price only applies to items; a deduction or charge is always a straight amount.
+  // Quantity × price only applies to items that use it; a deduction or charge, and any item
+  // switched to a straight amount, is just the amount typed.
   const cashLineAmount = (line: CashLineValues) =>
-    isDirectAmount || line.kind !== 'ITEM'
+    line.kind !== 'ITEM' || !line.useQtyPrice
       ? Number(line.amount) || 0
       : computeAmount(line.quantity, line.unitPrice);
   const sumOfKind = (kinds: CashbookLineKind[]) =>
@@ -348,7 +358,13 @@ export function NewTransactionPanel({
       entryDate: today(),
       cashAccountId: rule?.defaultCashAccountId ?? '',
       offsetGlAccountId: rule?.lines?.[0]?.account?.id ?? '',
-      cashLines: [{ ...EMPTY_CASH_LINE, glAccountId: rule?.lines?.[0]?.account?.id ?? '' }],
+      cashLines: [
+        {
+          ...EMPTY_CASH_LINE,
+          useQtyPrice: transactionType?.usesQuantityPrice !== false,
+          glAccountId: rule?.lines?.[0]?.account?.id ?? '',
+        },
+      ],
     });
     setSelectedTaxTypeIds([]);
   }
@@ -503,7 +519,7 @@ export function NewTransactionPanel({
                     kind: line.kind,
                     glAccountId: line.glAccountId,
                     amount: cashLineAmount(line),
-                    ...(isDirectAmount || line.kind !== 'ITEM'
+                    ...(line.kind !== 'ITEM' || !line.useQtyPrice
                       ? {}
                       : { quantity: Number(line.quantity), unitPrice: Number(line.unitPrice) }),
                     description: line.description || undefined,
@@ -759,7 +775,7 @@ export function NewTransactionPanel({
             Types before creating transactions of this type.
           </p>
         ) : isCashbookType ? (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             <Input
               label="Transaction Type"
               readOnly
@@ -773,117 +789,113 @@ export function NewTransactionPanel({
               </p>
             )}
 
-            {!transactionType?.sourceTypeId && (
-              <>
-                <Controller
-                  name="businessRole"
-                  control={control}
-                  render={({ field }) => (
-                    <SearchSelect
-                      label="Business Role"
-                      placeholder="Optional — select a business role…"
-                      options={businessRoleOptions}
-                      value={field.value}
-                      onChange={(value) => {
-                        field.onChange(value);
-                        setValue('businessEntity', '');
-                      }}
-                    />
-                  )}
-                />
-                <Controller
-                  name="businessEntity"
-                  control={control}
-                  render={({ field }) => (
-                    <SearchSelect
-                      label="Business Entity"
-                      placeholder={
-                        !businessRole
-                          ? 'Select a business role first…'
-                          : isLoadingEntities
-                            ? 'Loading…'
-                            : 'Optional — select an entity…'
-                      }
-                      options={entityOptions}
-                      value={field.value}
-                      onChange={(value) => {
-                        field.onChange(value);
-                        const entity = entities.find((e) => e.id === value);
-                        if (entity?.currency) setValue('currency', entity.currency);
-                      }}
-                      disabled={!businessRole}
-                    />
-                  )}
-                />
-              </>
-            )}
-
-            {transactionType?.sourceTypeId && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {transactionType?.sourceTypeId ? (
+                <div className="sm:col-span-2">
+                  <Controller
+                    name="sourceLedgerEntryId"
+                    control={control}
+                    render={({ field }) => (
+                      <SearchSelect
+                        label="Settle Item"
+                        placeholder={
+                          unpaidSourceLedgerEntries.length === 0
+                            ? 'No unpaid items right now'
+                            : 'Select an item to settle (optional)…'
+                        }
+                        options={sourceLedgerOptions}
+                        value={field.value}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          const entry = unpaidSourceLedgerEntries.find((e) => e.id === value);
+                          if (entry) {
+                            setValue('offsetGlAccountId', entry.glAccount.id);
+                            setValue('amount', String(entry.outstandingAmount));
+                            setValue('currency', entry.currency);
+                          }
+                        }}
+                      />
+                    )}
+                  />
+                </div>
+              ) : (
+                <>
+                  <Controller
+                    name="businessRole"
+                    control={control}
+                    render={({ field }) => (
+                      <SearchSelect
+                        label="Business Role"
+                        placeholder="Optional — select a role…"
+                        options={businessRoleOptions}
+                        value={field.value}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          setValue('businessEntity', '');
+                        }}
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="businessEntity"
+                    control={control}
+                    render={({ field }) => (
+                      <SearchSelect
+                        label="Business Entity"
+                        placeholder={
+                          !businessRole
+                            ? 'Select a role first…'
+                            : isLoadingEntities
+                              ? 'Loading…'
+                              : 'Optional — select an entity…'
+                        }
+                        options={entityOptions}
+                        value={field.value}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          const entity = entities.find((e) => e.id === value);
+                          if (entity?.currency) setValue('currency', entity.currency);
+                        }}
+                        disabled={!businessRole}
+                      />
+                    )}
+                  />
+                </>
+              )}
               <Controller
-                name="sourceLedgerEntryId"
+                name="entryDate"
                 control={control}
+                rules={{ required: 'Date is required' }}
                 render={({ field }) => (
-                  <SearchSelect
-                    label="Settle Item"
-                    placeholder={
-                      unpaidSourceLedgerEntries.length === 0
-                        ? 'No unpaid items right now'
-                        : 'Select an item to settle (optional)…'
-                    }
-                    options={sourceLedgerOptions}
+                  <DatePicker
+                    label={`${transactionType?.name ?? 'Transaction'} Date`}
                     value={field.value}
-                    onChange={(value) => {
-                      field.onChange(value);
-                      const entry = unpaidSourceLedgerEntries.find((e) => e.id === value);
-                      if (entry) {
-                        setValue('offsetGlAccountId', entry.glAccount.id);
-                        setValue('amount', String(entry.outstandingAmount));
-                        setValue('currency', entry.currency);
-                      }
-                    }}
+                    onChange={field.onChange}
+                    error={errors.entryDate?.message}
                   />
                 )}
               />
-            )}
+            </div>
 
-            <Controller
-              name="cashAccountId"
-              control={control}
-              rules={{ required: 'Cash/bank account is required' }}
-              render={({ field }) => (
-                <SearchSelect
-                  label="Cash/Bank Account"
-                  placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select cash/bank account…'}
-                  options={cashAccountOptions}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.cashAccountId?.message}
-                />
-              )}
-            />
-
-            {usesLines ? (
-              <>
-                <CashEntryLines
-                  control={control}
-                  register={register}
-                  errors={errors}
-                  fields={cashLineFields}
-                  lines={cashLines ?? []}
-                  isDirectAmount={isDirectAmount}
-                  accountLabel={isCashbookReceipt ? 'Account to Credit' : 'Account to Debit'}
-                  accountOptions={glAccountOptions}
-                  isLoadingAccounts={isLoadingGlAccounts}
-                  total={cashLinesTotal}
-                  itemsTotal={itemsTotal}
-                  chargesTotal={chargesTotal}
-                  deductionsTotal={deductionsTotal}
-                  isReceipt={isCashbookReceipt}
-                  currency={currency}
-                  lineAmount={cashLineAmount}
-                  onAdd={(kind) => appendCashLine({ ...EMPTY_CASH_LINE, kind })}
-                  onRemove={removeCashLine}
-                />
+            <div
+              className={`grid grid-cols-1 gap-2 ${usesLines ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+            >
+              <Controller
+                name="cashAccountId"
+                control={control}
+                rules={{ required: 'Cash/bank account is required' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Cash/Bank Account"
+                    placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select cash/bank account…'}
+                    options={cashAccountOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.cashAccountId?.message}
+                  />
+                )}
+              />
+              {usesLines && (
                 <Controller
                   name="currency"
                   control={control}
@@ -899,7 +911,66 @@ export function NewTransactionPanel({
                     />
                   )}
                 />
-              </>
+              )}
+              <Controller
+                name="settlementMethod"
+                control={control}
+                rules={{ required: 'Settlement method is required' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label={isCashbookReceipt ? 'Method of Receipt' : 'Method of Payment'}
+                    placeholder="Select method…"
+                    options={SETTLEMENT_METHOD_OPTIONS}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.settlementMethod?.message}
+                  />
+                )}
+              />
+            </div>
+
+            <FormField
+              label="Reference"
+              registration={register('reference')}
+              placeholder="Optional bank/cheque reference"
+            />
+
+            <FormField
+              label="Description"
+              type="textarea"
+              rows={2}
+              registration={register('description')}
+              placeholder={`What is this ${transactionType?.name.toLowerCase() ?? 'transaction'} for?`}
+            />
+
+            {usesLines ? (
+              <CashEntryLines
+                control={control}
+                register={register}
+                errors={errors}
+                fields={cashLineFields}
+                lines={cashLines ?? []}
+                setValue={setValue}
+                defaultUseQtyPrice={transactionType?.usesQuantityPrice !== false}
+                accountLabel={isCashbookReceipt ? 'Account to Credit' : 'Account to Debit'}
+                accountOptions={glAccountOptions}
+                isLoadingAccounts={isLoadingGlAccounts}
+                total={cashLinesTotal}
+                itemsTotal={itemsTotal}
+                chargesTotal={chargesTotal}
+                deductionsTotal={deductionsTotal}
+                isReceipt={isCashbookReceipt}
+                currency={currency}
+                lineAmount={cashLineAmount}
+                onAdd={(kind) =>
+                  appendCashLine({
+                    ...EMPTY_CASH_LINE,
+                    kind,
+                    useQtyPrice: transactionType?.usesQuantityPrice !== false,
+                  })
+                }
+                onRemove={removeCashLine}
+              />
             ) : (
               <>
                 <Controller
@@ -922,49 +993,6 @@ export function NewTransactionPanel({
                 {amountFields}
               </>
             )}
-
-            <Controller
-              name="entryDate"
-              control={control}
-              rules={{ required: 'Date is required' }}
-              render={({ field }) => (
-                <DatePicker
-                  label={`${transactionType?.name ?? 'Transaction'} Date`}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.entryDate?.message}
-                />
-              )}
-            />
-
-            <Controller
-              name="settlementMethod"
-              control={control}
-              rules={{ required: 'Settlement method is required' }}
-              render={({ field }) => (
-                <SearchSelect
-                  label="Settlement Method"
-                  placeholder="Select settlement method…"
-                  options={SETTLEMENT_METHOD_OPTIONS}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.settlementMethod?.message}
-                />
-              )}
-            />
-
-            <FormField
-              label="Reference"
-              registration={register('reference')}
-              placeholder="Optional bank/cheque reference"
-            />
-
-            <FormField
-              label="Description"
-              type="textarea"
-              registration={register('description')}
-              placeholder={`What is this ${transactionType?.name.toLowerCase() ?? 'transaction'} for?`}
-            />
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -1101,7 +1129,7 @@ export function NewTransactionPanel({
 
             {taxLines.length > 0 && (
               <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
-                <span className="text-sm font-bold text-gray-900">Tax / Deductions</span>
+                <span className="text-sm font-bold text-gray-900">Tax</span>
                 {taxLines.map((line) => (
                   <label key={line.taxTypeId} className="flex items-center gap-2">
                     <input
@@ -1194,7 +1222,8 @@ function CashEntryLines({
   errors,
   fields,
   lines,
-  isDirectAmount,
+  setValue,
+  defaultUseQtyPrice,
   accountLabel,
   accountOptions,
   isLoadingAccounts,
@@ -1213,7 +1242,8 @@ function CashEntryLines({
   errors: FieldErrors<FormValues>;
   fields: { id: string }[];
   lines: CashLineValues[];
-  isDirectAmount: boolean;
+  setValue: UseFormSetValue<FormValues>;
+  defaultUseQtyPrice: boolean;
   accountLabel: string;
   accountOptions: SearchSelectOption[];
   isLoadingAccounts: boolean;
@@ -1232,109 +1262,163 @@ function CashEntryLines({
   const hasAdjustments = deductionsTotal > 0 || chargesTotal > 0;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <span className="text-sm font-bold text-gray-900">Lines</span>
 
       {fields.map((field, index) => {
         const lineErrors = errors.cashLines?.[index];
         const kind = lines[index]?.kind ?? 'ITEM';
         const isItem = kind === 'ITEM';
-        return (
-          <div key={field.id} className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500">
-                {isItem
-                  ? `Line ${index + 1}`
-                  : kind === 'DEDUCTION'
-                    ? `Deduction — reduces the cash ${verb}`
-                    : `Charge — adds to the cash ${verb}`}
-              </span>
-              {(!isItem || itemCount > 1) && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(index)}
-                  className="text-xs font-medium text-red-600 hover:text-red-700"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
+        const useQtyPrice = isItem && (lines[index]?.useQtyPrice ?? defaultUseQtyPrice);
+        const accountFieldLabel = isItem
+          ? accountLabel
+          : kind === 'DEDUCTION'
+            ? `Deduction (reduces the cash ${verb})`
+            : `Charge (adds to the cash ${verb})`;
 
-            <Controller
-              name={`cashLines.${index}.glAccountId`}
-              control={control}
-              rules={{ required: 'Account is required' }}
-              render={({ field: f }) => (
-                <SearchSelect
-                  label={isItem ? accountLabel : 'Account'}
-                  placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
-                  options={accountOptions}
-                  value={f.value}
-                  onChange={f.onChange}
-                  error={lineErrors?.glAccountId?.message}
-                />
-              )}
-            />
-
-            {isDirectAmount || !isItem ? (
-              <Controller
-                name={`cashLines.${index}.amount`}
-                control={control}
-                rules={{
-                  validate: (v) => Number(v) > 0 || 'Amount must be greater than 0',
+        const accountField = (
+          <Controller
+            name={`cashLines.${index}.glAccountId`}
+            control={control}
+            rules={{ required: 'Account is required' }}
+            render={({ field: f }) => (
+              <SearchSelect
+                label={accountFieldLabel}
+                placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
+                options={accountOptions}
+                value={f.value}
+                onChange={f.onChange}
+                error={lineErrors?.glAccountId?.message}
+              />
+            )}
+          />
+        );
+        const amountField = (
+          <Controller
+            name={`cashLines.${index}.amount`}
+            control={control}
+            rules={{
+              validate: (v) => Number(v) > 0 || 'Amount must be greater than 0',
+            }}
+            render={({ field: f }) => (
+              <NumberField
+                label="Amount"
+                value={Number(f.value) || 0}
+                onChange={(value) => f.onChange(String(value))}
+                error={lineErrors?.amount?.message}
+              />
+            )}
+          />
+        );
+        const descriptionField = (
+          <FormField
+            label="Description"
+            registration={register(`cashLines.${index}.description`)}
+            placeholder={isItem ? 'Optional' : 'e.g. Early payment discount, VAT, bank charge'}
+          />
+        );
+        // The switch (items only) and remove icon sit last on the row.
+        const actions = (
+          <div className="flex items-center gap-1 pb-1.5">
+            {isItem && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={useQtyPrice}
+                aria-label={useQtyPrice ? 'Goods' : 'Service'}
+                title={
+                  useQtyPrice
+                    ? 'Goods (quantity × unit price) — click for a service, a straight amount'
+                    : 'Service (straight amount) — click for goods, quantity × unit price'
+                }
+                onClick={() => {
+                  const line = lines[index];
+                  if (!line) return;
+                  // Carry the figure across so switching never loses what was typed.
+                  if (useQtyPrice) {
+                    setValue(`cashLines.${index}.amount`, String(lineAmount(line) || ''));
+                  } else {
+                    setValue(`cashLines.${index}.quantity`, '1');
+                    setValue(`cashLines.${index}.unitPrice`, line.amount);
+                  }
+                  setValue(`cashLines.${index}.useQtyPrice`, !useQtyPrice);
                 }}
-                render={({ field: f }) => (
+                className={`rounded-md p-1.5 transition-colors ${
+                  useQtyPrice
+                    ? 'bg-brand/10 text-brand'
+                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                }`}
+              >
+                {useQtyPrice ? <Package size={15} /> : <HandHelping size={15} />}
+              </button>
+            )}
+            {!isItem || itemCount > 1 ? (
+              <button
+                type="button"
+                aria-label="Remove line"
+                title="Remove line"
+                onClick={() => onRemove(index)}
+                className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 size={15} />
+              </button>
+            ) : (
+              <span className="w-[27px]" aria-hidden />
+            )}
+          </div>
+        );
+
+        return (
+          <div key={field.id} className="rounded-xl border border-gray-200 p-2.5">
+            {useQtyPrice ? (
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_auto]">
+                  {accountField}
+                  <Controller
+                    name={`cashLines.${index}.quantity`}
+                    control={control}
+                    rules={{ validate: (v) => Number(v) > 0 || 'Must be above 0' }}
+                    render={({ field: f }) => (
+                      <NumberField
+                        label="Quantity"
+                        placeholder="0"
+                        value={Number(f.value) || 0}
+                        onChange={(value) => f.onChange(String(value))}
+                        error={lineErrors?.quantity?.message}
+                      />
+                    )}
+                  />
+                  <Controller
+                    name={`cashLines.${index}.unitPrice`}
+                    control={control}
+                    rules={{ validate: (v) => Number(v) > 0 || 'Must be above 0' }}
+                    render={({ field: f }) => (
+                      <NumberField
+                        label="Unit Price"
+                        value={Number(f.value) || 0}
+                        onChange={(value) => f.onChange(String(value))}
+                        error={lineErrors?.unitPrice?.message}
+                      />
+                    )}
+                  />
                   <NumberField
                     label="Amount"
-                    value={Number(f.value) || 0}
-                    onChange={(value) => f.onChange(String(value))}
-                    error={lineErrors?.amount?.message}
+                    value={lines[index] ? lineAmount(lines[index]) : 0}
+                    onChange={() => {}}
+                    disabled
                   />
-                )}
-              />
+                  {actions}
+                </div>
+                {descriptionField}
+              </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
-                <Controller
-                  name={`cashLines.${index}.quantity`}
-                  control={control}
-                  rules={{ validate: (v) => Number(v) > 0 || 'Must be above 0' }}
-                  render={({ field: f }) => (
-                    <NumberField
-                      label="Quantity"
-                      placeholder="0"
-                      value={Number(f.value) || 0}
-                      onChange={(value) => f.onChange(String(value))}
-                      error={lineErrors?.quantity?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  name={`cashLines.${index}.unitPrice`}
-                  control={control}
-                  rules={{ validate: (v) => Number(v) > 0 || 'Must be above 0' }}
-                  render={({ field: f }) => (
-                    <NumberField
-                      label="Unit Price"
-                      value={Number(f.value) || 0}
-                      onChange={(value) => f.onChange(String(value))}
-                      error={lineErrors?.unitPrice?.message}
-                    />
-                  )}
-                />
-                <NumberField
-                  label="Amount"
-                  value={lines[index] ? lineAmount(lines[index]) : 0}
-                  onChange={() => {}}
-                  disabled
-                />
+              <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,2fr)_1fr_minmax(0,2fr)_auto]">
+                {accountField}
+                {amountField}
+                {descriptionField}
+                {actions}
               </div>
             )}
-
-            <FormField
-              label={isItem ? 'Line Description' : 'Description'}
-              registration={register(`cashLines.${index}.description`)}
-              placeholder={isItem ? 'Optional' : 'e.g. Early payment discount, VAT, bank charge'}
-            />
           </div>
         );
       })}

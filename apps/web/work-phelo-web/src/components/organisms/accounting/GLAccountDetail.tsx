@@ -6,7 +6,12 @@ import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { useDeactivateGLAccount, useDeleteGLAccount, useGLAccountLedger } from '@/hooks';
+import {
+  useActivateGLAccount,
+  useDeactivateGLAccount,
+  useDeleteGLAccount,
+  useGLAccountLedger,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { EditLeafAccountPanel } from '@/components/organisms/accounting/panels/EditLeafAccountPanel';
@@ -30,6 +35,7 @@ const TABS = [
 export function GLAccountDetail({ account, hasChildAccounts, onDeleted }: GLAccountDetailProps) {
   const toast = useToast();
   const { mutateAsync: deactivateAccount, isPending: isDeactivating } = useDeactivateGLAccount();
+  const { mutateAsync: activateAccount, isPending: isActivating } = useActivateGLAccount();
   const { mutateAsync: deleteAccount, isPending: isDeleting } = useDeleteGLAccount();
   const { data: ledger } = useGLAccountLedger(account.id);
   const [activeTab, setActiveTab] = useState('ledger');
@@ -49,6 +55,15 @@ export function GLAccountDetail({ account, hasChildAccounts, onDeleted }: GLAcco
       setConfirmDeactivateOpen(false);
     } catch (error) {
       toast.error(extractError(error, 'Unable to deactivate account'));
+    }
+  };
+
+  const reactivate = async () => {
+    try {
+      await activateAccount(account.id);
+      toast.success('Account reactivated');
+    } catch (error) {
+      toast.error(extractError(error, 'Unable to reactivate account'));
     }
   };
 
@@ -85,6 +100,17 @@ export function GLAccountDetail({ account, hasChildAccounts, onDeleted }: GLAcco
               onClick={() => setConfirmDeactivateOpen(true)}
             >
               Deactivate
+            </Button>
+          )}
+          {account.status !== 'ACTIVE' && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={reactivate}
+              isLoading={isActivating}
+              loadingText="Reactivating…"
+            >
+              Reactivate
             </Button>
           )}
           {canDelete && (
@@ -154,7 +180,7 @@ export function GLAccountDetail({ account, hasChildAccounts, onDeleted }: GLAcco
         isOpen={confirmDeactivateOpen}
         onClose={() => setConfirmDeactivateOpen(false)}
         title="Deactivate account?"
-        description={`"${account.name}" will no longer accept new postings. Existing ledger history is preserved. This cannot be undone from here — contact an administrator if you need it reinstated.`}
+        description={`"${account.name}" will no longer accept new postings. Existing ledger history is preserved.  You can reactivate it later from this page.`}
         footer={
           <>
             <Button

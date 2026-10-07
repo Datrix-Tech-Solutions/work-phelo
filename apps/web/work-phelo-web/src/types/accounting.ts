@@ -492,6 +492,9 @@ export interface TransactionTypeRuleLine {
     name: string;
     category: GLAccountCategory;
   } | null;
+  /** Set on a line that applies when the document is settled, not when it is raised: a
+   *  deduction reduces the cash that moves (discount, withholding tax), a charge adds to it. */
+  settlementKind: RuleLineSettlementKind | null;
   /** Set only on a tax line — which TaxType drives this line's computed amount. */
   taxType: { id: string; name: string; rate: number } | null;
   /** Set only when this line also posts to a party's subledger account under the
@@ -516,8 +519,11 @@ export interface TransactionTypeRule {
   lines: TransactionTypeRuleLine[];
 }
 
+export type RuleLineSettlementKind = 'DEDUCTION' | 'CHARGE';
+
 export interface TransactionTypeRuleLineInput {
   direction: PostingLineDirection;
+  settlementKind?: RuleLineSettlementKind;
   /** Exactly one of accountId / scopeCategory / scopeClassificationId. */
   accountId?: string;
   scopeCategory?: GLAccountCategory;
@@ -1175,6 +1181,13 @@ export interface AccountingTradeDocumentBalance {
   originalAmount: string;
   appliedSettlements: string;
   appliedCreditNotes: string;
+  /** Each credit/debit note applied, with the transaction type it was raised under. */
+  appliedNotes: {
+    allocationId: string;
+    documentNumber: string | null;
+    transactionType: string | null;
+    amount: string;
+  }[];
   outstandingAmount: string;
   paymentState: AccountingTradeDocumentPaymentState;
 }
@@ -1263,6 +1276,15 @@ export interface QueryTradeSettlementsParams {
   limit?: number;
 }
 
+/** A deduction (reduces the cash that moves) or charge (adds to it) taken when a document is
+ *  settled. The form works any percentage out; the API takes the amount. */
+export interface SettlementAdjustmentPayload {
+  kind: RuleLineSettlementKind;
+  glAccountId: string;
+  amount: number;
+  description?: string;
+}
+
 export interface CreateTradeSettlementPayload {
   partyId: string;
   /** The posted invoice/bill this settlement is being recorded to pay. The settlement
@@ -1276,6 +1298,9 @@ export interface CreateTradeSettlementPayload {
   reference?: string;
   description?: string;
   exchangeRate?: number;
+  /** `amount` is what is settled against the document; the cash that moves is that amount less
+   *  deductions plus charges. */
+  adjustments?: SettlementAdjustmentPayload[];
 }
 
 export type AccountingTradeAllocationSource = 'RECEIPT' | 'PAYMENT' | 'CREDIT_NOTE';
@@ -1787,6 +1812,7 @@ export interface AccountClassification {
   code: string;
   name: string;
   category: GLAccountCategory;
+  description: string | null;
   displayOrder: number;
   isSystemTemplate: boolean;
   isActive: boolean;
@@ -1800,6 +1826,7 @@ export interface CreateAccountClassificationPayload {
   code: string;
   name: string;
   category: GLAccountCategory;
+  description?: string;
   displayOrder?: number;
   isSystemTemplate?: boolean;
   cashFlowCategory?: CashFlowCategory;
@@ -1831,6 +1858,7 @@ export interface AccountGroup {
     category: GLAccountCategory;
     cashFlowCategory: CashFlowCategory | null;
   };
+  description: string | null;
   displayOrder: number;
   isActive: boolean;
   /** Overrides the classification's cash-flow default for every account in this group. */
@@ -1843,6 +1871,7 @@ export interface CreateAccountGroupPayload {
   classificationId: string;
   code: string;
   name: string;
+  description?: string;
   displayOrder?: number;
   cashFlowCategory?: CashFlowCategory;
 }

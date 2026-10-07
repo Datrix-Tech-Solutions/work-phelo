@@ -538,6 +538,53 @@ describe('PayablesService', () => {
     });
   });
 
+  describe('applied debit notes on the balance', () => {
+    it('lists each applied debit note with its transaction type and amount', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableAllocation.findMany.mockResolvedValue([
+        {
+          id: 'alloc-1',
+          amount: new Prisma.Decimal(1000),
+          creditNote: {
+            documentNumber: 'CN-1',
+            transactionTypeId: 'type-disc',
+          },
+        },
+        {
+          id: 'alloc-2',
+          amount: new Prisma.Decimal(200),
+          creditNote: { documentNumber: 'CN-2', transactionTypeId: null },
+        },
+      ]);
+      (prisma.transactionType as Record<string, unknown>).findMany = jest
+        .fn()
+        .mockResolvedValue([{ id: 'type-disc', name: 'Discount Received' }]);
+
+      const balance = await service.billBalance(actor.tenantId, 'bill-1');
+
+      expect(balance.appliedNotes).toEqual([
+        {
+          allocationId: 'alloc-1',
+          documentNumber: 'CN-1',
+          transactionType: 'Discount Received',
+          amount: '1000.0000',
+        },
+        {
+          allocationId: 'alloc-2',
+          documentNumber: 'CN-2',
+          transactionType: null,
+          amount: '200.0000',
+        },
+      ]);
+    });
+
+    it('is an empty list when no debit note has been applied', async () => {
+      const { service } = setup();
+      const balance = await service.billBalance(actor.tenantId, 'bill-1');
+      expect(balance.appliedNotes).toEqual([]);
+    });
+  });
+
   it('posts a bill as Dr offset account and Cr AP control', async () => {
     const { journals, prisma, service } = setup();
     prisma.accountingPayableDocument.findFirst.mockResolvedValueOnce(bill());
@@ -589,6 +636,77 @@ describe('PayablesService', () => {
         counterpartyId: vendor.id,
       }),
     ]);
+  });
+
+  it('settles the full amount but pays the net when a discount and a bank charge are taken', async () => {
+    const { cashbook, prisma, service } = setup();
+
+    await service.createPayment(actor, {
+      vendorId: vendor.id,
+      billId: 'bill-1',
+      cashAccountId: 'cash-account-1',
+      amount: 600,
+      currency: 'GHS',
+      paymentDate: '2026-08-10',
+      settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+      adjustments: [
+        { kind: 'DEDUCTION' as never, glAccountId: 'discount-gl', amount: 50 },
+        { kind: 'CHARGE' as never, glAccountId: 'bank-charge-gl', amount: 5 },
+      ],
+    });
+
+    const sent = (
+      cashbook.createPayment.mock.calls[0] as unknown[]
+    )[1] as Record<string, unknown>;
+    expect(sent.offsetGlAccountId).toBeUndefined();
+    expect(sent.amount).toBeUndefined();
+    expect(sent.offsetSubledgerAccountId).toBe(subledgerAccountId);
+    expect(sent.lines).toEqual([
+      expect.objectContaining({
+        kind: 'ITEM',
+        glAccountId: apControlAccountId,
+        amount: 600,
+      }),
+      expect.objectContaining({
+        kind: 'DEDUCTION',
+        glAccountId: 'discount-gl',
+        amount: 50,
+      }),
+      expect.objectContaining({
+        kind: 'CHARGE',
+        glAccountId: 'bank-charge-gl',
+        amount: 5,
+      }),
+    ]);
+    // The payment keeps what was settled, so it can be allocated to the bill in full.
+    const created = (
+      prisma.accountingPayablePayment.create.mock.calls[0] as [
+        { data: { amount: number } },
+      ]
+    )[0];
+    expect(created.data.amount).toBe(600);
+  });
+
+  it('refuses an adjustment that posts to the bill’s own AP account', async () => {
+    const { service } = setup();
+    await expect(
+      service.createPayment(actor, {
+        vendorId: vendor.id,
+        billId: 'bill-1',
+        cashAccountId: 'cash-account-1',
+        amount: 600,
+        currency: 'GHS',
+        paymentDate: '2026-08-10',
+        settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+        adjustments: [
+          {
+            kind: 'DEDUCTION' as never,
+            glAccountId: apControlAccountId,
+            amount: 10,
+          },
+        ],
+      }),
+    ).rejects.toThrow('control account');
   });
 
   it('posts AP payments through the transactional Cashbook path', async () => {

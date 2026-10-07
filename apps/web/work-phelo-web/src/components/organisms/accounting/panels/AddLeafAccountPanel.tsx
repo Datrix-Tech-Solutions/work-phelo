@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -12,7 +12,14 @@ import {
   GLAccount,
   GLAccountCategory,
 } from '@/types/accounting';
-import { useAccountClassifications, useAccountGroups, useCreateGLAccount } from '@/hooks';
+import {
+  useAccountClassifications,
+  useAccountGroups,
+  useCreateGLAccount,
+  useGLAccounts,
+} from '@/hooks';
+import { suggestAccountCode } from '@/lib/accounting/accountCodes';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -91,7 +98,8 @@ export function AddLeafAccountPanel({
     control,
     reset,
     setValue,
-    formState: { errors },
+    getValues,
+    formState: { errors, dirtyFields },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
   // Seed the name (and, when creating "here", the whole locked hierarchy) each time the panel opens.
@@ -123,6 +131,42 @@ export function AddLeafAccountPanel({
     ? (groupsData?.items ?? []).map((g) => ({ value: g.id, label: g.name }))
     : [];
 
+  // The next free code inside the parent account's range (or the classification's, when there
+  // is no parent account), from the accounts already there. Fills the code until the user types
+  // their own.
+  const parentAccountId = useWatch({ control, name: 'parentAccountId' });
+  const currentCode = useWatch({ control, name: 'accountCode' });
+  const { data: allGroupsData } = useAccountGroups(
+    classificationId ? { classificationId, limit: 100 } : {},
+  );
+  const { data: allAccounts } = useGLAccounts();
+  const classificationCode = classificationsData?.items.find(
+    (c) => c.id === classificationId,
+  )?.code;
+  const codeSuggestion = useMemo(() => {
+    if (!classificationId || !classificationCode || !allGroupsData || !allAccounts) return null;
+    const groups = allGroupsData.items.filter((g) => g.classificationId === classificationId);
+    const parent = parentAccountId ? groups.find((g) => g.id === parentAccountId) : undefined;
+    if (parentAccountId && !parent) return null;
+    const used = allAccounts
+      .filter((a) =>
+        parent
+          ? a.accountGroupId === parent.id
+          : a.classificationId === classificationId && !a.accountGroupId,
+      )
+      .map((a) => a.code);
+    return suggestAccountCode(
+      parent ? parent.code : classificationCode,
+      used,
+      parent ? [] : groups.map((g) => g.code),
+    );
+  }, [classificationId, classificationCode, parentAccountId, allGroupsData, allAccounts]);
+  useEffect(() => {
+    if (codeSuggestion?.code && !dirtyFields.accountCode && currentCode !== codeSuggestion.code) {
+      setValue('accountCode', codeSuggestion.code);
+    }
+  }, [codeSuggestion?.code, dirtyFields.accountCode, currentCode, setValue]);
+
   // These resets exist for the freely-editable form; a locked scope never changes accountType
   // or classificationId out from under itself, so they'd otherwise wipe the locked selection
   // right after the effect above sets it.
@@ -141,6 +185,23 @@ export function AddLeafAccountPanel({
     onClose();
   };
 
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop. Continue
+  // clears the code, name and description for the next account but keeps where it is going: the
+  // type, classification, parent account and cash flow category. Not offered when the panel is opened from another
+  // form that takes the new account back (onCreated).
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: handleClose,
+    onContinue: () =>
+      reset({
+        ...DEFAULTS,
+        accountType: getValues('accountType'),
+        classificationId: getValues('classificationId'),
+        parentAccountId: getValues('parentAccountId'),
+        cashFlowCategory: getValues('cashFlowCategory'),
+      }),
+  });
+
   const onSubmit = async (data: FormValues) => {
     try {
       const account = await createAccount({
@@ -153,7 +214,10 @@ export function AddLeafAccountPanel({
       });
       toast.success('Account created successfully');
       onCreated?.(account);
-      handleClose();
+      entry.finishSave(
+        { title: 'Account Added!', message: `${data.accountName} has been added.` },
+        handleClose,
+      );
     } catch (err) {
       toast.error(extractError(err, 'Failed to create account'));
     }
@@ -173,6 +237,8 @@ export function AddLeafAccountPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
+      {...entry.panelProps}
+      lock={onCreated ? undefined : entry.panelProps.lock}
       title="Add Account"
       description={
         lockedSummary
@@ -190,30 +256,95 @@ export function AddLeafAccountPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
-        <FormField
-          label="Account Code"
-          type="number"
-          registration={register('accountCode', { required: 'Account code is required' })}
-          error={errors.accountCode}
-          placeholder="e.g. 1101"
-        />
+      <div className="flex flex-col gap-3">
+        {/* The same three fields whether the form is opened on its own or from a spot in the tree.
+            From the tree they come pre-filled and locked, so the account lands exactly there. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Controller
+            name="accountType"
+            control={control}
+            rules={{ required: 'Account type is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Account Type"
+                placeholder="Select account type…"
+                options={TYPE_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                disabled={!!lockedScope}
+                error={errors.accountType?.message}
+              />
+            )}
+          />
+          <Controller
+            name="classificationId"
+            control={control}
+            rules={{ required: 'Classification is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Classification"
+                placeholder={
+                  !accountType
+                    ? 'Select a type first…'
+                    : isLoadingClassifications
+                      ? 'Loading…'
+                      : 'Select classification…'
+                }
+                options={classificationOptions}
+                value={field.value}
+                onChange={field.onChange}
+                disabled={!!lockedScope || !accountType}
+                error={errors.classificationId?.message}
+              />
+            )}
+          />
+          <Controller
+            name="parentAccountId"
+            control={control}
+            render={({ field }) => (
+              <SearchSelect
+                label="Parent Account (optional)"
+                placeholder={
+                  !classificationId
+                    ? 'Select a classification first…'
+                    : isLoadingGroups
+                      ? 'Loading…'
+                      : 'None — post directly under classification'
+                }
+                options={parentAccountOptions}
+                value={field.value}
+                onChange={field.onChange}
+                disabled={!!lockedScope || !classificationId}
+                error={errors.parentAccountId?.message}
+              />
+            )}
+          />
+        </div>
 
-        <FormField
-          label="Account Name"
-          registration={register('accountName', { required: 'Account name is required' })}
-          error={errors.accountName}
-          placeholder="e.g. Ecobank"
-        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)]">
+          <FormField
+            label="Account Code"
+            type="number"
+            registration={register('accountCode', { required: 'Account code is required' })}
+            error={errors.accountCode}
+            placeholder="e.g. 1101"
+          />
+          <FormField
+            label="Account Name"
+            registration={register('accountName', { required: 'Account name is required' })}
+            error={errors.accountName}
+            placeholder="e.g. Ecobank"
+          />
+        </div>
 
-        <FormField
-          label="Description (optional)"
-          type="textarea"
-          rows={2}
-          registration={register('description')}
-          error={errors.description}
-          placeholder="Optional description"
-        />
+        {codeSuggestion &&
+          (codeSuggestion.problem ? (
+            <p className="-mt-1 text-xs text-amber-600">{codeSuggestion.problem}</p>
+          ) : (
+            <p className="-mt-1 text-xs text-gray-500">
+              Code suggested from the accounts group ({codeSuggestion.range}).
+            </p>
+          ))}
 
         <Controller
           name="cashFlowCategory"
@@ -229,67 +360,14 @@ export function AddLeafAccountPanel({
           )}
         />
 
-        {lockedScope ? (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-            <span className="font-medium text-gray-500">Placed under: </span>
-            {lockedSummary}
-          </div>
-        ) : (
-          <>
-            <Controller
-              name="accountType"
-              control={control}
-              rules={{ required: 'Account type is required' }}
-              render={({ field }) => (
-                <SearchSelect
-                  label="Account Type"
-                  placeholder="Select account type…"
-                  options={TYPE_OPTIONS}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.accountType?.message}
-                />
-              )}
-            />
-
-            {accountType && (
-              <Controller
-                name="classificationId"
-                control={control}
-                rules={{ required: 'Classification is required' }}
-                render={({ field }) => (
-                  <SearchSelect
-                    label="Classification"
-                    placeholder={isLoadingClassifications ? 'Loading…' : 'Select classification…'}
-                    options={classificationOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.classificationId?.message}
-                  />
-                )}
-              />
-            )}
-
-            {classificationId && (
-              <Controller
-                name="parentAccountId"
-                control={control}
-                render={({ field }) => (
-                  <SearchSelect
-                    label="Parent Account (optional)"
-                    placeholder={
-                      isLoadingGroups ? 'Loading…' : 'None — post directly under classification'
-                    }
-                    options={parentAccountOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={errors.parentAccountId?.message}
-                  />
-                )}
-              />
-            )}
-          </>
-        )}
+        <FormField
+          label="Description (optional)"
+          type="textarea"
+          rows={2}
+          registration={register('description')}
+          error={errors.description}
+          placeholder="Optional description"
+        />
       </div>
     </SidePanel>
   );

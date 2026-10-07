@@ -3,6 +3,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   GLAccountCategory,
   PostingDirection,
+  RuleLineSettlementKind,
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,7 +30,10 @@ const scopedMain = {
   scopeClassificationId: 'cls-fixed-assets',
 };
 
-function setup(type = payableType) {
+function setup(
+  type: Record<string, unknown> = payableType,
+  accountCategory: GLAccountCategory = GLAccountCategory.LIABILITY,
+) {
   const create = jest
     .fn<Promise<unknown>, [{ data: { lines: { create: unknown[] } } }]>()
     .mockResolvedValue({ id: 'r1', lines: [] });
@@ -44,7 +48,7 @@ function setup(type = payableType) {
   const masterData = {
     findGLAccount: jest.fn().mockResolvedValue({
       id: 'acc-trade-payable',
-      category: GLAccountCategory.LIABILITY,
+      category: accountCategory,
     }),
   } as unknown as AccountingMasterDataService;
   return {
@@ -122,5 +126,125 @@ describe('TransactionTypeRulesService scoped lines', () => {
         ],
       }),
     ).rejects.toThrow('fixed account');
+  });
+});
+
+describe('TransactionTypeRulesService settlement lines', () => {
+  const settlementDeduction = {
+    direction: PostingDirection.CR,
+    accountId: 'acc-wht',
+    settlementKind: RuleLineSettlementKind.DEDUCTION,
+  };
+  const docLines = [
+    { direction: PostingDirection.DR, accountId: 'acc-expense' },
+    payableControl,
+  ];
+
+  it('keeps settlement lines out of the document rule, even on the control side', async () => {
+    const { service, create } = setup();
+    await service.createRule(user, {
+      transactionTypeId: 'tt1',
+      lines: [...docLines, settlementDeduction],
+    });
+    const written = create.mock.calls[0][0].data.lines.create as {
+      settlementKind: string | null;
+    }[];
+    expect(written.map((l) => l.settlementKind)).toEqual([
+      null,
+      null,
+      'DEDUCTION',
+    ]);
+  });
+
+  it('puts a bill payment charge on the debit side and a deduction on the credit side', async () => {
+    const { service } = setup();
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          ...docLines,
+          {
+            direction: PostingDirection.DR,
+            accountId: 'acc-bank-charge',
+            settlementKind: RuleLineSettlementKind.CHARGE,
+          },
+        ],
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          ...docLines,
+          { ...settlementDeduction, direction: PostingDirection.DR },
+        ],
+      }),
+    ).rejects.toThrow('must be a credit line');
+  });
+
+  it('flips the sides for a receivable type', async () => {
+    const { service } = setup(
+      { ...payableType, category: TransactionTypeCategory.RECEIVABLE },
+      GLAccountCategory.ASSET,
+    );
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          { direction: PostingDirection.CR, accountId: 'acc-sales' },
+          { direction: PostingDirection.DR, accountId: 'acc-ar' },
+          {
+            direction: PostingDirection.DR,
+            accountId: 'acc-wht',
+            settlementKind: RuleLineSettlementKind.DEDUCTION,
+          },
+        ],
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses settlement lines on a linked type', async () => {
+    const { service } = setup({ ...payableType, isLinked: true });
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          { direction: PostingDirection.CR, accountId: 'acc-expense' },
+          { direction: PostingDirection.DR, accountId: 'acc-trade-payable' },
+          { ...settlementDeduction },
+        ],
+      }),
+    ).rejects.toThrow('plain Receivable or Payable');
+  });
+
+  it('needs a fixed account, and only a deduction can carry a tax', async () => {
+    const { service } = setup();
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          ...docLines,
+          {
+            direction: PostingDirection.CR,
+            scopeCategory: GLAccountCategory.LIABILITY,
+            settlementKind: RuleLineSettlementKind.DEDUCTION,
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          ...docLines,
+          {
+            direction: PostingDirection.DR,
+            accountId: 'acc-bank-charge',
+            taxTypeId: 'tax-1',
+            settlementKind: RuleLineSettlementKind.CHARGE,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Only a settlement deduction');
   });
 });

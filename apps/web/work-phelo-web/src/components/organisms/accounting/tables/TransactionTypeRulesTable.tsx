@@ -210,7 +210,7 @@ function RuleCard({
             <span>Account</span>
             <span>Description</span>
             <span>Dir</span>
-            <span>Tax</span>
+            <span>Tax / Settlement</span>
           </div>
           {rule.lines.map((line) => (
             <div
@@ -228,7 +228,13 @@ function RuleCard({
               <span className="min-w-0 truncate text-gray-600">{line.description ?? '—'}</span>
               <TypeChip label={line.direction} color={line.direction === 'DR' ? 'blue' : 'green'} />
               <span className="min-w-0 truncate text-gray-600">
-                {line.taxType ? `${line.taxType.name} (${line.taxType.rate}%)` : '—'}
+                {line.settlementKind
+                  ? `At settlement · ${line.settlementKind === 'DEDUCTION' ? 'deduction' : 'charge'}${
+                      line.taxType ? ` · ${line.taxType.name} (${line.taxType.rate}%)` : ''
+                    }`
+                  : line.taxType
+                    ? `${line.taxType.name} (${line.taxType.rate}%)`
+                    : '—'}
               </span>
             </div>
           ))}

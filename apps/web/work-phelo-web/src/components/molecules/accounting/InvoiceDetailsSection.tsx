@@ -57,7 +57,10 @@ export function InvoiceDetailsSection({
     () => rules.find((r) => r.transactionTypeId === transactionTypeId),
     [rules, transactionTypeId],
   );
-  const taxLines = useMemo(() => (rule?.lines ?? []).filter((line) => line.taxType), [rule]);
+  const taxLines = useMemo(
+    () => (rule?.lines ?? []).filter((line) => line.taxType && !line.settlementKind),
+    [rule],
+  );
 
   const toggleTaxType = (taxTypeId: string) => {
     setValue(
@@ -142,7 +145,7 @@ export function InvoiceDetailsSection({
 
       {taxLines.length > 0 && (
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
-          <span className="text-sm font-bold text-gray-900">Tax / Deductions</span>
+          <span className="text-sm font-bold text-gray-900">Tax</span>
           {taxLines.map((line) => (
             <label key={line.taxType!.id} className="flex items-center gap-2">
               <input

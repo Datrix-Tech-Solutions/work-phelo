@@ -174,6 +174,32 @@ export class CashbookEntryLineDto {
   description?: string;
 }
 
+/** Something that changes the cash when a bill or invoice is settled, on top of the amount being
+ *  settled: a deduction reduces the cash (discount, withholding tax) and a charge adds to it
+ *  (bank charge). The form works any percentage out; the API takes the amount. */
+export class SettlementAdjustmentDto {
+  @ApiProperty({ enum: [CashbookLineKind.DEDUCTION, CashbookLineKind.CHARGE] })
+  @IsIn([CashbookLineKind.DEDUCTION, CashbookLineKind.CHARGE])
+  kind!: CashbookLineKind;
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  glAccountId!: string;
+
+  @ApiProperty({ example: 160, minimum: 0.0001 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  amount!: number;
+
+  @ApiPropertyOptional({ example: 'Early payment discount' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+}
+
 export class CashbookEntryDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()

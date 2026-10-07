@@ -65,6 +65,19 @@ export function useUpdateGLAccount() {
   });
 }
 
+export function useActivateGLAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<GLAccount>(`${BASE}/${id}/activate`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });
+    },
+  });
+}
+
 export function useDeactivateGLAccount() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1008,6 +1008,7 @@ export class AccountingMasterDataService {
           code: dto.code,
           name: dto.name,
           category: dto.category,
+          description: this.optional(dto.description),
           displayOrder: dto.displayOrder ?? 0,
           isSystemTemplate: dto.isSystemTemplate ?? false,
           cashFlowCategory: dto.cashFlowCategory,
@@ -1070,6 +1071,9 @@ export class AccountingMasterDataService {
           ...(dto.code ? { code: dto.code } : {}),
           ...(dto.name ? { name: dto.name } : {}),
           ...(dto.category ? { category: dto.category } : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optional(dto.description) }
+            : {}),
           ...(dto.displayOrder !== undefined
             ? { displayOrder: dto.displayOrder }
             : {}),
@@ -1222,6 +1226,7 @@ export class AccountingMasterDataService {
           classificationId: dto.classificationId,
           code: dto.code,
           name: dto.name,
+          description: this.optional(dto.description),
           displayOrder: dto.displayOrder ?? 0,
           cashFlowCategory: dto.cashFlowCategory,
           createdByUserId: user.id,
@@ -1571,6 +1576,9 @@ export class AccountingMasterDataService {
             : {}),
           ...(dto.code ? { code: dto.code } : {}),
           ...(dto.name ? { name: dto.name } : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optional(dto.description) }
+            : {}),
           ...(dto.displayOrder !== undefined
             ? { displayOrder: dto.displayOrder }
             : {}),
@@ -2155,6 +2163,73 @@ export class AccountingMasterDataService {
     await this.recordAudit(
       user,
       'GL_ACCOUNT_DEACTIVATE',
+      'GLAccount',
+      updated.id,
+      { status: updated.status, allowPosting: updated.allowPosting },
+    );
+    return updated;
+  }
+
+  /** Puts a deactivated account back in use. It can only come back under a classification,
+   *  parent account and account that are themselves active — otherwise it would be live inside
+   *  something that is switched off. Posting is restored too (deactivating turns it off), except
+   *  for a summary account with child accounts, which never takes postings. */
+  async activateGLAccount(user: RequestUser, accountId: string) {
+    const account = await this.findGLAccount(user.tenantId, accountId);
+    if (account.status === RecordStatus.ACTIVE) return account;
+
+    const [classification, group, parent, childCount] = await Promise.all([
+      account.classificationId
+        ? this.prisma.accountClassification.findFirst({
+            where: { id: account.classificationId, tenantId: user.tenantId },
+            select: { isActive: true, name: true },
+          })
+        : null,
+      account.accountGroupId
+        ? this.prisma.accountGroup.findFirst({
+            where: { id: account.accountGroupId, tenantId: user.tenantId },
+            select: { isActive: true, name: true },
+          })
+        : null,
+      account.parentAccountId
+        ? this.prisma.gLAccount.findFirst({
+            where: { id: account.parentAccountId, tenantId: user.tenantId },
+            select: { status: true, name: true },
+          })
+        : null,
+      this.prisma.gLAccount.count({
+        where: { tenantId: user.tenantId, parentAccountId: account.id },
+      }),
+    ]);
+    if (classification && !classification.isActive) {
+      throw new ConflictException(
+        `Reactivate the classification "${classification.name}" first`,
+      );
+    }
+    if (group && !group.isActive) {
+      throw new ConflictException(
+        `Reactivate the parent account "${group.name}" first`,
+      );
+    }
+    if (parent && parent.status !== RecordStatus.ACTIVE) {
+      throw new ConflictException(
+        `Reactivate the account "${parent.name}" first`,
+      );
+    }
+
+    const updated = await this.prisma.gLAccount.update({
+      where: {
+        id_tenantId: { id: account.id, tenantId: user.tenantId },
+      },
+      data: {
+        status: RecordStatus.ACTIVE,
+        allowPosting: childCount === 0,
+        updatedByUserId: user.id,
+      },
+    });
+    await this.recordAudit(
+      user,
+      'GL_ACCOUNT_ACTIVATE',
       'GLAccount',
       updated.id,
       { status: updated.status, allowPosting: updated.allowPosting },

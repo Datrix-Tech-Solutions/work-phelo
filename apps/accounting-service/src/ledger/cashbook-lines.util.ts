@@ -59,9 +59,12 @@ export function normalizeEntryLines(input: {
         'With lines, put quantity and unitPrice on each line',
       );
     }
-    if (input.lines.length > 1 && input.offsetSubledgerAccountId) {
+    if (
+      input.offsetSubledgerAccountId &&
+      (input.lines[0].kind ?? CashbookLineKind.ITEM) !== CashbookLineKind.ITEM
+    ) {
       throw new BadRequestException(
-        'A subledger account can only be set on a single-account entry',
+        'The subledger account goes on the first line, which must be an item',
       );
     }
     const lines = input.lines.map((line): NormalizedEntryLine => {
@@ -127,4 +130,38 @@ export function normalizeEntryLines(input: {
     ],
     total: amount,
   };
+}
+
+/** The lines of the cashbook entry behind a payment or receipt that settles a bill or invoice:
+ *  the amount settled against the control (AP/AR) account first — it carries the vendor or
+ *  customer — then each deduction and charge taken at settlement. */
+export function settlementEntryLines(input: {
+  controlAccountId: string;
+  amount: number;
+  description?: string;
+  adjustments: {
+    kind: CashbookLineKind;
+    glAccountId: string;
+    amount: number;
+    description?: string;
+  }[];
+}): EntryLineInput[] {
+  if (
+    input.adjustments.some(
+      (line) => line.glAccountId === input.controlAccountId,
+    )
+  ) {
+    throw new BadRequestException(
+      "A deduction or charge cannot post to the document's own control account",
+    );
+  }
+  return [
+    {
+      kind: CashbookLineKind.ITEM,
+      glAccountId: input.controlAccountId,
+      amount: input.amount,
+      description: input.description,
+    },
+    ...input.adjustments,
+  ];
 }

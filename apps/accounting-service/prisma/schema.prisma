@@ -111,6 +111,13 @@ enum CashbookTransactionType {
   @@schema("accounting")
 }
 
+enum RuleLineSettlementKind {
+  DEDUCTION
+  CHARGE
+
+  @@schema("accounting")
+}
+
 enum CashbookLineKind {
   ITEM
   DEDUCTION
@@ -388,6 +395,7 @@ model AccountClassification {
   code             String
   name             String
   category         GLAccountCategory
+  description      String?
   displayOrder     Int                       @default(0)
   isSystemTemplate Boolean                   @default(false)
   isActive         Boolean                   @default(true)
@@ -414,6 +422,7 @@ model AccountGroup {
   classificationId String
   code             String
   name             String
+  description      String?
   displayOrder     Int                   @default(0)
   isActive         Boolean               @default(true)
   /// Overrides the classification's cash-flow default for every account in this group; an
@@ -976,7 +985,7 @@ model TransactionTypeRule {
 }
 
 model TransactionTypeRuleLine {
-  id                    String                 @id @default(uuid())
+  id                    String                  @id @default(uuid())
   tenantId              String
   ruleId                String
   sequence              Int
@@ -990,13 +999,18 @@ model TransactionTypeRuleLine {
   scopeClassificationId String?
   taxTypeId             String?
   subledgerType         String?
+  /// Set only on a line that applies when a bill/invoice is settled, not when it is raised: a
+  /// DEDUCTION reduces the cash that moves (discount, withholding tax), a CHARGE adds to it
+  /// (bank charge). Offered as optional checkboxes on the payment form; ignored when the
+  /// document is created. Null on every document line.
+  settlementKind        RuleLineSettlementKind?
   description           String?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  rule                  TransactionTypeRule    @relation(fields: [ruleId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  account               GLAccount?             @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  scopeClassification   AccountClassification? @relation(fields: [scopeClassificationId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  taxType               TaxType?               @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  rule                  TransactionTypeRule     @relation(fields: [ruleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  account               GLAccount?              @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  scopeClassification   AccountClassification?  @relation(fields: [scopeClassificationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  taxType               TaxType?                @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, ruleId, sequence])

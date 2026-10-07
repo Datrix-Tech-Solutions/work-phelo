@@ -260,16 +260,25 @@ describe('normalizeEntryLines', () => {
     );
   });
 
-  it('allows a subledger account only on a single-account entry', () => {
+  it('puts the subledger account on the first line, which must be an item', () => {
     expect(() =>
       normalizeEntryLines({
         offsetSubledgerAccountId: 's',
         lines: [
-          { glAccountId: 'a', amount: 1 },
-          { glAccountId: 'b', amount: 2 },
+          { glAccountId: 'a', amount: 10 },
+          { kind: CashbookLineKind.DEDUCTION, glAccountId: 'b', amount: 2 },
         ],
       }),
-    ).toThrow('single-account');
+    ).not.toThrow();
+    expect(() =>
+      normalizeEntryLines({
+        offsetSubledgerAccountId: 's',
+        lines: [
+          { kind: CashbookLineKind.DEDUCTION, glAccountId: 'b', amount: 2 },
+          { glAccountId: 'a', amount: 10 },
+        ],
+      }),
+    ).toThrow('first line');
   });
 });
 

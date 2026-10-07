@@ -575,6 +575,53 @@ describe('ReceivablesService', () => {
     });
   });
 
+  describe('applied credit notes on the balance', () => {
+    it('lists each applied credit note with its transaction type and amount', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingReceivableAllocation.findMany.mockResolvedValue([
+        {
+          id: 'alloc-1',
+          amount: new Prisma.Decimal(1000),
+          creditNote: {
+            documentNumber: 'CN-1',
+            transactionTypeId: 'type-allow',
+          },
+        },
+        {
+          id: 'alloc-2',
+          amount: new Prisma.Decimal(200),
+          creditNote: { documentNumber: 'CN-2', transactionTypeId: null },
+        },
+      ]);
+      (prisma.transactionType as Record<string, unknown>).findMany = jest
+        .fn()
+        .mockResolvedValue([{ id: 'type-allow', name: 'Discount Allowed' }]);
+
+      const balance = await service.invoiceBalance(actor.tenantId, 'invoice-1');
+
+      expect(balance.appliedNotes).toEqual([
+        {
+          allocationId: 'alloc-1',
+          documentNumber: 'CN-1',
+          transactionType: 'Discount Allowed',
+          amount: '1000.0000',
+        },
+        {
+          allocationId: 'alloc-2',
+          documentNumber: 'CN-2',
+          transactionType: null,
+          amount: '200.0000',
+        },
+      ]);
+    });
+
+    it('is an empty list when no credit note has been applied', async () => {
+      const { service } = setup();
+      const balance = await service.invoiceBalance(actor.tenantId, 'invoice-1');
+      expect(balance.appliedNotes).toEqual([]);
+    });
+  });
+
   it('posts an invoice as Dr AR control and Cr offset account', async () => {
     const { journals, prisma, service } = setup();
     prisma.accountingReceivableDocument.findFirst.mockResolvedValueOnce(
@@ -628,6 +675,52 @@ describe('ReceivablesService', () => {
         counterpartyId: customer.id,
       }),
     ]);
+  });
+
+  it('settles the full amount but receives the net when a discount and withholding tax are taken', async () => {
+    const { cashbook, prisma, service } = setup();
+
+    await service.createReceipt(actor, {
+      customerId: customer.id,
+      invoiceId: 'invoice-1',
+      cashAccountId: 'cash-account-1',
+      amount: 600,
+      currency: 'GHS',
+      receiptDate: '2026-08-10',
+      settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+      adjustments: [
+        { kind: 'DEDUCTION' as never, glAccountId: 'discount-gl', amount: 12 },
+        { kind: 'DEDUCTION' as never, glAccountId: 'wht-gl', amount: 30 },
+      ],
+    });
+
+    const sent = (
+      cashbook.createReceipt.mock.calls[0] as unknown[]
+    )[1] as Record<string, unknown>;
+    expect(sent.amount).toBeUndefined();
+    expect(sent.lines).toEqual([
+      expect.objectContaining({
+        kind: 'ITEM',
+        glAccountId: arControlAccountId,
+        amount: 600,
+      }),
+      expect.objectContaining({
+        kind: 'DEDUCTION',
+        glAccountId: 'discount-gl',
+        amount: 12,
+      }),
+      expect.objectContaining({
+        kind: 'DEDUCTION',
+        glAccountId: 'wht-gl',
+        amount: 30,
+      }),
+    ]);
+    const created = (
+      prisma.accountingReceivableReceipt.create.mock.calls[0] as [
+        { data: { amount: number } },
+      ]
+    )[0];
+    expect(created.data.amount).toBe(600);
   });
 
   it('posts AR receipts through the transactional Cashbook path', async () => {

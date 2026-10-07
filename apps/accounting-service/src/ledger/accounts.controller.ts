@@ -352,6 +352,21 @@ export class AccountsController {
     return this.masterData.deactivateGLAccount(request.user, accountId);
   }
 
+  @Post('accounts/:accountId/activate')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary: 'Reactivate a deactivated GL account',
+    description:
+      'Only allowed once its classification, parent account and parent GL account (if any) are active. Posting is switched back on unless it has child accounts.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  activateAccount(
+    @Param('accountId', ParseUUIDPipe) accountId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.activateGLAccount(request.user, accountId);
+  }
+
   @Delete('accounts/:accountId')
   @ApiTags('Accounting - Chart of Accounts')
   @ApiOperation({

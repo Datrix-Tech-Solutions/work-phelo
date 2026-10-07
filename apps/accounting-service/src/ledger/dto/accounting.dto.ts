@@ -480,6 +480,13 @@ export class CreateAccountClassificationDto {
   @IsEnum(GLAccountCategory)
   category!: GLAccountCategory;
 
+  @ApiPropertyOptional({ example: 'Cash, bank and short-term receivables' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
   @ApiPropertyOptional({ example: 10 })
   @IsOptional()
   @Type(() => Number)
@@ -527,6 +534,13 @@ export class CreateAccountGroupDto {
   @IsString()
   @MaxLength(160)
   name!: string;
+
+  @ApiPropertyOptional({ example: 'Cash, bank and short-term receivables' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
 
   @ApiPropertyOptional({ example: 10 })
   @IsOptional()

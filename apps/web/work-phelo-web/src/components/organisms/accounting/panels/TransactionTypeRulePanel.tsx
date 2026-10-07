@@ -1,5 +1,6 @@
 'use client';
 
+import { Trash2 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import {
   Control,
@@ -36,12 +37,25 @@ import type {
   TransactionTypeRuleLineInput,
 } from '@/types/accounting';
 
-type LineKind = 'DEBIT' | 'CREDIT' | 'DEDUCTION' | '';
+type LineKind =
+  | 'DEBIT'
+  | 'CREDIT'
+  | 'DEDUCTION'
+  | 'SETTLEMENT_DEDUCTION'
+  | 'SETTLEMENT_CHARGE'
+  | '';
 
 const KIND_OPTIONS: SearchSelectOption[] = [
   { label: 'Debit', value: 'DEBIT' },
   { label: 'Credit', value: 'CREDIT' },
-  { label: 'Deduction', value: 'DEDUCTION' },
+  { label: 'Tax', value: 'DEDUCTION' },
+];
+
+/** Lines that apply when the bill/invoice is paid rather than when it is raised. The user ticks
+ *  the ones that apply on the payment form. */
+const SETTLEMENT_KIND_OPTIONS: SearchSelectOption[] = [
+  { label: 'Settlement Deduction', value: 'SETTLEMENT_DEDUCTION' },
+  { label: 'Settlement Charge', value: 'SETTLEMENT_CHARGE' },
 ];
 
 const DEDUCTION_DIRECTION_OPTIONS: SearchSelectOption[] = [
@@ -103,10 +117,31 @@ function cashbookDirectionFor(
   return type.category === 'RECEIVABLE' ? 'CR' : 'DR';
 }
 
-function directionOf(line: LineFormValues): PostingLineDirection | '' {
+function isSettlementKind(kind: LineKind) {
+  return kind === 'SETTLEMENT_DEDUCTION' || kind === 'SETTLEMENT_CHARGE';
+}
+
+/** Paying a bill debits Trade Payable, so a deduction (less cash out) is a credit and a charge
+ *  a debit; receiving on an invoice credits Trade Receivable, so it is the other way round. */
+function settlementDirection(
+  kind: 'SETTLEMENT_DEDUCTION' | 'SETTLEMENT_CHARGE',
+  category: TransactionTypeCategory | undefined,
+): PostingLineDirection | null {
+  if (category !== 'PAYABLE' && category !== 'RECEIVABLE') return null;
+  const isDeduction = kind === 'SETTLEMENT_DEDUCTION';
+  return (category === 'PAYABLE') === isDeduction ? 'CR' : 'DR';
+}
+
+function directionOf(
+  line: LineFormValues,
+  category?: TransactionTypeCategory,
+): PostingLineDirection | '' {
   if (line.kind === 'DEBIT') return 'DR';
   if (line.kind === 'CREDIT') return 'CR';
   if (line.kind === 'DEDUCTION') return line.deductionDirection;
+  if (line.kind === 'SETTLEMENT_DEDUCTION' || line.kind === 'SETTLEMENT_CHARGE') {
+    return settlementDirection(line.kind, category) ?? '';
+  }
   return '';
 }
 
@@ -120,6 +155,17 @@ function scopeInput(
 }
 
 function lineToFormValues(line: TransactionTypeRule['lines'][number]): LineFormValues {
+  if (line.settlementKind) {
+    return {
+      kind: line.settlementKind === 'DEDUCTION' ? 'SETTLEMENT_DEDUCTION' : 'SETTLEMENT_CHARGE',
+      deductionDirection: '',
+      accountId: line.account?.id ?? '',
+      scopeCategory: '',
+      scopeClassificationId: '',
+      taxTypeId: line.taxType?.id ?? '',
+      description: line.description ?? '',
+    };
+  }
   if (line.taxType) {
     return {
       kind: 'DEDUCTION',
@@ -217,6 +263,13 @@ export function TransactionTypeRulePanel({
   // side a deduction posts to (see above): debit for a bill, credit for an invoice, and the
   // reverse for the linked notes. Cashbook and source-linked types keep a fixed account.
   const mainLineDirection: PostingLineDirection | null = fixedDeductionDirection;
+  // Only a plain Receivable/Payable type is ever settled — a note, a cashbook type or a
+  // source-linked type has no payment form for settlement lines.
+  const allowsSettlement =
+    !isCashbookType &&
+    !isLinkedType &&
+    !selectedType?.sourceTypeId &&
+    (selectedType?.category === 'RECEIVABLE' || selectedType?.category === 'PAYABLE');
   const allowsScope = !isCashbookType && !selectedType?.sourceTypeId && mainLineDirection !== null;
   const watchedLines = useWatch({ control, name: 'lines' });
   const mainLineIndex = allowsScope
@@ -293,25 +346,39 @@ export function TransactionTypeRulePanel({
     }
 
     for (const line of values.lines) {
+      if (isSettlementKind(line.kind) && !line.accountId) {
+        toast.error('Every settlement line needs an account.');
+        return;
+      }
       if (line.kind === 'DEDUCTION' && !line.deductionDirection) {
-        toast.error('Every deduction line needs a Debit/Credit side.');
+        toast.error('Every tax line needs a Debit/Credit side.');
         return;
       }
     }
 
     const lines: TransactionTypeRuleLineInput[] = values.lines.map((line, index) => ({
-      direction: directionOf(line) as PostingLineDirection,
+      direction: directionOf(line, selectedType?.category) as PostingLineDirection,
       ...(index === mainLineIndex ? scopeInput(line) : { accountId: line.accountId }),
-      taxTypeId: line.kind === 'DEDUCTION' ? line.taxTypeId || undefined : undefined,
+      taxTypeId:
+        line.kind === 'DEDUCTION' || line.kind === 'SETTLEMENT_DEDUCTION'
+          ? line.taxTypeId || undefined
+          : undefined,
+      ...(line.kind === 'SETTLEMENT_DEDUCTION'
+        ? { settlementKind: 'DEDUCTION' as const }
+        : line.kind === 'SETTLEMENT_CHARGE'
+          ? { settlementKind: 'CHARGE' as const }
+          : {}),
       description: line.description || undefined,
     }));
 
-    if (lines.length < 2) {
+    // Settlement lines belong to the payment, not the posting, so they don't count here.
+    const documentLines = lines.filter((l) => !l.settlementKind);
+    if (documentLines.length < 2) {
       toast.error('A rule needs at least 2 lines.');
       return;
     }
-    const debitCount = lines.filter((l) => l.direction === 'DR').length;
-    const creditCount = lines.filter((l) => l.direction === 'CR').length;
+    const debitCount = documentLines.filter((l) => l.direction === 'DR').length;
+    const creditCount = documentLines.filter((l) => l.direction === 'CR').length;
     if (debitCount === 0 || creditCount === 0) {
       toast.error('A rule needs at least one debit line and one credit line.');
       return;
@@ -342,7 +409,7 @@ export function TransactionTypeRulePanel({
       description={
         isCashbookType
           ? `Map how this type posts — the single offset account it ${cashbookDirection === 'CR' ? 'credits' : 'debits'} against a cash/bank account.`
-          : 'Map how this transaction type posts — a debit line, a credit line, and any deductions (tax) it needs.'
+          : 'Map how this transaction type posts — a debit line, a credit line, any taxes, and any deductions or charges taken at payment.'
       }
       footer={
         <div className="flex justify-end gap-3">
@@ -435,7 +502,7 @@ export function TransactionTypeRulePanel({
             />
           </>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-gray-900">Lines</span>
               <Button type="button" variant="outline" onClick={() => append({ ...EMPTY_LINE })}>
@@ -469,6 +536,10 @@ export function TransactionTypeRulePanel({
                 taxTypeOptions={taxTypeOptions}
                 fixedDeductionDirection={fixedDeductionDirection}
                 isMainLine={index === mainLineIndex}
+                kindOptions={
+                  allowsSettlement ? [...KIND_OPTIONS, ...SETTLEMENT_KIND_OPTIONS] : KIND_OPTIONS
+                }
+                settlementCategory={selectedType?.category}
               />
             ))}
           </div>
@@ -491,6 +562,8 @@ function RuleLineEditor({
   taxTypeOptions,
   fixedDeductionDirection,
   isMainLine,
+  kindOptions,
+  settlementCategory,
 }: {
   control: Control<FormValues>;
   register: ReturnType<typeof useForm<FormValues>>['register'];
@@ -504,6 +577,8 @@ function RuleLineEditor({
   taxTypeOptions: SearchSelectOption[];
   fixedDeductionDirection: PostingLineDirection | null;
   isMainLine: boolean;
+  kindOptions: SearchSelectOption[];
+  settlementCategory: TransactionTypeCategory | undefined;
 }) {
   const kind = useWatch({ control, name: `lines.${index}.kind` });
   const scopeCategory = useWatch({ control, name: `lines.${index}.scopeCategory` });
@@ -559,86 +634,144 @@ function RuleLineEditor({
     }
   }, [kind, fixedDeductionDirection, index, setValue]);
 
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-500">Line {index + 1}</span>
-        {canRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="text-xs font-medium text-red-600 hover:text-red-700"
-          >
-            Remove
-          </button>
-        )}
-      </div>
+  const isSettlement = kind === 'SETTLEMENT_DEDUCTION' || kind === 'SETTLEMENT_CHARGE';
+  const hasTaxType = kind === 'DEDUCTION' || kind === 'SETTLEMENT_DEDUCTION';
+  const hasPostsAs = kind === 'DEDUCTION' || isSettlement;
 
-      <Controller
-        name={`lines.${index}.kind`}
-        control={control}
-        rules={{ required: 'Required' }}
-        render={({ field: f }) => (
-          <SearchSelect
-            label="Line Type"
-            placeholder="Debit, Credit, or Deduction…"
-            options={KIND_OPTIONS}
-            value={f.value}
-            onChange={f.onChange}
-            error={errors.lines?.[index]?.kind?.message}
-          />
-        )}
-      />
-
-      {kind === 'DEDUCTION' && (
-        <div className="grid grid-cols-2 gap-3">
-          {fixedDeductionDirection ? (
-            <Input
-              label="Posts As"
-              readOnly
-              value={fixedDeductionDirection === 'DR' ? 'Debit (DR)' : 'Credit (CR)'}
-            />
-          ) : (
-            <Controller
-              name={`lines.${index}.deductionDirection`}
-              control={control}
-              rules={{ required: 'Required' }}
-              render={({ field: f }) => (
-                <SearchSelect
-                  label="Posts As"
-                  placeholder="Debit or credit…"
-                  options={DEDUCTION_DIRECTION_OPTIONS}
-                  value={f.value}
-                  onChange={f.onChange}
-                  error={errors.lines?.[index]?.deductionDirection?.message}
-                />
-              )}
-            />
-          )}
-          <Controller
-            name={`lines.${index}.taxTypeId`}
-            control={control}
-            rules={{ required: 'Select a tax type' }}
-            render={({ field: f }) => (
-              <SearchSelect
-                label="Tax Type"
-                placeholder="Select a tax type…"
-                options={taxTypeOptions}
-                value={f.value}
-                onChange={f.onChange}
-                error={errors.lines?.[index]?.taxTypeId?.message}
-              />
-            )}
-          />
-        </div>
+  const kindField = (
+    <Controller
+      name={`lines.${index}.kind`}
+      control={control}
+      rules={{ required: 'Required' }}
+      render={({ field: f }) => (
+        <SearchSelect
+          label="Line Type"
+          placeholder="Select…"
+          options={kindOptions}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.kind?.message}
+        />
       )}
+    />
+  );
 
-      {isMainLine ? (
-        <>
-          <p className="text-xs text-gray-500">
-            Choose how far to narrow where this line posts. Stop at a category or classification and
-            the user picks the account when making the transaction; pick an account and it is fixed.
-          </p>
+  const postsAsField = !hasPostsAs ? null : kind === 'DEDUCTION' && !fixedDeductionDirection ? (
+    <Controller
+      name={`lines.${index}.deductionDirection`}
+      control={control}
+      rules={{ required: 'Required' }}
+      render={({ field: f }) => (
+        <SearchSelect
+          label="Posts As"
+          placeholder="Debit or credit…"
+          options={DEDUCTION_DIRECTION_OPTIONS}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.deductionDirection?.message}
+        />
+      )}
+    />
+  ) : (
+    <Input
+      label="Posts As"
+      readOnly
+      value={
+        (isSettlement
+          ? settlementDirection(
+              kind as 'SETTLEMENT_DEDUCTION' | 'SETTLEMENT_CHARGE',
+              settlementCategory,
+            )
+          : fixedDeductionDirection) === 'DR'
+          ? 'Debit (DR)'
+          : 'Credit (CR)'
+      }
+    />
+  );
+
+  const taxTypeField = !hasTaxType ? null : (
+    <Controller
+      name={`lines.${index}.taxTypeId`}
+      control={control}
+      rules={kind === 'DEDUCTION' ? { required: 'Select a tax type' } : undefined}
+      render={({ field: f }) => (
+        <SearchSelect
+          label={kind === 'DEDUCTION' ? 'Tax Type' : 'Tax Type (optional)'}
+          placeholder={kind === 'DEDUCTION' ? 'Select a tax type…' : 'None — a plain discount'}
+          options={taxTypeOptions}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.taxTypeId?.message}
+        />
+      )}
+    />
+  );
+
+  const accountField = isMainLine ? (
+    <Controller
+      name={`lines.${index}.accountId`}
+      control={control}
+      render={({ field: f }) => (
+        <SearchSelect
+          label="Account (optional)"
+          placeholder="Any — chosen on the transaction"
+          options={scopedAccountOptions}
+          value={f.value}
+          onChange={pickAccount}
+        />
+      )}
+    />
+  ) : (
+    <Controller
+      name={`lines.${index}.accountId`}
+      control={control}
+      rules={{ required: 'Required' }}
+      render={({ field: f }) => (
+        <SearchSelect
+          label="Account"
+          placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
+          options={accountOptions}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.accountId?.message}
+        />
+      )}
+    />
+  );
+
+  const descriptionField = (
+    <FormField
+      label="Description"
+      registration={register(`lines.${index}.description`)}
+      placeholder="Optional"
+    />
+  );
+
+  const removeButton = (
+    <div className="flex h-10 items-center">
+      {canRemove ? (
+        <button
+          type="button"
+          aria-label="Remove line"
+          title="Remove line"
+          onClick={onRemove}
+          className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+        >
+          <Trash2 size={15} />
+        </button>
+      ) : (
+        <span className="w-[27px]" aria-hidden />
+      )}
+    </div>
+  );
+
+  // The main line narrows where it posts: line type, category, classification, account on one
+  // row, with the description beneath. Every other line is a single row.
+  if (isMainLine) {
+    return (
+      <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-2.5">
+        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+          {kindField}
           <Controller
             name={`lines.${index}.scopeCategory`}
             control={control}
@@ -660,50 +793,39 @@ function RuleLineEditor({
             render={({ field: f }) => (
               <SearchSelect
                 label="Classification (optional)"
-                placeholder="Any classification"
+                placeholder="Any"
                 options={classificationOptions}
                 value={f.value}
                 onChange={pickClassification}
               />
             )}
           />
-          <Controller
-            name={`lines.${index}.accountId`}
-            control={control}
-            render={({ field: f }) => (
-              <SearchSelect
-                label="Account (optional)"
-                placeholder="Any account — chosen on the transaction"
-                options={scopedAccountOptions}
-                value={f.value}
-                onChange={pickAccount}
-              />
-            )}
-          />
-        </>
-      ) : (
-        <Controller
-          name={`lines.${index}.accountId`}
-          control={control}
-          rules={{ required: 'Required' }}
-          render={({ field: f }) => (
-            <SearchSelect
-              label="Account"
-              placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
-              options={accountOptions}
-              value={f.value}
-              onChange={f.onChange}
-              error={errors.lines?.[index]?.accountId?.message}
-            />
-          )}
-        />
-      )}
+          {accountField}
+          {removeButton}
+        </div>
+        {descriptionField}
+      </div>
+    );
+  }
 
-      <FormField
-        label="Description"
-        registration={register(`lines.${index}.description`)}
-        placeholder="Optional description"
-      />
+  const columns = isSettlement
+    ? kind === 'SETTLEMENT_DEDUCTION'
+      ? 'sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.3fr)_auto]'
+      : 'sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_auto]'
+    : kind === 'DEDUCTION'
+      ? 'sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.3fr)_auto]'
+      : 'sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,2fr)_auto]';
+
+  return (
+    <div className="rounded-xl border border-gray-200 p-2.5">
+      <div className={`grid grid-cols-1 items-end gap-2 ${columns}`}>
+        {kindField}
+        {postsAsField}
+        {taxTypeField}
+        {accountField}
+        {descriptionField}
+        {removeButton}
+      </div>
     </div>
   );
 }
