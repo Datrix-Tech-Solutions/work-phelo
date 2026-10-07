@@ -16,6 +16,18 @@ const COUNTRY_CODES = [
 
 const ALL_CODES = COUNTRY_CODES.map((c) => c.code);
 
+/** +1 numbers have no trunk prefix; everywhere else a leading 0 is dialled only inside the country. */
+const NO_TRUNK_PREFIX = '+1';
+
+/**
+ * Digits only, without the local "0" people type first (0244 072 091 -> 244072091), so the
+ * stored number is the international one (+233244072091) and not +2330244072091.
+ */
+function nationalDigits(input: string, code: string): string {
+  const digits = input.replace(/\D/g, '');
+  return (code === NO_TRUNK_PREFIX ? digits : digits.replace(/^0+/, '')).slice(0, 10);
+}
+
 function parsePhone(
   raw: string | null | undefined,
   fallback: string,
@@ -106,7 +118,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
             type="tel"
             value={localValue}
             onChange={(e) => {
-              const numeric = e.target.value.replace(/\D/g, '').slice(0, 10);
+              const numeric = nationalDigits(e.target.value, countryCode);
               if (!isControlled) setInternalNumber(numeric);
               onChange?.(countryCode + numeric);
             }}

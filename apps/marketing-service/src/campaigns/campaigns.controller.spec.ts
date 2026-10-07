@@ -20,6 +20,7 @@ describe('CampaignsController authorization contract', () => {
     ['preview', P.CAMPAIGNS_CREATE],
     ['estimate', P.CAMPAIGNS_CREATE],
     ['create', P.CAMPAIGNS_CREATE],
+    ['update', P.CAMPAIGNS_CREATE],
     ['send', P.CAMPAIGNS_SEND],
     ['cancel', P.CAMPAIGNS_CANCEL],
   ] as const)('gates %s behind %s', (method, permission) => {
@@ -40,6 +41,7 @@ describe('CampaignsController authorization contract', () => {
         'preview',
         'estimate',
         'create',
+        'update',
         'send',
         'cancel',
       ].sort(),

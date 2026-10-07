@@ -1018,8 +1018,8 @@ export class ClientsService {
     return this.formatText(value).toLocaleLowerCase();
   }
 
-  private formatOptionalText(value: string | undefined): string | null {
-    if (value === undefined) return null;
+  private formatOptionalText(value: string | null | undefined): string | null {
+    if (value === undefined || value === null) return null;
     const normalized = this.formatText(value);
     return normalized.length > 0 ? normalized : null;
   }

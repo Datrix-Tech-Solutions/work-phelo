@@ -12,7 +12,7 @@ import {
   MaxLength,
 } from 'class-validator';
 
-export const SEGMENT_RECIPIENT_TYPES = ['PROSPECT'] as const;
+export const SEGMENT_RECIPIENT_TYPES = ['PROSPECT', 'CLIENT'] as const;
 export type SegmentRecipientType = (typeof SEGMENT_RECIPIENT_TYPES)[number];
 
 const MAX_PICKED = 1000;
@@ -26,7 +26,8 @@ export class SegmentRulesDto {
   @ApiPropertyOptional({
     enum: SEGMENT_RECIPIENT_TYPES,
     default: 'PROSPECT',
-    description: 'Who the segment holds. Only prospects for now.',
+    description:
+      'Who the segment holds. Fixed once saved. Sales stages and prospect picks apply to prospect segments; client picks apply to client segments.',
   })
   @IsOptional()
   @IsIn(SEGMENT_RECIPIENT_TYPES)
@@ -34,7 +35,7 @@ export class SegmentRulesDto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: 'Prospects with any of these business types.',
+    description: 'People with any of these business types.',
   })
   @IsOptional()
   @IsArray()
@@ -42,6 +43,18 @@ export class SegmentRulesDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   businessTypeIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      "People who have any of these products or services (CRM Settings product IDs). A client's uninterested products do not count.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_FILTER_VALUES)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  productIds?: string[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -75,6 +88,30 @@ export class SegmentRulesDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   excludeProspectIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Client segments only: clients always included, whether or not the filters match.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PICKED)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  includeClientIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Client segments only: clients always left out, even when the filters match.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PICKED)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  excludeClientIds?: string[];
 }
 
 export class CreateSegmentDto extends SegmentRulesDto {

@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CampaignsTable } from '@/components/molecules/marketing/CampaignsTable';
+import { CampaignDetailPanel } from '@/components/organisms/marketing/CampaignDetailPanel';
 import { AddCampaignPanel, CampaignForm } from '@/components/organisms/marketing/AddCampaignPanel';
 import {
   useCampaigns,
   useCancelCampaign,
   useCreateCampaign,
+  useUpdateCampaign,
   useSendCampaign,
 } from '@/hooks/marketing/useCampaigns';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
@@ -21,11 +23,35 @@ import type { Campaign } from '@/types/marketing';
 
 const PAGE_SIZE = 10;
 
+/**
+ * The form values to start from; undefined for a brand new campaign. A resend or retry starts as an
+ * instant send, while an edit keeps the campaign's own schedule.
+ */
+function initialFor(campaign: Campaign | null, keepSchedule: boolean) {
+  if (!campaign) return undefined;
+  return {
+    ...(keepSchedule && campaign.dispatchMode === 'SCHEDULED' && campaign.scheduledDate
+      ? { dispatch: 'schedule' as const, scheduledDate: campaign.scheduledDate }
+      : {}),
+    name: campaign.name,
+    outreachChannel: campaign.channels,
+    targetSegment: campaign.segments.map((segment) => segment.id),
+    subject: campaign.subject,
+    message: campaign.message,
+    senderIdentityId: campaign.senderIdentityId ?? '',
+  };
+}
+
 export default function CampaignsPage() {
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  /** The campaign being resent or retried; the form opens with its details. */
+  const [reusing, setReusing] = useState<Campaign | null>(null);
+  /** The scheduled campaign being edited; the form opens with its details. */
+  const [editing, setEditing] = useState<Campaign | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [sending, setSending] = useState<Campaign | null>(null);
   const [cancelling, setCancelling] = useState<Campaign | null>(null);
   const canCreate = usePermissionRule('marketing.campaigns:CREATE');
@@ -37,34 +63,61 @@ export default function CampaignsPage() {
     limit: PAGE_SIZE,
     ...(search.trim() ? { search: search.trim() } : {}),
   });
+  // Looked up from the list, so a campaign that is still sending updates as the list refreshes.
+  const viewing = data?.data.find((campaign) => campaign.id === viewingId) ?? null;
   const createCampaign = useCreateCampaign();
+  const updateCampaign = useUpdateCampaign();
   const sendCampaign = useSendCampaign();
   const cancelCampaign = useCancelCampaign();
 
   function handleSubmit(form: CampaignForm) {
-    createCampaign.mutate(
-      {
-        name: form.name.trim(),
-        channels: form.outreachChannel,
-        segmentIds: form.targetSegment,
-        subject: form.subject.trim(),
-        message: form.message.trim(),
-        dispatchMode: form.dispatch === 'schedule' ? 'SCHEDULED' : 'INSTANT',
-        ...(form.outreachChannel.includes('SMS') && form.senderIdentityId
-          ? { senderIdentityId: form.senderIdentityId }
-          : {}),
-        ...(form.dispatch === 'schedule' && form.scheduledDate
-          ? { scheduledDate: form.scheduledDate }
-          : {}),
+    const payload = {
+      name: form.name.trim(),
+      channels: form.outreachChannel,
+      segmentIds: form.targetSegment,
+      subject: form.subject.trim(),
+      message: form.message.trim(),
+      dispatchMode: form.dispatch === 'schedule' ? ('SCHEDULED' as const) : ('INSTANT' as const),
+      ...(form.outreachChannel.includes('SMS') && form.senderIdentityId
+        ? { senderIdentityId: form.senderIdentityId }
+        : {}),
+      ...(form.dispatch === 'schedule' && form.scheduledDate
+        ? { scheduledDate: form.scheduledDate }
+        : {}),
+    };
+    const done = (success: string, failure: string) => ({
+      onSuccess: () => {
+        toast.success(success);
+        closePanel();
       },
-      {
-        onSuccess: () => {
-          toast.success('Campaign created');
-          setPanelOpen(false);
-        },
-        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to create campaign')),
-      },
-    );
+      onError: (error: unknown) => toast.error(apiErrorMessage(error, failure)),
+    });
+    if (editing) {
+      updateCampaign.mutate(
+        { id: editing.id, ...payload },
+        done('Campaign updated', 'Failed to update campaign'),
+      );
+    } else {
+      createCampaign.mutate(payload, done('Campaign created', 'Failed to create campaign'));
+    }
+  }
+
+  function openEdit(campaign: Campaign) {
+    setViewingId(null);
+    setEditing(campaign);
+    setPanelOpen(true);
+  }
+
+  function openReuse(campaign: Campaign) {
+    setViewingId(null);
+    setReusing(campaign);
+    setPanelOpen(true);
+  }
+
+  function closePanel() {
+    setPanelOpen(false);
+    setReusing(null);
+    setEditing(null);
   }
 
   function handleCancel() {
@@ -112,16 +165,44 @@ export default function CampaignsPage() {
           totalPages={Math.max(1, data?.meta.totalPages ?? 1)}
           onPageChange={setPage}
           onAdd={canCreate ? () => setPanelOpen(true) : undefined}
+          onReuse={canCreate ? openReuse : undefined}
+          onEdit={canCreate ? openEdit : undefined}
+          onRowClick={(campaign) => setViewingId(campaign.id)}
           onSend={canSend ? setSending : undefined}
           onCancel={canCancel ? setCancelling : undefined}
         />
       </div>
 
+      <CampaignDetailPanel
+        campaign={viewing}
+        onClose={() => setViewingId(null)}
+        onReuse={canCreate ? openReuse : undefined}
+        onEdit={canCreate ? openEdit : undefined}
+      />
+
       <AddCampaignPanel
         isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
+        onClose={closePanel}
         onSubmit={handleSubmit}
-        isSubmitting={createCampaign.isPending}
+        isSubmitting={createCampaign.isPending || updateCampaign.isPending}
+        initial={initialFor(editing ?? reusing, !!editing)}
+        title={
+          editing
+            ? 'Edit Campaign'
+            : reusing
+              ? reusing.status === 'FAILED'
+                ? 'Retry Campaign'
+                : 'Resend Campaign'
+              : undefined
+        }
+        description={
+          editing
+            ? 'Change the details of this scheduled campaign. Recipients are worked out again when you save.'
+            : reusing
+              ? 'Review the details from the original campaign, then send it again.'
+              : undefined
+        }
+        submitLabel={editing ? 'Save Changes' : undefined}
       />
 
       <Modal

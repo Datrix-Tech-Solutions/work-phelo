@@ -604,6 +604,17 @@ describe('ClientsService', () => {
       });
     });
 
+    it('removes the phone and email of the primary contact when they are null', async () => {
+      await service.update(user, 'client-1', {
+        primaryContact: { phone: null, email: null },
+      });
+
+      expect(prisma.tx.marketingClientContact.update).toHaveBeenCalledWith({
+        where: { id: 'contact-1' },
+        data: { phone: null, email: null },
+      });
+    });
+
     it('updates the location', async () => {
       await service.update(user, 'client-1', {
         location: { label: 'Kumasi, Ghana', latitude: 6.69, longitude: -1.62 },

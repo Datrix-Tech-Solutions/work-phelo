@@ -7,6 +7,7 @@ import { RequestUser } from '@work-phelo/types';
 import { Prisma } from '../../prisma/generated/client';
 import {
   CampaignSegmentsService,
+  clientSegmentWhere,
   segmentWhere,
 } from './campaign-segments.service';
 
@@ -28,9 +29,12 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   normalizedName: 'negotiating insurers',
   recipientType: 'PROSPECT',
   businessTypeIds: [TYPE],
+  productIds: [],
   pipelineStageIds: [STAGE],
   includeProspectIds: [],
   excludeProspectIds: [],
+  includeClientIds: [],
+  excludeClientIds: [],
   ...overrides,
 });
 
@@ -46,12 +50,14 @@ describe('CampaignSegmentsService', () => {
     marketingCrmSettingOption: { findMany: jest.fn(), count: jest.fn() },
     marketingPipelineStage: { count: jest.fn() },
     marketingProspect: { count: jest.fn(), groupBy: jest.fn() },
+    marketingClient: { count: jest.fn() },
   };
   const service = new CampaignSegmentsService(prisma as never);
 
   beforeEach(() => {
     jest.resetAllMocks();
     prisma.marketingProspect.count.mockResolvedValue(5);
+    prisma.marketingClient.count.mockResolvedValue(3);
     prisma.marketingCrmSettingOption.count.mockResolvedValue(1);
     prisma.marketingPipelineStage.count.mockResolvedValue(1);
   });
@@ -81,6 +87,121 @@ describe('CampaignSegmentsService', () => {
           { id: { notIn: [P2] } },
         ],
       });
+    });
+  });
+
+  describe('clientSegmentWhere', () => {
+    it('matches the business types, or the picked clients, minus the exclusions', () => {
+      expect(
+        clientSegmentWhere({
+          businessTypeIds: [TYPE],
+          includeClientIds: [P1],
+          excludeClientIds: [P2],
+        }),
+      ).toEqual({
+        AND: [
+          {
+            OR: [
+              { AND: [{ businessTypeId: { in: [TYPE] } }] },
+              { id: { in: [P1] } },
+            ],
+          },
+          { id: { notIn: [P2] } },
+        ],
+      });
+    });
+  });
+
+  describe('products', () => {
+    const PRODUCT = '33333333-3333-4333-8333-333333333333';
+
+    it('limits prospects to those with any of the products, alongside the other filters', () => {
+      expect(
+        segmentWhere({
+          businessTypeIds: [TYPE],
+          productIds: [PRODUCT],
+          pipelineStageIds: [],
+          includeProspectIds: [],
+          excludeProspectIds: [],
+        }),
+      ).toEqual({
+        AND: [
+          {
+            OR: [
+              {
+                AND: [
+                  { businessTypeId: { in: [TYPE] } },
+                  { products: { some: { productId: { in: [PRODUCT] } } } },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('does not count a product a client is uninterested in', () => {
+      expect(
+        clientSegmentWhere({
+          businessTypeIds: [],
+          productIds: [PRODUCT],
+          includeClientIds: [],
+          excludeClientIds: [],
+        }),
+      ).toEqual({
+        AND: [
+          {
+            OR: [
+              {
+                AND: [
+                  {
+                    products: {
+                      some: {
+                        productId: { in: [PRODUCT] },
+                        status: { not: 'UNINTERESTED' },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('saves a segment made of products alone', async () => {
+      prisma.marketingCampaignSegment.create.mockResolvedValue(
+        row({
+          businessTypeIds: [],
+          pipelineStageIds: [],
+          productIds: [PRODUCT],
+        }),
+      );
+
+      await service.create(user, {
+        name: 'Motor cover',
+        productIds: [PRODUCT],
+      });
+
+      expect(prisma.marketingCampaignSegment.create).toHaveBeenCalledWith({
+        data: like({ productIds: [PRODUCT] }),
+      });
+    });
+
+    it('rejects a product that is not one of the tenant’s', async () => {
+      prisma.marketingCrmSettingOption.count.mockResolvedValue(0);
+
+      await expect(
+        service.create(user, { name: 'X', productIds: [PRODUCT] }),
+      ).rejects.toThrow(/not found/);
+      expect(prisma.marketingCampaignSegment.create).not.toHaveBeenCalled();
+    });
+
+    it('counts clients with the product for a client segment', async () => {
+      await expect(
+        service.count(user, { recipientType: 'CLIENT', productIds: [PRODUCT] }),
+      ).resolves.toEqual({ prospectCount: 0, clientCount: 3 });
     });
   });
 
@@ -132,7 +253,11 @@ describe('CampaignSegmentsService', () => {
           pipelineStageIds: [STAGE],
         }),
       });
-      expect(result).toMatchObject({ id: 'seg-1', prospectCount: 5 });
+      expect(result).toMatchObject({
+        id: 'seg-1',
+        prospectCount: 5,
+        clientCount: 0,
+      });
     });
 
     it('needs at least one filter or picked prospect', async () => {
@@ -216,14 +341,143 @@ describe('CampaignSegmentsService', () => {
     it('counts what some rules match without saving', async () => {
       await expect(
         service.count(user, { businessTypeIds: [TYPE] }),
-      ).resolves.toEqual({ prospectCount: 5 });
+      ).resolves.toEqual({ prospectCount: 5, clientCount: 0 });
     });
 
     it('is zero with no rules', async () => {
       await expect(service.count(user, {})).resolves.toEqual({
         prospectCount: 0,
+        clientCount: 0,
       });
       expect(prisma.marketingProspect.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('client segments', () => {
+    it('saves a client segment and counts clients, not prospects', async () => {
+      prisma.marketingCampaignSegment.create.mockResolvedValue(
+        row({ recipientType: 'CLIENT', pipelineStageIds: [] }),
+      );
+
+      const result = await service.create(user, {
+        name: 'Insurance clients',
+        recipientType: 'CLIENT',
+        businessTypeIds: [TYPE],
+      });
+
+      expect(prisma.marketingCampaignSegment.create).toHaveBeenCalledWith({
+        data: like({ recipientType: 'CLIENT', businessTypeIds: [TYPE] }),
+      });
+      expect(result).toMatchObject({ prospectCount: 0, clientCount: 3 });
+      expect(prisma.marketingProspect.count).not.toHaveBeenCalled();
+    });
+
+    it('lets a client segment be made of picked clients alone', async () => {
+      prisma.marketingCampaignSegment.create.mockResolvedValue(
+        row({
+          recipientType: 'CLIENT',
+          businessTypeIds: [],
+          pipelineStageIds: [],
+          includeClientIds: [P1],
+        }),
+      );
+
+      await expect(
+        service.create(user, {
+          name: 'VIPs',
+          recipientType: 'CLIENT',
+          includeClientIds: [P1],
+        }),
+      ).resolves.toMatchObject({ clientCount: 3 });
+    });
+
+    it.each([
+      ['a sales stage', { pipelineStageIds: [STAGE] }],
+      ['a prospect pick', { includeProspectIds: [P1] }],
+    ])('refuses %s in a client segment', async (_label, rules) => {
+      await expect(
+        service.create(user, {
+          name: 'X',
+          recipientType: 'CLIENT',
+          businessTypeIds: [TYPE],
+          ...rules,
+        }),
+      ).rejects.toThrow(/cannot be used in a client segment/);
+      expect(prisma.marketingCampaignSegment.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a client pick in a prospect segment', async () => {
+      await expect(
+        service.create(user, {
+          name: 'X',
+          businessTypeIds: [TYPE],
+          includeClientIds: [P1],
+        }),
+      ).rejects.toThrow(/cannot be used in a prospect segment/);
+    });
+
+    it('needs a filter or a picked client', async () => {
+      await expect(
+        service.create(user, { name: 'X', recipientType: 'CLIENT' }),
+      ).rejects.toThrow(/at least one filter/);
+    });
+
+    it('does not let a saved segment change who it holds', async () => {
+      prisma.marketingCampaignSegment.findFirst.mockResolvedValue(row());
+
+      await expect(
+        service.update(user, 'seg-1', { recipientType: 'CLIENT' }),
+      ).rejects.toThrow(/cannot be changed/);
+      expect(prisma.marketingCampaignSegment.update).not.toHaveBeenCalled();
+    });
+
+    it('counts clients for client rules', async () => {
+      await expect(
+        service.count(user, {
+          recipientType: 'CLIENT',
+          businessTypeIds: [TYPE],
+        }),
+      ).resolves.toEqual({ prospectCount: 0, clientCount: 3 });
+    });
+
+    it('resolves prospect and client segments into separate filters', async () => {
+      prisma.marketingCampaignSegment.findMany.mockResolvedValue([
+        row({ id: 'seg-p' }),
+        row({
+          id: 'seg-c',
+          recipientType: 'CLIENT',
+          pipelineStageIds: [],
+        }),
+      ]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        { id: TYPE, name: 'Insurance' },
+      ]);
+
+      const result = await service.resolve(TENANT, ['seg-p', 'seg-c']);
+
+      expect(result.prospectWhere).toEqual({
+        tenantId: TENANT,
+        OR: [segmentWhere(row())],
+      });
+      expect(result.clientWhere).toEqual({
+        tenantId: TENANT,
+        OR: [
+          clientSegmentWhere({
+            businessTypeIds: [TYPE],
+            includeClientIds: [],
+            excludeClientIds: [],
+          }),
+        ],
+      });
+    });
+
+    it('has no client filter when only prospect segments were chosen', async () => {
+      prisma.marketingCampaignSegment.findMany.mockResolvedValue([row()]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
+
+      const result = await service.resolve(TENANT, ['seg-1']);
+
+      expect(result.clientWhere).toBeNull();
     });
   });
 });

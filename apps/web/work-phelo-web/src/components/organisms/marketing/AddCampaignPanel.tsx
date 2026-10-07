@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -58,20 +58,68 @@ interface Props {
   onClose: () => void;
   onSubmit: (data: CampaignForm) => void;
   isSubmitting?: boolean;
+  /**
+   * Details to start from: a resend or retry (dispatch left at its default, instant) or an edit of
+   * a scheduled campaign (which also carries its dispatch and date).
+   */
+  initial?: Pick<
+    CampaignForm,
+    'name' | 'outreachChannel' | 'targetSegment' | 'subject' | 'message' | 'senderIdentityId'
+  > &
+    Partial<Pick<CampaignForm, 'dispatch' | 'scheduledDate'>>;
+  title?: string;
+  description?: string;
+  /** Replaces the save button's text, which otherwise follows the chosen dispatch. */
+  submitLabel?: string;
 }
 
-export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Props) {
-  const { data: segments = [] } = useCampaignSegments(isOpen);
+/** "Saved segment · 12 clients": what kind of segment it is and how many people it holds. */
+function segmentSummary(segment: CampaignSegment) {
+  const kind = segment.builtIn ? 'Business type' : 'Saved segment';
+  const [count, singular] =
+    segment.recipientType === 'CLIENT'
+      ? [segment.clientCount, 'client']
+      : [segment.prospectCount, 'prospect'];
+  return `${kind} · ${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+/** "3 unique prospects", "2 unique clients" or "3 unique prospects and 2 clients". */
+function audienceSummary(prospects: number, clients: number) {
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+  if (clients === 0) return `${plural(prospects, 'unique prospect')}`;
+  if (prospects === 0) return `${plural(clients, 'unique client')}`;
+  return `${plural(prospects, 'unique prospect')} and ${plural(clients, 'client')}`;
+}
+
+export function AddCampaignPanel({
+  isOpen,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  initial,
+  title = 'New Campaign',
+  description = 'Set up an outreach campaign for a target segment.',
+  submitLabel,
+}: Props) {
+  const { data: segments = [], isPending: segmentsPending } = useCampaignSegments(isOpen);
   const [segmentModal, setSegmentModal] = useState<{ segment: CampaignSegment | null } | null>(
     null,
   );
-  const { data: approvedSenders = [] } = useSmsSenderIdentities({ status: 'APPROVED' });
+  const { data: approvedSenders = [], isPending: sendersPending } = useSmsSenderIdentities({
+    status: 'APPROVED',
+  });
+  const prefilled = useRef(false);
+  /** Segments of the campaign being reused that no longer exist, so were left out. */
+  const droppedSegments =
+    initial && !segmentsPending
+      ? initial.targetSegment.filter((id) => !segments.some((segment) => segment.id === id)).length
+      : 0;
   const segmentOptions = useMemo(
     () =>
       segments.map((segment) => ({
         value: segment.id,
         label: segment.name,
-        sublabel: `${segment.builtIn ? 'Business type' : 'Saved segment'} · ${segment.prospectCount} prospect${segment.prospectCount === 1 ? '' : 's'}`,
+        sublabel: segmentSummary(segment),
       })),
     [segments],
   );
@@ -116,8 +164,29 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
   // The caller closes the panel after a successful save, so reset on close rather than on submit:
   // a failed save keeps what the user typed.
   useEffect(() => {
-    if (!isOpen) reset(DEFAULT_VALUES);
+    if (!isOpen) {
+      reset(DEFAULT_VALUES);
+      prefilled.current = false;
+    }
   }, [isOpen, reset]);
+
+  // Start from an earlier campaign once the segments and senders it refers to are known, keeping
+  // only the ones that still exist (a deleted segment or an unapproved sender can't be reused).
+  useEffect(() => {
+    if (!isOpen || !initial || prefilled.current || segmentsPending || sendersPending) return;
+    prefilled.current = true;
+    const targetSegment = initial.targetSegment.filter((id) =>
+      segments.some((segment) => segment.id === id),
+    );
+    reset({
+      ...DEFAULT_VALUES,
+      ...initial,
+      targetSegment,
+      senderIdentityId: approvedSenders.some((sender) => sender.id === initial.senderIdentityId)
+        ? initial.senderIdentityId
+        : '',
+    });
+  }, [isOpen, initial, segments, segmentsPending, approvedSenders, sendersPending, reset]);
 
   const preview = useCampaignPreview({
     segmentIds: segmentValue,
@@ -150,20 +219,28 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="New Campaign"
-      description="Set up an outreach campaign for a target segment."
+      title={title}
+      description={description}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button onClick={handleSubmit(handleFormSubmit)} isLoading={isSubmitting}>
-            {dispatchValue === 'schedule' ? 'Schedule Campaign' : 'Send Campaign'}
+            {submitLabel ?? (dispatchValue === 'schedule' ? 'Schedule Campaign' : 'Save Campaign')}
           </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+        {droppedSegments > 0 && (
+          <p className="rounded-input bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            {droppedSegments === 1
+              ? '1 target segment from the original campaign no longer exists and was left out.'
+              : `${droppedSegments} target segments from the original campaign no longer exist and were left out.`}{' '}
+            Pick the audience again to continue.
+          </p>
+        )}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Campaign Details
         </p>
@@ -198,25 +275,32 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
             validate: (v) => v.length > 0 || 'Select at least one target segment',
           })}
         />
-        <div className="flex items-end gap-2">
-          <div className="flex-1 min-w-0">
-            <MultiSelect
-              label="Target Segment"
-              placeholder="Select target segments"
-              value={segmentValue}
-              onChange={(v) => setValue('targetSegment', v, { shouldValidate: true })}
-              options={segmentOptions}
-              error={errors.targetSegment?.message}
-              hideChips
-            />
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+          <label className="text-sm font-bold text-gray-900">Target Segment</label>
+          {/* The label and error sit outside the row, so the button stretches to the field's height. */}
+          <div className="flex items-stretch gap-2">
+            <div className="flex-1 min-w-0">
+              <MultiSelect
+                placeholder="Select target segments"
+                value={segmentValue}
+                onChange={(v) => setValue('targetSegment', v, { shouldValidate: true })}
+                options={segmentOptions}
+                hideChips
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setSegmentModal({ segment: null })}
+              aria-label="Create segment"
+              title="Create segment"
+              className="shrink-0 aspect-square px-0 py-0"
+            >
+              <Icons.Plus className="w-4 h-4" />
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setSegmentModal({ segment: null })}
-            className="shrink-0 h-11.5"
-          >
-            + Create
-          </Button>
+          {errors.targetSegment?.message && (
+            <p className="text-xs text-red-500">{errors.targetSegment.message}</p>
+          )}
         </div>
 
         {selectedSegments.length > 0 && (
@@ -228,10 +312,7 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">{segment.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {segment.builtIn ? 'Business type' : 'Saved segment'} · {segment.prospectCount}{' '}
-                    prospect{segment.prospectCount === 1 ? '' : 's'}
-                  </p>
+                  <p className="text-xs text-gray-500">{segmentSummary(segment)}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   {!segment.builtIn && (
@@ -264,8 +345,8 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
 
         {preview.data && (
           <p className="text-xs text-gray-500">
-            {preview.data.prospectCount} unique prospect
-            {preview.data.prospectCount === 1 ? '' : 's'} across the selected segment
+            {audienceSummary(preview.data.prospectCount, preview.data.clientCount)} across the
+            selected segment
             {selectedSegments.length === 1 ? '' : 's'} · {preview.data.reachable} message
             {preview.data.reachable === 1 ? '' : 's'}
           </p>
