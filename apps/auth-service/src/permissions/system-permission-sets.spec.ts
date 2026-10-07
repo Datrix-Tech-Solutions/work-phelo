@@ -1,5 +1,8 @@
 import { PermissionAction } from '../../prisma/generated/client';
-import { seedDefaultPermissionTemplates } from './system-permission-sets';
+import {
+  seedDefaultPermissionTemplates,
+  syncUserSystemPermissionSet,
+} from './system-permission-sets';
 
 type MockFn = jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
 
@@ -43,6 +46,7 @@ function makePrisma() {
           _count: { users: set.userCount },
         };
       }) as MockFn,
+      findMany: jest.fn().mockResolvedValue([]) as MockFn,
       update: jest.fn(async ({ where, data }) => {
         const current = Array.from(permissionSets.values()).find(
           (set) => set.id === where.id,
@@ -67,6 +71,10 @@ function makePrisma() {
         permissionSets.set(`${set.tenantId}:${set.name}`, set);
         return { id };
       }) as MockFn,
+    },
+    userPermissionSet: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }) as MockFn,
+      upsert: jest.fn().mockResolvedValue({}) as MockFn,
     },
     permissionSetResource: {
       findMany: jest.fn().mockResolvedValue([]) as MockFn,
@@ -126,5 +134,31 @@ describe('seedDefaultPermissionTemplates', () => {
         skipDuplicates: true,
       }),
     );
+  });
+});
+
+describe('syncUserSystemPermissionSet', () => {
+  it('does not reseed global permission resources when the role has no active system set mapping', async () => {
+    const prisma = makePrisma();
+
+    await syncUserSystemPermissionSet(prisma as never, {
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      role: 'EMPLOYEE',
+      grantedBy: 'user-1',
+    });
+
+    expect(prisma.resource.upsert).not.toHaveBeenCalled();
+    expect(prisma.permissionSet.findMany).not.toHaveBeenCalled();
+    expect(prisma.userPermissionSet.upsert).not.toHaveBeenCalled();
+    expect(prisma.userPermissionSet.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        permissionSet: {
+          tenantId: 'tenant-1',
+          isActive: false,
+        },
+      },
+    });
   });
 });

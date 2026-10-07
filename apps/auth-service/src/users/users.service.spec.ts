@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -12,19 +16,56 @@ jest.mock('bcrypt', () => ({
 type MockFn = jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
 
 function makePrisma() {
-  return {
+  const prisma: {
+    $transaction: jest.MockedFunction<
+      (callback: (tx: unknown) => Promise<unknown>) => Promise<unknown>
+    >;
+    resource: { upsert: MockFn };
+    user: {
+      findFirst: MockFn;
+      findUnique: MockFn;
+      create: MockFn;
+      update: MockFn;
+      delete: MockFn;
+    };
+    tenant: { findUnique: MockFn; update: MockFn };
+    permissionSet: { findFirst: MockFn; findMany: MockFn };
+    userPermissionSet: {
+      createMany: MockFn;
+      deleteMany: MockFn;
+      upsert: MockFn;
+    };
+    refreshToken: { create: MockFn };
+  } = {
+    $transaction: jest.fn(async (callback) => callback(prisma)),
+    resource: {
+      upsert: jest.fn() as MockFn,
+    },
     user: {
       findFirst: jest.fn() as MockFn,
       findUnique: jest.fn() as MockFn,
+      create: jest.fn() as MockFn,
       update: jest.fn().mockResolvedValue({}) as MockFn,
+      delete: jest.fn().mockResolvedValue({}) as MockFn,
     },
     tenant: {
+      findUnique: jest.fn() as MockFn,
       update: jest.fn().mockResolvedValue({}) as MockFn,
+    },
+    permissionSet: {
+      findFirst: jest.fn() as MockFn,
+      findMany: jest.fn().mockResolvedValue([]) as MockFn,
+    },
+    userPermissionSet: {
+      createMany: jest.fn().mockResolvedValue({ count: 0 }) as MockFn,
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }) as MockFn,
+      upsert: jest.fn().mockResolvedValue({}) as MockFn,
     },
     refreshToken: {
       create: jest.fn().mockResolvedValue({}) as MockFn,
     },
   };
+  return prisma;
 }
 
 function makeRabbit() {
@@ -170,6 +211,188 @@ describe('UsersService.resendInvite', () => {
     await expect(service.resendInvite('tenant-2', 'user-1')).rejects.toThrow(
       NotFoundException,
     );
+  });
+});
+
+describe('UsersService.provisionEmployeeInvite', () => {
+  const originalSuperAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+  const tenant = {
+    id: 'tenant-1',
+    slug: 'acme-ghana',
+    name: 'Acme Ghana',
+  };
+  const pendingUser = {
+    id: 'user-1',
+    tenantId: tenant.id,
+    email: 'kwame@acmeghana.com',
+    firstName: 'Kwame',
+    lastName: 'Mensah',
+    phone: '+233200000000',
+    role: 'EMPLOYEE',
+    status: 'PENDING_VERIFICATION',
+    forcePasswordReset: true,
+    inviteToken: 'invite-token',
+    inviteExpiresAt: new Date('2026-06-01T00:00:00.000Z'),
+  };
+  const inviteDto = {
+    email: pendingUser.email,
+    firstName: pendingUser.firstName,
+    lastName: pendingUser.lastName,
+    phone: pendingUser.phone,
+  };
+
+  beforeEach(() => {
+    process.env.SUPER_ADMIN_EMAIL = 'owner@workphelo.com';
+  });
+
+  afterAll(() => {
+    process.env.SUPER_ADMIN_EMAIL = originalSuperAdminEmail;
+  });
+
+  function arrangeProvisioning() {
+    const prisma = makePrisma();
+    prisma.permissionSet.findFirst.mockResolvedValue({ id: 'employee-set' });
+    prisma.tenant.findUnique.mockResolvedValue(tenant);
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.permissionSet.findMany.mockResolvedValue([
+      { id: 'employee-set', name: 'Employee' },
+    ]);
+    prisma.user.create.mockResolvedValue(pendingUser);
+    const rabbit = makeRabbit();
+    const audit = makeAudit();
+    const service = makeService(prisma, rabbit, audit);
+
+    return { prisma, rabbit, audit, service };
+  }
+
+  it('assigns the baseline Employee permission set without reseeding global resources', async () => {
+    const { prisma, service } = arrangeProvisioning();
+
+    const result = await service.provisionEmployeeInvite(tenant.id, inviteDto);
+
+    expect(result).toEqual({
+      userId: pendingUser.id,
+      email: pendingUser.email,
+      inviteSent: true,
+    });
+    expect(prisma.resource.upsert).not.toHaveBeenCalled();
+    expect(prisma.userPermissionSet.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          userId: pendingUser.id,
+          permissionSetId: 'employee-set',
+          grantedBy: pendingUser.id,
+        },
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it('creates the user and assigns baseline permissions in one transaction to avoid cleanup races', async () => {
+    const { prisma, service } = arrangeProvisioning();
+    let insideTransaction = false;
+    prisma.$transaction.mockImplementationOnce(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        insideTransaction = true;
+        try {
+          return await callback(prisma);
+        } finally {
+          insideTransaction = false;
+        }
+      },
+    );
+    prisma.user.create.mockImplementationOnce(async () => {
+      expect(insideTransaction).toBe(true);
+      return pendingUser;
+    });
+    prisma.userPermissionSet.createMany.mockImplementationOnce(async () => {
+      expect(insideTransaction).toBe(true);
+      return { count: 1 };
+    });
+
+    await service.provisionEmployeeInvite(tenant.id, inviteDto);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fail successful provisioning when invite notification publishing fails', async () => {
+    const { prisma, rabbit, service } = arrangeProvisioning();
+    rabbit.notificationInviteUser.mockRejectedValueOnce(
+      new Error('notification unavailable'),
+    );
+
+    await expect(
+      service.provisionEmployeeInvite(tenant.id, inviteDto),
+    ).resolves.toEqual({
+      userId: pendingUser.id,
+      email: pendingUser.email,
+      inviteSent: true,
+    });
+
+    expect(prisma.user.create).toHaveBeenCalled();
+    expect(prisma.userPermissionSet.createMany).toHaveBeenCalled();
+  });
+
+  it('keeps the mocked DB provisioning path well below the HR RPC timeout', async () => {
+    const { service } = arrangeProvisioning();
+    const startedAt = Date.now();
+
+    await service.provisionEmployeeInvite(tenant.id, inviteDto);
+
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+  });
+});
+
+describe('UsersService.deletePendingEmployeeInvite', () => {
+  it('is idempotent when the pending invite no longer exists', async () => {
+    const prisma = makePrisma();
+    prisma.user.findUnique.mockResolvedValue(null);
+    const service = makeService(prisma);
+
+    await expect(
+      service.deletePendingEmployeeInvite('tenant-1', {
+        email: 'missing@acmeghana.com',
+      }),
+    ).resolves.toEqual({ deleted: false });
+    expect(prisma.user.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes only rollback-eligible pending employee invites', async () => {
+    const prisma = makePrisma();
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      role: 'EMPLOYEE',
+      status: 'PENDING_VERIFICATION',
+      inviteToken: 'token',
+    });
+    const service = makeService(prisma);
+
+    await expect(
+      service.deletePendingEmployeeInvite('tenant-1', {
+        email: 'pending@acmeghana.com',
+      }),
+    ).resolves.toEqual({ deleted: true });
+    expect(prisma.user.delete).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+    });
+  });
+
+  it('rejects rollback once an invite is no longer pending', async () => {
+    const prisma = makePrisma();
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      role: 'EMPLOYEE',
+      status: 'ACTIVE',
+      inviteToken: null,
+    });
+    const service = makeService(prisma);
+
+    await expect(
+      service.deletePendingEmployeeInvite('tenant-1', {
+        email: 'active@acmeghana.com',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.user.delete).not.toHaveBeenCalled();
   });
 });
 
