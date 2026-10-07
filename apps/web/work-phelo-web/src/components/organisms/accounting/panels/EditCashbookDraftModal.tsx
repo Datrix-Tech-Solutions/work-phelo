@@ -46,6 +46,9 @@ export function EditCashbookDraftModal({ transaction, onClose, onSaved }: Props)
   const [offsetGlAccountId, setOffsetGlAccountId] = useState(transaction.offsetGlAccountId ?? '');
   const [reference, setReference] = useState(transaction.reference ?? '');
   const [description, setDescription] = useState(transaction.description);
+  // With several lines the one account picker no longer means anything; the lines are shown
+  // as they are and the account is left alone.
+  const hasSeveralLines = (transaction.lines?.length ?? 0) > 1;
 
   const cashAccountOptions = useMemo(
     () => cashAccounts.map((a) => ({ value: a.id, label: a.name })),
@@ -64,7 +67,7 @@ export function EditCashbookDraftModal({ transaction, onClose, onSaved }: Props)
     ...(settlementMethod !== transaction.settlementMethod
       ? { settlementMethod: settlementMethod as AccountingCashbookSettlementMethod }
       : {}),
-    ...(offsetGlAccountId && offsetGlAccountId !== transaction.offsetGlAccountId
+    ...(!hasSeveralLines && offsetGlAccountId && offsetGlAccountId !== transaction.offsetGlAccountId
       ? { offsetGlAccountId }
       : {}),
     ...(reference.trim() && reference.trim() !== (transaction.reference ?? '')
@@ -143,14 +146,39 @@ export function EditCashbookDraftModal({ transaction, onClose, onSaved }: Props)
           onChange={setSettlementMethod}
           clearable={false}
         />
-        <SearchSelect
-          label={transaction.direction === 'INFLOW' ? 'Account to Credit' : 'Account to Debit'}
-          placeholder="Select account"
-          options={glAccountOptions}
-          value={offsetGlAccountId}
-          onChange={setOffsetGlAccountId}
-          clearable={false}
-        />
+        {hasSeveralLines ? (
+          <div className="flex flex-col gap-1 rounded-xl border border-gray-200 p-3 text-sm">
+            <span className="font-semibold text-gray-700">Lines</span>
+            {transaction.lines.map((line) => (
+              <div key={line.id} className="flex items-center justify-between text-gray-600">
+                <span>
+                  {line.glAccount.code} — {line.glAccount.name}
+                  {line.kind !== 'ITEM' && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      {line.kind === 'DEDUCTION' ? 'Deduction' : 'Charge'}
+                    </span>
+                  )}
+                </span>
+                <span>
+                  {line.kind === 'DEDUCTION' ? '− ' : line.kind === 'CHARGE' ? '+ ' : ''}
+                  {Number(line.amount).toLocaleString()}
+                </span>
+              </div>
+            ))}
+            <span className="pt-1 text-xs text-gray-500">
+              This entry has several lines. Changing its lines isn&apos;t available here yet.
+            </span>
+          </div>
+        ) : (
+          <SearchSelect
+            label={transaction.direction === 'INFLOW' ? 'Account to Credit' : 'Account to Debit'}
+            placeholder="Select account"
+            options={glAccountOptions}
+            value={offsetGlAccountId}
+            onChange={setOffsetGlAccountId}
+            clearable={false}
+          />
+        )}
         <Input
           label="Reference"
           value={reference}

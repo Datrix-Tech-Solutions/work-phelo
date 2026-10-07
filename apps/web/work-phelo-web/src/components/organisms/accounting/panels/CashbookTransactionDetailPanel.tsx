@@ -184,18 +184,51 @@ export function CashbookTransactionDetailPanel({
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
           <Row label="Type" value={transaction.transactionType} />
           <Row label="Cash/Bank Account" value={transaction.cashAccount.name} />
-          {transaction.offsetGlAccount && (
-            <Row
-              label="Offset Account"
-              value={`${transaction.offsetGlAccount.code} — ${transaction.offsetGlAccount.name}`}
-            />
+          {(transaction.lines?.length ?? 0) > 1 ? (
+            <div className="flex flex-col gap-1 border-t border-gray-100 pt-2">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Lines
+              </span>
+              {transaction.lines.map((line) => (
+                <div key={line.id} className="flex items-start justify-between gap-3 text-sm">
+                  <span className="min-w-0 text-gray-700">
+                    {line.glAccount.code} — {line.glAccount.name}
+                    {line.kind !== 'ITEM' && (
+                      <span className="ml-2 text-xs font-medium text-gray-500">
+                        {line.kind === 'DEDUCTION' ? 'Deduction' : 'Charge'}
+                      </span>
+                    )}
+                    {line.description && (
+                      <span className="block text-xs text-gray-500">{line.description}</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-gray-900">
+                    {line.kind === 'DEDUCTION' ? '− ' : line.kind === 'CHARGE' ? '+ ' : ''}
+                    {fmtAmount(line.amount, transaction.currency)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            transaction.offsetGlAccount && (
+              <Row
+                label="Offset Account"
+                value={`${transaction.offsetGlAccount.code} — ${transaction.offsetGlAccount.name}`}
+              />
+            )
           )}
           <Row label="Transaction Date" value={fmtDate(transaction.transactionDate)} />
           {transaction.postedJournalEntry && (
             <Row label="Journal #" value={transaction.postedJournalEntry.journalNumber} />
           )}
           <div className="border-t border-gray-100 pt-2 flex items-center justify-between text-sm">
-            <span className="text-gray-600">Amount</span>
+            <span className="text-gray-600">
+              {transaction.lines?.some((line) => line.kind !== 'ITEM')
+                ? transaction.direction === 'INFLOW'
+                  ? 'Cash received'
+                  : 'Cash paid'
+                : 'Amount'}
+            </span>
             <span className="font-semibold text-gray-900">
               {fmtAmount(transaction.amount, transaction.currency)}
             </span>

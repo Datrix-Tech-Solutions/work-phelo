@@ -293,6 +293,15 @@ export class CreateTransactionTypeDto {
   @IsOptional()
   @IsBoolean()
   isLinked?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'When true the New Transaction form asks for quantity × unit price and derives the amount; when false it takes a straight amount.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  usesQuantityPrice?: boolean;
 }
 
 export class UpdateTransactionTypeDto extends PartialType(

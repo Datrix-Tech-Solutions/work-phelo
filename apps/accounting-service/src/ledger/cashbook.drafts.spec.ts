@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any */
 import {
   BadRequestException,
   ConflictException,
@@ -28,17 +28,36 @@ describe('CashbookService draft receipts and payments', () => {
     sourceModule: 'MARKETING',
     receivableReceipt: null,
     payablePayment: null,
+    lines: [],
     ...overrides,
   });
 
-  const makePrisma = () => ({
-    cashbookTransaction: { findFirst: jest.fn(), updateMany: jest.fn() },
-    accountingCashAccount: { findFirst: jest.fn() },
-    accountingAuditLog: { create: jest.fn() },
-    $transaction: jest.fn((fn: (tx: unknown) => unknown) =>
-      Promise.resolve(fn({})),
-    ),
-  });
+  const makePrisma = () => {
+    const client: Record<string, any> = {
+      cashbookTransaction: { findFirst: jest.fn(), updateMany: jest.fn() },
+      cashbookTransactionLine: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      accountingCashAccount: { findFirst: jest.fn() },
+      accountingAuditLog: { create: jest.fn() },
+    };
+    client.$transaction = jest.fn((fn: (tx: unknown) => unknown) =>
+      Promise.resolve(fn(client)),
+    );
+    return client as {
+      cashbookTransaction: { findFirst: jest.Mock; updateMany: jest.Mock };
+      cashbookTransactionLine: {
+        deleteMany: jest.Mock;
+        createMany: jest.Mock;
+        update: jest.Mock;
+      };
+      accountingCashAccount: { findFirst: jest.Mock };
+      accountingAuditLog: { create: jest.Mock };
+      $transaction: jest.Mock;
+    };
+  };
 
   let prisma: ReturnType<typeof makePrisma>;
   let notifier: { notify: jest.Mock };
@@ -159,6 +178,82 @@ describe('CashbookService draft receipts and payments', () => {
       ]) {
         expect(data).not.toHaveProperty(locked);
       }
+    });
+
+    describe('lines', () => {
+      const twoLines = [
+        { glAccountId: 'acct-rent', amount: 2000 },
+        { glAccountId: 'acct-insurance', amount: 70000, description: 'Policy' },
+      ];
+
+      beforeEach(() => {
+        prisma.accountingCashAccount.findFirst.mockResolvedValue({
+          glAccountId: 'cash-gl',
+        });
+      });
+
+      it('replaces every line and sets the amount to their sum', async () => {
+        await service.updateDraftTransaction(user, 'cb-1', { lines: twoLines });
+
+        const data =
+          prisma.cashbookTransaction.updateMany.mock.calls[0][0].data;
+        expect(Number(data.amount.toString())).toBe(72000);
+        expect(data.offsetGlAccountId).toBe('acct-rent');
+        expect(data.quantity).toBeNull();
+        expect(prisma.cashbookTransactionLine.deleteMany).toHaveBeenCalled();
+        const created =
+          prisma.cashbookTransactionLine.createMany.mock.calls[0][0].data;
+        expect(created).toHaveLength(2);
+        expect(created[1]).toMatchObject({
+          tenantId: 'tenant-1',
+          transactionId: 'cb-1',
+          sequence: 2,
+          glAccountId: 'acct-insurance',
+          description: 'Policy',
+        });
+      });
+
+      it('refuses lines combined with a single offset account', async () => {
+        await expect(
+          service.updateDraftTransaction(user, 'cb-1', {
+            lines: twoLines,
+            offsetGlAccountId: 'acct-2',
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it("refuses a line on the entry's own cash account", async () => {
+        await expect(
+          service.updateDraftTransaction(user, 'cb-1', {
+            lines: [{ glAccountId: 'cash-gl', amount: 10 }],
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(prisma.cashbookTransaction.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('refuses to change one account on an entry with several lines', async () => {
+        prisma.cashbookTransaction.findFirst.mockResolvedValue(
+          draft({ lines: [{ id: 'l1' }, { id: 'l2' }] }),
+        );
+        await expect(
+          service.updateDraftTransaction(user, 'cb-1', {
+            offsetGlAccountId: 'acct-2',
+          }),
+        ).rejects.toThrow('edit its lines');
+      });
+
+      it('keeps a single line in step with a changed account', async () => {
+        prisma.cashbookTransaction.findFirst.mockResolvedValue(
+          draft({ lines: [{ id: 'l1' }] }),
+        );
+        await service.updateDraftTransaction(user, 'cb-1', {
+          offsetGlAccountId: 'acct-2',
+        });
+        expect(prisma.cashbookTransactionLine.update).toHaveBeenCalledWith({
+          where: { id_tenantId: { id: 'l1', tenantId: 'tenant-1' } },
+          data: { glAccountId: 'acct-2' },
+        });
+      });
     });
 
     it('rejects an attempt to send the locked fields at all', async () => {

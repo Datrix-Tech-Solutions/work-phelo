@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -13,8 +15,10 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { AccountingSettlementMethod } from '../../../prisma/generated/client';
+import { CashbookEntryLineDto } from './cashbook.dto';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -97,7 +101,7 @@ export class UpdateReceivableInvoiceDraftDto {
   externalReference?: string;
 }
 
-/** What can still be changed on a draft cashbook entry (amount, quantity and unit price are fixed). */
+/** What can still be changed on a draft cashbook entry. Its amount only changes by replacing its lines. */
 export class UpdateCashbookDraftDto {
   @ApiPropertyOptional({ type: String, format: 'date' })
   @IsOptional()
@@ -121,6 +125,19 @@ export class UpdateCashbookDraftDto {
   @IsOptional()
   @IsUUID()
   offsetGlAccountId?: string;
+
+  @ApiPropertyOptional({
+    type: [CashbookEntryLineDto],
+    description:
+      'Replaces every line of the draft; the entry amount becomes the net cash (items plus charges minus deductions). Cannot be combined with offsetGlAccountId.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CashbookEntryLineDto)
+  lines?: CashbookEntryLineDto[];
 
   @ApiPropertyOptional({ example: 1.25, minimum: 0.00000001 })
   @IsOptional()

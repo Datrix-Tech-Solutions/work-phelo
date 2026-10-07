@@ -111,6 +111,14 @@ enum CashbookTransactionType {
   @@schema("accounting")
 }
 
+enum CashbookLineKind {
+  ITEM
+  DEDUCTION
+  CHARGE
+
+  @@schema("accounting")
+}
+
 enum CashbookDirection {
   INFLOW
   OUTFLOW
@@ -341,6 +349,7 @@ model GLAccount {
   subledgers                  SubledgerAccount[]
   cashAccounts                AccountingCashAccount[]
   cashbookOffsets             CashbookTransaction[]          @relation("CashbookOffsetAccount")
+  cashbookLines               CashbookTransactionLine[]      @relation("CashbookLineAccount")
   receivableOffsets           AccountingReceivableDocument[] @relation("ReceivableOffsetAccount")
   receivableArAccounts        AccountingReceivableDocument[] @relation("ReceivableArAccount")
   receivableReceiptArAccounts AccountingReceivableReceipt[]  @relation("ReceivableReceiptArAccount")
@@ -821,6 +830,7 @@ model CashbookTransaction {
   receivableReceipt        AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
   payablePayment           AccountingPayablePayment?    @relation("PayableCashbookTransaction")
   sourceLedgerAllocations  SourceLedgerAllocation[]
+  lines                    CashbookTransactionLine[]
 
   @@unique([tenantId, transactionNumber])
   @@unique([id, tenantId])
@@ -838,43 +848,74 @@ model CashbookTransaction {
   @@schema("accounting")
 }
 
+/// One account an entry posts to, against the entry's single cash line. An ITEM or CHARGE adds
+/// to the entry (a payment debits it, a receipt credits it); a DEDUCTION takes away from it (the
+/// other way round). `CashbookTransaction.amount` is the net cash that moves: items + charges −
+/// deductions. `offsetGlAccountId` mirrors the first item. Entries made before lines existed
+/// have none — readers treat the header offset account and amount as their one item.
+model CashbookTransactionLine {
+  id            String              @id @default(uuid())
+  tenantId      String
+  transactionId String
+  sequence      Int
+  kind          CashbookLineKind    @default(ITEM)
+  glAccountId   String
+  amount        Decimal             @db.Decimal(20, 4)
+  /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
+  quantity      Decimal?            @db.Decimal(20, 4)
+  unitPrice     Decimal?            @db.Decimal(20, 4)
+  description   String?
+  createdAt     DateTime            @default(now())
+  transaction   CashbookTransaction @relation(fields: [transactionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount     GLAccount           @relation("CashbookLineAccount", fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, transactionId, sequence])
+  @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
 /// User-defined transaction types offered when creating a cashbook entry (e.g. Receipt,
 /// Payment). The five system defaults (RECEIPT/PAYMENT/TRANSFER/CHARGE/ADJUSTMENT) are
 /// auto-seeded per tenant on first read via AccountingMasterDataService.listTransactionTypes()
 /// (backed by seedStandardTransactionTypes()) and flagged isSystemDefault, but are otherwise
 /// ordinary rows — freely editable and deletable like any tenant-created type.
 model TransactionType {
-  id              String                  @id @default(uuid())
-  tenantId        String
-  code            String
-  name            String
-  category        TransactionTypeCategory
-  businessRoles   String[]                @default([])
-  allowedDocument String?
+  id                String                  @id @default(uuid())
+  tenantId          String
+  code              String
+  name              String
+  category          TransactionTypeCategory
+  businessRoles     String[]                @default([])
+  allowedDocument   String?
   /// Legacy free-text tag — superseded by sourceTypeId below, kept only so existing rows
   /// aren't silently dropped. Never read by the New Transaction source-picker dropdown.
-  source          String?
+  source            String?
   /// A rule is not the only thing that makes a type usable on New Transaction — a type
   /// linked to a source is usable too, since its offset account/amount come from picking
   /// one of that source's open SourceLedgerEntry items instead of a preconfigured rule line.
-  sourceTypeId    String?
-  description     String?
-  isSystemDefault Boolean                 @default(false)
+  sourceTypeId      String?
+  description       String?
+  isSystemDefault   Boolean                 @default(false)
   /// When true, this Receivable/Payable type posts a single-line direct entry straight
   /// to Cashbook (New Transaction opens the cash/bank + offset account form and calls
   /// /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.
-  postsToCashbook Boolean                 @default(false)
+  postsToCashbook   Boolean                 @default(false)
   /// Receivable/Payable types only (never cashbook-posted): a linked type creates a Credit
   /// Note (receivable) / Debit Note (payable) that must reference an original posted
   /// invoice/bill and reduces its outstanding balance. Its rule is written in the note's own
   /// direction, so the control (AR/AP) line is the opposite side to a normal invoice/bill.
-  isLinked        Boolean                 @default(false)
-  createdByUserId String
-  updatedByUserId String
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  rule            TransactionTypeRule?
-  sourceType      SourceType?             @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  isLinked          Boolean                 @default(false)
+  /// When true the New Transaction form asks for quantity × unit price and derives the amount;
+  /// when false it takes a straight amount (rent, insurance and the like have no quantity).
+  /// Presentation only — the API still accepts quantity and unit price together or not at all.
+  usesQuantityPrice Boolean                 @default(true)
+  createdByUserId   String
+  updatedByUserId   String
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  rule              TransactionTypeRule?
+  sourceType        SourceType?             @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
