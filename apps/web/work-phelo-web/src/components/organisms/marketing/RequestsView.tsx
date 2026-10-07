@@ -8,6 +8,7 @@ import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
 import { RequestDetailPanel } from '@/components/organisms/marketing/RequestDetailPanel';
 import { ApproveRequestModal } from '@/components/organisms/marketing/ApproveRequestModal';
 import { RejectRequestModal } from '@/components/organisms/marketing/RejectRequestModal';
+import { StartTripModal } from '@/components/organisms/marketing/StartTripModal';
 import { CompleteTripModal } from '@/components/organisms/marketing/CompleteTripModal';
 import { useCancelRequest, useRequest, useRequests } from '@/hooks/marketing/useRequests';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
@@ -61,6 +62,7 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
   const [approving, setApproving] = useState<TransportRequest | null>(null);
   const [rejecting, setRejecting] = useState<TransportRequest | null>(null);
   const [rescheduling, setRescheduling] = useState<TransportRequest | null>(null);
+  const [starting, setStarting] = useState<TransportRequest | null>(null);
   const [completing, setCompleting] = useState<TransportRequest | null>(null);
   const [cancelling, setCancelling] = useState<TransportRequest | null>(null);
 
@@ -80,10 +82,11 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
     row.status === 'PENDING' || row.status === 'APPROVED' || row.status === 'ON_ROUTE';
   const canCancelRow = (row: TransportRequest) =>
     isLive(row) && ((isOwn(row) && canCancel) || canApprove);
+  const canStartRow = (row: TransportRequest) =>
+    row.startable && ((isOwn(row) && canEdit) || canApprove);
   const canCompleteRow = (row: TransportRequest) =>
     row.completable && ((isOwn(row) && canEdit) || canApprove);
-  const canRescheduleRow = (row: TransportRequest) =>
-    canApprove && (row.status === 'APPROVED' || row.status === 'ON_ROUTE');
+  const canRescheduleRow = (row: TransportRequest) => canApprove && row.status === 'APPROVED';
 
   if (isError) {
     return (
@@ -127,6 +130,8 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
           canCancel={canCancelRow}
           onReschedule={canApprove ? setRescheduling : undefined}
           canReschedule={canRescheduleRow}
+          onStart={canEdit || canApprove ? setStarting : undefined}
+          canStart={canStartRow}
           onComplete={canEdit || canApprove ? setCompleting : undefined}
           canComplete={canCompleteRow}
         />
@@ -139,6 +144,7 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
         onClose={closeDetail}
         canReview={canApprove}
         canReschedule={!!detail && canRescheduleRow(detail)}
+        canStart={!!detail && canStartRow(detail)}
         canComplete={!!detail && canCompleteRow(detail)}
         canCancel={!!detail && canCancelRow(detail) && detail.status !== 'PENDING'}
         onApprove={(row) => {
@@ -152,6 +158,10 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
         onReschedule={(row) => {
           closeDetail();
           setRescheduling(row);
+        }}
+        onStart={(row) => {
+          closeDetail();
+          setStarting(row);
         }}
         onComplete={(row) => {
           closeDetail();
@@ -169,6 +179,7 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
         onClose={() => setRescheduling(null)}
       />
       <RejectRequestModal request={rejecting} onClose={() => setRejecting(null)} />
+      <StartTripModal request={starting} onClose={() => setStarting(null)} />
       <CompleteTripModal request={completing} onClose={() => setCompleting(null)} />
 
       {cancelling && (

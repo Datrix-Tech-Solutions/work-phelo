@@ -78,7 +78,7 @@ export class InternalFleetAssetsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a vehicle asset name or branch' })
+  @ApiOperation({ summary: 'Update a vehicle asset name, branch or condition' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: InternalUpdateVehicleAssetDto,
@@ -87,6 +87,7 @@ export class InternalFleetAssetsController {
     return this.assets.update(dto.tenantId, id, {
       ...(dto.name !== undefined ? { name: dto.name } : {}),
       ...(dto.branchId !== undefined ? { branchId: dto.branchId ?? '' } : {}),
+      ...(dto.condition !== undefined ? { condition: dto.condition } : {}),
     });
   }
 

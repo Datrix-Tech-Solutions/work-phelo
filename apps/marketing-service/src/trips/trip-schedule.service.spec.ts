@@ -17,6 +17,7 @@ function row(overrides: Record<string, unknown> = {}) {
     driverEmployeeId: 'e1',
     driverName: 'Ama Mensah',
     selfDriven: false,
+    startedAt: null,
     ...overrides,
   };
 }
@@ -53,24 +54,35 @@ describe('TripScheduleService', () => {
     expect(where).not.toHaveProperty('travelDate');
   });
 
-  it('marks a trip booked before its departure and on route after it', async () => {
+  const STARTED = new Date('2026-10-20T10:05:00.000Z');
+
+  it('marks a trip on route only once it is started, whatever the clock says', async () => {
     prisma.marketingTransportRequest.findMany.mockResolvedValue([
-      row({ id: 'running', departureTime: '10:00', returnTime: '12:00' }),
-      row({ id: 'later', departureTime: '14:00', returnTime: '17:00' }),
+      row({ id: 'started', startedAt: STARTED }),
+      row({ id: 'not-started', departureTime: '09:00', returnTime: '10:00' }),
     ]);
 
     const trips = await service.activeTrips(TENANT);
 
     expect(trips.map((t) => [t.requestId, t.state, t.overdue])).toEqual([
-      ['running', 'ON_ROUTE', false],
-      ['later', 'BOOKED', false],
+      ['started', 'ON_ROUTE', false],
+      ['not-started', 'BOOKED', false],
     ]);
   });
 
-  it('keeps an unresolved trip on route and flags it overdue, however old', async () => {
+  it('flags a started trip overdue once its return time has passed, however old', async () => {
     prisma.marketingTransportRequest.findMany.mockResolvedValue([
-      row({ id: 'today-late', departureTime: '08:00', returnTime: '10:30' }),
-      row({ id: 'last-week', travelDate: at('2026-10-13') }),
+      row({
+        id: 'today-late',
+        departureTime: '08:00',
+        returnTime: '10:30',
+        startedAt: STARTED,
+      }),
+      row({
+        id: 'last-week',
+        travelDate: at('2026-10-13'),
+        startedAt: STARTED,
+      }),
     ]);
 
     const trips = await service.activeTrips(TENANT);

@@ -4,6 +4,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import {
+  CONDITION_LABELS,
   PURPOSE_LABELS,
   REQUEST_STATUS_BADGES,
   describeReturn,
@@ -33,6 +34,7 @@ interface Props {
   canReview: boolean;
   /** What the viewer may do to an approved or on-route trip. */
   canReschedule: boolean;
+  canStart: boolean;
   canComplete: boolean;
   canCancel: boolean;
   /** Approving needs a vehicle and driver, so it opens the approval pop-up. */
@@ -41,6 +43,8 @@ interface Props {
   onReject: (request: TransportRequest) => void;
   /** Rescheduling is the approval pop-up again, with a date and times. */
   onReschedule: (request: TransportRequest) => void;
+  /** Starting asks for the starting mileage, vehicle condition and real departure time. */
+  onStart: (request: TransportRequest) => void;
   /** Completing asks for the real return time. */
   onComplete: (request: TransportRequest) => void;
   onCancel: (request: TransportRequest) => void;
@@ -51,17 +55,19 @@ export function RequestDetailPanel({
   onClose,
   canReview,
   canReschedule,
+  canStart,
   canComplete,
   canCancel,
   onApprove,
   onReject,
   onReschedule,
+  onStart,
   onComplete,
   onCancel,
 }: Props) {
   const badge = request ? REQUEST_STATUS_BADGES[request.status] : null;
   const reviewing = canReview && request?.status === 'PENDING';
-  const tripActions = !!request && (canReschedule || canComplete || canCancel);
+  const tripActions = !!request && (canReschedule || canStart || canComplete || canCancel);
 
   return (
     <SidePanel
@@ -98,6 +104,7 @@ export function RequestDetailPanel({
                 Reschedule
               </Button>
             )}
+            {canStart && <Button onClick={() => onStart(request)}>Start Trip</Button>}
             {canComplete && <Button onClick={() => onComplete(request)}>Complete Trip</Button>}
           </div>
         ) : undefined
@@ -118,7 +125,7 @@ export function RequestDetailPanel({
             {request.requester.department ? ` · ${request.requester.department}` : ''}
           </Field>
           <Field label="Purpose">{PURPOSE_LABELS[request.purpose]}</Field>
-          {/* Requests made before purpose became personal / official keep their typed reason. */}
+          {/* Requests made before purpose became personal / marketing / operations keep their typed reason. */}
           {request.businessPurpose && <Field label="Details">{request.businessPurpose}</Field>}
           {request.stops.length > 0 ? (
             <div className="flex flex-col gap-1.5">
@@ -194,6 +201,28 @@ export function RequestDetailPanel({
             </Field>
           )}
 
+          {request.start && (
+            <Field label="Departed">
+              {request.start.actualDepartureTime
+                ? `${formatClock(request.start.actualDepartureTime)}${
+                    request.start.minutesLate
+                      ? ` · ${Math.abs(request.start.minutesLate)} min ${
+                          request.start.minutesLate > 0 ? 'late' : 'early'
+                        }`
+                      : ''
+                  }`
+                : 'Not recorded'}
+              {request.start.mileage !== null
+                ? `\nStarting mileage ${request.start.mileage.toLocaleString('en-GB')}`
+                : ''}
+              {request.start.condition
+                ? `\nVehicle condition ${CONDITION_LABELS[request.start.condition]}`
+                : ''}
+              {request.start.notes ? `\n${request.start.notes}` : ''}
+              {`\nStarted by ${request.start.byName ?? 'Unknown'} · ${longDate(request.start.at)}`}
+            </Field>
+          )}
+
           {request.completion && (
             <Field label="Returned">
               {request.completion.actualReturnTime
@@ -203,6 +232,17 @@ export function RequestDetailPanel({
                       : ''
                   }`
                 : 'Not recorded'}
+              {request.completion.endingMileage !== null
+                ? `\nEnding mileage ${request.completion.endingMileage.toLocaleString('en-GB')}${
+                    request.completion.distance !== null
+                      ? ` · ${request.completion.distance.toLocaleString('en-GB')} km covered`
+                      : ''
+                  }`
+                : ''}
+              {request.completion.endingCondition
+                ? `\nReturn condition ${CONDITION_LABELS[request.completion.endingCondition]}`
+                : ''}
+              {request.completion.notes ? `\n${request.completion.notes}` : ''}
               {`\nCompleted by ${request.completion.byName ?? 'Unknown'} · ${longDate(request.completion.at)}`}
             </Field>
           )}

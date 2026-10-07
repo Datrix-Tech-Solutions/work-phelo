@@ -11,25 +11,14 @@ const trip = {
   travelDate: '2026-10-20',
   departureTime: '10:00',
   returnTime: '12:00',
+  started: true,
 };
 const clock = (date: string, time: string) => ({ date, time });
 
 describe('tripState', () => {
-  it.each([
-    ['the day before', '2026-10-19', '23:59', 'BOOKED'],
-    ['earlier the same day', '2026-10-20', '09:59', 'BOOKED'],
-    ['the minute it departs', '2026-10-20', '10:00', 'ON_ROUTE'],
-    ['part way through', '2026-10-20', '11:30', 'ON_ROUTE'],
-    [
-      'after the return time, still unresolved',
-      '2026-10-20',
-      '18:00',
-      'ON_ROUTE',
-    ],
-    ['the next day, still unresolved', '2026-10-21', '00:00', 'ON_ROUTE'],
-    ['long after, still unresolved', '2026-11-30', '09:00', 'ON_ROUTE'],
-  ])('is %s → %s', (_label, date, time, expected) => {
-    expect(tripState(clock(date, time), trip)).toBe(expected);
+  it('is on route only once started, never by the clock', () => {
+    expect(tripState({ started: false })).toBe('BOOKED');
+    expect(tripState({ started: true })).toBe('ON_ROUTE');
   });
 });
 
@@ -53,11 +42,6 @@ describe('trips with no return time', () => {
     expect(isOverdue(clock('2026-10-20', '23:59'), open)).toBe(false);
     expect(isOverdue(clock('2026-12-01', '09:00'), open)).toBe(false);
   });
-
-  it('still goes on route at departure', () => {
-    expect(tripState(clock('2026-10-20', '09:59'), open)).toBe('BOOKED');
-    expect(tripState(clock('2026-10-20', '10:00'), open)).toBe('ON_ROUTE');
-  });
 });
 
 describe('canComplete', () => {
@@ -68,11 +52,18 @@ describe('canComplete', () => {
     expect(canComplete(clock('2026-10-21', '08:00'), trip)).toBe(true);
   });
 
-  it('needs only the departure to have passed when there is no return time', () => {
+  it('needs only the trip to be started when there is no return time', () => {
     const open = { ...trip, returnTime: null };
-    expect(canComplete(clock('2026-10-20', '09:59'), open)).toBe(false);
-    expect(canComplete(clock('2026-10-20', '10:00'), open)).toBe(true);
+    expect(canComplete(clock('2026-10-20', '09:59'), open)).toBe(true);
     expect(canComplete(clock('2026-10-25', '08:00'), open)).toBe(true);
+  });
+
+  it('never allows a trip that was not started', () => {
+    const idle = { ...trip, started: false };
+    expect(canComplete(clock('2026-10-21', '08:00'), idle)).toBe(false);
+    expect(
+      canComplete(clock('2026-10-25', '08:00'), { ...idle, returnTime: null }),
+    ).toBe(false);
   });
 });
 

@@ -22,6 +22,8 @@ describe('RequestsController authorization contract', () => {
     'update',
     'cancel',
     'complete',
+    'start',
+    'startOptions',
   ] as const)(
     'leaves %s open to everyone: the service limits it to their own requests',
     (method) => {
@@ -57,6 +59,8 @@ describe('RequestsController authorization contract', () => {
         'update',
         'cancel',
         'complete',
+        'start',
+        'startOptions',
         'reschedule',
         'approve',
         'reject',

@@ -34,7 +34,7 @@ const COLUMNS: Column<TransportRequest>[] = [
     render: (row) => (
       <div className="flex flex-col">
         <span className="font-semibold text-gray-900">{PURPOSE_LABELS[row.purpose]}</span>
-        {/* Requests made before purpose became personal / official keep their typed reason. */}
+        {/* Requests made before purpose became personal / marketing / operations keep their typed reason. */}
         {row.businessPurpose && (
           <span className="text-xs text-gray-500 line-clamp-1 max-w-56">{row.businessPurpose}</span>
         )}
@@ -122,6 +122,8 @@ interface Props {
   onReject?: (row: TransportRequest) => void;
   canReschedule?: (row: TransportRequest) => boolean;
   onReschedule?: (row: TransportRequest) => void;
+  canStart?: (row: TransportRequest) => boolean;
+  onStart?: (row: TransportRequest) => void;
   canComplete?: (row: TransportRequest) => boolean;
   onComplete?: (row: TransportRequest) => void;
   canEdit?: (row: TransportRequest) => boolean;
@@ -149,6 +151,8 @@ export function RequestsTable({
   onReject,
   canReschedule,
   onReschedule,
+  canStart,
+  onStart,
   canComplete,
   onComplete,
   canEdit,
@@ -165,6 +169,9 @@ export function RequestsTable({
     }
     if (onReject && canApprove?.(row)) {
       actions.push({ label: 'Reject', onClick: () => onReject(row), danger: true });
+    }
+    if (onStart && canStart?.(row)) {
+      actions.push({ label: 'Start Trip', onClick: () => onStart(row), variant: 'success' });
     }
     if (onComplete && canComplete?.(row)) {
       actions.push({ label: 'Complete Trip', onClick: () => onComplete(row), variant: 'success' });
