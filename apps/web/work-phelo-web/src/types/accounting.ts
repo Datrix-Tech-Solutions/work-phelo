@@ -457,6 +457,10 @@ export interface TaxType {
   effectiveFrom: string;
   effectiveTo: string | null;
   isActive: boolean;
+  /** Default account on the payables side — input tax on a bill, or tax withheld when paying. */
+  payableAccountId: string | null;
+  /** Default account on the receivables side — output tax on an invoice, or tax a customer withholds. */
+  receivableAccountId: string | null;
 }
 
 export interface CreateTaxTypePayload {
@@ -465,6 +469,9 @@ export interface CreateTaxTypePayload {
   rate: number;
   effectiveFrom: string;
   effectiveTo?: string;
+  /** Null clears the default. */
+  payableAccountId?: string | null;
+  receivableAccountId?: string | null;
 }
 
 export type UpdateTaxTypePayload = Partial<CreateTaxTypePayload> & { isActive?: boolean };
@@ -1061,10 +1068,33 @@ export interface AccountingTradeDocument {
   /** The Receivable (AR) or Payable (AP) account this document actually posts to —
    *  resolved once from the Transaction Type Rule at creation, not a fixed setting. */
   controlAccount: AccountingTradeGLAccountRef;
+  /** The items on the document, each with its own account. Empty on documents made before items
+   *  existed — read those as one item from `offsetGlAccount`, `subtotalAmount` and `costCentre`. */
+  lines: {
+    id: string;
+    sequence: number;
+    glAccountId: string;
+    glAccount: AccountingTradeGLAccountRef;
+    amount: string;
+    quantity: string | null;
+    unitPrice: string | null;
+    description: string | null;
+    costCentreId: string | null;
+    costCentre: AccountingTradeGLAccountRef | null;
+  }[];
   /** Present only when the document's Rule split tax onto its own account(s); each
    *  entry's account isn't enriched server-side, so the panel resolves it against the
    *  GL account list. */
-  taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+  taxBreakdown: {
+    glAccountId: string;
+    taxTypeId: string;
+    amount: string;
+    /** Absent on documents made before deductions and charges existed — those are all taxes. */
+    kind?: 'TAX' | 'DEDUCTION' | 'CHARGE';
+    description?: string;
+    /** The side the line posts to; absent on older documents, where it follows the offset. */
+    direction?: 'DR' | 'CR';
+  }[];
   postedJournalEntry: AccountingTradeJournalRef | null;
   reversalJournalEntry: AccountingTradeJournalRef | null;
   originalDocument: AccountingTradeOriginalDocumentRef | null;
@@ -1083,14 +1113,41 @@ export interface QueryTradeDocumentsParams {
   limit?: number;
 }
 
+/** A tax added on a bill or invoice form: the server works the amount out from the tax type. */
+export interface DocumentTaxPayload {
+  taxTypeId: string;
+  glAccountId: string;
+}
+
+/** A deduction (reduces what is owed) or a charge (adds to it) typed on a bill or invoice form. */
+export interface DocumentAdjustmentPayload {
+  kind: 'DEDUCTION' | 'CHARGE';
+  glAccountId: string;
+  amount: number;
+  description?: string;
+}
+
+/** One item on a bill or invoice. */
+export interface DocumentLinePayload {
+  /** Inside the rule's scope; leave out when the rule fixes one account. */
+  glAccountId?: string;
+  amount: number;
+  quantity?: number;
+  unitPrice?: number;
+  description?: string;
+  costCentreId?: string;
+}
+
 export interface CreateTradeInvoicePayload {
   partyId: string;
   documentDate: string;
   dueDate?: string;
   currency: string;
-  /** The subtotal (quantity × unitPrice, rounded to 2 decimals), before any tax lines the
-   *  rule adds on top. */
-  amount: number;
+  /** The subtotal (quantity × unitPrice, rounded to 2 decimals), before any taxes, deductions
+   *  or charges. Required unless `lines` is sent, which makes it their sum. */
+  amount?: number;
+  /** The items on the document, each with its own account, amount and cost centre. */
+  lines?: DocumentLinePayload[];
   quantity?: number;
   unitPrice?: number;
   exchangeRate?: number;
@@ -1102,6 +1159,10 @@ export interface CreateTradeInvoicePayload {
   offsetGlAccountId?: string;
   /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
   selectedTaxTypeIds?: string[];
+  /** Taxes, deductions and charges added on the form. The total is the amount, plus taxes and
+   *  charges, less deductions. */
+  taxes?: DocumentTaxPayload[];
+  adjustments?: DocumentAdjustmentPayload[];
   /** Optional active cost centre (department) — tags the offset (P&L) line, not the AR/AP or tax lines. */
   costCentreId?: string;
   description?: string;
@@ -1216,7 +1277,9 @@ export interface CreateTradeCreditNotePayload {
   partyId: string;
   documentDate: string;
   currency: string;
-  amount: number;
+  /** Required unless `lines` is sent (a Rule-driven note). */
+  amount?: number;
+  lines?: DocumentLinePayload[];
   /** Manual path: the offset account. Linked path: only when the rule scopes its main line,
    *  the account picked within that scope. */
   offsetGlAccountId?: string;
@@ -1229,6 +1292,8 @@ export interface CreateTradeCreditNotePayload {
   quantity?: number;
   unitPrice?: number;
   selectedTaxTypeIds?: string[];
+  taxes?: DocumentTaxPayload[];
+  adjustments?: DocumentAdjustmentPayload[];
   costCentreId?: string;
   originalDocumentId?: string;
   description?: string;

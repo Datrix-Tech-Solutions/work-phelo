@@ -263,15 +263,18 @@ export function TransactionTypeRulePanel({
   // side a deduction posts to (see above): debit for a bill, credit for an invoice, and the
   // reverse for the linked notes. Cashbook and source-linked types keep a fixed account.
   const mainLineDirection: PostingLineDirection | null = fixedDeductionDirection;
-  // Only a plain Receivable/Payable type is ever settled — a note, a cashbook type or a
-  // source-linked type has no payment form for settlement lines.
-  const allowsSettlement =
-    !isCashbookType &&
-    !isLinkedType &&
-    !selectedType?.sourceTypeId &&
-    (selectedType?.category === 'RECEIVABLE' || selectedType?.category === 'PAYABLE');
   const allowsScope = !isCashbookType && !selectedType?.sourceTypeId && mainLineDirection !== null;
   const watchedLines = useWatch({ control, name: 'lines' });
+  // Taxes, deductions and charges are added on the bill, invoice and payment forms now, so the
+  // rule is just its debit and credit. A rule made before that can still carry those lines, and
+  // keeps showing the types it uses so they can be seen and removed.
+  const legacyKindOptions = useMemo(() => {
+    const used = new Set((watchedLines ?? []).map((l) => l.kind));
+    return [...KIND_OPTIONS, ...SETTLEMENT_KIND_OPTIONS].filter(
+      (option) =>
+        option.value === 'DEBIT' || option.value === 'CREDIT' || used.has(option.value as LineKind),
+    );
+  }, [watchedLines]);
   const mainLineIndex = allowsScope
     ? (watchedLines ?? []).findIndex(
         (l) => (l.kind === 'DEBIT' || l.kind === 'CREDIT') && directionOf(l) === mainLineDirection,
@@ -536,9 +539,7 @@ export function TransactionTypeRulePanel({
                 taxTypeOptions={taxTypeOptions}
                 fixedDeductionDirection={fixedDeductionDirection}
                 isMainLine={index === mainLineIndex}
-                kindOptions={
-                  allowsSettlement ? [...KIND_OPTIONS, ...SETTLEMENT_KIND_OPTIONS] : KIND_OPTIONS
-                }
+                kindOptions={legacyKindOptions}
                 settlementCategory={selectedType?.category}
               />
             ))}

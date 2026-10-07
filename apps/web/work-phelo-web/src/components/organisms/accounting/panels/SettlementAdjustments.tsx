@@ -4,7 +4,7 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import type { RuleLineSettlementKind, TransactionTypeRule } from '@/types/accounting';
+import type { RuleLineSettlementKind, TaxType, TransactionTypeRule } from '@/types/accounting';
 
 /** One deduction or charge taken when a bill/invoice is settled. A row from the type's rule starts
  *  with its account filled in and is ticked on or off per payment; a one-off row is always on. */
@@ -12,6 +12,8 @@ export type AdjustmentRow = {
   key: string;
   /** The rule line it came from, null for a one-off row the user added. */
   ruleLineId: string | null;
+  /** A one-off row that takes a tax type (e.g. withholding tax) instead of a typed description. */
+  isTaxRow?: boolean;
   kind: RuleLineSettlementKind;
   label: string;
   taxTypeId: string | null;
@@ -63,6 +65,10 @@ export function rowsFromRule(lines: TransactionTypeRule['lines']): AdjustmentRow
     }));
 }
 
+export function newTaxRow(): AdjustmentRow {
+  return { ...newOneOffRow('DEDUCTION'), isTaxRow: true };
+}
+
 export function newOneOffRow(kind: RuleLineSettlementKind): AdjustmentRow {
   return {
     key: nextKey(),
@@ -90,6 +96,8 @@ export function SettlementAdjustments({
   currency,
   accountOptions,
   isLoadingAccounts,
+  taxTypes,
+  settlementDate,
 }: {
   rows: AdjustmentRow[];
   onChange: (rows: AdjustmentRow[]) => void;
@@ -98,7 +106,35 @@ export function SettlementAdjustments({
   currency: string;
   accountOptions: SearchSelectOption[];
   isLoadingAccounts: boolean;
+  /** Tax types that can be taken at settlement (e.g. withholding tax) — in force on the date. */
+  taxTypes: TaxType[];
+  settlementDate: string;
 }) {
+  const taxOptions: SearchSelectOption[] = taxTypes
+    .filter(
+      (t) =>
+        t.isActive &&
+        (!settlementDate || t.effectiveFrom.slice(0, 10) <= settlementDate) &&
+        (!t.effectiveTo || !settlementDate || t.effectiveTo.slice(0, 10) >= settlementDate),
+    )
+    .map((t) => ({ value: t.id, label: `${t.name} (${t.rate}%)` }));
+  // A tax usually posts to the same account every time: the tax type's default on this side.
+  const chooseTax = (key: string, taxTypeId: string) => {
+    const taxType = taxTypes.find((t) => t.id === taxTypeId);
+    const row = rows.find((r) => r.key === key);
+    if (!taxType || !row) return;
+    update(key, {
+      taxTypeId,
+      taxRate: taxType.rate,
+      mode: 'PERCENT',
+      percent: String(taxType.rate),
+      description: taxType.name,
+      glAccountId:
+        row.glAccountId ||
+        (isReceipt ? taxType.receivableAccountId : taxType.payableAccountId) ||
+        '',
+    });
+  };
   const verb = isReceipt ? 'received' : 'paid';
   const update = (key: string, patch: Partial<AdjustmentRow>) =>
     onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -114,6 +150,9 @@ export function SettlementAdjustments({
           </span>
         </div>
         <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => onChange([...rows, newTaxRow()])}>
+            Add Tax
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -141,7 +180,15 @@ export function SettlementAdjustments({
               row.enabled ? 'border-gray-200' : 'border-dashed border-gray-200 bg-gray-50'
             }`}
           >
-            {isOneOff ? (
+            {isOneOff && row.isTaxRow ? (
+              <SearchSelect
+                label="Tax"
+                placeholder={taxOptions.length ? 'Select a tax…' : 'No tax types in force'}
+                options={taxOptions}
+                value={row.taxTypeId ?? ''}
+                onChange={(value) => chooseTax(row.key, value)}
+              />
+            ) : isOneOff ? (
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-gray-500">
                   {row.kind === 'DEDUCTION' ? 'Deduction' : 'Charge'}

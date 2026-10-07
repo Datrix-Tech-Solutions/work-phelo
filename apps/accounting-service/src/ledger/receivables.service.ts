@@ -41,8 +41,15 @@ import {
   ReverseReceivableDto,
 } from './dto/receivables.dto';
 import { JournalsService } from './journals.service';
-import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import { normalizeDocumentLines } from './document-lines';
 import { settlementEntryLines } from './cashbook-lines.util';
+import {
+  BreakdownEntry,
+  buildFormBreakdown,
+  FormAdjustment,
+  FormTax,
+  hasFormBreakdown,
+} from './document-adjustments';
 import { resolveMainLineAccount } from './rule-account-scope';
 import {
   SourceTransactionEvent,
@@ -70,6 +77,13 @@ const receivableDocumentInclude = {
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
   costCentre: { select: { id: true, code: true, name: true } },
+  lines: {
+    orderBy: { sequence: 'asc' as const },
+    include: {
+      glAccount: { select: { id: true, code: true, name: true } },
+      costCentre: { select: { id: true, code: true, name: true } },
+    },
+  },
   arAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
     select: { id: true, journalNumber: true, status: true, postedAt: true },
@@ -311,17 +325,17 @@ export class ReceivablesService {
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
-      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
-    assertQuantityPriceMatchesAmount(dto);
 
-    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const { lines: itemLines, subtotal: subtotalAmount } =
+      await this.resolveDocumentLines(user.tenantId, dto);
     const {
       arAccountId,
-      offsetGlAccountId,
       taxAmount,
       taxBreakdown,
+      netAdjustment,
+      lineAccounts,
       transactionTypeCode,
     } = await this.resolveRulePosting(
       user.tenantId,
@@ -330,10 +344,23 @@ export class ReceivablesService {
       subtotalAmount,
       dto.selectedTaxTypeIds,
       false,
-      { offsetGlAccountId: dto.offsetGlAccountId },
+      {
+        lineAccountIds: itemLines.map((line) => line.glAccountId),
+        taxes: dto.taxes,
+        adjustments: dto.adjustments,
+        documentDate: dto.documentDate,
+      },
     );
-    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
-    const totalAmount = subtotalAmount.plus(taxAmount);
+    for (const accountId of new Set(lineAccounts)) {
+      await this.assertPostingOffsetAccount(user.tenantId, accountId);
+    }
+    // Taxes and charges add to what is owed; deductions take away from it.
+    const totalAmount = subtotalAmount.plus(taxAmount).plus(netAdjustment);
+    if (totalAmount.lessThanOrEqualTo(0)) {
+      throw new BadRequestException(
+        'The deductions leave nothing owed — the total must be above zero',
+      );
+    }
 
     const document = await this.withDocumentNumberLock(
       user.tenantId,
@@ -358,16 +385,24 @@ export class ReceivablesService {
             currency: dto.currency,
             exchangeRate: dto.exchangeRate,
             subtotalAmount,
-            quantity: dto.quantity,
-            unitPrice: dto.unitPrice,
+            // A single item keeps its quantity × price on the document; with several, each line
+            // carries its own.
+            quantity:
+              itemLines.length === 1 ? itemLines[0].quantity : undefined,
+            unitPrice:
+              itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
             taxAmount,
             totalAmount,
             description: this.optional(dto.description),
             externalReference: this.optional(dto.externalReference),
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId,
-            costCentreId: this.optional(dto.costCentreId),
+            offsetGlAccountId: lineAccounts[0],
+            costCentreId:
+              itemLines.length === 1
+                ? this.optional(itemLines[0].costCentreId)
+                : null,
+            lines: { create: this.documentLineWrites(itemLines, lineAccounts) },
             arAccountId,
             transactionTypeId: dto.transactionTypeId,
             taxBreakdown,
@@ -400,6 +435,10 @@ export class ReceivablesService {
         'offsetGlAccountId and arAccountId are required unless a transactionTypeId is given',
       );
     }
+    if (dto.amount === undefined) {
+      throw new BadRequestException('amount is required');
+    }
+    const manualAmount = dto.amount;
     const { offsetGlAccountId, arAccountId } = dto;
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
@@ -432,15 +471,17 @@ export class ReceivablesService {
         user.tenantId,
         invoice.id,
       );
-      if (new Prisma.Decimal(dto.amount).greaterThan(outstanding)) {
+      if (new Prisma.Decimal(manualAmount).greaterThan(outstanding)) {
         throw new ConflictException(
           'Invoice-specific credit note cannot exceed invoice outstanding balance',
         );
       }
     }
 
-    const { subtotalAmount, taxAmount, totalAmount } =
-      this.documentAmounts(dto);
+    const { subtotalAmount, taxAmount, totalAmount } = this.documentAmounts({
+      ...dto,
+      amount: manualAmount,
+    });
     const document = await this.withDocumentNumberLock(
       user.tenantId,
       'ARC',
@@ -498,22 +539,22 @@ export class ReceivablesService {
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
-      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertCustomerCurrency(customer.currency, dto.currency);
-    assertQuantityPriceMatchesAmount(dto);
     if (!dto.originalInvoiceId) {
       throw new BadRequestException(
         'A linked transaction must reference an original invoice',
       );
     }
 
-    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const { lines: itemLines, subtotal: subtotalAmount } =
+      await this.resolveDocumentLines(user.tenantId, dto);
     const {
       arAccountId,
-      offsetGlAccountId,
       taxAmount,
       taxBreakdown,
+      netAdjustment,
+      lineAccounts,
       transactionTypeCode,
     } = await this.resolveRulePosting(
       user.tenantId,
@@ -522,10 +563,23 @@ export class ReceivablesService {
       subtotalAmount,
       dto.selectedTaxTypeIds,
       true,
-      { offsetGlAccountId: dto.offsetGlAccountId },
+      {
+        lineAccountIds: itemLines.map((line) => line.glAccountId),
+        taxes: dto.taxes,
+        adjustments: dto.adjustments,
+        documentDate: dto.documentDate,
+      },
     );
-    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
-    const totalAmount = subtotalAmount.plus(taxAmount);
+    for (const accountId of new Set(lineAccounts)) {
+      await this.assertPostingOffsetAccount(user.tenantId, accountId);
+    }
+    // Taxes and charges add to what is owed; deductions take away from it.
+    const totalAmount = subtotalAmount.plus(taxAmount).plus(netAdjustment);
+    if (totalAmount.lessThanOrEqualTo(0)) {
+      throw new BadRequestException(
+        'The deductions leave nothing owed — the total must be above zero',
+      );
+    }
 
     const original = await this.getDocumentForTenant(
       user.tenantId,
@@ -579,16 +633,24 @@ export class ReceivablesService {
             currency: dto.currency,
             exchangeRate: dto.exchangeRate,
             subtotalAmount,
-            quantity: dto.quantity,
-            unitPrice: dto.unitPrice,
+            // A single item keeps its quantity × price on the document; with several, each line
+            // carries its own.
+            quantity:
+              itemLines.length === 1 ? itemLines[0].quantity : undefined,
+            unitPrice:
+              itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
             taxAmount,
             totalAmount,
             description: this.optional(dto.description),
             externalReference: this.optional(dto.externalReference),
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId,
-            costCentreId: this.optional(dto.costCentreId),
+            offsetGlAccountId: lineAccounts[0],
+            costCentreId:
+              itemLines.length === 1
+                ? this.optional(itemLines[0].costCentreId)
+                : null,
+            lines: { create: this.documentLineWrites(itemLines, lineAccounts) },
             arAccountId,
             transactionTypeId,
             taxBreakdown,
@@ -699,6 +761,7 @@ export class ReceivablesService {
         tenantId: user.tenantId,
         documentType: AccountingReceivableDocumentType.INVOICE,
       },
+      include: { lines: { select: { id: true } } },
     });
     if (!document) throw new NotFoundException('Invoice not found');
     if (document.status !== AccountingReceivableStatus.DRAFT) {
@@ -726,6 +789,11 @@ export class ReceivablesService {
     if (dto.externalReference !== undefined) {
       data.externalReference = this.optional(dto.externalReference);
     }
+    if (dto.costCentreId !== undefined && (document.lines?.length ?? 0) > 0) {
+      throw new ConflictException(
+        "This invoice's cost centres were set on its items and can't be changed here yet",
+      );
+    }
     if (dto.costCentreId !== undefined) {
       if (dto.costCentreId !== null) {
         await this.assertActiveCostCentre(user.tenantId, dto.costCentreId);
@@ -736,6 +804,11 @@ export class ReceivablesService {
       if (!document.transactionTypeId) {
         throw new BadRequestException(
           'This invoice has no transaction type, so its tax lines cannot be changed',
+        );
+      }
+      if (hasFormBreakdown(document.taxBreakdown)) {
+        throw new ConflictException(
+          "This draft's taxes, deductions and charges were added on its form and can't be changed here yet",
         );
       }
       // Only the tax lines are taken from the rule; the accounts the draft already resolved stay put.
@@ -1650,28 +1723,47 @@ export class ReceivablesService {
     // A resolved rule splits tax onto its own account(s), leaving the offset line at just
     // the subtotal; a document with no breakdown (a credit note, or one predating rules)
     // keeps the old behavior of lumping the full total onto the offset line.
-    const offsetLines = taxBreakdown.length
-      ? [
-          {
-            glAccountId: document.offsetGlAccountId,
-            costCentreId: document.costCentreId ?? undefined,
-            description,
-            ...debitCredit(offsetDirection, subtotalAmount),
-          },
-          ...taxBreakdown.map((t) => ({
-            glAccountId: t.glAccountId,
-            description: `${description} — tax`,
-            ...debitCredit(t.direction ?? offsetDirection, t.amount),
-          })),
-        ]
-      : [
-          {
-            glAccountId: document.offsetGlAccountId,
-            costCentreId: document.costCentreId ?? undefined,
-            description,
-            ...debitCredit(offsetDirection, totalAmount),
-          },
-        ];
+    // One line per item, each to its own account and cost centre. A document made before items
+    // existed has none, and posts its single offset account for the subtotal.
+    const itemLines = (document.lines ?? []).map((item) => ({
+      glAccountId: item.glAccountId,
+      costCentreId: item.costCentreId ?? undefined,
+      description: item.description ?? description,
+      ...debitCredit(offsetDirection, Number(item.amount.toString())),
+    }));
+    const offsetLines =
+      taxBreakdown.length || itemLines.length > 0
+        ? [
+            ...(itemLines.length > 0
+              ? itemLines
+              : [
+                  {
+                    glAccountId: document.offsetGlAccountId,
+                    costCentreId: document.costCentreId ?? undefined,
+                    description,
+                    ...debitCredit(offsetDirection, subtotalAmount),
+                  },
+                ]),
+            ...taxBreakdown.map((t) => ({
+              glAccountId: t.glAccountId,
+              description: `${description} — ${
+                t.kind === 'DEDUCTION'
+                  ? 'deduction'
+                  : t.kind === 'CHARGE'
+                    ? 'charge'
+                    : 'tax'
+              }${t.description ? ` (${t.description})` : ''}`,
+              ...debitCredit(t.direction ?? offsetDirection, t.amount),
+            })),
+          ]
+        : [
+            {
+              glAccountId: document.offsetGlAccountId,
+              costCentreId: document.costCentreId ?? undefined,
+              description,
+              ...debitCredit(offsetDirection, totalAmount),
+            },
+          ];
 
     const lines = isInvoice
       ? [arLine, ...offsetLines]
@@ -2112,17 +2204,25 @@ export class ReceivablesService {
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
     expectLinked = false,
-    options: { offsetGlAccountId?: string; taxOnly?: boolean } = {},
+    options: {
+      offsetGlAccountId?: string;
+      /** One account pick per item on the document (a fixed rule account needs none). */
+      lineAccountIds?: (string | undefined)[];
+      taxOnly?: boolean;
+      /** Taxes, deductions and charges added on the form (as opposed to the rule's own). */
+      taxes?: FormTax[];
+      adjustments?: FormAdjustment[];
+      documentDate?: string;
+    } = {},
   ): Promise<{
     arAccountId: string;
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
-    taxBreakdown: {
-      glAccountId: string;
-      taxTypeId: string;
-      amount: string;
-      direction: PostingDirection;
-    }[];
+    taxBreakdown: BreakdownEntry[];
+    /** Charges less deductions: what the form's adjustments add to (or take from) the total. */
+    netAdjustment: Prisma.Decimal;
+    /** The account each item posts to, in order. */
+    lineAccounts: string[];
     transactionTypeCode: string;
   }> {
     const transactionType = await this.prisma.transactionType.findFirst({
@@ -2192,21 +2292,25 @@ export class ReceivablesService {
     const controlAccountId = arLine.accountId;
     // A scoped main line (the user picks the account) is resolved against the scope; the
     // tax-only path keeps the accounts the draft already holds, so it needs no pick.
-    const offsetGlAccountId = options.taxOnly
-      ? (mainLine.accountId ?? '')
-      : await resolveMainLineAccount(
-          this.prisma,
-          tenantId,
-          mainLine,
-          options.offsetGlAccountId,
-          [
+    const picks = options.lineAccountIds ?? [options.offsetGlAccountId];
+    const lineAccounts: string[] = [];
+    if (options.taxOnly) {
+      lineAccounts.push(mainLine.accountId ?? '');
+    } else {
+      // Every item must sit inside the rule's scope (or be the rule's one fixed account).
+      for (const pick of picks) {
+        lineAccounts.push(
+          await resolveMainLineAccount(this.prisma, tenantId, mainLine, pick, [
             controlAccountId,
             ...explicitLines.flatMap((l) => (l.accountId ? [l.accountId] : [])),
-          ],
+          ]),
         );
+      }
+    }
+    const offsetGlAccountId = lineAccounts[0];
 
     const selected = new Set(selectedTaxTypeIds ?? []);
-    const taxBreakdown = explicitLines
+    const taxBreakdown: BreakdownEntry[] = explicitLines
       .filter((l) => l.taxTypeId && l.accountId && selected.has(l.taxTypeId))
       .map((line) => {
         const rate = new Prisma.Decimal(line.taxType!.rate);
@@ -2216,18 +2320,43 @@ export class ReceivablesService {
           taxTypeId: line.taxTypeId!,
           amount: amount.toString(),
           direction: line.direction,
+          kind: 'TAX' as const,
+          description: line.taxType!.name,
         };
       });
-    const taxAmount = taxBreakdown.reduce(
-      (sum, t) => sum.plus(new Prisma.Decimal(t.amount)),
-      new Prisma.Decimal(0),
-    );
+    // Taxes, deductions and charges added on the form. A tax or charge goes on the main line's
+    // side and a deduction on the control side, so they add to or take from what is owed.
+    const form = options.taxOnly
+      ? null
+      : await buildFormBreakdown(this.prisma, tenantId, {
+          subtotal,
+          documentDate: options.documentDate,
+          mainSide:
+            autoBalanceDirection === PostingDirection.DR
+              ? PostingDirection.CR
+              : PostingDirection.DR,
+          controlSide: autoBalanceDirection,
+          taxes: options.taxes,
+          adjustments: options.adjustments,
+          excludeAccountIds: [controlAccountId, offsetGlAccountId].filter(
+            Boolean,
+          ),
+        });
+    taxBreakdown.push(...(form?.entries ?? []));
+    const taxAmount = taxBreakdown
+      .filter((t) => t.kind === 'TAX')
+      .reduce(
+        (sum, t) => sum.plus(new Prisma.Decimal(t.amount)),
+        new Prisma.Decimal(0),
+      );
 
     return {
       arAccountId: controlAccountId,
       offsetGlAccountId,
       taxAmount,
       taxBreakdown,
+      netAdjustment: form?.netAdjustment ?? new Prisma.Decimal(0),
+      lineAccounts,
       transactionTypeCode: transactionType.code,
     };
   }
@@ -2239,6 +2368,9 @@ export class ReceivablesService {
     /** Null for documents created before tax lines carried their own direction —
      *  documentJournalDto falls back to the offset line's direction for those. */
     direction: PostingDirection | null;
+    /** Absent on documents made before deductions and charges existed — those are all taxes. */
+    kind: 'TAX' | 'DEDUCTION' | 'CHARGE';
+    description: string | null;
   }[] {
     if (!Array.isArray(value)) return [];
     return value.flatMap((entry) => {
@@ -2262,6 +2394,12 @@ export class ReceivablesService {
           taxTypeId: typeof entry.taxTypeId === 'string' ? entry.taxTypeId : '',
           amount: Number(entry.amount),
           direction,
+          kind:
+            entry.kind === 'DEDUCTION' || entry.kind === 'CHARGE'
+              ? entry.kind
+              : ('TAX' as const),
+          description:
+            typeof entry.description === 'string' ? entry.description : null,
         },
       ];
     });
@@ -2426,6 +2564,40 @@ export class ReceivablesService {
 
   /** The optional department tag — when given, it must be an active cost centre of this
    *  tenant. Checked at creation for early feedback; posting re-validates it. */
+  /** The items on a bill, invoice or note — normalised from `lines`, or from the single `amount`
+   *  of an older request — with each cost centre checked. */
+  private async resolveDocumentLines(
+    tenantId: string,
+    dto: Parameters<typeof normalizeDocumentLines>[0],
+  ) {
+    const result = normalizeDocumentLines(dto);
+    for (const costCentreId of new Set(
+      result.lines.flatMap((line) =>
+        line.costCentreId ? [line.costCentreId] : [],
+      ),
+    )) {
+      await this.assertActiveCostCentre(tenantId, costCentreId);
+    }
+    return result;
+  }
+
+  // Nested under `lines: { create: [...] }` — tenantId comes from the parent document through the
+  // composite FK, so it must not be passed here.
+  private documentLineWrites(
+    items: ReturnType<typeof normalizeDocumentLines>['lines'],
+    accountIds: string[],
+  ) {
+    return items.map((item, index) => ({
+      sequence: index + 1,
+      glAccountId: accountIds[index],
+      amount: item.amount,
+      quantity: item.quantity ?? null,
+      unitPrice: item.unitPrice ?? null,
+      description: this.optional(item.description),
+      costCentreId: this.optional(item.costCentreId),
+    }));
+  }
+
   private async assertActiveCostCentre(
     tenantId: string,
     costCentreId: string | undefined,

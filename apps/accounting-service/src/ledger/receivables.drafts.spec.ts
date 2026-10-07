@@ -281,6 +281,7 @@ describe('ReceivablesService draft invoices', () => {
             taxTypeId: 'tax-1',
             amount: '125',
             direction: 'CR',
+            kind: 'TAX',
           },
         ]);
         expect(data).not.toHaveProperty('subtotalAmount');

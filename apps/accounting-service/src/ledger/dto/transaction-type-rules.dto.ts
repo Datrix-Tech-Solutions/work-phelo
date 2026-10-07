@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -59,6 +60,28 @@ export class CreateTaxTypeDto {
   @IsOptional()
   @IsDateString()
   effectiveTo?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Default account on the payables side: input tax on a bill, or tax withheld when paying a vendor. Null clears it.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  payableAccountId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Default account on the receivables side: output tax on an invoice, or tax withheld by a customer. Null clears it.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  receivableAccountId?: string | null;
 }
 
 export class UpdateTaxTypeDto extends PartialType(CreateTaxTypeDto) {
