@@ -39,6 +39,7 @@ import {
   QueryTransportRequestsDto,
   RescheduleTransportRequestDto,
   ReviewTransportRequestDto,
+  StartTransportRequestDto,
   UpdateTransportRequestDto,
 } from './dto/transport-request.dto';
 import { RequestsService } from './requests.service';
@@ -180,13 +181,43 @@ export class RequestsController {
     return this.service.cancel(request.user, id);
   }
 
+  @Get(':id/start-options')
+  @ApiOperation({
+    summary: 'Starting mileage and vehicle condition to prefill the start form',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  startOptions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.startOptions(request.user, id);
+  }
+
+  @Post(':id/start')
+  @HttpCode(HttpStatus.OK)
+  // Open to everyone, like complete: the service limits it to the caller's own requests (and
+  // lets approvers act on any).
+  @ApiOperation({
+    summary: 'Start an approved trip',
+    description:
+      'Puts the trip on route and records the starting mileage, vehicle condition, actual departure time and notes. The requester can start their own; anyone who can approve can start any.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  start(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: StartTransportRequestDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.start(request.user, id, dto);
+  }
+
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
   // lets approvers act on any).
   @ApiOperation({
     summary:
-      'Complete a trip once its return time has passed (or it has departed, if it had none)',
+      'Complete a started trip once its return time has passed (or straight away, if it had none)',
     description:
       'Records when the vehicle actually got back and any further places visited. The requester can complete their own; anyone who can approve can complete any. Final: a completed trip cannot be changed.',
   })

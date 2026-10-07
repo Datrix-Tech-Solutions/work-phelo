@@ -4,6 +4,8 @@ import type {
   ApproveTransportRequestPayload,
   DestinationOption,
   CompleteTransportRequestPayload,
+  StartTransportRequestPayload,
+  TransportRequestStartOptions,
   CreateTransportRequestPayload,
   TransportRequest,
   TransportRequestAllocationOptions,
@@ -167,6 +169,30 @@ export function useRescheduleRequest() {
   return useMutation({
     mutationFn: async ({ id, ...payload }: RescheduleTransportRequestPayload & { id: string }) => {
       const res = await api.post<TransportRequest>(`${ENDPOINT}/${id}/reschedule`, payload);
+      return res.data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Prefill for the start form; fetched fresh each time it opens. */
+export function useStartOptions(id: string | undefined) {
+  return useQuery({
+    queryKey: [...REQUESTS_KEY, 'start-options', id] as const,
+    queryFn: async () => {
+      const res = await api.get<TransportRequestStartOptions>(`${ENDPOINT}/${id}/start-options`);
+      return res.data;
+    },
+    enabled: !!id,
+    gcTime: 0,
+  });
+}
+
+export function useStartRequest() {
+  const invalidate = useInvalidateRequests();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: StartTransportRequestPayload & { id: string }) => {
+      const res = await api.post<TransportRequest>(`${ENDPOINT}/${id}/start`, payload);
       return res.data;
     },
     onSuccess: invalidate,

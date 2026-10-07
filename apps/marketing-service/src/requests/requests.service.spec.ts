@@ -32,6 +32,12 @@ const timeTerm = (where: Record<string, unknown>) =>
 const ownersTerm = (where: Record<string, unknown>) =>
   (where.AND as { OR: unknown[] }[])[1].OR;
 
+/** The return details every completion must carry besides the time. */
+const returnDetails = {
+  endingMileage: 48390,
+  endingCondition: 'GOOD' as const,
+};
+
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const today = new Date().toISOString().slice(0, 10);
 const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -52,7 +58,7 @@ const ama = { employeeId: 'e1', name: 'Ama Mensah', department: 'Operations' };
 const kofi = { employeeId: 'e2', name: 'Kofi Boateng', department: null };
 
 const createDto = {
-  purpose: 'OFFICIAL' as const,
+  purpose: 'MARKETING' as const,
   travelDate: future,
   departureTime: '08:00',
   returnTime: '17:00',
@@ -66,7 +72,7 @@ function row(overrides: Record<string, unknown> = {}) {
     requesterEmployeeId: 'e1',
     requesterName: 'Ama Mensah',
     requesterDepartment: 'Operations',
-    purpose: 'OFFICIAL',
+    purpose: 'MARKETING',
     businessPurpose: null,
     travelDate: new Date(`${future}T00:00:00.000Z`),
     departureTime: '08:00',
@@ -84,6 +90,13 @@ function row(overrides: Record<string, unknown> = {}) {
     driverEmployeeId: null,
     driverName: null,
     selfDriven: false,
+    startedAt: null,
+    startedByUserId: null,
+    startedByName: null,
+    actualDepartureTime: null,
+    startingMileage: null,
+    startingCondition: null,
+    startNotes: null,
     cancelledAt: null,
     createdAt: new Date('2026-10-01T00:00:00.000Z'),
     updatedAt: new Date('2026-10-01T00:00:00.000Z'),
@@ -95,6 +108,7 @@ function row(overrides: Record<string, unknown> = {}) {
 
 describe('RequestsService', () => {
   const tx = {
+    marketingFleetVehicle: { updateMany: jest.fn() },
     marketingTransportRequestPassenger: { deleteMany: jest.fn() },
     marketingTransportRequestStop: {
       deleteMany: jest.fn(),
@@ -118,6 +132,7 @@ describe('RequestsService', () => {
     marketingFleetVehicle: { findUnique: jest.fn(), findMany: jest.fn() },
     marketingClient: { findMany: jest.fn() },
     marketingProspect: { findMany: jest.fn() },
+    marketingAppointment: { findFirst: jest.fn() },
     marketingTransportRequestStop: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -165,6 +180,107 @@ describe('RequestsService', () => {
         ? (arg as (client: typeof tx) => unknown)(tx)
         : Promise.all(arg as Promise<unknown>[]),
     );
+  });
+
+  describe('create from an approved appointment', () => {
+    const appointment = (overrides: Record<string, unknown> = {}) => ({
+      id: 'appt-1',
+      tenantId: TENANT,
+      prospectId: 'p1',
+      marketerUserId: 'user-1',
+      managerUserId: null,
+      status: 'APPROVED',
+      ...overrides,
+    });
+    const beta = {
+      id: 'p1',
+      companyName: 'Beta Co',
+      locationLabel: 'Kumasi',
+      latitude: 6.69,
+      longitude: -1.62,
+    };
+
+    beforeEach(() => {
+      directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      prisma.marketingTransportRequest.create.mockResolvedValue(row());
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(null);
+      prisma.marketingAppointment.findFirst.mockResolvedValue(appointment());
+      prisma.marketingProspect.findMany.mockResolvedValue([beta]);
+    });
+
+    it('fixes the purpose to marketing and always includes the appointment’s prospect', async () => {
+      await service.create(user(), {
+        ...createDto,
+        purpose: 'PERSONAL',
+        destination: 'ignored',
+        appointmentId: 'appt-1',
+      });
+
+      const { data } = callArg(prisma.marketingTransportRequest.create) as {
+        data: Record<string, unknown> & { stops: { create: unknown[] } };
+      };
+      expect(data).toMatchObject({
+        purpose: 'MARKETING',
+        appointmentId: 'appt-1',
+        destination: 'Beta Co',
+      });
+      expect(data.stops.create).toEqual([
+        expect.objectContaining({ kind: 'PROSPECT', refId: 'p1' }),
+      ]);
+    });
+
+    it('lets the prospect through even when it is not assigned to the requester', async () => {
+      await service.create(user(), { ...createDto, appointmentId: 'appt-1' });
+
+      const where = (
+        prisma.marketingProspect.findMany.mock.calls[0] as [
+          { where: Record<string, unknown> },
+        ]
+      )[0].where;
+      expect(where.OR).toEqual([{ assignedUserId: 'user-1' }, { id: 'p1' }]);
+    });
+
+    it.each(['PENDING', 'REJECTED', 'CANCELLED', 'COMPLETED'])(
+      'refuses a %s appointment',
+      async (status) => {
+        prisma.marketingAppointment.findFirst.mockResolvedValue(
+          appointment({ status }),
+        );
+        await expect(
+          service.create(user(), { ...createDto, appointmentId: 'appt-1' }),
+        ).rejects.toThrow(/approved appointment/);
+      },
+    );
+
+    it('hides an appointment that belongs to someone else', async () => {
+      prisma.marketingAppointment.findFirst.mockResolvedValue(
+        appointment({ marketerUserId: 'someone-else' }),
+      );
+      await expect(
+        service.create(user(), { ...createDto, appointmentId: 'appt-1' }),
+      ).rejects.toThrow(/Appointment not found/);
+    });
+
+    it('lets the manager, or someone who can approve appointments, request for it', async () => {
+      prisma.marketingAppointment.findFirst.mockResolvedValue(
+        appointment({
+          marketerUserId: 'someone-else',
+          managerUserId: 'user-1',
+        }),
+      );
+      await expect(
+        service.create(user(), { ...createDto, appointmentId: 'appt-1' }),
+      ).resolves.toBeDefined();
+    });
+
+    it('refuses a second request for the same appointment', async () => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue({
+        id: 'other',
+      });
+      await expect(
+        service.create(user(), { ...createDto, appointmentId: 'appt-1' }),
+      ).rejects.toThrow(/already has a transport request/);
+    });
   });
 
   describe('create', () => {
@@ -320,7 +436,6 @@ describe('RequestsService', () => {
     });
 
     describe('status filter', () => {
-      const todayDate = () => new Date(`${today}T00:00:00.000Z`);
       const statusClause = (status: string[]) =>
         service
           .list(user(), { status: status as never })
@@ -333,27 +448,15 @@ describe('RequestsService', () => {
         },
       );
 
-      it('APPROVED means approved and not yet departed', async () => {
+      it('APPROVED means approved and not yet started', async () => {
         expect(await statusClause(['APPROVED'])).toEqual([
-          {
-            status: 'APPROVED',
-            OR: [
-              { travelDate: { gt: todayDate() } },
-              { travelDate: todayDate(), departureTime: { gt: '12:00' } },
-            ],
-          },
+          { status: 'APPROVED', startedAt: null },
         ]);
       });
 
-      it('ON_ROUTE means approved, departed and not yet completed', async () => {
+      it('ON_ROUTE means approved, started and not yet completed', async () => {
         expect(await statusClause(['ON_ROUTE'])).toEqual([
-          {
-            status: 'APPROVED',
-            OR: [
-              { travelDate: { lt: todayDate() } },
-              { travelDate: todayDate(), departureTime: { lte: '12:00' } },
-            ],
-          },
+          { status: 'APPROVED', startedAt: { not: null } },
         ]);
       });
 
@@ -468,32 +571,24 @@ describe('RequestsService', () => {
       expect(result.overdue).toBe(false);
     });
 
-    it('starts a trip on its own at the departure time', async () => {
-      const trip = { status: 'APPROVED', travelDate: at(today) };
-      expect(
-        (
-          await viewOne({
-            ...trip,
-            departureTime: '12:00',
-            returnTime: '15:00',
-          })
-        ).status,
-      ).toBe('ON_ROUTE');
-      expect(
-        (
-          await viewOne({
-            ...trip,
-            departureTime: '12:01',
-            returnTime: '15:00',
-          })
-        ).status,
-      ).toBe('APPROVED');
+    it('goes on route only once started, never by the clock', async () => {
+      const trip = {
+        status: 'APPROVED',
+        travelDate: at(today),
+        departureTime: '08:00',
+        returnTime: '15:00',
+      };
+      expect((await viewOne({ ...trip, startedAt: new Date() })).status).toBe(
+        'ON_ROUTE',
+      );
+      expect((await viewOne(trip)).status).toBe('APPROVED');
     });
 
     it('keeps a trip on route, flagged overdue, after its return time until someone completes it', async () => {
       const result = await viewOne({
         status: 'APPROVED',
         travelDate: at('2020-01-01'),
+        startedAt: new Date('2020-01-01T08:00:00.000Z'),
       });
       expect(result.status).toBe('ON_ROUTE');
       expect(result.overdue).toBe(true);
@@ -504,6 +599,7 @@ describe('RequestsService', () => {
         status: 'APPROVED',
         travelDate: at(today),
         departureTime: '08:00',
+        startedAt: new Date(),
       };
       expect((await viewOne({ ...trip, returnTime: '12:00' })).overdue).toBe(
         true,
@@ -595,6 +691,7 @@ describe('RequestsService', () => {
         travelDate: at(today),
         departureTime: '08:00',
         returnTime: '11:00',
+        startedAt: new Date(),
         ...overrides,
       });
 
@@ -621,6 +718,7 @@ describe('RequestsService', () => {
       arrange();
 
       const result = await service.complete(user(), 'req-1', {
+        ...returnDetails,
         actualReturnTime: '11:40',
       });
 
@@ -637,11 +735,63 @@ describe('RequestsService', () => {
       expect(result.completion?.minutesLate).toBe(40);
     });
 
+    it('records the return details and updates the vehicle mileage and condition', async () => {
+      arrange(overdueTrip({ startingMileage: 48210, vehicleAssetId: 'veh-1' }));
+      fleet.updateVehicle.mockResolvedValue({});
+      tx.marketingFleetVehicle.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.complete(user(), 'req-1', {
+        ...returnDetails,
+        actualReturnTime: '11:40',
+        notes: 'Small scratch on the door',
+      });
+
+      expect(callArg(tx.marketingTransportRequest.updateMany)).toMatchObject({
+        data: {
+          endingMileage: 48390,
+          endingCondition: 'GOOD',
+          completionNotes: 'Small scratch on the door',
+        },
+      });
+      expect(callArg(tx.marketingFleetVehicle.updateMany)).toMatchObject({
+        data: { currentMileage: 48390 },
+      });
+      expect(fleet.updateVehicle).toHaveBeenCalledWith(TENANT, 'veh-1', {
+        condition: 'GOOD',
+      });
+    });
+
+    it('rejects an ending mileage below the starting mileage', async () => {
+      arrange(overdueTrip({ startingMileage: 50000 }));
+
+      await expect(
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '11:40',
+        }),
+      ).rejects.toThrow(/below the starting mileage/);
+    });
+
+    it('still completes when the vehicle condition cannot be updated in HR', async () => {
+      arrange();
+      fleet.updateVehicle.mockRejectedValue(new Error('hr down'));
+
+      await expect(
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '11:40',
+        }),
+      ).resolves.toBeDefined();
+    });
+
     it('lets an approver complete someone else’s trip', async () => {
       arrange();
 
       await expect(
-        service.complete(approver(), 'req-1', { actualReturnTime: '11:30' }),
+        service.complete(approver(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '11:30',
+        }),
       ).resolves.toBeDefined();
     });
 
@@ -652,6 +802,7 @@ describe('RequestsService', () => {
 
       await expect(
         service.complete(user({ id: 'someone-else' }), 'req-1', {
+          ...returnDetails,
           actualReturnTime: '11:30',
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
@@ -666,7 +817,10 @@ describe('RequestsService', () => {
       );
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '11:00' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '11:00',
+        }),
       ).rejects.toThrow(/after its return time/);
     });
 
@@ -674,7 +828,10 @@ describe('RequestsService', () => {
       arrange(overdueTrip({ returnTime: '12:00' }));
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '12:00' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '12:00',
+        }),
       ).resolves.toBeDefined();
     });
 
@@ -686,7 +843,10 @@ describe('RequestsService', () => {
         );
 
         await expect(
-          service.complete(user(), 'req-1', { actualReturnTime: '11:30' }),
+          service.complete(user(), 'req-1', {
+            ...returnDetails,
+            actualReturnTime: '11:30',
+          }),
         ).rejects.toThrow(/Only approved trips/);
       },
     );
@@ -697,7 +857,10 @@ describe('RequestsService', () => {
       );
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '11:30' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '11:30',
+        }),
       ).rejects.toThrow(/already completed/);
     });
 
@@ -707,10 +870,16 @@ describe('RequestsService', () => {
       );
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '07:59' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '07:59',
+        }),
       ).rejects.toThrow(/after the departure time/);
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '08:00' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '08:00',
+        }),
       ).rejects.toThrow(/after the departure time/);
     });
 
@@ -720,7 +889,10 @@ describe('RequestsService', () => {
       );
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '12:01' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '12:01',
+        }),
       ).rejects.toThrow(/cannot be in the future/);
     });
 
@@ -728,7 +900,10 @@ describe('RequestsService', () => {
       arrange(overdueTrip({ travelDate: at('2020-01-01') }));
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '23:30' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '23:30',
+        }),
       ).resolves.toBeDefined();
     });
 
@@ -740,7 +915,10 @@ describe('RequestsService', () => {
       tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '11:30' }),
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '11:30',
+        }),
       ).rejects.toThrow(/can no longer be completed/);
     });
   });
@@ -1254,12 +1432,13 @@ describe('RequestsService', () => {
         status: 'APPROVED',
         id: { not: 'req-1' },
       });
-      // Two cases: past the return time, or (no return time) already departed. These used to be
-      // overwritten by the vehicle/driver OR, so ANY other approved trip blocked the approval.
+      // Only a started trip is still out. Two cases: no return time, or past the return time. These
+      // used to be overwritten by the vehicle/driver OR, so ANY other approved trip blocked the approval.
+      expect(stale).toMatchObject({ startedAt: { not: null } });
       expect(stale.OR).toHaveLength(2);
       expect(stale.OR).toEqual([
+        { returnTime: null },
         expect.objectContaining({ returnTime: { not: null } }),
-        expect.objectContaining({ returnTime: null }),
       ]);
       expect(ownersTerm(where)).toEqual([
         { vehicleAssetId: 'veh-1' },
@@ -2158,6 +2337,7 @@ describe('RequestsService', () => {
           travelDate: at(today),
           departureTime: '08:00',
           returnTime: '11:00',
+          startedAt: new Date(),
           ...overrides,
         });
 
@@ -2181,6 +2361,7 @@ describe('RequestsService', () => {
         prisma.marketingClient.findMany.mockResolvedValue([acme, newco]);
 
         await service.complete(user({ role: 'TENANT_ADMIN' }), 'req-1', {
+          ...returnDetails,
           actualReturnTime: '11:00',
           stops: [
             { kind: 'CLIENT', id: 'c1' },
@@ -2209,6 +2390,7 @@ describe('RequestsService', () => {
         prisma.marketingClient.findMany.mockResolvedValue([newco]);
 
         await service.complete(user({ role: 'TENANT_ADMIN' }), 'req-1', {
+          ...returnDetails,
           actualReturnTime: '11:00',
           stops: [{ kind: 'CLIENT', id: 'c2' }],
         });
@@ -2222,7 +2404,10 @@ describe('RequestsService', () => {
       it('changes nothing about places when none are added', async () => {
         arrange();
 
-        await service.complete(user(), 'req-1', { actualReturnTime: '11:00' });
+        await service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '11:00',
+        });
 
         expect(
           tx.marketingTransportRequestStop.createMany,
@@ -2236,6 +2421,7 @@ describe('RequestsService', () => {
 
         await expect(
           service.complete(user(), 'req-1', {
+            ...returnDetails,
             actualReturnTime: '11:00',
             stops: [{ kind: 'CLIENT', id: 'someone-elses' }],
           }),
@@ -2248,6 +2434,7 @@ describe('RequestsService', () => {
         prisma.marketingClient.findMany.mockResolvedValue([newco]);
 
         await service.complete(user({ id: 'user-1' }), 'req-1', {
+          ...returnDetails,
           actualReturnTime: '11:00',
           stops: [{ kind: 'CLIENT', id: 'c2' }],
         });
@@ -2258,7 +2445,7 @@ describe('RequestsService', () => {
   });
 
   describe('purpose', () => {
-    it('saves whether the trip is personal or official', async () => {
+    it('saves whether the trip is personal or marketing', async () => {
       directory.resolve.mockResolvedValue({ person: ama, people: [] });
       prisma.marketingTransportRequest.create.mockResolvedValue(
         row({ purpose: 'PERSONAL' }),
@@ -2306,13 +2493,124 @@ describe('RequestsService', () => {
 
     it('still shows the old free-text purpose of requests made before this changed', async () => {
       prisma.marketingTransportRequest.findFirst.mockResolvedValue(
-        row({ businessPurpose: 'Client site visit', purpose: 'OFFICIAL' }),
+        row({ businessPurpose: 'Client site visit', purpose: 'MARKETING' }),
       );
 
       const result = await service.findOne(user(), 'req-1');
 
-      expect(result.purpose).toBe('OFFICIAL');
+      expect(result.purpose).toBe('MARKETING');
       expect(result.businessPurpose).toBe('Client site visit');
+    });
+  });
+
+  describe('start', () => {
+    const approved = (overrides: Record<string, unknown> = {}) =>
+      row({
+        status: 'APPROVED',
+        travelDate: at(today),
+        departureTime: '08:00',
+        returnTime: '17:00',
+        vehicleAssetId: 'veh-1',
+        vehicleName: 'Toyota Hilux',
+        ...overrides,
+      });
+    const at = (date: string) => new Date(`${date}T00:00:00.000Z`);
+    const startDto = {
+      actualDepartureTime: '08:10',
+      startingMileage: 48210,
+      startingCondition: 'GOOD' as const,
+      notes: 'Fuel full',
+    };
+
+    function arrange(request = approved()) {
+      prisma.marketingTransportRequest.findFirst
+        .mockResolvedValueOnce(request)
+        .mockResolvedValueOnce(
+          approved({ startedAt: new Date(), startingMileage: 48210 }),
+        );
+      directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      prisma.marketingTransportRequest.updateMany.mockResolvedValue({
+        count: 1,
+      });
+    }
+
+    it('puts an approved trip on route and records the departure details', async () => {
+      arrange();
+
+      const result = await service.start(user(), 'req-1', startDto);
+
+      expect(
+        callArg(prisma.marketingTransportRequest.updateMany),
+      ).toMatchObject({
+        where: { id: 'req-1', status: 'APPROVED', startedAt: null },
+        data: {
+          startedByUserId: 'user-1',
+          actualDepartureTime: '08:10',
+          startingMileage: 48210,
+          startingCondition: 'GOOD',
+          startNotes: 'Fuel full',
+        },
+      });
+      expect(result.status).toBe('ON_ROUTE');
+    });
+
+    it('cannot start a trip that is not approved', async () => {
+      arrange(approved({ status: 'PENDING' }));
+      await expect(service.start(user(), 'req-1', startDto)).rejects.toThrow(
+        /Only approved/,
+      );
+    });
+
+    it('cannot start a trip twice', async () => {
+      arrange(approved({ startedAt: new Date() }));
+      await expect(service.start(user(), 'req-1', startDto)).rejects.toThrow(
+        /already started/,
+      );
+    });
+
+    it('cannot start before the travel day', async () => {
+      arrange(approved({ travelDate: at(future) }));
+      await expect(service.start(user(), 'req-1', startDto)).rejects.toThrow(
+        /before its travel day/,
+      );
+    });
+
+    it('cannot record a departure time in the future on the travel day', async () => {
+      arrange();
+      await expect(
+        service.start(user(), 'req-1', {
+          ...startDto,
+          actualDepartureTime: '12:01',
+        }),
+      ).rejects.toThrow(/cannot be in the future/);
+    });
+
+    it('loses cleanly if the trip changed while starting', async () => {
+      arrange();
+      prisma.marketingTransportRequest.updateMany.mockResolvedValue({
+        count: 0,
+      });
+      await expect(service.start(user(), 'req-1', startDto)).rejects.toThrow(
+        /can no longer be started/,
+      );
+    });
+
+    it('cannot be rescheduled once started', async () => {
+      prisma.marketingTransportRequest.findFirst.mockResolvedValue(
+        approved({ startedAt: new Date() }),
+      );
+      await expect(
+        service.reschedule(
+          user({ permissions: ['requests:approve_all'] }),
+          'req-1',
+          {
+            travelDate: future,
+            departureTime: '09:00',
+            vehicleAssetId: 'veh-1',
+            selfDriven: true,
+          },
+        ),
+      ).rejects.toThrow(/has started/);
     });
   });
 
@@ -2323,6 +2621,7 @@ describe('RequestsService', () => {
         travelDate: at(today),
         departureTime: '08:00',
         returnTime: null,
+        startedAt: new Date(),
         ...overrides,
       });
     const viewOne = async (overrides: Record<string, unknown>) => {
@@ -2376,20 +2675,16 @@ describe('RequestsService', () => {
       ).not.toHaveProperty('returnTime');
     });
 
-    it('goes on route at departure but is never overdue', async () => {
+    it('is on route once started but is never overdue', async () => {
       const result = await viewOne({ travelDate: at('2020-01-01') });
 
       expect(result.status).toBe('ON_ROUTE');
       expect(result.overdue).toBe(false);
     });
 
-    it('can be completed any time after it departs, but not before', async () => {
-      expect((await viewOne({ departureTime: '08:00' })).completable).toBe(
-        true,
-      );
-      expect((await viewOne({ departureTime: '12:01' })).completable).toBe(
-        false,
-      );
+    it('can be completed any time after it is started, but not before', async () => {
+      expect((await viewOne({})).completable).toBe(true);
+      expect((await viewOne({ startedAt: null })).completable).toBe(false);
     });
 
     it('only becomes completable after the return time when it has one', async () => {
@@ -2412,6 +2707,7 @@ describe('RequestsService', () => {
       tx.marketingTransportRequest.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.complete(user(), 'req-1', {
+        ...returnDetails,
         actualReturnTime: '11:30',
       });
 
@@ -2422,14 +2718,17 @@ describe('RequestsService', () => {
       });
     });
 
-    it('cannot be completed before it has departed, and says why', async () => {
+    it('cannot be completed before it has been started, and says why', async () => {
       prisma.marketingTransportRequest.findFirst.mockResolvedValue(
-        noReturn({ departureTime: '12:01' }),
+        noReturn({ startedAt: null }),
       );
 
       await expect(
-        service.complete(user(), 'req-1', { actualReturnTime: '12:30' }),
-      ).rejects.toThrow(/once it has departed/);
+        service.complete(user(), 'req-1', {
+          ...returnDetails,
+          actualReturnTime: '12:30',
+        }),
+      ).rejects.toThrow(/Start the trip/);
     });
 
     it('holds its vehicle and driver from departure onwards: nothing starts-before-end is required of the other trip', async () => {

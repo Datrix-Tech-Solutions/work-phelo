@@ -579,8 +579,8 @@ export interface CreateFleetVehicleResult extends FleetVehicle {
 }
 
 /**
- * ON_ROUTE is derived: an approved request whose departure time has passed. It stays on
- * route until someone completes, cancels or reschedules it. COMPLETED is a real, final status.
+ * ON_ROUTE is derived: an approved request that someone has started. It stays on
+ * route until someone completes or cancels it. COMPLETED is a real, final status.
  */
 export type TransportRequestStatus =
   | 'PENDING'
@@ -598,7 +598,7 @@ export interface TransportRequestPerson {
   jobTitle?: string | null;
 }
 
-export type TransportPurpose = 'PERSONAL' | 'OFFICIAL';
+export type TransportPurpose = 'PERSONAL' | 'MARKETING' | 'OPERATIONS';
 
 /** A client or prospect a trip goes to, with the location saved when it was chosen. */
 export interface TransportStop {
@@ -628,6 +628,8 @@ export interface TransportRequest {
   purpose: TransportPurpose;
   /** Free-text purpose that requests made before purpose became personal / official still carry. */
   businessPurpose: string | null;
+  /** The appointment the trip was requested for, if any. */
+  appointmentId: string | null;
   /** YYYY-MM-DD */
   travelDate: string;
   /** 24h HH:mm */
@@ -637,8 +639,20 @@ export interface TransportRequest {
   /** The places chosen, joined into one line (or the old typed destination). */
   destination: string;
   stops: TransportStop[];
-  /** The trip has departed and its return time has passed (or it had none). */
+  /** The trip has been started and its return time has passed (or it had none). */
   completable: boolean;
+  /** Approved, not started, and its travel day has come. */
+  startable: boolean;
+  /** Set once someone starts the trip. minutesLate: positive = left late, negative = early. */
+  start: {
+    at: string;
+    byName: string | null;
+    actualDepartureTime: string | null;
+    mileage: number | null;
+    condition: VehicleCondition | null;
+    notes: string | null;
+    minutesLate: number | null;
+  } | null;
   notes: string | null;
   requester: { userId: string; name: string; department: string | null };
   /** People in the vehicle excluding the driver; the requester counts unless they drive. */
@@ -654,6 +668,11 @@ export interface TransportRequest {
     at: string;
     byName: string | null;
     actualReturnTime: string | null;
+    endingMileage: number | null;
+    endingCondition: VehicleCondition | null;
+    notes: string | null;
+    /** Kilometres covered (ending minus starting mileage); null when either is missing. */
+    distance: number | null;
     minutesLate: number | null;
   } | null;
   /** Set when an approver moved the trip; `previous` is where it was before. */
@@ -698,10 +717,14 @@ export interface TransportStopRef {
 
 export interface CreateTransportRequestPayload {
   purpose: TransportPurpose;
+  /** An approved appointment the trip is for; its prospect is always a destination. */
+  appointmentId?: string;
   travelDate: string;
   departureTime: string;
   returnTime?: string;
   stops?: TransportStopRef[];
+  /** Typed destination and purpose, used for personal trips instead of stops. */
+  destination?: string;
   passengerIds?: string[];
   notes?: string;
 }
@@ -745,9 +768,33 @@ export interface TransportRequestWindow {
 export interface RescheduleTransportRequestPayload
   extends ApproveTransportRequestPayload, TransportRequestWindow {}
 
+export type VehicleCondition = 'NEW' | 'GOOD' | 'FAIR' | 'POOR';
+
+/** What the start form is prefilled with. */
+export interface TransportRequestStartOptions {
+  vehicleName: string | null;
+  /** The vehicle's current mileage, when one is recorded. */
+  mileage: number | null;
+  /** The vehicle's condition as recorded on its asset. */
+  condition: VehicleCondition | null;
+  /** The business-timezone clock, used to prefill the departure time. */
+  now: { date: string; time: string };
+}
+
+export interface StartTransportRequestPayload {
+  /** HH:mm the vehicle actually left. */
+  actualDepartureTime: string;
+  startingMileage: number;
+  startingCondition: VehicleCondition;
+  notes?: string;
+}
+
 export interface CompleteTransportRequestPayload {
   /** HH:mm on the travel date. */
   actualReturnTime: string;
+  endingMileage: number;
+  endingCondition: VehicleCondition;
+  notes?: string;
   /** Further places visited, added to the planned ones. */
   stops?: TransportStopRef[];
 }

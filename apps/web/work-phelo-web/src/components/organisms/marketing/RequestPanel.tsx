@@ -5,9 +5,11 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { Icons } from '@/components/atoms/icons';
 import { MapPin } from 'lucide-react';
+import { useGeocodeSearch } from '@/hooks';
 import { useDestinationPicker } from '@/hooks/marketing/useDestinationPicker';
 import {
   useCreateRequest,
@@ -16,12 +18,21 @@ import {
 } from '@/hooks/marketing/useRequests';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
+import { formatAppointmentTime } from '@/lib/appointments';
+import { formatDate } from '@/lib/formatters';
 import { PURPOSE_OPTIONS } from '@/lib/requestOptions';
 import { inputClass } from '@/lib/utils';
-import type { DestinationOption, TransportPurpose, TransportRequest } from '@/types/marketing';
+import type {
+  Appointment,
+  DestinationOption,
+  TransportPurpose,
+  TransportRequest,
+} from '@/types/marketing';
 
 interface FormValues {
   purpose: TransportPurpose;
+  /** Typed destination and purpose, used instead of the client/prospect picker on personal trips. */
+  destination: string;
   travelDate: string;
   departureTime: string;
   /** Optional: blank means no planned return, and the trip stays out until it is completed. */
@@ -30,7 +41,9 @@ interface FormValues {
   notes: string;
 }
 
-type FormErrors = Partial<Record<'travelDate' | 'departureTime' | 'returnTime', string>>;
+type FormErrors = Partial<
+  Record<'destination' | 'travelDate' | 'departureTime' | 'returnTime', string>
+>;
 
 /** Local today as YYYY-MM-DD. */
 const todayIso = () => {
@@ -42,7 +55,8 @@ const todayIso = () => {
 
 /** A fresh form: today's date is worked out when the form opens, not when the page loaded. */
 const emptyValues = (): FormValues => ({
-  purpose: 'OFFICIAL',
+  purpose: 'MARKETING',
+  destination: '',
   travelDate: todayIso(),
   departureTime: '',
   returnTime: '',
@@ -75,9 +89,14 @@ interface Props {
   onClose: () => void;
   /** When set the panel edits this (pending) request; otherwise it raises a new one. */
   request?: TransportRequest | null;
+  /**
+   * When set the panel raises a trip for this approved appointment: the purpose is fixed to
+   * marketing and its prospect is a fixed destination, with room to add more.
+   */
+  appointment?: Appointment | null;
 }
 
-export function RequestPanel({ isOpen, onClose, request }: Props) {
+export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
   const toast = useToast();
   const createRequest = useCreateRequest();
   const updateRequest = useUpdateRequest();
@@ -87,9 +106,17 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
 
   const [values, setValues] = useState<FormValues>(emptyValues);
   const [errors, setErrors] = useState<FormErrors>({});
-  const destinations = useDestinationPicker();
+  // The appointment's prospect is already a destination, so it can't be picked again.
+  const appointmentProspectId = appointment?.prospectId;
+  const fixedPlace = useMemo(
+    () => (appointmentProspectId ? [{ kind: 'PROSPECT', id: appointmentProspectId }] : []),
+    [appointmentProspectId],
+  );
+  const destinations = useDestinationPicker([], fixedPlace);
   // Re-seed the form whenever the panel opens for a different request (or for create).
-  const seedKey = isOpen ? (request?.id ?? 'new') : null;
+  const seedKey = isOpen
+    ? (request?.id ?? (appointment ? `appointment:${appointment.id}` : 'new'))
+    : null;
   const [seededFor, setSeededFor] = useState<string | null>(null);
   if (seedKey !== seededFor) {
     setSeededFor(seedKey);
@@ -99,13 +126,22 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
       request
         ? {
             purpose: request.purpose,
+            destination: request.purpose !== 'MARKETING' ? request.destination : '',
             travelDate: request.travelDate,
             departureTime: request.departureTime,
             returnTime: request.returnTime ?? '',
             passengerIds: request.passengers.map((p) => p.employeeId),
             notes: request.notes ?? '',
           }
-        : emptyValues(),
+        : appointment
+          ? {
+              ...emptyValues(),
+              // A trip for an appointment is a marketing trip, on the appointment's day (or today
+              // if that has passed, since a request can't be for the past).
+              purpose: 'MARKETING',
+              travelDate: appointment.date > todayIso() ? appointment.date : todayIso(),
+            }
+          : emptyValues(),
     );
   }
 
@@ -130,6 +166,20 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
       },
   );
 
+  const isPersonal = values.purpose === 'PERSONAL';
+  // Personal and operations trips store a typed or searched destination instead of clients/prospects.
+  const usesPlaceText = values.purpose !== 'MARKETING';
+
+  // Operations trips pick a place by searching as they type, like the prospect location search.
+  const [placeQuery, setPlaceQuery] = useState('');
+  const { data: placeSuggestions = [] } = useGeocodeSearch(placeQuery);
+  const placeOptions = useMemo(() => {
+    const names = placeSuggestions.map((place) => place.placeName);
+    // The chosen place may not be in the live suggestions, so keep it so its label still shows.
+    const all = values.destination ? [values.destination, ...names] : names;
+    return [...new Set(all)].map((name) => ({ value: name, label: name }));
+  }, [placeSuggestions, values.destination]);
+
   const requester = request
     ? { name: request.requester.name, department: request.requester.department }
     : options?.requester;
@@ -140,6 +190,11 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
 
   function validate(): boolean {
     const next: FormErrors = {};
+    if (usesPlaceText && !values.destination.trim()) {
+      next.destination = isPersonal
+        ? 'Destination and purpose is required.'
+        : 'Destination is required.';
+    }
     if (!values.travelDate) next.travelDate = 'Travel date is required.';
     if (!values.departureTime) next.departureTime = 'Departure time is required.';
     // The return time is optional, but when given it must come after the departure.
@@ -168,8 +223,13 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
           notes,
           // Clearing the field removes the return time.
           returnTime: values.returnTime || null,
-          // Only sent when changed, so an older request's typed destination is left alone.
-          ...(destinations.touched ? { stops: destinations.refs } : {}),
+          // Personal trips type their destination; picked places are dropped.
+          // Otherwise stops are only sent when changed, so an older request's typed destination is left alone.
+          ...(usesPlaceText
+            ? { destination: values.destination.trim(), stops: [] }
+            : destinations.touched || request.purpose !== 'MARKETING'
+              ? { stops: destinations.refs }
+              : {}),
         },
         {
           onSuccess: () => {
@@ -185,9 +245,14 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
     createRequest.mutate(
       {
         ...common,
+        ...(appointment ? { appointmentId: appointment.id } : {}),
         ...(notes ? { notes } : {}),
         ...(values.returnTime ? { returnTime: values.returnTime } : {}),
-        ...(destinations.refs.length ? { stops: destinations.refs } : {}),
+        ...(usesPlaceText
+          ? { destination: values.destination.trim() }
+          : destinations.refs.length
+            ? { stops: destinations.refs }
+            : {}),
       },
       {
         onSuccess: () => {
@@ -242,60 +307,122 @@ export function RequestPanel({ isOpen, onClose, request }: Props) {
 
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">Purpose</label>
-          <SegmentedToggle
-            value={values.purpose}
-            onChange={(v) => set('purpose', v)}
-            options={PURPOSE_OPTIONS}
-          />
+          {appointment ? (
+            <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-600 select-none">
+              Marketing
+            </div>
+          ) : (
+            <SegmentedToggle
+              value={values.purpose}
+              onChange={(v) => set('purpose', v)}
+              options={PURPOSE_OPTIONS}
+            />
+          )}
         </div>
 
-        <MultiSelect
-          label="Destination (client or prospect)"
-          placeholder={destinations.isLoading ? 'Loading…' : 'Search clients and prospects'}
-          options={destinations.options}
-          value={destinations.selectedKeys}
-          onChange={destinations.onChange}
-          onQueryChange={destinations.setSearch}
-          hideChips
-        />
-
-        {destinations.selected.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {destinations.selected.map((place) => (
-              <div
-                key={`${place.kind}:${place.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3"
-              >
-                <div className="min-w-0">
+        {values.purpose === 'OPERATIONS' ? (
+          <SearchSelect
+            label="Destination"
+            placeholder="Search for a location..."
+            options={placeOptions}
+            value={values.destination}
+            onChange={(v) => {
+              set('destination', v);
+              setPlaceQuery('');
+            }}
+            onQueryChange={setPlaceQuery}
+            error={errors.destination}
+          />
+        ) : isPersonal ? (
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+            <label className="text-sm font-bold text-gray-900">Destination and purpose</label>
+            <input
+              type="text"
+              placeholder="Where are you going and why?"
+              value={values.destination}
+              onChange={(e) => set('destination', e.target.value)}
+              maxLength={500}
+              className={inputClass(errors.destination)}
+            />
+            {errors.destination && <p className="text-xs text-red-500">{errors.destination}</p>}
+          </div>
+        ) : (
+          <>
+            {appointment && (
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-gray-900">Appointment</label>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
                   <p className="text-sm font-semibold text-gray-900 truncate">
-                    {place.name}
+                    {appointment.prospectName}
                     <span className="ml-2 text-[11px] font-semibold uppercase tracking-tight text-gray-400">
-                      {place.kind === 'CLIENT' ? 'Client' : 'Prospect'}
+                      Prospect
                     </span>
                   </p>
-                  <p className="flex items-center gap-1 text-xs text-gray-500 truncate">
-                    <MapPin className="w-3 h-3 shrink-0" />
-                    {place.locationLabel}
+                  <p className="text-xs text-gray-500">
+                    {formatDate(appointment.date)} · {formatAppointmentTime(appointment)}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => destinations.remove(place)}
-                  className="text-gray-400 hover:text-red-400 transition-colors shrink-0"
-                >
-                  <Icons.X className="w-4 h-4" />
-                </button>
               </div>
-            ))}
-          </div>
-        )}
-        {destinations.isEmpty && (
-          <p className="text-xs text-gray-400 -mt-2">
-            You have no clients or prospects to choose from. The destination can be left blank.
-          </p>
-        )}
-        {request && request.stops.length === 0 && request.destination && !destinations.touched && (
-          <p className="text-xs text-gray-500 -mt-2">Previously entered: {request.destination}</p>
+            )}
+
+            <MultiSelect
+              label={
+                appointment
+                  ? 'Add more destinations (optional)'
+                  : 'Destination (client or prospect)'
+              }
+              placeholder={destinations.isLoading ? 'Loading…' : 'Search clients and prospects'}
+              options={destinations.options}
+              value={destinations.selectedKeys}
+              onChange={destinations.onChange}
+              onQueryChange={destinations.setSearch}
+              hideChips
+            />
+
+            {destinations.selected.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {destinations.selected.map((place) => (
+                  <div
+                    key={`${place.kind}:${place.id}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
+                        {place.name}
+                        <span className="ml-2 text-[11px] font-semibold uppercase tracking-tight text-gray-400">
+                          {place.kind === 'CLIENT' ? 'Client' : 'Prospect'}
+                        </span>
+                      </p>
+                      <p className="flex items-center gap-1 text-xs text-gray-500 truncate">
+                        <MapPin className="w-3 h-3 shrink-0" />
+                        {place.locationLabel}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => destinations.remove(place)}
+                      className="text-gray-400 hover:text-red-400 transition-colors shrink-0"
+                    >
+                      <Icons.X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {destinations.isEmpty && (
+              <p className="text-xs text-gray-400 -mt-2">
+                You have no clients or prospects to choose from. The destination can be left blank.
+              </p>
+            )}
+            {request &&
+              request.stops.length === 0 &&
+              request.destination &&
+              !destinations.touched && (
+                <p className="text-xs text-gray-500 -mt-2">
+                  Previously entered: {request.destination}
+                </p>
+              )}
+          </>
         )}
 
         <DatePicker

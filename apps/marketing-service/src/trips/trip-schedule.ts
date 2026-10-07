@@ -18,6 +18,8 @@ export interface TripWindow {
   departureTime: string;
   /** Planned return (HH:mm). Null when none was given: the trip then holds its vehicle until completed. */
   returnTime: string | null;
+  /** Someone has started the trip. Only a started trip is on route. */
+  started: boolean;
 }
 
 export const DEFAULT_TRANSPORT_TIMEZONE = 'Africa/Accra';
@@ -45,19 +47,17 @@ export function wallClockNow(
 }
 
 /**
- * A trip starts by itself at its departure time and then stays on route until a
- * person completes, cancels or reschedules it. It never ends on the clock alone.
- * - BOOKED: the departure time has not come yet.
- * - ON_ROUTE: departure has passed (even if the return time has too).
+ * A trip is started by a person, never by the clock, and then stays on route until a person
+ * completes, cancels or reschedules it.
+ * - BOOKED: not started yet, whatever the departure time says.
+ * - ON_ROUTE: started.
  */
-export function tripState(now: WallClock, trip: TripWindow): TripState {
-  if (trip.travelDate > now.date) return 'BOOKED';
-  if (trip.travelDate < now.date) return 'ON_ROUTE';
-  return now.time >= trip.departureTime ? 'ON_ROUTE' : 'BOOKED';
+export function tripState(trip: Pick<TripWindow, 'started'>): TripState {
+  return trip.started ? 'ON_ROUTE' : 'BOOKED';
 }
 
 /**
- * True once the return time has passed while the trip is still unresolved. A trip with no
+ * True once the return time has passed while the trip is still unresolved (meaningful for a started trip). A trip with no
  * planned return time can't be overdue: it simply stays on route until someone completes it.
  */
 export function isOverdue(now: WallClock, trip: TripWindow): boolean {
@@ -68,14 +68,11 @@ export function isOverdue(now: WallClock, trip: TripWindow): boolean {
 }
 
 /**
- * A trip can be completed once it has departed and either its return time has passed, or it never
- * had one.
+ * A trip can be completed once it has been started and either its return time has passed, or it
+ * never had one.
  */
 export function canComplete(now: WallClock, trip: TripWindow): boolean {
-  return (
-    tripState(now, trip) === 'ON_ROUTE' &&
-    (!trip.returnTime || isOverdue(now, trip))
-  );
+  return trip.started && (!trip.returnTime || isOverdue(now, trip));
 }
 
 /** Whole minutes from one HH:mm to another on the same day (negative if `to` is earlier). */

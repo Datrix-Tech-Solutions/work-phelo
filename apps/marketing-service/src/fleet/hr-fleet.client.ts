@@ -15,6 +15,8 @@ export interface HrVehicleAsset {
   branchId: string | null;
   branchName?: string | null;
   assignedEmployeeId: string | null;
+  /** The asset's recorded condition in HR. */
+  condition?: 'NEW' | 'GOOD' | 'FAIR' | 'POOR' | null;
   assignedEmployeeName?: string;
   createdAt: string;
 }
@@ -73,7 +75,11 @@ export class HrFleetClient {
   updateVehicle(
     tenantId: string,
     assetId: string,
-    input: { name?: string; branchId?: string | null },
+    input: {
+      name?: string;
+      branchId?: string | null;
+      condition?: 'NEW' | 'GOOD' | 'FAIR' | 'POOR';
+    },
   ) {
     return this.http.patch<HrVehicleAsset>(`${BASE}/${assetId}`, {
       body: { tenantId, ...input },
