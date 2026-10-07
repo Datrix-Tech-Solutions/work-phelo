@@ -58,6 +58,19 @@ export class TenantConfigService {
     };
   }
 
+  /** Which modules a tenant has switched on, for services that act on a tenant named in a path. */
+  async getModuleConfig(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { moduleConfig: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    return {
+      moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {},
+    };
+  }
+
   async getReinsuranceAccountingIntegration(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },

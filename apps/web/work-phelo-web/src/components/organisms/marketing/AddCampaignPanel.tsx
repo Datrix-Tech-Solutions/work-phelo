@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -8,16 +8,22 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
-import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
-import { useCampaignEstimate, useCampaignPreview } from '@/hooks/marketing/useCampaigns';
+import { Icons } from '@/components/atoms/icons';
+import { CampaignSegmentModal } from '@/components/organisms/marketing/CampaignSegmentModal';
+import {
+  useCampaignEstimate,
+  useCampaignPreview,
+  useCampaignSegments,
+} from '@/hooks/marketing/useCampaigns';
 import { useSmsSenderIdentities } from '@/hooks/marketing/useSmsMarketing';
-import type { CampaignChannel, ProspectingSetting } from '@/types/marketing';
+import type { CampaignChannel, CampaignSegment } from '@/types/marketing';
 
 export type CampaignDispatch = 'instant' | 'schedule';
 
 export interface CampaignForm {
   name: string;
   outreachChannel: CampaignChannel[];
+  /** Segment ids: saved segments, or `business-type:<id>` for a built-in one. */
   targetSegment: string[];
   subject: string;
   message: string;
@@ -47,10 +53,6 @@ const CHANNEL_OPTIONS: { label: string; value: CampaignChannel }[] = [
   { label: 'Email', value: 'EMAIL' },
 ];
 
-function toOptions(items: ProspectingSetting[]) {
-  return items.map((item) => ({ value: item.id, label: item.name }));
-}
-
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -59,9 +61,20 @@ interface Props {
 }
 
 export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Props) {
-  const { data: businessTypes = [] } = useProspectingSettings('business-types');
+  const { data: segments = [] } = useCampaignSegments(isOpen);
+  const [segmentModal, setSegmentModal] = useState<{ segment: CampaignSegment | null } | null>(
+    null,
+  );
   const { data: approvedSenders = [] } = useSmsSenderIdentities({ status: 'APPROVED' });
-  const segmentOptions = useMemo(() => toOptions(businessTypes), [businessTypes]);
+  const segmentOptions = useMemo(
+    () =>
+      segments.map((segment) => ({
+        value: segment.id,
+        label: segment.name,
+        sublabel: `${segment.builtIn ? 'Business type' : 'Saved segment'} · ${segment.prospectCount} prospect${segment.prospectCount === 1 ? '' : 's'}`,
+      })),
+    [segments],
+  );
   const senderOptions = useMemo(
     () =>
       approvedSenders.map((sender) => ({
@@ -83,6 +96,15 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
 
   const channelValue = useWatch({ control, name: 'outreachChannel' });
   const segmentValue = useWatch({ control, name: 'targetSegment' });
+
+  const selectedSegments = useMemo(
+    () =>
+      (segmentValue ?? []).flatMap((id) => {
+        const segment = segments.find((item) => item.id === id);
+        return segment ? [segment] : [];
+      }),
+    [segmentValue, segments],
+  );
   const subjectValue = useWatch({ control, name: 'subject' }) ?? '';
   const messageValue = useWatch({ control, name: 'message' }) ?? '';
   const senderIdentityId = useWatch({ control, name: 'senderIdentityId' });
@@ -98,11 +120,11 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
   }, [isOpen, reset]);
 
   const preview = useCampaignPreview({
-    businessTypeIds: segmentValue,
+    segmentIds: segmentValue,
     channels: channelValue,
   });
   const estimate = useCampaignEstimate({
-    businessTypeIds: segmentValue,
+    segmentIds: segmentValue,
     channels: channelValue,
     subject: subjectValue,
     message: messageValue,
@@ -176,18 +198,76 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
             validate: (v) => v.length > 0 || 'Select at least one target segment',
           })}
         />
-        <MultiSelect
-          label="Target Segment"
-          placeholder="Select target segments"
-          value={segmentValue}
-          onChange={(v) => setValue('targetSegment', v, { shouldValidate: true })}
-          options={segmentOptions}
-          error={errors.targetSegment?.message}
-        />
+        <div className="flex items-end gap-2">
+          <div className="flex-1 min-w-0">
+            <MultiSelect
+              label="Target Segment"
+              placeholder="Select target segments"
+              value={segmentValue}
+              onChange={(v) => setValue('targetSegment', v, { shouldValidate: true })}
+              options={segmentOptions}
+              error={errors.targetSegment?.message}
+              hideChips
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setSegmentModal({ segment: null })}
+            className="shrink-0 h-11.5"
+          >
+            + Create
+          </Button>
+        </div>
+
+        {selectedSegments.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {selectedSegments.map((segment) => (
+              <div
+                key={segment.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{segment.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {segment.builtIn ? 'Business type' : 'Saved segment'} · {segment.prospectCount}{' '}
+                    prospect{segment.prospectCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {!segment.builtIn && (
+                    <button
+                      type="button"
+                      onClick={() => setSegmentModal({ segment })}
+                      className="text-xs font-semibold text-brand hover:underline"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setValue(
+                        'targetSegment',
+                        (segmentValue ?? []).filter((id) => id !== segment.id),
+                        { shouldValidate: true },
+                      )
+                    }
+                    className="text-gray-400 hover:text-red-400 transition-colors"
+                  >
+                    <Icons.X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {preview.data && (
           <p className="text-xs text-gray-500">
-            {preview.data.prospectCount} prospect{preview.data.prospectCount === 1 ? '' : 's'} in
-            the selected segments · {preview.data.reachable} message
+            {preview.data.prospectCount} unique prospect
+            {preview.data.prospectCount === 1 ? '' : 's'} across the selected segment
+            {selectedSegments.length === 1 ? '' : 's'} · {preview.data.reachable} message
+            {preview.data.reachable === 1 ? '' : 's'}
           </p>
         )}
 
@@ -326,6 +406,24 @@ export function AddCampaignPanel({ isOpen, onClose, onSubmit, isSubmitting }: Pr
           </>
         )}
       </div>
+      <CampaignSegmentModal
+        isOpen={!!segmentModal}
+        segment={segmentModal?.segment}
+        onClose={() => setSegmentModal(null)}
+        onSaved={(saved) => {
+          const current = segmentValue ?? [];
+          if (!current.includes(saved.id)) {
+            setValue('targetSegment', [...current, saved.id], { shouldValidate: true });
+          }
+        }}
+        onDeleted={(id) =>
+          setValue(
+            'targetSegment',
+            (segmentValue ?? []).filter((item) => item !== id),
+            { shouldValidate: true },
+          )
+        }
+      />
     </SidePanel>
   );
 }

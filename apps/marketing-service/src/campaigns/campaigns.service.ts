@@ -9,13 +9,13 @@ import {
   MarketingCampaign,
   MarketingCampaignRecipientStatus,
   MarketingCampaignStatus,
-  MarketingCrmSettingCategory,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { campaignSmsText, estimateSmsSegments } from '../sms/sms-segments';
 import { SmsSenderIdentitiesService } from '../sms/sms-sender-identities.service';
 import { SmsWalletService } from '../sms/sms-wallet.service';
+import { CampaignSegmentsService } from './campaign-segments.service';
 import {
   CAMPAIGN_DISPATCHER,
   type CampaignDispatcher,
@@ -26,15 +26,13 @@ import {
   EstimateCampaignDto,
   PreviewCampaignRecipientsDto,
   QueryCampaignsDto,
+  RecipientOptionsQueryDto,
 } from './dto/campaign.dto';
 
 const NOT_FOUND_MESSAGE = 'Campaign not found';
-const INVALID_BUSINESS_TYPE_MESSAGE =
-  'A selected business type is invalid or inactive';
-const NO_PROSPECTS_MESSAGE =
-  'No prospects were found under the selected business types';
+const NO_PROSPECTS_MESSAGE = 'No prospects were found in the selected segments';
 const NO_REACHABLE_MESSAGE =
-  'None of the prospects under these business types have a primary contact reachable on the selected channels';
+  'None of the prospects in these segments have a primary contact reachable on the selected channels';
 const PAST_DATE_MESSAGE = 'The scheduled date cannot be in the past';
 const NOT_CANCELLABLE_MESSAGE =
   'Only campaigns that have not started sending can be cancelled';
@@ -119,6 +117,7 @@ export class CampaignsService {
     private readonly wallet: SmsWalletService,
     @Inject(CAMPAIGN_DISPATCHER)
     private readonly dispatcher: CampaignDispatcher,
+    private readonly segments: CampaignSegmentsService,
   ) {}
 
   async list(user: RequestUser, query: QueryCampaignsDto = {}) {
@@ -165,12 +164,47 @@ export class CampaignsService {
     return this.toResponse(campaign, counts.get(id));
   }
 
+  /** Prospects that can be picked when building a segment, optionally within some filters. */
+  async recipientOptions(user: RequestUser, query: RecipientOptionsQueryDto) {
+    const search = query.search?.trim().replace(/\s+/g, ' ').toLowerCase();
+    const prospects = await this.prisma.marketingProspect.findMany({
+      where: {
+        tenantId: user.tenantId,
+        ...(query.businessTypeIds?.length
+          ? { businessTypeId: { in: query.businessTypeIds } }
+          : {}),
+        ...(query.ids?.length ? { id: { in: query.ids } } : {}),
+        ...(query.pipelineStageIds?.length
+          ? { pipelineStageId: { in: query.pipelineStageIds } }
+          : {}),
+        ...(search ? { normalizedCompanyName: { contains: search } } : {}),
+      },
+      orderBy: [{ companyName: 'asc' }, { id: 'asc' }],
+      take: query.ids?.length ?? query.limit ?? 30,
+      select: {
+        id: true,
+        companyName: true,
+        locationLabel: true,
+        contacts: {
+          where: { isPrimary: true },
+          take: 1,
+          select: { name: true },
+        },
+      },
+    });
+    return prospects.map((prospect) => ({
+      id: prospect.id,
+      companyName: prospect.companyName,
+      locationLabel: prospect.locationLabel,
+      contactName: prospect.contacts[0]?.name ?? null,
+    }));
+  }
+
   /** How many messages a campaign would queue, without saving anything. */
   async preview(user: RequestUser, dto: PreviewCampaignRecipientsDto) {
-    await this.assertActiveBusinessTypes(user.tenantId, dto.businessTypeIds);
+    const audience = await this.segments.resolve(user.tenantId, dto.segmentIds);
     const { prospectCount, drafts } = await this.resolveRecipients(
-      user.tenantId,
-      dto.businessTypeIds,
+      audience.where,
       dto.channels,
     );
     return {
@@ -181,10 +215,9 @@ export class CampaignsService {
   }
 
   async estimate(user: RequestUser, dto: EstimateCampaignDto) {
-    await this.assertActiveBusinessTypes(user.tenantId, dto.businessTypeIds);
+    const audience = await this.segments.resolve(user.tenantId, dto.segmentIds);
     const { prospectCount, drafts } = await this.resolveRecipients(
-      user.tenantId,
-      dto.businessTypeIds,
+      audience.where,
       dto.channels,
     );
     const smsDrafts = drafts.filter((draft) => draft.channel === 'SMS');
@@ -290,13 +323,9 @@ export class CampaignsService {
 
   async create(user: RequestUser, dto: CreateCampaignDto) {
     const scheduledDate = this.parseScheduledDate(dto);
-    const businessTypes = await this.assertActiveBusinessTypes(
-      user.tenantId,
-      dto.businessTypeIds,
-    );
+    const audience = await this.segments.resolve(user.tenantId, dto.segmentIds);
     const { prospectCount, drafts } = await this.resolveRecipients(
-      user.tenantId,
-      dto.businessTypeIds,
+      audience.where,
       dto.channels,
     );
     if (prospectCount === 0)
@@ -343,8 +372,10 @@ export class CampaignsService {
           tenantId: user.tenantId,
           name: dto.name,
           channels: dto.channels,
-          businessTypeIds: businessTypes.map((type) => type.id),
-          businessTypeNames: businessTypes.map((type) => type.name),
+          businessTypeIds: audience.businessTypes.map((type) => type.id),
+          businessTypeNames: audience.businessTypes.map((type) => type.name),
+          segmentIds: audience.segments.map((segment) => segment.id),
+          segmentNames: audience.segments.map((segment) => segment.name),
           senderIdentityId: sender?.id ?? null,
           senderIdSnapshot: sender?.senderId ?? null,
           subject: dto.subject,
@@ -694,12 +725,12 @@ export class CampaignsService {
    * kept as SKIPPED so the counts explain themselves.
    */
   private async resolveRecipients(
-    tenantId: string,
-    businessTypeIds: string[],
+    /** Matches a prospect in any of the chosen segments, so one in several is listed once. */
+    where: Prisma.MarketingProspectWhereInput,
     channels: CampaignChannel[],
   ) {
     const prospects = await this.prisma.marketingProspect.findMany({
-      where: { tenantId, businessTypeId: { in: businessTypeIds } },
+      where,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
@@ -761,25 +792,6 @@ export class CampaignsService {
   }
 
   /** Every id must be an active business type of this tenant; returned in the order requested. */
-  private async assertActiveBusinessTypes(tenantId: string, ids: string[]) {
-    const settings = await this.prisma.marketingCrmSettingOption.findMany({
-      where: {
-        id: { in: ids },
-        tenantId,
-        category: MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
-        archivedAt: null,
-        isActive: true,
-      },
-      select: { id: true, name: true },
-    });
-    const byId = new Map(settings.map((setting) => [setting.id, setting]));
-    const ordered = ids.map((id) => byId.get(id));
-    if (ordered.some((setting) => !setting)) {
-      throw new BadRequestException(INVALID_BUSINESS_TYPE_MESSAGE);
-    }
-    return ordered as { id: string; name: string }[];
-  }
-
   /** "YYYY-MM-DD" as a UTC date, rejecting anything before today. */
   private parseScheduledDate(dto: CreateCampaignDto): Date | null {
     if (dto.dispatchMode !== 'SCHEDULED' || !dto.scheduledDate) return null;
@@ -873,6 +885,10 @@ export class CampaignsService {
       id: campaign.id,
       name: campaign.name,
       channels: campaign.channels,
+      segments: campaign.segmentIds.map((id, index) => ({
+        id,
+        name: campaign.segmentNames[index] ?? '',
+      })),
       businessTypes: campaign.businessTypeIds.map((id, index) => ({
         id,
         name: campaign.businessTypeNames[index] ?? '',

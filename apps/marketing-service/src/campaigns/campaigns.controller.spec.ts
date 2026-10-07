@@ -16,6 +16,7 @@ describe('CampaignsController authorization contract', () => {
   it.each([
     ['list', P.CAMPAIGNS_VIEW],
     ['get', P.CAMPAIGNS_VIEW],
+    ['recipientOptions', P.CAMPAIGNS_CREATE],
     ['preview', P.CAMPAIGNS_CREATE],
     ['estimate', P.CAMPAIGNS_CREATE],
     ['create', P.CAMPAIGNS_CREATE],
@@ -32,7 +33,16 @@ describe('CampaignsController authorization contract', () => {
       .filter((name) => name !== 'constructor')
       .sort();
     expect(declared).toEqual(
-      ['list', 'get', 'preview', 'estimate', 'create', 'send', 'cancel'].sort(),
+      [
+        'list',
+        'get',
+        'recipientOptions',
+        'preview',
+        'estimate',
+        'create',
+        'send',
+        'cancel',
+      ].sort(),
     );
   });
 });

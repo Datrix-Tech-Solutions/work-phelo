@@ -670,6 +670,7 @@ export class RequestsService {
       );
     }
     if (
+      dto.endingMileage !== undefined &&
       existing.startingMileage !== null &&
       dto.endingMileage < existing.startingMileage
     ) {
@@ -704,7 +705,7 @@ export class RequestsService {
           completedByUserId: user.id,
           completedByName: this.requesterFrom(user, resolved.person).name,
           actualReturnTime: dto.actualReturnTime,
-          endingMileage: dto.endingMileage,
+          endingMileage: dto.endingMileage ?? null,
           endingCondition: dto.endingCondition,
           completionNotes: dto.notes || null,
         },
@@ -713,7 +714,7 @@ export class RequestsService {
         throw new ConflictException('This trip can no longer be completed');
       }
       // The vehicle's mileage follows each trip, so the next start is prefilled with it.
-      if (existing.vehicleAssetId) {
+      if (existing.vehicleAssetId && dto.endingMileage !== undefined) {
         await tx.marketingFleetVehicle.updateMany({
           where: {
             tenantId: user.tenantId,

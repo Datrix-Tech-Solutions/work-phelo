@@ -278,15 +278,17 @@ export class CompleteTransportRequestDto {
   })
   actualReturnTime!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 48390,
-    description: 'Odometer reading on return; not below the starting mileage.',
+    description:
+      'Odometer reading on return; not below the starting mileage. Optional.',
   })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(9_999_999)
-  endingMileage!: number;
+  endingMileage?: number;
 
   @ApiProperty({ enum: MarketingVehicleCondition })
   @IsEnum(MarketingVehicleCondition)

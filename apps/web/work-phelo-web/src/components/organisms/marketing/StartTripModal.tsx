@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Play } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useStartOptions, useStartRequest } from '@/hooks/marketing/useRequests';
 import { useToast } from '@/hooks/useToast';
@@ -40,13 +41,13 @@ function StartForm({ request, onClose }: { request: TransportRequest; onClose: (
 
   // Until edited, each field shows what it is prefilled with once that has loaded.
   const [departureEdit, setDepartureEdit] = useState<string | null>(null);
-  const [mileageEdit, setMileageEdit] = useState<string | null>(null);
+  const [mileageEdit, setMileageEdit] = useState<number | null>(null);
   const [conditionEdit, setConditionEdit] = useState<VehicleCondition | null>(null);
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Errors>({});
 
   const departure = departureEdit ?? options?.now.time ?? '';
-  const mileage = mileageEdit ?? (options?.mileage != null ? String(options.mileage) : '');
+  const mileage = mileageEdit ?? options?.mileage ?? 0;
   const condition = conditionEdit ?? options?.condition ?? '';
 
   const minutesLate = departure ? minutesBetween(request.departureTime, departure) : null;
@@ -54,9 +55,7 @@ function StartForm({ request, onClose }: { request: TransportRequest; onClose: (
   function handleStart() {
     const next: Errors = {};
     if (!departure) next.departure = 'Enter the time the vehicle left.';
-    if (mileage === '' || !/^\d+$/.test(mileage)) {
-      next.mileage = 'Enter the odometer reading as a whole number.';
-    }
+    if (!mileage) next.mileage = 'Enter the odometer reading.';
     if (!condition) next.condition = 'Select the vehicle condition.';
     setErrors(next);
     if (Object.keys(next).length) return;
@@ -65,7 +64,7 @@ function StartForm({ request, onClose }: { request: TransportRequest; onClose: (
       {
         id: request.id,
         actualDepartureTime: departure,
-        startingMileage: Number(mileage),
+        startingMileage: mileage,
         startingCondition: condition as VehicleCondition,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       },
@@ -124,18 +123,15 @@ function StartForm({ request, onClose }: { request: TransportRequest; onClose: (
           )}
         </div>
 
-        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">Starting mileage</label>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder={options ? 'Odometer reading' : 'Loading…'}
-            value={mileage}
-            onChange={(e) => setMileageEdit(e.target.value.trim())}
-            className={inputClass(errors.mileage)}
-          />
-          {errors.mileage && <p className="text-xs text-red-500">{errors.mileage}</p>}
-        </div>
+        <NumberField
+          label="Starting mileage"
+          decimals={0}
+          placeholder={options ? 'Odometer reading' : 'Loading…'}
+          value={mileage}
+          onChange={setMileageEdit}
+          error={errors.mileage}
+          className="w-full"
+        />
 
         <SearchSelect
           label="Vehicle condition"

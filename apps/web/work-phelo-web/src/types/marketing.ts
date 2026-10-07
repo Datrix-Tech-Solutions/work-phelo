@@ -792,7 +792,7 @@ export interface StartTransportRequestPayload {
 export interface CompleteTransportRequestPayload {
   /** HH:mm on the travel date. */
   actualReturnTime: string;
-  endingMileage: number;
+  endingMileage?: number;
   endingCondition: VehicleCondition;
   notes?: string;
   /** Further places visited, added to the planned ones. */
@@ -910,6 +910,8 @@ export interface Campaign {
   id: string;
   name: string;
   channels: CampaignChannel[];
+  /** The segments the campaign was sent to, by the name they had at the time. */
+  segments: { id: string; name: string }[];
   businessTypes: { id: string; name: string }[];
   senderIdentityId: string | null;
   senderIdSnapshot: string | null;
@@ -955,7 +957,8 @@ export interface CampaignsQuery {
 export interface CreateCampaignPayload {
   name: string;
   channels: CampaignChannel[];
-  businessTypeIds: string[];
+  /** Saved segment ids, or `business-type:<id>` for a built-in business-type segment. */
+  segmentIds: string[];
   subject: string;
   message: string;
   dispatchMode: CampaignDispatchMode;
@@ -964,8 +967,47 @@ export interface CreateCampaignPayload {
 }
 
 export interface CampaignPreviewPayload {
-  businessTypeIds: string[];
+  segmentIds: string[];
   channels: CampaignChannel[];
+}
+
+export type SegmentRecipientType = 'PROSPECT';
+
+/** A saved audience, or a built-in one (everyone with a business type). Shared across the tenant. */
+export interface CampaignSegment {
+  id: string;
+  name: string;
+  /** Built-in segments are read-only: one per business type. */
+  builtIn: boolean;
+  recipientType: SegmentRecipientType;
+  businessTypeIds: string[];
+  pipelineStageIds: string[];
+  /** Prospects always in, whether or not the filters match. */
+  includeProspectIds: string[];
+  /** Prospects always out, even when the filters match. */
+  excludeProspectIds: string[];
+  prospectCount: number;
+}
+
+export interface SegmentRulesPayload {
+  recipientType?: SegmentRecipientType;
+  businessTypeIds?: string[];
+  pipelineStageIds?: string[];
+  includeProspectIds?: string[];
+  excludeProspectIds?: string[];
+}
+
+export interface SaveSegmentPayload extends SegmentRulesPayload {
+  name: string;
+}
+
+/** A prospect that can be chosen as a campaign recipient. */
+export interface CampaignRecipientOption {
+  id: string;
+  companyName: string;
+  locationLabel: string;
+  /** The primary contact the campaign would message. */
+  contactName: string | null;
 }
 
 export interface CampaignPreview {
