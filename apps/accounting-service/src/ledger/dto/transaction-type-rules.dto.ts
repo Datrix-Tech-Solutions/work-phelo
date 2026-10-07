@@ -18,6 +18,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   GLAccountCategory,
   PostingDirection,
+  RuleLineSettlementKind,
 } from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
@@ -99,6 +100,15 @@ export class TransactionTypeRuleLineDto {
   @IsOptional()
   @IsUUID()
   scopeClassificationId?: string;
+
+  @ApiPropertyOptional({
+    enum: RuleLineSettlementKind,
+    description:
+      "Marks a line that applies when the bill/invoice is settled rather than when it is raised. A DEDUCTION reduces the cash that moves (discount, withholding tax); a CHARGE adds to it (bank charge). Needs a fixed account, and its side is fixed by the type's category.",
+  })
+  @IsOptional()
+  @IsEnum(RuleLineSettlementKind)
+  settlementKind?: RuleLineSettlementKind;
 
   @ApiPropertyOptional({
     format: 'uuid',

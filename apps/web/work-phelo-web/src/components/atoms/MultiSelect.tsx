@@ -12,6 +12,18 @@ export interface MultiSelectOption {
   sublabel?: string;
 }
 
+/** Soft pill colours, one per selection. Written out in full so Tailwind keeps every class. */
+const CHIP_COLORS = [
+  'bg-blue-100 text-blue-800',
+  'bg-emerald-100 text-emerald-800',
+  'bg-amber-100 text-amber-800',
+  'bg-purple-100 text-purple-800',
+  'bg-rose-100 text-rose-800',
+  'bg-teal-100 text-teal-800',
+  'bg-orange-100 text-orange-800',
+  'bg-indigo-100 text-indigo-800',
+];
+
 /** Sentinel for the synthetic "All" row in inline (filter-bar) mode — real option values never use it. */
 const ALL_VALUE = '';
 
@@ -25,8 +37,8 @@ interface MultiSelectProps {
   hideChips?: boolean;
   /** 'md' (default) keeps the standard py-3 height; 'sm' matches the DataTable search input (py-2). */
   size?: 'sm' | 'md';
-  /** 'default' shows selected values as removable chips above the field. 'inline' (for filter bars)
-   *  keeps everything to a single row — no chips above, selections summarized inside the field itself. */
+  /** 'default' shows selected values as removable chips inside the field. 'inline' (for filter bars)
+   *  keeps everything to a single row — selections are summarized as text inside the field. */
   variant?: 'default' | 'inline';
   /** Label for the inline variant's "All" row/empty state. Defaults to "All {placeholder}"
    *  (e.g. "All Status") so the field names its own dimension rather than showing a bare "All". */
@@ -58,7 +70,7 @@ export function MultiSelect({
   const [query, setQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -157,13 +169,21 @@ export function MultiSelect({
     }
   };
 
-  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // The field is a div (it holds removable chips, which are buttons), so Enter and Space
+    // open it the way a native button would.
+    if (e.target !== e.currentTarget) return;
+    if (
+      !open &&
+      (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ')
+    ) {
       e.preventDefault();
       openDropdown();
       setQuery('');
     }
   };
+
+  const showChips = !hideChips && variant !== 'inline' && selected.length > 0;
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     switch (e.key) {
@@ -208,38 +228,21 @@ export function MultiSelect({
     <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={containerRef}>
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
-      {/* Selected chips */}
-      {!hideChips && variant !== 'inline' && selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selected.map((opt) => (
-            <span
-              key={opt.value}
-              className="inline-flex items-center gap-1 bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) text-xs font-medium px-2 py-1 rounded-full"
-            >
-              {opt.label}
-              <button
-                type="button"
-                onClick={() => toggle(opt.value)}
-                className="hover:text-(--module-btn-bg-hover,var(--color-brand-hover)) transition-colors"
-              >
-                <Icons.X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Trigger — same combobox styling as SearchSelect */}
-      <button
+      {/* The field itself — same combobox styling as SearchSelect. Selected values sit inside it as
+          removable chips; the options open in a list below. */}
+      <div
         ref={triggerRef}
-        type="button"
+        role="combobox"
+        tabIndex={0}
         onClick={handleTriggerClick}
         onKeyDown={handleTriggerKeyDown}
         aria-expanded={open}
         aria-controls={listboxId}
+        aria-haspopup="listbox"
         className={cn(
-          'flex items-center justify-between px-4 border rounded-input transition-colors',
+          'flex cursor-pointer items-center justify-between gap-2 px-4 border rounded-input transition-colors outline-none',
           size === 'sm' ? 'py-2' : 'py-3',
+          showChips && (size === 'sm' ? 'py-1.5' : 'py-2.5'),
           open
             ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
@@ -247,27 +250,56 @@ export function MultiSelect({
               : 'bg-transparent border-(--input-border,var(--color-gray-400))',
         )}
       >
-        <span
-          className={cn(
-            'text-sm truncate min-w-0',
-            selected.length > 0 || variant === 'inline' ? 'text-gray-900' : 'text-gray-400',
-          )}
-        >
-          {selected.length === 0
-            ? variant === 'inline'
-              ? resolvedAllLabel
-              : placeholder
-            : variant === 'inline'
-              ? selected.map((o) => o.label).join(', ')
-              : 'Add more…'}
-        </span>
+        {showChips ? (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            {selected.map((opt) => (
+              <span
+                key={opt.value}
+                // Coloured by the option's place in the list, so each selection differs (up to
+                // eight) and an option keeps its colour whatever else is selected.
+                className={cn(
+                  'inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full',
+                  CHIP_COLORS[options.findIndex((o) => o.value === opt.value) % CHIP_COLORS.length],
+                )}
+              >
+                {opt.label}
+                <button
+                  type="button"
+                  aria-label={`Remove ${opt.label}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggle(opt.value);
+                  }}
+                  className="opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  <Icons.X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span
+            className={cn(
+              'text-sm truncate min-w-0',
+              selected.length > 0 || variant === 'inline' ? 'text-gray-900' : 'text-gray-400',
+            )}
+          >
+            {selected.length === 0
+              ? variant === 'inline'
+                ? resolvedAllLabel
+                : placeholder
+              : variant === 'inline'
+                ? selected.map((o) => o.label).join(', ')
+                : 'Add more…'}
+          </span>
+        )}
         <Icons.ChevronDown
           className={cn(
             'w-4 h-4 shrink-0 text-gray-400 transition-transform duration-150',
             open && 'rotate-180',
           )}
         />
-      </button>
+      </div>
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -14,10 +14,12 @@ import {
 } from '@/types/accounting';
 import {
   useAccountClassifications,
-  useAccountingCurrencyOptions,
+  useAccountGroups,
   useCreateAccountGroup,
   useUpdateAccountGroup,
 } from '@/hooks';
+import { suggestGroupCode } from '@/lib/accounting/accountCodes';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -32,9 +34,7 @@ type FormValues = {
   accountName: string;
   accountType: GLAccountCategory | '';
   classificationId: string;
-  // Not connected to any backend field yet — the account group endpoint has no
-  // currency/status/description fields. Collected here for later, not submitted.
-  currency: string;
+  // Only shown when editing — it is how a deactivated parent account is reactivated.
   status: string;
   description: string;
   cashFlowCategory: CashFlowCategory | '';
@@ -45,7 +45,6 @@ const DEFAULTS: FormValues = {
   accountName: '',
   accountType: '',
   classificationId: '',
-  currency: '',
   status: '',
   description: '',
   cashFlowCategory: '',
@@ -69,7 +68,6 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
   const { mutateAsync: createGroup, isPending: isCreating } = useCreateAccountGroup();
   const { mutateAsync: updateGroup, isPending: isUpdating } = useUpdateAccountGroup();
   const isPending = isCreating || isUpdating;
-  const { options: currencyOptions } = useAccountingCurrencyOptions();
 
   const {
     register,
@@ -77,7 +75,8 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
     control,
     reset,
     setValue,
-    formState: { errors },
+    getValues,
+    formState: { errors, dirtyFields },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
   const accountType = useWatch({ control, name: 'accountType' });
@@ -88,6 +87,34 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
     ? (classificationsData?.items ?? []).map((c) => ({ value: c.id, label: c.name }))
     : [];
 
+  // The next free code inside the chosen classification's range, from the parent accounts
+  // already under it. Fills the code until the user types their own.
+  const classificationId = useWatch({ control, name: 'classificationId' });
+  const currentCode = useWatch({ control, name: 'accountCode' });
+  const { data: siblingGroups } = useAccountGroups(
+    classificationId ? { classificationId, limit: 100 } : {},
+  );
+  const classificationCode = classificationsData?.items.find(
+    (c) => c.id === classificationId,
+  )?.code;
+  const codeSuggestion = useMemo(
+    () =>
+      !editing && classificationId && classificationCode && siblingGroups
+        ? suggestGroupCode(
+            classificationCode,
+            siblingGroups.items
+              .filter((g) => g.classificationId === classificationId)
+              .map((g) => g.code),
+          )
+        : null,
+    [editing, classificationId, classificationCode, siblingGroups],
+  );
+  useEffect(() => {
+    if (codeSuggestion?.code && !dirtyFields.accountCode && currentCode !== codeSuggestion.code) {
+      setValue('accountCode', codeSuggestion.code);
+    }
+  }, [codeSuggestion?.code, dirtyFields.accountCode, currentCode, setValue]);
+
   useEffect(() => {
     if (!isOpen || !editing) return;
     reset({
@@ -97,6 +124,7 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
       accountType: editing.classification.category,
       classificationId: editing.classificationId,
       status: editing.isActive ? 'Active' : 'Inactive',
+      description: editing.description ?? '',
       cashFlowCategory: editing.cashFlowCategory ?? '',
     });
   }, [isOpen, editing, reset]);
@@ -111,6 +139,20 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
     onClose();
   };
 
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop. Continue
+  // clears the form for the next parent account but keeps the account type and classification.
+  // Adding only.
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: handleClose,
+    onContinue: () =>
+      reset({
+        ...DEFAULTS,
+        accountType: getValues('accountType'),
+        classificationId: getValues('classificationId'),
+      }),
+  });
+
   const onSubmit = async (data: FormValues) => {
     try {
       if (editing) {
@@ -119,6 +161,7 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
           code: data.accountCode,
           name: data.accountName,
           classificationId: data.classificationId,
+          description: data.description.trim(),
           cashFlowCategory: data.cashFlowCategory || undefined,
           ...(data.status ? { isActive: data.status === 'Active' } : {}),
         });
@@ -130,10 +173,14 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
         code: data.accountCode,
         name: data.accountName,
         classificationId: data.classificationId,
+        description: data.description.trim() || undefined,
         cashFlowCategory: data.cashFlowCategory || undefined,
       });
       toast.success('Parent account created successfully');
-      handleClose();
+      entry.finishSave(
+        { title: 'Parent Account Added!', message: `${data.accountName} has been added.` },
+        handleClose,
+      );
     } catch (err) {
       toast.error(
         extractError(
@@ -148,6 +195,8 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
+      {...entry.panelProps}
+      lock={editing ? undefined : entry.panelProps.lock}
       title={editing ? 'Edit Parent Account' : 'Add Parent Account'}
       description={
         editing
@@ -165,39 +214,23 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
-        <FormField
-          label="Account Code"
-          type="number"
-          registration={register('accountCode', { required: 'Account code is required' })}
-          error={errors.accountCode}
-          placeholder="e.g. 1100"
-        />
-
-        <FormField
-          label="Account Name"
-          registration={register('accountName', { required: 'Account name is required' })}
-          error={errors.accountName}
-          placeholder="e.g. Bank Accounts"
-        />
-
-        <Controller
-          name="accountType"
-          control={control}
-          rules={{ required: 'Account type is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Account Type"
-              placeholder="Select account type…"
-              options={TYPE_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.accountType?.message}
-            />
-          )}
-        />
-
-        {accountType && (
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Controller
+            name="accountType"
+            control={control}
+            rules={{ required: 'Account type is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Account Type"
+                placeholder="Select account type…"
+                options={TYPE_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.accountType?.message}
+              />
+            )}
+          />
           <Controller
             name="classificationId"
             control={control}
@@ -205,65 +238,86 @@ export function AddParentAccountPanel({ isOpen, onClose, editing }: AddParentAcc
             render={({ field }) => (
               <SearchSelect
                 label="Classification"
-                placeholder={isLoadingClassifications ? 'Loading…' : 'Select classification…'}
+                placeholder={
+                  !accountType
+                    ? 'Select an account type first…'
+                    : isLoadingClassifications
+                      ? 'Loading…'
+                      : 'Select classification…'
+                }
                 options={classificationOptions}
                 value={field.value}
                 onChange={field.onChange}
+                disabled={!accountType}
                 error={errors.classificationId?.message}
               />
             )}
           />
-        )}
+        </div>
 
-        <Controller
-          name="currency"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder="Select currency…"
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)]">
+          <FormField
+            label="Account Code"
+            type="number"
+            registration={register('accountCode', { required: 'Account code is required' })}
+            error={errors.accountCode}
+            placeholder="e.g. 1100"
+          />
+          <FormField
+            label="Account Name"
+            registration={register('accountName', { required: 'Account name is required' })}
+            error={errors.accountName}
+            placeholder="e.g. Bank Accounts"
+          />
+        </div>
+
+        {codeSuggestion &&
+          (codeSuggestion.problem ? (
+            <p className="-mt-1 text-xs text-amber-600">{codeSuggestion.problem}</p>
+          ) : (
+            <p className="-mt-1 text-xs text-gray-500">
+              Code suggested from the accounts group ({codeSuggestion.range}).
+            </p>
+          ))}
+
+        <div className={`grid grid-cols-1 gap-3 ${editing ? 'sm:grid-cols-2' : ''}`}>
+          <Controller
+            name="cashFlowCategory"
+            control={control}
+            render={({ field }) => (
+              <SearchSelect
+                label="Cash Flow Category (optional)"
+                placeholder="Defaults from the classification"
+                options={CASH_FLOW_CATEGORY_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+          {editing && (
+            <Controller
+              name="status"
+              control={control}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Status"
+                  placeholder="Select status…"
+                  options={STATUS_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
             />
           )}
-        />
-
-        <Controller
-          name="status"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Status"
-              placeholder="Select status…"
-              options={STATUS_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
+        </div>
 
         <FormField
           label="Description"
           type="textarea"
-          rows={4}
+          rows={2}
           registration={register('description')}
           error={errors.description}
           placeholder="Provide a brief description of this account…"
-        />
-
-        <Controller
-          name="cashFlowCategory"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Cash Flow Category (optional)"
-              placeholder="Defaults from the classification, or Operating"
-              options={CASH_FLOW_CATEGORY_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
         />
       </div>
     </SidePanel>

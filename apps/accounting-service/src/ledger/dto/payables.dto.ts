@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -12,11 +13,13 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import {
   AccountingPayableStatus,
   AccountingSettlementMethod,
 } from '../../../prisma/generated/client';
+import { SettlementAdjustmentDto } from './cashbook.dto';
 
 const uppercase = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
@@ -290,6 +293,18 @@ export class CreatePayablePaymentDto {
   @IsString()
   @MaxLength(120)
   sourceRecordId?: string;
+
+  @ApiPropertyOptional({
+    type: [SettlementAdjustmentDto],
+    description:
+      'Deductions (discount, withholding tax) and charges (bank charge) taken at settlement. `amount` is what is settled against the document; the cash that moves is that amount less deductions plus charges, and must stay above zero.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => SettlementAdjustmentDto)
+  adjustments?: SettlementAdjustmentDto[];
 }
 
 export class QueryPayableDocumentsDto {

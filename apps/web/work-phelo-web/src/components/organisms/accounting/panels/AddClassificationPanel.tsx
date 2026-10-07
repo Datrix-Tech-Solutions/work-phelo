@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useEffect, useMemo } from 'react';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -12,7 +12,13 @@ import {
   CashFlowCategory,
   GLAccountCategory,
 } from '@/types/accounting';
-import { useCreateAccountClassification, useUpdateAccountClassification } from '@/hooks';
+import {
+  useAccountClassifications,
+  useCreateAccountClassification,
+  useUpdateAccountClassification,
+} from '@/hooks';
+import { suggestClassificationCode } from '@/lib/accounting/accountCodes';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -27,6 +33,7 @@ type FormValues = {
   accountType: GLAccountCategory | '';
   accountCode: string;
   cashFlowCategory: CashFlowCategory | '';
+  description: string;
 };
 
 const DEFAULTS: FormValues = {
@@ -34,6 +41,7 @@ const DEFAULTS: FormValues = {
   accountType: '',
   accountCode: '',
   cashFlowCategory: '',
+  description: '',
 };
 
 const TYPE_OPTIONS: SearchSelectOption[] = [
@@ -57,8 +65,33 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
     handleSubmit,
     control,
     reset,
-    formState: { errors },
+    getValues,
+    setValue,
+    formState: { errors, dirtyFields },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
+
+  // The next free code in the type's block, from the classifications already there.
+  const accountType = useWatch({ control, name: 'accountType' });
+  const currentCode = useWatch({ control, name: 'accountCode' });
+  const { data: sameTypeData } = useAccountClassifications(
+    accountType ? { category: accountType, limit: 100 } : {},
+  );
+  const codeSuggestion = useMemo(
+    () =>
+      !editing && accountType && sameTypeData
+        ? suggestClassificationCode(
+            accountType,
+            sameTypeData.items.filter((c) => c.category === accountType).map((c) => c.code),
+          )
+        : null,
+    [editing, accountType, sameTypeData],
+  );
+  // Fills the code until the user types their own.
+  useEffect(() => {
+    if (codeSuggestion?.code && !dirtyFields.accountCode && currentCode !== codeSuggestion.code) {
+      setValue('accountCode', codeSuggestion.code);
+    }
+  }, [codeSuggestion?.code, dirtyFields.accountCode, currentCode, setValue]);
 
   useEffect(() => {
     if (!isOpen || !editing) return;
@@ -67,6 +100,7 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
       accountType: editing.category,
       accountCode: editing.code,
       cashFlowCategory: editing.cashFlowCategory ?? '',
+      description: editing.description ?? '',
     });
   }, [isOpen, editing, reset]);
 
@@ -74,6 +108,14 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
     reset(DEFAULTS);
     onClose();
   };
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop. Continue
+  // clears the form for the next classification but keeps the account type. Adding only.
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: handleClose,
+    onContinue: () => reset({ ...DEFAULTS, accountType: getValues('accountType') }),
+  });
 
   const onSubmit = async (data: FormValues) => {
     try {
@@ -84,6 +126,7 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
           category: data.accountType as GLAccountCategory,
           code: data.accountCode,
           cashFlowCategory: data.cashFlowCategory || undefined,
+          description: data.description.trim(),
         });
         toast.success('Classification updated successfully');
         handleClose();
@@ -94,9 +137,13 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
         category: data.accountType as GLAccountCategory,
         code: data.accountCode,
         cashFlowCategory: data.cashFlowCategory || undefined,
+        description: data.description.trim() || undefined,
       });
       toast.success('Classification created successfully');
-      handleClose();
+      entry.finishSave(
+        { title: 'Classification Added!', message: `${data.accountName} has been added.` },
+        handleClose,
+      );
     } catch (err) {
       toast.error(
         extractError(
@@ -111,6 +158,8 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
+      {...entry.panelProps}
+      lock={editing ? undefined : entry.panelProps.lock}
       title={editing ? 'Edit Classification' : 'Add Classification'}
       description={
         editing
@@ -128,14 +177,7 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
-        <FormField
-          label="Account Name"
-          registration={register('accountName', { required: 'Account name is required' })}
-          error={errors.accountName}
-          placeholder="e.g. Current Assets"
-        />
-
+      <div className="flex flex-col gap-3">
         <Controller
           name="accountType"
           control={control}
@@ -152,13 +194,30 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
           )}
         />
 
-        <FormField
-          label="Account Code"
-          type="number"
-          registration={register('accountCode', { required: 'Account code is required' })}
-          error={errors.accountCode}
-          placeholder="e.g. 1000"
-        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)]">
+          <FormField
+            label="Account Code"
+            type="number"
+            registration={register('accountCode', { required: 'Account code is required' })}
+            error={errors.accountCode}
+            placeholder="e.g. 1000"
+          />
+          <FormField
+            label="Account Name"
+            registration={register('accountName', { required: 'Account name is required' })}
+            error={errors.accountName}
+            placeholder="e.g. Current Assets"
+          />
+        </div>
+
+        {codeSuggestion &&
+          (codeSuggestion.problem ? (
+            <p className="-mt-1 text-xs text-amber-600">{codeSuggestion.problem}</p>
+          ) : (
+            <p className="-mt-1 text-xs text-gray-500">
+              Code suggested from the accounts group ({codeSuggestion.range}).
+            </p>
+          ))}
 
         <Controller
           name="cashFlowCategory"
@@ -172,6 +231,15 @@ export function AddClassificationPanel({ isOpen, onClose, editing }: AddClassifi
               onChange={field.onChange}
             />
           )}
+        />
+
+        <FormField
+          label="Description"
+          type="textarea"
+          rows={2}
+          registration={register('description')}
+          error={errors.description}
+          placeholder="Optional description"
         />
       </div>
     </SidePanel>

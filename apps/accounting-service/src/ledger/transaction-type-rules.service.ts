@@ -9,6 +9,7 @@ import {
   GLAccountCategory,
   Prisma,
   PostingDirection,
+  RuleLineSettlementKind,
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -329,6 +330,7 @@ export class TransactionTypeRulesService {
       scopeClassificationId: line.scopeClassificationId ?? null,
       taxTypeId: line.taxTypeId,
       subledgerType: line.subledgerType,
+      settlementKind: line.settlementKind ?? null,
       description: this.optional(line.description),
     }));
   }
@@ -357,14 +359,14 @@ export class TransactionTypeRulesService {
       category: TransactionTypeCategory;
       sourceTypeId: string | null;
     },
-    lines: TransactionTypeRuleLineDto[],
+    allLines: TransactionTypeRuleLineDto[],
   ) {
     if (transactionType.postsToCashbook) {
-      this.validateCashbookLine(transactionType.category, lines);
+      this.validateCashbookLine(transactionType.category, allLines);
       if (
-        !lines[0].accountId ||
-        lines[0].scopeCategory ||
-        lines[0].scopeClassificationId
+        !allLines[0].accountId ||
+        allLines[0].scopeCategory ||
+        allLines[0].scopeClassificationId
       ) {
         throw new BadRequestException(
           'The offset line of a cashbook type needs a fixed account.',
@@ -372,6 +374,14 @@ export class TransactionTypeRulesService {
       }
       return;
     }
+
+    // Settlement lines apply when the bill/invoice is paid, not when it is raised, so they
+    // are checked on their own and kept out of the document rules below.
+    this.validateSettlementLines(
+      transactionType,
+      allLines.filter((l) => l.settlementKind),
+    );
+    const lines = allLines.filter((l) => !l.settlementKind);
 
     this.validateAccountOrScope(transactionType, lines);
 
@@ -405,6 +415,62 @@ export class TransactionTypeRulesService {
       throw new BadRequestException(
         'The auto-balancing line cannot itself be a tax line.',
       );
+    }
+  }
+
+  /** A deduction reduces the cash that moves when a bill/invoice is settled, a charge adds to it.
+   *  The side follows from that and the category: paying a bill debits Trade Payable, so a
+   *  deduction is a credit and a charge a debit; receiving on an invoice credits Trade
+   *  Receivable, so it is the other way round. Only a plain Receivable/Payable type is ever
+   *  settled — a note, a cashbook type or a source-linked type has no payment form for these. */
+  private validateSettlementLines(
+    transactionType: {
+      isLinked: boolean;
+      category: TransactionTypeCategory;
+      sourceTypeId: string | null;
+    },
+    lines: TransactionTypeRuleLineDto[],
+  ) {
+    if (lines.length === 0) return;
+    const isPayable =
+      transactionType.category === TransactionTypeCategory.PAYABLE;
+    const isReceivable =
+      transactionType.category === TransactionTypeCategory.RECEIVABLE;
+    if (
+      transactionType.isLinked ||
+      transactionType.sourceTypeId ||
+      (!isPayable && !isReceivable)
+    ) {
+      throw new BadRequestException(
+        'Settlement lines only apply to a plain Receivable or Payable type — not a linked, cashbook or source-linked one.',
+      );
+    }
+    for (const line of lines) {
+      if (!line.accountId || line.scopeCategory || line.scopeClassificationId) {
+        throw new BadRequestException(
+          'A settlement line needs a fixed account.',
+        );
+      }
+      if (line.subledgerType) {
+        throw new BadRequestException(
+          'A settlement line cannot post to a subledger.',
+        );
+      }
+      const isDeduction =
+        line.settlementKind === RuleLineSettlementKind.DEDUCTION;
+      if (line.taxTypeId && !isDeduction) {
+        throw new BadRequestException(
+          'Only a settlement deduction can be a tax.',
+        );
+      }
+      const expected =
+        isPayable === isDeduction ? PostingDirection.CR : PostingDirection.DR;
+      if (line.direction !== expected) {
+        throw new BadRequestException(
+          `A settlement ${isDeduction ? 'deduction' : 'charge'} on this type must be a ` +
+            `${expected === PostingDirection.CR ? 'credit' : 'debit'} line.`,
+        );
+      }
     }
   }
 
@@ -526,6 +592,7 @@ export class TransactionTypeRulesService {
       if (
         account &&
         requiredCategory &&
+        !line.settlementKind &&
         line.direction === autoBalanceDirection &&
         account.category !== requiredCategory
       ) {
@@ -591,6 +658,7 @@ export class TransactionTypeRulesService {
             }
           : null,
         subledgerType: line.subledgerType,
+        settlementKind: line.settlementKind,
         description: line.description,
       })),
     };

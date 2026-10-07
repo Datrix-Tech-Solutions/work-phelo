@@ -1,13 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { useEffect, useMemo, useState } from 'react';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import {
+  AdjustmentRow,
+  adjustmentAmount,
+  rowsFromRule,
+  SettlementAdjustments,
+} from '@/components/organisms/accounting/panels/SettlementAdjustments';
 import {
   AccountingTradeDocument,
   AccountingCashbookSettlementMethod,
@@ -18,9 +24,14 @@ import {
   useAllocateReceivableReceipt,
   useCashAccountOptions,
   useCompletePaymentRequest,
+  useGLAccountOptions,
+  useTransactionTypeRules,
   useCreatePayablePayment,
   useCreateReceivableReceipt,
   usePayableBillBalance,
+  usePayableCreditNotes,
+  useReceivableCreditNotes,
+  useTransactionTypes,
   usePostPayablePayment,
   usePostReceivableReceipt,
   useReceivableInvoiceBalance,
@@ -102,6 +113,54 @@ export function MakePaymentPanel({
   const outstanding = balance?.outstandingAmount ?? document?.totalAmount ?? '0';
   const amountPaid = balance?.appliedSettlements ?? '0';
 
+  // The credit/debit notes that brought the balance down. A newer API lists them on the balance;
+  // otherwise they are found from the document's own notes, so the reduction is never unexplained.
+  const appliedCreditTotal = Number(balance?.appliedCreditNotes ?? 0);
+  const hasListedNotes = (balance?.appliedNotes?.length ?? 0) > 0;
+  const needNoteLookup = isOpen && appliedCreditTotal > 0 && !hasListedNotes;
+  const noteParams = { partyId: document?.party.id, status: 'POSTED' as const, limit: 100 };
+  const receivableNotes = useReceivableCreditNotes(noteParams, {
+    enabled: needNoteLookup && isReceivable,
+  });
+  const payableNotes = usePayableCreditNotes(noteParams, {
+    enabled: needNoteLookup && !isReceivable,
+  });
+  const { data: transactionTypes = [] } = useTransactionTypes();
+  const noteRows = useMemo(() => {
+    if (hasListedNotes) return balance?.appliedNotes ?? [];
+    if (appliedCreditTotal <= 0 || !document) return [];
+    const notes = (isReceivable ? receivableNotes.data : payableNotes.data)?.items ?? [];
+    const found = notes
+      .filter((note) => note.originalDocumentId === document.id)
+      .map((note) => ({
+        allocationId: note.id,
+        documentNumber: note.documentNumber,
+        transactionType:
+          transactionTypes.find((type) => type.id === note.transactionTypeId)?.name ?? null,
+        amount: note.totalAmount,
+      }));
+    const foundTotal = found.reduce((sum, note) => sum + Number(note.amount), 0);
+    // Only itemise when the notes account for the whole reduction; otherwise show it as one line.
+    if (found.length > 0 && Math.abs(foundTotal - appliedCreditTotal) < 0.005) return found;
+    return [
+      {
+        allocationId: 'applied-notes',
+        documentNumber: null,
+        transactionType: null,
+        amount: String(appliedCreditTotal),
+      },
+    ];
+  }, [
+    hasListedNotes,
+    balance?.appliedNotes,
+    appliedCreditTotal,
+    document,
+    isReceivable,
+    receivableNotes.data,
+    payableNotes.data,
+    transactionTypes,
+  ]);
+
   const { options: cashAccountOptions, isLoading: isLoadingCashAccounts } = useCashAccountOptions();
 
   const completeRequest = useCompletePaymentRequest();
@@ -134,6 +193,26 @@ export function MakePaymentPanel({
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
+  // Deductions and charges taken at settlement. The bill/invoice's transaction type rule offers
+  // its settlement lines as ticks; the user can untick them or add one-off lines.
+  const { data: rules = [] } = useTransactionTypeRules();
+  const { options: glAccountOptions, isLoading: isLoadingGlAccounts } = useGLAccountOptions();
+  const rule = useMemo(
+    () => rules.find((r) => r.transactionTypeId === document?.transactionTypeId),
+    [rules, document?.transactionTypeId],
+  );
+  const [adjustments, setAdjustments] = useState<AdjustmentRow[]>([]);
+  const settleAmount = Number(useWatch({ control, name: 'amount' })) || 0;
+  const activeAdjustments = adjustments.filter((row) => row.enabled);
+  const sumOf = (kind: 'DEDUCTION' | 'CHARGE') =>
+    activeAdjustments
+      .filter((row) => row.kind === kind)
+      .reduce((sum, row) => sum + adjustmentAmount(row, settleAmount), 0);
+  const deductionsTotal = sumOf('DEDUCTION');
+  const chargesTotal = sumOf('CHARGE');
+  // The cash that actually moves — what the bank statement will show.
+  const cashTotal = settleAmount - deductionsTotal + chargesTotal;
+
   useEffect(() => {
     if (!isOpen) return;
     reset({
@@ -145,6 +224,11 @@ export function MakePaymentPanel({
     // Only re-prefill when a different document is opened — not on every balance refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, document?.id, paymentRequest?.id, reset]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setAdjustments(rowsFromRule(rule?.lines ?? []));
+  }, [isOpen, document?.id, rule?.id, rule?.lines]);
 
   const close = () => {
     reset(DEFAULTS);
@@ -174,6 +258,23 @@ export function MakePaymentPanel({
       return;
     }
 
+    for (const row of activeAdjustments) {
+      if (!row.glAccountId) {
+        toast.error('Select an account on every deduction and charge.');
+        return;
+      }
+      if (!(adjustmentAmount(row, Number(values.amount)) > 0)) {
+        toast.error('Every deduction and charge needs an amount above zero.');
+        return;
+      }
+    }
+    if (activeAdjustments.length > 0 && !(cashTotal > 0)) {
+      toast.error(
+        `The deductions leave nothing to ${isReceivable ? 'receive' : 'pay'} — the net amount must be above zero.`,
+      );
+      return;
+    }
+
     try {
       const settlement = await createSettlement.mutateAsync({
         partyId: document.party.id,
@@ -184,6 +285,16 @@ export function MakePaymentPanel({
         settlementDate: values.paymentDate,
         settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
         reference: values.reference || undefined,
+        ...(activeAdjustments.length > 0
+          ? {
+              adjustments: activeAdjustments.map((row) => ({
+                kind: row.kind,
+                glAccountId: row.glAccountId,
+                amount: adjustmentAmount(row, Number(values.amount)),
+                description: row.description || row.label || undefined,
+              })),
+            }
+          : {}),
       });
       await postSettlement.mutateAsync(settlement.id);
       await allocateSettlement.mutateAsync({
@@ -223,7 +334,7 @@ export function MakePaymentPanel({
       }
     >
       {document && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {paymentRequest && (
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
               <p>
@@ -262,6 +373,21 @@ export function MakePaymentPanel({
               label="Invoice Total"
               value={fmtAmount(document.totalAmount, document.currency)}
             />
+            {noteRows.map((note) => (
+              <SummaryRow
+                key={note.allocationId}
+                label={
+                  note.transactionType || note.documentNumber
+                    ? `${isReceivable ? 'Credit note' : 'Debit note'}${
+                        note.transactionType ? ` — ${note.transactionType}` : ''
+                      }${note.documentNumber ? ` (${note.documentNumber})` : ''}`
+                    : isReceivable
+                      ? 'Credit notes applied'
+                      : 'Debit notes applied'
+                }
+                value={`− ${fmtAmount(note.amount, document.currency)}`}
+              />
+            ))}
             <SummaryRow label="Amount Paid" value={fmtAmount(amountPaid, document.currency)} />
             <div className="border-t border-gray-100 pt-2">
               <SummaryRow
@@ -271,63 +397,79 @@ export function MakePaymentPanel({
             </div>
           </div>
 
-          {paymentRequest ? (
-            <SummaryRow
-              label="Payment Amount"
-              value={fmtAmount(paymentRequest.amount, paymentRequest.currency)}
-            />
-          ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Controller
-              name="amount"
+              name="cashAccountId"
               control={control}
-              rules={{
-                required: 'Payment amount is required',
-                min: { value: 0.01, message: 'Payment amount must be greater than 0' },
-              }}
+              rules={{ required: 'Cash/bank account is required' }}
               render={({ field }) => (
-                <CurrencyInput
-                  label="Payment Amount"
+                <SearchSelect
+                  label="Cash/Bank Account"
+                  placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select cash/bank account…'}
+                  options={cashAccountOptions}
                   value={field.value}
-                  currency={document.currency}
-                  lockCurrency
-                  onValueChange={field.onChange}
-                  error={errors.amount?.message}
+                  onChange={field.onChange}
+                  error={errors.cashAccountId?.message}
                 />
               )}
             />
-          )}
 
-          <Controller
-            name="cashAccountId"
-            control={control}
-            rules={{ required: 'Cash/bank account is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Cash/Bank Account"
-                placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select cash/bank account…'}
-                options={cashAccountOptions}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.cashAccountId?.message}
+            <Controller
+              name="settlementMethod"
+              control={control}
+              rules={{ required: 'Payment method is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Payment Method"
+                  placeholder="Select payment method…"
+                  options={SETTLEMENT_METHOD_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.settlementMethod?.message}
+                />
+              )}
+            />
+
+            {paymentRequest ? (
+              <SummaryRow
+                label="Payment Amount"
+                value={fmtAmount(paymentRequest.amount, paymentRequest.currency)}
+              />
+            ) : (
+              <Controller
+                name="amount"
+                control={control}
+                rules={{
+                  required: 'Payment amount is required',
+                  min: { value: 0.01, message: 'Payment amount must be greater than 0' },
+                }}
+                render={({ field }) => (
+                  <CurrencyInput
+                    label="Payment Amount"
+                    value={field.value}
+                    currency={document.currency}
+                    lockCurrency
+                    onValueChange={field.onChange}
+                    error={errors.amount?.message}
+                  />
+                )}
               />
             )}
-          />
 
-          <Controller
-            name="settlementMethod"
-            control={control}
-            rules={{ required: 'Payment method is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Payment Method"
-                placeholder="Select payment method…"
-                options={SETTLEMENT_METHOD_OPTIONS}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.settlementMethod?.message}
-              />
-            )}
-          />
+            <Controller
+              name="paymentDate"
+              control={control}
+              rules={{ required: 'Payment date is required' }}
+              render={({ field }) => (
+                <DatePicker
+                  label="Payment Date"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.paymentDate?.message}
+                />
+              )}
+            />
+          </div>
 
           {!paymentRequest && (
             <FormField
@@ -338,19 +480,45 @@ export function MakePaymentPanel({
             />
           )}
 
-          <Controller
-            name="paymentDate"
-            control={control}
-            rules={{ required: 'Payment date is required' }}
-            render={({ field }) => (
-              <DatePicker
-                label="Payment Date"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.paymentDate?.message}
+          {!paymentRequest && (
+            <>
+              <SettlementAdjustments
+                rows={adjustments}
+                onChange={setAdjustments}
+                settleAmount={settleAmount}
+                isReceipt={isReceivable}
+                currency={document.currency}
+                accountOptions={glAccountOptions}
+                isLoadingAccounts={isLoadingGlAccounts}
               />
-            )}
-          />
+              {activeAdjustments.length > 0 && (
+                <div className="flex flex-col gap-1 rounded-xl bg-gray-50 px-3 py-2 text-sm">
+                  <SummaryRow
+                    label="Amount settled"
+                    value={fmtAmount(settleAmount, document.currency)}
+                  />
+                  {deductionsTotal > 0 && (
+                    <SummaryRow
+                      label="Less deductions"
+                      value={`− ${fmtAmount(deductionsTotal, document.currency)}`}
+                    />
+                  )}
+                  {chargesTotal > 0 && (
+                    <SummaryRow
+                      label="Plus charges"
+                      value={`+ ${fmtAmount(chargesTotal, document.currency)}`}
+                    />
+                  )}
+                  <div className="border-t border-gray-200 pt-1">
+                    <SummaryRow
+                      label={isReceivable ? 'Cash received' : 'Cash paid'}
+                      value={fmtAmount(cashTotal, document.currency)}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </SidePanel>

@@ -585,7 +585,8 @@ export class SourceTransactionsService {
     if (type.isLinked) {
       return 'Credit-note types cannot be used - they need an original invoice';
     }
-    const lines = type.rule?.lines ?? [];
+    // Settlement lines apply when the invoice is paid, so they play no part in raising it.
+    const lines = (type.rule?.lines ?? []).filter((l) => !l.settlementKind);
     if (!type.rule || lines.length === 0) {
       return 'Configure the rule for this type first';
     }

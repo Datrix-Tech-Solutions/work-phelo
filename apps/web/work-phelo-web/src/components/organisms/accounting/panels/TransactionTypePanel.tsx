@@ -14,6 +14,7 @@ import {
   useSourceTypes,
   useUpdateTransactionType,
 } from '@/hooks';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ACCOUNTING_DOCUMENT_OPTIONS } from '@/lib/accounting/documents';
@@ -42,7 +43,6 @@ type FormValues = {
   description: string;
   postsToCashbook: boolean;
   isLinked: boolean;
-  usesQuantityPrice: boolean;
 };
 
 const DEFAULTS: FormValues = {
@@ -55,7 +55,6 @@ const DEFAULTS: FormValues = {
   description: '',
   postsToCashbook: false,
   isLinked: false,
-  usesQuantityPrice: true,
 };
 
 export function TransactionTypePanel({
@@ -108,7 +107,6 @@ export function TransactionTypePanel({
         description: transactionType.description ?? '',
         postsToCashbook: transactionType.postsToCashbook,
         isLinked: transactionType.isLinked,
-        usesQuantityPrice: transactionType.usesQuantityPrice,
       });
     else reset(DEFAULTS);
   }, [transactionType, reset]);
@@ -117,6 +115,14 @@ export function TransactionTypePanel({
     reset(DEFAULTS);
     onClose();
   };
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop; Continue
+  // clears the form for the next type. Only when adding — editing saves and closes as usual.
+  const entry = useMultiEntryPanel({
+    isOpen: transactionType !== undefined,
+    onStop: close,
+    onContinue: () => reset(DEFAULTS),
+  });
 
   const submit = async (values: FormValues) => {
     try {
@@ -130,7 +136,6 @@ export function TransactionTypePanel({
         description: values.description || undefined,
         postsToCashbook: values.postsToCashbook,
         isLinked: values.isLinked,
-        usesQuantityPrice: values.usesQuantityPrice,
       };
       if (transactionType) await update({ id: transactionType.id, ...payload });
       else await create(payload);
@@ -139,7 +144,10 @@ export function TransactionTypePanel({
           ? 'Transaction type updated successfully'
           : 'Transaction type created successfully',
       );
-      close();
+      entry.finishSave(
+        { title: 'Transaction Type Added!', message: `${values.name} has been added.` },
+        close,
+      );
     } catch (error) {
       toast.error(
         extractError(error, `Unable to ${isEditing ? 'update' : 'create'} transaction type`),
@@ -151,6 +159,8 @@ export function TransactionTypePanel({
     <SidePanel
       isOpen={transactionType !== undefined}
       onClose={close}
+      {...entry.panelProps}
+      lock={isEditing ? undefined : entry.panelProps.lock}
       title={isEditing ? 'Update Transaction Type' : 'Add Transaction Type'}
       description="Transaction types classify cashbook and journal entries for reporting and posting."
       footer={
@@ -168,135 +178,92 @@ export function TransactionTypePanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
-        <FormField
-          label="Name"
-          registration={register('name', {
-            required: 'Name is required',
-            maxLength: { value: 160, message: 'Name must be 160 characters or fewer' },
-            // A typed code is dirty, so it is left alone; clearing it resumes suggesting.
-            onChange: (e: ChangeEvent<HTMLInputElement>) => {
-              if (!isEditing && !dirtyFields.code)
-                setValue('code', suggestTransactionTypeCode(e.target.value));
-            },
-          })}
-          error={errors.name}
-          placeholder="e.g. Customer Receipt"
-        />
-        <FormField
-          label="Code"
-          registration={register('code', {
-            required: 'Code is required',
-            maxLength: { value: 30, message: 'Code must be 30 characters or fewer' },
-            setValueAs: (value: string) => value.toUpperCase(),
-          })}
-          error={errors.code}
-          placeholder="e.g. CUST-RCPT"
-        />
-        <Controller
-          name="category"
-          control={control}
-          rules={{ required: 'Category is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Category"
-              placeholder="Select a category…"
-              options={CATEGORY_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.category?.message}
-            />
-          )}
-        />
-        {category && (
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)]">
+          <FormField
+            label="Name"
+            registration={register('name', {
+              required: 'Name is required',
+              maxLength: { value: 160, message: 'Name must be 160 characters or fewer' },
+              // A typed code is dirty, so it is left alone; clearing it resumes suggesting.
+              onChange: (e: ChangeEvent<HTMLInputElement>) => {
+                if (!isEditing && !dirtyFields.code)
+                  setValue('code', suggestTransactionTypeCode(e.target.value));
+              },
+            })}
+            error={errors.name}
+            placeholder="e.g. Customer Receipt"
+          />
+          <FormField
+            label="Code"
+            registration={register('code', {
+              required: 'Code is required',
+              maxLength: { value: 30, message: 'Code must be 30 characters or fewer' },
+              setValueAs: (value: string) => value.toUpperCase(),
+            })}
+            error={errors.code}
+            placeholder="e.g. CUST-RCPT"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Controller
-            name="postsToCashbook"
+            name="category"
             control={control}
+            rules={{ required: 'Category is required' }}
             render={({ field }) => (
-              <ToggleRow
-                label="Posts Directly to Cashbook"
-                description="Make direct payments to Cashbook, instead of creating an Invoice/Bill."
-                enabled={field.value}
-                onChange={(value) => {
-                  field.onChange(value);
-                  if (value) setValue('isLinked', false);
-                }}
+              <SearchSelect
+                label="Category"
+                placeholder="Select a category…"
+                options={CATEGORY_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.category?.message}
               />
             )}
           />
-        )}
-        {category && (
           <Controller
-            name="isLinked"
+            name="businessRoles"
             control={control}
             render={({ field }) => (
-              <ToggleRow
-                label="Linked Transaction"
-                description={`Creates a ${
-                  category === 'RECEIVABLE'
-                    ? 'credit note against an invoice'
-                    : 'debit note against a bill'
-                } used to reduce what is owed on the linked transaction.`}
-                enabled={field.value}
-                onChange={(value) => {
-                  field.onChange(value);
-                  if (value) setValue('postsToCashbook', false);
-                }}
+              <MultiSelect
+                label="Business Roles"
+                placeholder="Select applicable party types…"
+                options={businessRoleOptions}
+                value={field.value}
+                onChange={field.onChange}
               />
             )}
           />
-        )}
-        <Controller
-          name="usesQuantityPrice"
-          control={control}
-          render={({ field }) => (
-            <ToggleRow
-              label="Track Quantity and Unit Price"
-              description="Ask for quantity × unit price and work out the amount. Turn off to enter a straight amount, e.g. rent or insurance."
-              enabled={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
-        <Controller
-          name="businessRoles"
-          control={control}
-          render={({ field }) => (
-            <MultiSelect
-              label="Business Roles"
-              placeholder="Select applicable party types…"
-              options={businessRoleOptions}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
-        <Controller
-          name="allowedDocument"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Allowed Document"
-              placeholder="Select a document…"
-              options={ALLOWED_DOCUMENT_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
-        <Controller
-          name="sourceTypeId"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Source"
-              placeholder="Select a source…"
-              options={sourceOptions}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
+
+          <Controller
+            name="allowedDocument"
+            control={control}
+            render={({ field }) => (
+              <SearchSelect
+                label="Allowed Document"
+                placeholder="Select a document…"
+                options={ALLOWED_DOCUMENT_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+          <Controller
+            name="sourceTypeId"
+            control={control}
+            render={({ field }) => (
+              <SearchSelect
+                label="Source"
+                placeholder="Select a source…"
+                options={sourceOptions}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+        </div>
+
         <FormField
           label="Description"
           type="textarea"
@@ -307,6 +274,47 @@ export function TransactionTypePanel({
           error={errors.description}
           placeholder="Optional description"
         />
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {category && (
+            <Controller
+              name="postsToCashbook"
+              control={control}
+              render={({ field }) => (
+                <ToggleRow
+                  label="Posts Directly to Cashbook"
+                  description="Make direct payments to Cashbook, instead of creating an Invoice/Bill."
+                  enabled={field.value}
+                  onChange={(value) => {
+                    field.onChange(value);
+                    if (value) setValue('isLinked', false);
+                  }}
+                />
+              )}
+            />
+          )}
+          {category && (
+            <Controller
+              name="isLinked"
+              control={control}
+              render={({ field }) => (
+                <ToggleRow
+                  label="Linked Transaction"
+                  description={`Creates a ${
+                    category === 'RECEIVABLE'
+                      ? 'credit note against an invoice'
+                      : 'debit note against a bill'
+                  } used to reduce what is owed on the linked transaction.`}
+                  enabled={field.value}
+                  onChange={(value) => {
+                    field.onChange(value);
+                    if (value) setValue('postsToCashbook', false);
+                  }}
+                />
+              )}
+            />
+          )}
+        </div>
       </div>
     </SidePanel>
   );

@@ -149,6 +149,7 @@ function mapBalance(
     originalAmount: raw.originalAmount,
     appliedSettlements: raw[config.appliedSettlementsField],
     appliedCreditNotes: raw.appliedCreditNotes,
+    appliedNotes: raw.appliedNotes ?? [],
     outstandingAmount: raw.outstandingAmount,
     paymentState: raw.paymentState,
   };
@@ -389,8 +390,11 @@ export function useReversePayableBill() {
 
 // ---- Credit Notes (AR customer credits / AP vendor credits) ----
 
-export function useReceivableCreditNotes(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('RECEIVABLE', CREDIT_NOTE_SEGMENT, params);
+export function useReceivableCreditNotes(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('RECEIVABLE', CREDIT_NOTE_SEGMENT, params, options);
 }
 export function useReceivableCreditNote(creditNoteId: string | undefined) {
   return useDocument('RECEIVABLE', CREDIT_NOTE_SEGMENT, creditNoteId);
@@ -408,8 +412,11 @@ export function useAllocateReceivableCreditNote() {
   return useAllocateCreditNote('RECEIVABLE');
 }
 
-export function usePayableCreditNotes(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('PAYABLE', CREDIT_NOTE_SEGMENT, params);
+export function usePayableCreditNotes(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('PAYABLE', CREDIT_NOTE_SEGMENT, params, options);
 }
 export function usePayableCreditNote(creditNoteId: string | undefined) {
   return useDocument('PAYABLE', CREDIT_NOTE_SEGMENT, creditNoteId);

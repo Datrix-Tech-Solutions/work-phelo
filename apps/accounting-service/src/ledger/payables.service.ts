@@ -36,6 +36,7 @@ import {
 } from './dto/payables.dto';
 import { JournalsService } from './journals.service';
 import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import { settlementEntryLines } from './cashbook-lines.util';
 import { resolveMainLineAccount } from './rule-account-scope';
 
 const zero = new Prisma.Decimal(0);
@@ -672,9 +673,22 @@ export class PayablesService {
       throw new BadRequestException('The bill must be posted');
     }
 
+    // Deductions and charges taken at settlement make the cash differ from the amount settled:
+    // the entry then posts the amount to Trade Payable plus each adjustment, and its own
+    // amount is the net cash that actually leaves the bank. The payment keeps the amount
+    // settled, which is what gets allocated to the bill.
+    const adjustments = dto.adjustments ?? [];
     const cashbookDto: CreateCashbookPaymentDto = {
       cashAccountId: dto.cashAccountId,
-      amount: dto.amount,
+      ...(adjustments.length
+        ? {
+            lines: settlementEntryLines({
+              controlAccountId: bill.apAccountId,
+              amount: dto.amount,
+              adjustments,
+            }),
+          }
+        : { amount: dto.amount, offsetGlAccountId: bill.apAccountId }),
       currency: dto.currency,
       transactionDate: dto.paymentDate,
       settlementMethod: dto.settlementMethod,
@@ -683,7 +697,6 @@ export class PayablesService {
       counterpartyId: vendor.id,
       externalReference: dto.externalReference,
       description: dto.description ?? `Payment to ${vendor.name}`,
-      offsetGlAccountId: bill.apAccountId,
       offsetSubledgerAccountId: vendor.id,
       sourceModule: dto.sourceModule ?? 'ACCOUNTING',
       sourceRecordId: dto.sourceRecordId ?? 'AP_PAYMENT_PENDING',
@@ -1643,7 +1656,54 @@ export class PayablesService {
     };
   }
 
+  /** The debit notes applied to a bill, with the transaction type each was raised under, so the
+   *  payment screen can say what reduced the balance and by how much. */
+  private async appliedCreditNoteDetails(tenantId: string, billId: string) {
+    const allocations = await this.prisma.accountingPayableAllocation.findMany({
+      where: {
+        tenantId,
+        billId,
+        sourceType: AccountingPayableAllocationSource.CREDIT_NOTE,
+        reversedAt: null,
+      },
+      include: {
+        creditNote: {
+          select: { documentNumber: true, transactionTypeId: true },
+        },
+      },
+      orderBy: { allocatedAt: 'asc' },
+    });
+    const typeIds = [
+      ...new Set(
+        allocations.flatMap((a) =>
+          a.creditNote?.transactionTypeId
+            ? [a.creditNote.transactionTypeId]
+            : [],
+        ),
+      ),
+    ];
+    const types = typeIds.length
+      ? await this.prisma.transactionType.findMany({
+          where: { tenantId, id: { in: typeIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const nameById = new Map(types.map((type) => [type.id, type.name]));
+    return allocations.map((allocation) => ({
+      allocationId: allocation.id,
+      documentNumber: allocation.creditNote?.documentNumber ?? null,
+      transactionType: allocation.creditNote?.transactionTypeId
+        ? (nameById.get(allocation.creditNote.transactionTypeId) ?? null)
+        : null,
+      amount: this.money(allocation.amount),
+    }));
+  }
+
   private async billBalanceFromDocument(document: PayableDocument) {
+    const appliedNotes = await this.appliedCreditNoteDetails(
+      document.tenantId,
+      document.id,
+    );
     const [paymentApplied, creditApplied] = await Promise.all([
       this.sumAllocations(document.tenantId, {
         billId: document.id,
@@ -1664,6 +1724,7 @@ export class PayablesService {
       originalAmount: this.money(document.totalAmount),
       appliedPayments: this.money(paymentApplied),
       appliedCreditNotes: this.money(creditApplied),
+      appliedNotes,
       outstandingAmount: this.money(outstanding),
       paymentState: this.paymentState(document, outstanding, paymentApplied),
     };
@@ -1872,7 +1933,9 @@ export class PayablesService {
     // The auto-balance (AP) line is never a tax line — checking direction alone isn't
     // enough, since a deduction can be configured with that same direction (e.g. a
     // withholding tax credited on a bill, same as the AP line itself).
-    const apLine = rule.lines.find(
+    // Settlement lines apply when the document is paid, never when it is raised.
+    const documentLines = rule.lines.filter((l) => !l.settlementKind);
+    const apLine = documentLines.find(
       (l) => l.direction === autoBalanceDirection && !l.taxTypeId,
     );
     if (!apLine) {
@@ -1880,7 +1943,7 @@ export class PayablesService {
         "This transaction type's rule has no Payable line configured",
       );
     }
-    const explicitLines = rule.lines.filter((l) => l.id !== apLine.id);
+    const explicitLines = documentLines.filter((l) => l.id !== apLine.id);
     const mainLine = explicitLines.find((l) => !l.taxTypeId);
     if (!mainLine) {
       throw new ConflictException(
