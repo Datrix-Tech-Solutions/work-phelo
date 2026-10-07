@@ -6,6 +6,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -17,6 +18,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { SEGMENT_RECIPIENT_TYPES, SegmentRecipientType } from './segment.dto';
 
 export const CAMPAIGN_CHANNELS = ['SMS', 'EMAIL'] as const;
 export type CampaignChannel = (typeof CAMPAIGN_CHANNELS)[number];
@@ -112,6 +114,9 @@ export class CreateCampaignDto {
   scheduledDate?: string;
 }
 
+/** The details of a scheduled campaign, replaced as a whole. */
+export class UpdateCampaignDto extends CreateCampaignDto {}
+
 export class QueryCampaignsDto {
   @ApiPropertyOptional({ example: 1, minimum: 1, default: 1 })
   @IsOptional()
@@ -172,8 +177,17 @@ const commaList = ({ value }: { value: unknown }) =>
 
 export class RecipientOptionsQueryDto {
   @ApiPropertyOptional({
+    enum: SEGMENT_RECIPIENT_TYPES,
+    default: 'PROSPECT',
+    description: 'Whether to list prospects or clients.',
+  })
+  @IsOptional()
+  @IsIn(SEGMENT_RECIPIENT_TYPES)
+  recipientType?: SegmentRecipientType;
+
+  @ApiPropertyOptional({
     type: [String],
-    description: 'Comma-separated business type IDs to list prospects under.',
+    description: 'Comma-separated business type IDs to list people under.',
   })
   @IsOptional()
   @Transform(commaList)
@@ -184,7 +198,7 @@ export class RecipientOptionsQueryDto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: 'Comma-separated sales (pipeline) stage IDs.',
+    description: 'Comma-separated sales (pipeline) stage IDs. Prospects only.',
   })
   @IsOptional()
   @Transform(commaList)
@@ -196,7 +210,7 @@ export class RecipientOptionsQueryDto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      'Comma-separated prospect IDs to look up directly (e.g. a saved segment’s picks). Other filters still apply.',
+      'Comma-separated prospect or client IDs to look up directly (e.g. a saved segment’s picks). Other filters still apply.',
   })
   @IsOptional()
   @Transform(commaList)

@@ -631,6 +631,7 @@ model MarketingTransportOfficer {
 
 enum MarketingSegmentRecipientType {
   PROSPECT
+  CLIENT
 
   @@schema("marketing")
 }
@@ -644,10 +645,16 @@ model MarketingCampaignSegment {
   recipientType      MarketingSegmentRecipientType     @default(PROSPECT)
   businessTypeIds    String[]
   pipelineStageIds   String[]
+  /// People who have any of these products or services (a client's uninterested products don't count).
+  productIds         String[]                          @default([])
   /// Prospects always in the segment, even when the rules above don't match them.
   includeProspectIds String[]
   /// Prospects never in the segment, even when the rules above match them.
   excludeProspectIds String[]
+  /// For a CLIENT segment: clients always in the segment, even when the filters don't match them.
+  includeClientIds   String[]                          @default([])
+  /// For a CLIENT segment: clients never in the segment, even when the filters match them.
+  excludeClientIds   String[]                          @default([])
   createdByUserId    String?
   updatedByUserId    String?
   createdAt          DateTime                          @default(now())
@@ -696,12 +703,14 @@ model MarketingCampaign {
   @@schema("marketing")
 }
 
-/// One row per prospect primary contact per channel, fixed when the campaign is created.
+/// One row per prospect or client primary contact per channel, fixed when the campaign is created.
+/// Exactly one of prospectId and clientId is set.
 model MarketingCampaignRecipient {
   id               String                           @id @default(uuid())
   tenantId         String
   campaignId       String
-  prospectId       String
+  prospectId       String?
+  clientId         String?
   contactId        String
   companyName      String
   contactName      String

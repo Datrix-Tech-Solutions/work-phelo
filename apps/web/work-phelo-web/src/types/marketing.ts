@@ -292,8 +292,10 @@ export interface UpdateProspectPayload {
   pipelineStageId?: string;
   primaryContact?: {
     name?: string;
-    phone?: string;
-    email?: string;
+    /** `null` removes the phone number. */
+    phone?: string | null;
+    /** `null` removes the email address. */
+    email?: string | null;
     decisionMakerTypeId?: string | null;
   };
   /** The complete desired set — existing rows left out are removed. */
@@ -478,8 +480,10 @@ export interface UpdateClientPayload {
   isBillable?: boolean;
   primaryContact?: {
     name?: string;
-    phone?: string;
-    email?: string;
+    /** `null` removes the phone number. */
+    phone?: string | null;
+    /** `null` removes the email address. */
+    email?: string | null;
     decisionMakerTypeId?: string | null;
   };
   location?: Partial<CreateProspectLocationPayload>;
@@ -971,7 +975,7 @@ export interface CampaignPreviewPayload {
   channels: CampaignChannel[];
 }
 
-export type SegmentRecipientType = 'PROSPECT';
+export type SegmentRecipientType = 'PROSPECT' | 'CLIENT';
 
 /** A saved audience, or a built-in one (everyone with a business type). Shared across the tenant. */
 export interface CampaignSegment {
@@ -981,27 +985,39 @@ export interface CampaignSegment {
   builtIn: boolean;
   recipientType: SegmentRecipientType;
   businessTypeIds: string[];
+  /** People who have any of these products or services. */
+  productIds: string[];
   pipelineStageIds: string[];
   /** Prospects always in, whether or not the filters match. */
   includeProspectIds: string[];
   /** Prospects always out, even when the filters match. */
   excludeProspectIds: string[];
+  /** Client segments: clients always in, whether or not the filters match. */
+  includeClientIds: string[];
+  /** Client segments: clients always out, even when the filters match. */
+  excludeClientIds: string[];
+  /** How many prospects it holds; 0 for a client segment. */
   prospectCount: number;
+  /** How many clients it holds; 0 for a prospect segment. */
+  clientCount: number;
 }
 
 export interface SegmentRulesPayload {
   recipientType?: SegmentRecipientType;
   businessTypeIds?: string[];
+  productIds?: string[];
   pipelineStageIds?: string[];
   includeProspectIds?: string[];
   excludeProspectIds?: string[];
+  includeClientIds?: string[];
+  excludeClientIds?: string[];
 }
 
 export interface SaveSegmentPayload extends SegmentRulesPayload {
   name: string;
 }
 
-/** A prospect that can be chosen as a campaign recipient. */
+/** A prospect or client that can be chosen as a campaign recipient. */
 export interface CampaignRecipientOption {
   id: string;
   companyName: string;
@@ -1012,6 +1028,7 @@ export interface CampaignRecipientOption {
 
 export interface CampaignPreview {
   prospectCount: number;
+  clientCount: number;
   /** Messages that will be queued. */
   reachable: number;
   /** Contacts with no phone/email for a chosen channel, or a repeated address. */
@@ -1032,6 +1049,7 @@ export interface CampaignEstimateWarning {
 
 export interface CampaignEstimate {
   prospectCount: number;
+  clientCount: number;
   recipientCount: number;
   smsRecipientCount: number;
   emailRecipientCount: number;

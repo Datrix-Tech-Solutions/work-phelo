@@ -64,7 +64,7 @@ export class CampaignSegmentsController {
   @ApiOperation({
     summary: 'List the segments a campaign can target',
     description:
-      'Saved segments shared across the tenant, then one built-in segment per active business type, each with how many prospects it holds.',
+      'Saved segments shared across the tenant, then one built-in segment per active business type, each with how many prospects or clients it holds.',
   })
   list(@Req() request: AuthedRequest) {
     return this.service.list(request.user);
@@ -73,7 +73,9 @@ export class CampaignSegmentsController {
   @Post('count')
   @HttpCode(HttpStatus.OK)
   @RequireAnyPermission(CAMPAIGNS_CREATE)
-  @ApiOperation({ summary: 'How many prospects some segment rules match' })
+  @ApiOperation({
+    summary: 'How many prospects or clients some segment rules match',
+  })
   count(@Body() dto: SegmentRulesDto, @Req() request: AuthedRequest) {
     return this.service.count(request.user, dto);
   }

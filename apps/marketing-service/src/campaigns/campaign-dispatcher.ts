@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { CampaignDeliveryChannel } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingRabbitPublisher } from '../messaging/rabbitmq.publisher';
+import { campaignSmsText } from '../sms/sms-segments';
 
 /**
  * Hands a saved campaign to whatever actually sends it. The campaigns service
@@ -126,7 +127,8 @@ export class RabbitMqCampaignDispatcher implements CampaignDispatcher {
         senderId: campaign.senderIdSnapshot,
         reservationId: campaign.smsReservationId,
         subject: campaign.subject,
-        message: campaign.message,
+        // The text that is sent and that credits were estimated and reserved for: subject, then message.
+        message: campaignSmsText(campaign.subject, campaign.message),
         recipients: batch.map((recipient) => ({
           recipientId: recipient.id,
           channel: 'SMS',

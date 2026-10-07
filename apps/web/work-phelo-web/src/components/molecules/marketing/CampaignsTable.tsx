@@ -6,7 +6,7 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { formatDate } from '@/lib/formatters';
 import type { Campaign, CampaignChannel, CampaignStatus } from '@/types/marketing';
 
-const STATUS_MAP: Record<
+export const CAMPAIGN_STATUS_MAP: Record<
   CampaignStatus,
   { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }
 > = {
@@ -88,7 +88,7 @@ const COLUMNS: Column<Campaign>[] = [
     label: 'Status',
     width: '100px',
     render: (row) => {
-      const { label, variant } = STATUS_MAP[row.status];
+      const { label, variant } = CAMPAIGN_STATUS_MAP[row.status];
       return <Badge label={label} variant={variant} />;
     },
   },
@@ -109,7 +109,17 @@ interface Props {
   onCancel?: (row: Campaign) => void;
   /** Omit to hide Send. Send shows only on queued-ready SMS campaigns. */
   onSend?: (row: Campaign) => void;
+  /** Omit to hide Edit. Edit shows only on scheduled campaigns, which have not started sending. */
+  onEdit?: (row: Campaign) => void;
+  /** Omit to hide Resend and Retry. Resend shows on completed campaigns, Retry on failed ones. */
+  onReuse?: (row: Campaign) => void;
 }
+
+/** What a campaign can be started again as: a completed one is sent again, a failed one retried. */
+export const REUSE_LABEL: Partial<Record<CampaignStatus, string>> = {
+  COMPLETED: 'Resend',
+  FAILED: 'Retry',
+};
 
 export function CampaignsTable({
   data,
@@ -123,8 +133,10 @@ export function CampaignsTable({
   onAdd,
   onCancel,
   onSend,
+  onReuse,
+  onEdit,
 }: Props) {
-  const hasActions = Boolean(onCancel || onSend);
+  const hasActions = Boolean(onCancel || onSend || onReuse || onEdit);
   const columns: Column<Campaign>[] = hasActions
     ? [
         ...COLUMNS,
@@ -139,9 +151,33 @@ export function CampaignsTable({
               !row.channels.includes('EMAIL') &&
               ['PENDING_DISPATCH', 'SCHEDULED'].includes(row.status);
             const canCancel = onCancel && ['PENDING_DISPATCH', 'SCHEDULED'].includes(row.status);
-            if (!canSend && !canCancel) return null;
+            const reuseLabel = onReuse ? REUSE_LABEL[row.status] : undefined;
+            const canEdit = onEdit && row.status === 'SCHEDULED';
+            if (!canSend && !canCancel && !reuseLabel && !canEdit) return null;
             return (
               <div className="flex gap-2">
+                {canEdit && (
+                  <TableButton
+                    variant="blue"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(row);
+                    }}
+                  >
+                    Edit
+                  </TableButton>
+                )}
+                {reuseLabel && (
+                  <TableButton
+                    variant={row.status === 'FAILED' ? 'orange' : 'green'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReuse?.(row);
+                    }}
+                  >
+                    {reuseLabel}
+                  </TableButton>
+                )}
                 {canSend && (
                   <TableButton
                     onClick={(e) => {

@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCampaignRecipientOptions } from '@/hooks/marketing/useCampaigns';
-import type { CampaignRecipientOption } from '@/types/marketing';
+import type { CampaignRecipientOption, SegmentRecipientType } from '@/types/marketing';
 
 const SEARCH_DELAY_MS = 250;
 
 /**
- * The logic behind a "pick specific prospects" field when building a segment: a server-side name
- * search (optionally within some filters) and the prospects picked so far. The caller renders the
- * field and the list of chosen prospects.
+ * The logic behind a "pick specific prospects/clients" field when building a segment: a server-side
+ * name search (optionally within some filters) and the people picked so far. The caller renders the
+ * field and the list of chosen people.
  */
 export function useRecipientPicker(
-  filters: { businessTypeIds?: string[]; pipelineStageIds?: string[] } = {},
+  filters: {
+    recipientType?: SegmentRecipientType;
+    businessTypeIds?: string[];
+    pipelineStageIds?: string[];
+  } = {},
   initial: CampaignRecipientOption[] = [],
 ) {
   const [selected, setSelected] = useState<CampaignRecipientOption[]>(initial);
@@ -24,7 +28,7 @@ export function useRecipientPicker(
 
   const { data: found, isLoading } = useCampaignRecipientOptions(filters, debounced);
 
-  // Chosen prospects stay in the list even when the current search no longer returns them.
+  // Chosen people stay in the list even when the current search no longer returns them.
   const known = useMemo(() => {
     const byId = new Map<string, CampaignRecipientOption>();
     for (const prospect of found ?? []) byId.set(prospect.id, prospect);

@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   CampaignSegmentsService,
+  clientSegmentWhere,
   segmentWhere,
 } from './campaign-segments.service';
 import { CampaignsService } from './campaigns.service';
@@ -18,8 +19,9 @@ const prospect = (
   phone: string | null,
   email: string | null,
   withPrimary = true,
+  idPrefix = 'p',
 ) => ({
-  id: `p-${id}`,
+  id: `${idPrefix}-${id}`,
   companyName: `Company ${id}`,
   contacts: withPrimary
     ? [{ id: `c-${id}`, name: `Contact ${id}`, phone, email }]
@@ -93,6 +95,7 @@ describe('CampaignsService', () => {
     },
     marketingCampaignRecipient: {
       createMany: jest.fn(),
+      deleteMany: jest.fn(),
       updateMany: jest.fn(),
       update: jest.fn(),
       aggregate: jest.fn(),
@@ -113,6 +116,7 @@ describe('CampaignsService', () => {
     marketingCrmSettingOption: { findMany: jest.fn(), count: jest.fn() },
     marketingCampaignSegment: { findMany: jest.fn() },
     marketingProspect: { findMany: jest.fn() },
+    marketingClient: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
   const dispatcher = { dispatch: jest.fn(), cancel: jest.fn() };
@@ -347,7 +351,7 @@ describe('CampaignsService', () => {
       prisma.marketingProspect.findMany.mockResolvedValue([]);
 
       await expect(service.create(user, baseDto)).rejects.toThrow(
-        'No prospects were found in the selected segments',
+        'No prospects or clients were found in the selected segments',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(dispatcher.dispatch).not.toHaveBeenCalled();
@@ -522,6 +526,221 @@ describe('CampaignsService', () => {
     });
   });
 
+  describe('update', () => {
+    const scheduledDto: CreateCampaignDto = {
+      ...baseDto,
+      name: 'Q4 Launch (moved)',
+      dispatchMode: 'SCHEDULED',
+      scheduledDate: '2099-01-15',
+    };
+
+    beforeEach(() => {
+      prisma.marketingCampaign.findFirst.mockResolvedValue(
+        campaignRow({ status: 'SCHEDULED' }),
+      );
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospect('1', '0240000001', 'a@x.com'),
+      ]);
+      tx.marketingCampaign.updateMany.mockResolvedValue({ count: 1 });
+      tx.marketingCampaignRecipient.deleteMany.mockResolvedValue({ count: 2 });
+      tx.marketingCampaign.findUniqueOrThrow.mockResolvedValue(
+        campaignRow({ status: 'SCHEDULED', name: 'Q4 Launch (moved)' }),
+      );
+    });
+
+    it('replaces the details and works the recipients out again', async () => {
+      const result = await service.update(user, 'camp-1', scheduledDto);
+
+      expect(tx.marketingCampaign.updateMany).toHaveBeenCalledWith({
+        where: { id: 'camp-1', tenantId: TENANT, status: 'SCHEDULED' },
+        data: like({
+          name: 'Q4 Launch (moved)',
+          status: 'SCHEDULED',
+          scheduledDate: new Date('2099-01-15T00:00:00.000Z'),
+          segmentIds: [BUILT_IN],
+          senderIdSnapshot: 'WORKPHELO',
+        }),
+      });
+      expect(tx.marketingCampaignRecipient.deleteMany).toHaveBeenCalledWith({
+        where: { tenantId: TENANT, campaignId: 'camp-1' },
+      });
+      expect(createdRows()).toHaveLength(1);
+      expect(createdRows()[0]).toMatchObject({
+        campaignId: 'camp-1',
+        companyName: 'Company 1',
+      });
+      expect(result).toMatchObject({ name: 'Q4 Launch (moved)' });
+    });
+
+    it('does not change who created the campaign', async () => {
+      await service.update(user, 'camp-1', scheduledDto);
+
+      const [[args]] = tx.marketingCampaign.updateMany.mock.calls as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      expect(args.data).not.toHaveProperty('createdByUserId');
+    });
+
+    it.each(['PENDING_DISPATCH', 'SENDING', 'COMPLETED', 'CANCELLED'])(
+      'refuses a campaign that is %s',
+      async (status) => {
+        prisma.marketingCampaign.findFirst.mockResolvedValue(
+          campaignRow({ status }),
+        );
+
+        await expect(
+          service.update(user, 'camp-1', scheduledDto),
+        ).rejects.toThrow('Only scheduled campaigns can be edited');
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it('loses to a scheduler that started the campaign first', async () => {
+      tx.marketingCampaign.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.update(user, 'camp-1', scheduledDto),
+      ).rejects.toThrow('Only scheduled campaigns can be edited');
+      expect(tx.marketingCampaignRecipient.deleteMany).not.toHaveBeenCalled();
+      expect(tx.marketingCampaignRecipient.createMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps the old recipients when the new audience is empty', async () => {
+      prisma.marketingProspect.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.update(user, 'camp-1', scheduledDto),
+      ).rejects.toThrow('No prospects or clients were found');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('is not found for another tenant’s campaign', async () => {
+      prisma.marketingCampaign.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update(user, 'camp-9', scheduledDto),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('client segments', () => {
+    const CLIENT_SEGMENT = '77777777-7777-4777-8777-777777777777';
+    const clientSegment = (overrides: Record<string, unknown> = {}) => ({
+      id: CLIENT_SEGMENT,
+      tenantId: TENANT,
+      name: 'Insurance clients',
+      recipientType: 'CLIENT',
+      businessTypeIds: [BUSINESS_TYPE],
+      pipelineStageIds: [],
+      includeProspectIds: [],
+      excludeProspectIds: [],
+      includeClientIds: [],
+      excludeClientIds: [],
+      ...overrides,
+    });
+    const client = (id: string, phone: string | null, email: string | null) =>
+      prospect(id, phone, email, true, 'cl');
+
+    beforeEach(() => {
+      prisma.marketingCampaignSegment.findMany.mockResolvedValue([
+        clientSegment(),
+      ]);
+      prisma.marketingProspect.findMany.mockResolvedValue([]);
+      prisma.marketingClient.findMany.mockResolvedValue([
+        client('1', '0240000001', 'a@x.com'),
+      ]);
+    });
+
+    it('queries clients, not prospects, for a client segment', async () => {
+      await service.create(user, {
+        ...baseDto,
+        segmentIds: [CLIENT_SEGMENT],
+      });
+
+      expect(prisma.marketingProspect.findMany).not.toHaveBeenCalled();
+      expect(prisma.marketingClient.findMany).toHaveBeenCalledWith(
+        like({
+          where: {
+            tenantId: TENANT,
+            OR: [clientSegmentWhere(clientSegment())],
+          },
+        }),
+      );
+    });
+
+    it('records the recipient against the client, not a prospect', async () => {
+      await service.create(user, {
+        ...baseDto,
+        segmentIds: [CLIENT_SEGMENT],
+      });
+
+      expect(tx.marketingCampaignRecipient.createMany).toHaveBeenCalledWith({
+        data: [
+          like({
+            clientId: 'cl-1',
+            prospectId: null,
+            contactId: 'c-1',
+            companyName: 'Company 1',
+          }),
+        ],
+      });
+    });
+
+    it('reaches prospects and clients together, contacting a shared number once', async () => {
+      prisma.marketingCampaignSegment.findMany.mockResolvedValue([
+        clientSegment(),
+      ]);
+      prisma.marketingProspect.findMany.mockResolvedValue([
+        prospect('1', '0240000001', null),
+      ]);
+      prisma.marketingClient.findMany.mockResolvedValue([
+        client('2', '0240000001', null),
+        client('3', '0240000003', null),
+      ]);
+
+      await expect(
+        service.preview(user, {
+          segmentIds: [BUILT_IN, CLIENT_SEGMENT],
+          channels: ['SMS'],
+        }),
+      ).resolves.toEqual({
+        prospectCount: 1,
+        clientCount: 2,
+        reachable: 2,
+        skipped: 1,
+      });
+    });
+
+    it('counts a campaign that only has clients as having an audience', async () => {
+      prisma.marketingClient.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.create(user, { ...baseDto, segmentIds: [CLIENT_SEGMENT] }),
+      ).rejects.toThrow('No prospects or clients were found');
+    });
+
+    it('lists clients when picking recipients for a client segment', async () => {
+      prisma.marketingClient.findMany.mockResolvedValue([
+        { ...client('1', null, null), locationLabel: 'Accra' },
+      ]);
+
+      const result = await service.recipientOptions(user, {
+        recipientType: 'CLIENT',
+        search: 'comp',
+      });
+
+      expect(prisma.marketingProspect.findMany).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        {
+          id: 'cl-1',
+          companyName: 'Company 1',
+          locationLabel: 'Accra',
+          contactName: 'Contact 1',
+        },
+      ]);
+    });
+  });
+
   describe('preview', () => {
     it('counts reachable and skipped messages without saving', async () => {
       prisma.marketingProspect.findMany.mockResolvedValue([
@@ -534,7 +753,12 @@ describe('CampaignsService', () => {
           segmentIds: [BUILT_IN],
           channels: ['SMS', 'EMAIL'],
         }),
-      ).resolves.toEqual({ prospectCount: 2, reachable: 3, skipped: 1 });
+      ).resolves.toEqual({
+        prospectCount: 2,
+        clientCount: 0,
+        reachable: 3,
+        skipped: 1,
+      });
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
