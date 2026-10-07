@@ -605,13 +605,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         ) : (
           <div className="grid grid-cols-1 gap-2">
             {selectableTypes.map((type) => {
-              // A rule and a source are each independently sufficient to use a type — applies
-              // uniformly, including cashbook (Receipt/Payment/Charge/Adjustment) types: every
-              // type must be deliberately configured with at least one before it's usable,
-              // rather than falling back to ad hoc free-form account picking.
+              // A rule and a source are each independently sufficient to use a type. A cashbook
+              // type (direct receipt/payment) needs neither: both accounts are picked on the
+              // form, and a rule would only pre-fill one of them.
               const hasRule = type.rulesCount > 0;
               const hasSource = Boolean(type.sourceTypeId);
-              const canSelect = hasRule || hasSource;
+              const canSelect = hasRule || hasSource || type.postsToCashbook;
               return (
                 <button
                   key={type.id}
