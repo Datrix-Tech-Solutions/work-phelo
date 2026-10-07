@@ -127,7 +127,17 @@ enum MarketingSmsCreditReservationStatus {
 
 enum MarketingTransportPurpose {
   PERSONAL
-  OFFICIAL
+  MARKETING
+  OPERATIONS
+
+  @@schema("marketing")
+}
+
+enum MarketingVehicleCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
 
   @@schema("marketing")
 }
@@ -481,9 +491,11 @@ model MarketingTransportRequest {
   requesterEmployeeId   String?
   requesterName         String
   requesterDepartment   String?
-  /// Personal or official. Replaces the old free-text purpose, which older requests keep in businessPurpose.
-  purpose               MarketingTransportPurpose       @default(OFFICIAL)
+  /// Personal, marketing or operations. Replaces the old free-text purpose, which older requests keep in businessPurpose.
+  purpose               MarketingTransportPurpose       @default(MARKETING)
   businessPurpose       String?
+  /// Set when the request was raised from an approved appointment (marketing purpose, its prospect as a destination).
+  appointmentId         String?
   travelDate            DateTime                        @db.Date
   departureTime         String
   returnTime            String?
@@ -503,12 +515,24 @@ model MarketingTransportRequest {
   driverName            String?
   /// True when the requester drives; driverEmployeeId/driverName then hold the requester.
   selfDriven            Boolean                         @default(false)
+  /// Set when someone starts the trip: a trip is on route only once started, never by the clock.
+  startedAt             DateTime?
+  startedByUserId       String?
+  startedByName         String?
+  /// Actual departure, HH:mm on the day it was started, to compare with departureTime.
+  actualDepartureTime   String?
+  startingMileage       Int?
+  startingCondition     MarketingVehicleCondition?
+  startNotes            String?
   /// Set when someone completes the trip (a trip never completes on its own).
   completedAt           DateTime?
   completedByUserId     String?
   completedByName       String?
   /// Actual return, HH:mm on the travel date, to compare with returnTime.
   actualReturnTime      String?
+  endingMileage         Int?
+  endingCondition       MarketingVehicleCondition?
+  completionNotes       String?
   /// Set when an approver reschedules; the previous schedule is kept for display.
   rescheduleCount       Int                             @default(0)
   rescheduledAt         DateTime?
@@ -526,6 +550,7 @@ model MarketingTransportRequest {
   @@index([tenantId, status, travelDate])
   @@index([tenantId, requesterUserId, createdAt], map: "MarketingTransportRequest_requester_created_idx")
   @@index([tenantId, createdAt])
+  @@index([tenantId, appointmentId])
   @@index([tenantId, vehicleAssetId, travelDate], map: "MarketingTransportRequest_vehicle_date_idx")
   @@index([tenantId, driverEmployeeId, travelDate], map: "MarketingTransportRequest_driver_date_idx")
   @@schema("marketing")
@@ -604,6 +629,42 @@ model MarketingTransportOfficer {
   @@schema("marketing")
 }
 
+enum MarketingSegmentRecipientType {
+  PROSPECT
+  CLIENT
+
+  @@schema("marketing")
+}
+
+/// A saved audience, shared across the tenant. It stores rules, so the people in it follow the data.
+model MarketingCampaignSegment {
+  id                 String                            @id @default(uuid())
+  tenantId           String
+  name               String
+  normalizedName     String
+  recipientType      MarketingSegmentRecipientType     @default(PROSPECT)
+  businessTypeIds    String[]
+  pipelineStageIds   String[]
+  /// People who have any of these products or services (a client's uninterested products don't count).
+  productIds         String[]                          @default([])
+  /// Prospects always in the segment, even when the rules above don't match them.
+  includeProspectIds String[]
+  /// Prospects never in the segment, even when the rules above match them.
+  excludeProspectIds String[]
+  /// For a CLIENT segment: clients always in the segment, even when the filters don't match them.
+  includeClientIds   String[]                          @default([])
+  /// For a CLIENT segment: clients never in the segment, even when the filters match them.
+  excludeClientIds   String[]                          @default([])
+  createdByUserId    String?
+  updatedByUserId    String?
+  createdAt          DateTime                          @default(now())
+  updatedAt          DateTime                          @updatedAt
+
+  @@unique([tenantId, normalizedName])
+  @@index([tenantId, createdAt])
+  @@schema("marketing")
+}
+
 model MarketingCampaign {
   id                String                        @id @default(uuid())
   tenantId          String
@@ -611,6 +672,9 @@ model MarketingCampaign {
   channels          MarketingCampaignChannel[]
   businessTypeIds   String[]
   businessTypeNames String[]
+  /// The segments chosen: a saved segment's id, or "business-type:<id>" for a built-in one.
+  segmentIds        String[]                      @default([])
+  segmentNames      String[]                      @default([])
   senderIdentityId  String?
   senderIdSnapshot  String?
   subject           String
@@ -639,12 +703,14 @@ model MarketingCampaign {
   @@schema("marketing")
 }
 
-/// One row per prospect primary contact per channel, fixed when the campaign is created.
+/// One row per prospect or client primary contact per channel, fixed when the campaign is created.
+/// Exactly one of prospectId and clientId is set.
 model MarketingCampaignRecipient {
   id               String                           @id @default(uuid())
   tenantId         String
   campaignId       String
-  prospectId       String
+  prospectId       String?
+  clientId         String?
   contactId        String
   companyName      String
   contactName      String

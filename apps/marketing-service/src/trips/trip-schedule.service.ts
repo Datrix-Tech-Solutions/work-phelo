@@ -55,7 +55,7 @@ export interface CompletedTrip {
 /**
  * Approved trips that are booked or running, with their live state. Vehicle and
  * driver statuses are derived from these on every read: they flip to "on route"
- * at the departure time and stay that way until the trip is completed, cancelled
+ * when the trip is started and stay that way until the trip is completed, cancelled
  * or rescheduled, so an overdue trip keeps its vehicle and driver occupied.
  */
 @Injectable()
@@ -109,10 +109,13 @@ export class TripScheduleService {
         travelDate: row.travelDate.toISOString().slice(0, 10),
         departureTime: row.departureTime,
         returnTime: row.returnTime,
+        started: row.startedAt !== null,
       };
       return {
         requestId: row.id,
-        ...window,
+        travelDate: window.travelDate,
+        departureTime: window.departureTime,
+        returnTime: window.returnTime,
         destination: row.destination,
         requesterName: row.requesterName,
         vehicle: row.vehicleAssetId
@@ -127,8 +130,9 @@ export class TripScheduleService {
             ? { employeeId: row.driverEmployeeId, name: row.driverName }
             : null,
         selfDriven: row.selfDriven,
-        state: tripState(now, window),
-        overdue: isOverdue(now, window),
+        state: tripState(window),
+        // Only a trip that is out can be overdue; an unstarted one is simply not started.
+        overdue: window.started && isOverdue(now, window),
       };
     });
   }

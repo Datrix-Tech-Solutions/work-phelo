@@ -8,6 +8,7 @@ import {
   NewAppointmentErrors,
 } from '@/components/molecules/marketing/NewAppointmentForm';
 import { AppointmentDetailPanel } from '@/components/organisms/marketing/AppointmentDetailPanel';
+import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
 import { AppointmentsPanel } from '@/components/organisms/marketing/AppointmentsPanel';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -48,6 +49,9 @@ export default function AppointmentsPage() {
     setViewing(null);
     if (linkedId) router.replace(pathname);
   }
+
+  // The appointment a vehicle is being requested for; the request form is open while this is set.
+  const [transportFor, setTransportFor] = useState<Appointment | null>(null);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState<NewAppointmentFields>(EMPTY_FORM);
@@ -115,6 +119,16 @@ export default function AppointmentsPage() {
         key={detail?.id ?? 'none'}
         appointment={detail}
         onClose={closeDetail}
+        onRequestTransport={(appointment) => {
+          closeDetail();
+          setTransportFor(appointment);
+        }}
+      />
+
+      <RequestPanel
+        isOpen={!!transportFor}
+        appointment={transportFor}
+        onClose={() => setTransportFor(null)}
       />
 
       <SidePanel

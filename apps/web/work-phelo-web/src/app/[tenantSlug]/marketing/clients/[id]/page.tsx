@@ -10,7 +10,7 @@ import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectMan
 import { ProspectInteractionTimeline } from '@/components/molecules/marketing/ProspectInteractionTimeline';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
 import { AddClientProductModal } from '@/components/organisms/marketing/AddClientProductModal';
-import { ChangeClientDecisionMakerModal } from '@/components/organisms/marketing/ChangeClientDecisionMakerModal';
+import { EditPrimaryContactModal } from '@/components/organisms/marketing/EditPrimaryContactModal';
 import { ChangeClientLocationModal } from '@/components/organisms/marketing/ChangeClientLocationModal';
 import { ClientBillingModal } from '@/components/organisms/marketing/ClientBillingModal';
 import { ClientTransactionsTab } from '@/components/organisms/marketing/ClientTransactionsTab';
@@ -22,7 +22,12 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { TabBar } from '@/components/molecules/shared/TabBar';
-import { useClient, useClientBillingSummary, useDeleteClient } from '@/hooks/marketing/useClients';
+import {
+  useClient,
+  useClientBillingSummary,
+  useDeleteClient,
+  useUpdateClient,
+} from '@/hooks/marketing/useClients';
 import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -47,6 +52,7 @@ export default function ClientDetailPage() {
   const toast = useToast();
 
   const { data: client, isLoading, isError } = useClient(id);
+  const updateClient = useUpdateClient(id);
   const deleteClient = useDeleteClient();
   // A client's assignee manages it - edit, follow-ups, billing - without any permission; the
   // permissions only extend that to clients assigned to someone else. Deleting always needs one.
@@ -77,7 +83,7 @@ export default function ClientDetailPage() {
   const [billingOpen, setBillingOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
-  const [changingDecisionMaker, setChangingDecisionMaker] = useState(false);
+  const [editingContact, setEditingContact] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const listHref = `/${tenantSlug}/marketing/clients`;
@@ -121,7 +127,7 @@ export default function ClientDetailPage() {
           { label: 'Add Product', onClick: () => setAddingProduct(true) },
           { label: 'Edit Company Details', onClick: () => setEditingCompany(true) },
           { label: 'Change Location', onClick: () => setChangingLocation(true) },
-          { label: 'Change Decision Maker', onClick: () => setChangingDecisionMaker(true) },
+          { label: 'Edit Primary Contact', onClick: () => setEditingContact(true) },
         ]
       : []),
     ...(canDelete
@@ -285,14 +291,31 @@ export default function ClientDetailPage() {
         />
       )}
 
-      {changingDecisionMaker && (
-        <ChangeClientDecisionMakerModal
-          clientId={id}
-          clientName={client.companyName}
-          currentName={primaryContact?.name ?? ''}
-          currentRoleId={primaryContact?.decisionMaker?.id ?? ''}
+      {editingContact && (
+        <EditPrimaryContactModal
+          companyName={client.companyName}
+          current={{
+            name: primaryContact?.name ?? '',
+            phone: primaryContact?.phone ?? null,
+            email: primaryContact?.email ?? null,
+            roleId: primaryContact?.decisionMaker?.id ?? '',
+          }}
           isOpen
-          onClose={() => setChangingDecisionMaker(false)}
+          isSaving={updateClient.isPending}
+          onClose={() => setEditingContact(false)}
+          onSave={(changes) =>
+            updateClient.mutate(
+              { primaryContact: changes },
+              {
+                onSuccess: () => {
+                  toast.success('Primary contact updated');
+                  setEditingContact(false);
+                },
+                onError: (error) =>
+                  toast.error(apiErrorMessage(error, 'Failed to update primary contact')),
+              },
+            )
+          }
         />
       )}
 

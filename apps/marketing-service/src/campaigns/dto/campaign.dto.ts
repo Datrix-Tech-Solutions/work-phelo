@@ -6,6 +6,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -17,6 +18,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { SEGMENT_RECIPIENT_TYPES, SegmentRecipientType } from './segment.dto';
 
 export const CAMPAIGN_CHANNELS = ['SMS', 'EMAIL'] as const;
 export type CampaignChannel = (typeof CAMPAIGN_CHANNELS)[number];
@@ -36,6 +38,10 @@ export const CAMPAIGN_STATUSES = [
   'CANCELLED',
 ] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
+
+/** A saved segment's id, or "business-type:<id>" for the built-in segment of a business type. */
+const SEGMENT_ID_PATTERN =
+  /^(business-type:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -58,13 +64,16 @@ export class CreateCampaignDto {
   @ApiProperty({
     type: [String],
     description:
-      'Prospect business types. Every prospect under any of them is contacted, through its primary contact.',
+      'Segments to send to: a saved segment id, or "business-type:<id>" for everyone with a business type. Prospects in more than one are contacted once, through their primary contact.',
   })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()
-  @IsUUID('all', { each: true })
-  businessTypeIds!: string[];
+  @Matches(SEGMENT_ID_PATTERN, {
+    each: true,
+    message: 'each segment id must be a segment id or business-type:<id>',
+  })
+  segmentIds!: string[];
 
   @ApiProperty({ example: 'Introducing our new product', maxLength: 200 })
   @Transform(trim)
@@ -105,6 +114,9 @@ export class CreateCampaignDto {
   scheduledDate?: string;
 }
 
+/** The details of a scheduled campaign, replaced as a whole. */
+export class UpdateCampaignDto extends CreateCampaignDto {}
+
 export class QueryCampaignsDto {
   @ApiPropertyOptional({ example: 1, minimum: 1, default: 1 })
   @IsOptional()
@@ -141,8 +153,11 @@ export class PreviewCampaignRecipientsDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()
-  @IsUUID('all', { each: true })
-  businessTypeIds!: string[];
+  @Matches(SEGMENT_ID_PATTERN, {
+    each: true,
+    message: 'each segment id must be a segment id or business-type:<id>',
+  })
+  segmentIds!: string[];
 
   @ApiProperty({ enum: CAMPAIGN_CHANNELS, isArray: true })
   @IsArray()
@@ -150,6 +165,74 @@ export class PreviewCampaignRecipientsDto {
   @ArrayUnique()
   @IsEnum(CAMPAIGN_CHANNELS, { each: true })
   channels!: CampaignChannel[];
+}
+
+const commaList = ({ value }: { value: unknown }) =>
+  typeof value === 'string'
+    ? value
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
+    : value;
+
+export class RecipientOptionsQueryDto {
+  @ApiPropertyOptional({
+    enum: SEGMENT_RECIPIENT_TYPES,
+    default: 'PROSPECT',
+    description: 'Whether to list prospects or clients.',
+  })
+  @IsOptional()
+  @IsIn(SEGMENT_RECIPIENT_TYPES)
+  recipientType?: SegmentRecipientType;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Comma-separated business type IDs to list people under.',
+  })
+  @IsOptional()
+  @Transform(commaList)
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  businessTypeIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Comma-separated sales (pipeline) stage IDs. Prospects only.',
+  })
+  @IsOptional()
+  @Transform(commaList)
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  pipelineStageIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Comma-separated prospect or client IDs to look up directly (e.g. a saved segment’s picks). Other filters still apply.',
+  })
+  @IsOptional()
+  @Transform(commaList)
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  ids?: string[];
+
+  @ApiPropertyOptional({ description: 'Matches the company name.' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @ApiPropertyOptional({ example: 30, minimum: 1, maximum: 50, default: 30 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
 }
 
 export class EstimateCampaignDto extends PreviewCampaignRecipientsDto {

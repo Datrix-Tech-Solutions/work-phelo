@@ -5,11 +5,14 @@ import { Flag, MapPin } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
-import { useCompleteRequest } from '@/hooks/marketing/useRequests';
+import { NumberField } from '@/components/atoms/NumberField';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { useCompleteRequest, useStartOptions } from '@/hooks/marketing/useRequests';
 import { useDestinationPicker } from '@/hooks/marketing/useDestinationPicker';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import {
+  CONDITION_OPTIONS,
   describeReturn,
   formatClock,
   formatTravelDate,
@@ -17,7 +20,12 @@ import {
   minutesBetween,
 } from '@/lib/requestOptions';
 import { cn, inputClass } from '@/lib/utils';
-import type { TransportRequest } from '@/types/marketing';
+import type { TransportRequest, VehicleCondition } from '@/types/marketing';
+
+const textareaClass =
+  'w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand resize-none';
+
+type Errors = Partial<Record<'return' | 'mileage' | 'condition', string>>;
 
 interface Props {
   /** The trip being completed; the pop-up is shown while this is set. */
@@ -34,9 +42,18 @@ export function CompleteTripModal({ request, onClose }: Props) {
 function CompleteForm({ request, onClose }: { request: TransportRequest; onClose: () => void }) {
   const toast = useToast();
   const complete = useCompleteRequest();
-  // Starts as the return time chosen when the request was made, if there was one; change it to the real one.
-  const [actualReturnTime, setActualReturnTime] = useState(request.returnTime ?? '');
-  const [error, setError] = useState('');
+  // The time and condition are prefilled (the current time, the vehicle's current condition) once
+  // loaded, until edited.
+  const { data: options } = useStartOptions(request.id);
+  const [returnEdit, setReturnEdit] = useState<string | null>(null);
+  // 0 means nothing entered: the ending mileage is optional.
+  const [endingMileage, setEndingMileage] = useState(0);
+  const [conditionEdit, setConditionEdit] = useState<VehicleCondition | null>(null);
+  const [notes, setNotes] = useState('');
+  const [errors, setErrors] = useState<Errors>({});
+  const startingMileage = request.start?.mileage ?? null;
+  const actualReturnTime = returnEdit ?? options?.now.time ?? '';
+  const condition = conditionEdit ?? options?.condition ?? request.start?.condition ?? '';
   // Places already on the trip can't be added again.
   const visited = useDestinationPicker(
     [],
@@ -50,20 +67,33 @@ function CompleteForm({ request, onClose }: { request: TransportRequest; onClose
       : null;
   const verdict = describeReturn(minutesLate);
 
+  // The ending mileage is optional. Distance covered shows once it is a number not below the starting one.
+  const ending = endingMileage > 0 ? endingMileage : null;
+  const distance =
+    ending !== null && startingMileage !== null && ending >= startingMileage
+      ? ending - startingMileage
+      : null;
+
   function handleComplete() {
+    const next: Errors = {};
     if (!actualReturnTime) {
-      setError('Enter the time the vehicle got back.');
-      return;
+      next.return = 'Enter the time the vehicle got back.';
+    } else if (actualReturnTime <= (request.start?.actualDepartureTime ?? request.departureTime)) {
+      next.return = 'The return time must be after the departure time.';
     }
-    if (actualReturnTime <= request.departureTime) {
-      setError('The return time must be after the departure time.');
-      return;
+    if (ending !== null && startingMileage !== null && ending < startingMileage) {
+      next.mileage = `The ending mileage cannot be below the starting mileage (${startingMileage.toLocaleString('en-GB')}).`;
     }
-    setError('');
+    if (!condition) next.condition = 'Select the vehicle condition.';
+    setErrors(next);
+    if (Object.keys(next).length) return;
     complete.mutate(
       {
         id: request.id,
         actualReturnTime,
+        ...(ending !== null ? { endingMileage: ending } : {}),
+        endingCondition: condition as VehicleCondition,
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(visited.refs.length ? { stops: visited.refs } : {}),
       },
       {
@@ -107,11 +137,11 @@ function CompleteForm({ request, onClose }: { request: TransportRequest; onClose
           <input
             type="time"
             value={actualReturnTime}
-            onChange={(e) => setActualReturnTime(e.target.value)}
-            className={inputClass(error)}
+            onChange={(e) => setReturnEdit(e.target.value)}
+            className={inputClass(errors.return)}
           />
-          {error && <p className="text-xs text-red-500">{error}</p>}
-          {!error && verdict && request.returnTime && (
+          {errors.return && <p className="text-xs text-red-500">{errors.return}</p>}
+          {!errors.return && verdict && request.returnTime && (
             <p
               className={cn(
                 'text-xs font-medium',
@@ -123,6 +153,38 @@ function CompleteForm({ request, onClose }: { request: TransportRequest; onClose
             </p>
           )}
         </div>
+
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+          <NumberField
+            label="Ending mileage (optional)"
+            decimals={0}
+            placeholder="Odometer reading"
+            value={endingMileage}
+            onChange={setEndingMileage}
+            error={errors.mileage}
+            className="w-full"
+          />
+          {!errors.mileage && startingMileage !== null && (
+            <p className="text-xs text-gray-500">
+              Started at {startingMileage.toLocaleString('en-GB')}
+              {distance !== null ? (
+                <span className="font-semibold text-gray-900">
+                  {' '}
+                  · {distance.toLocaleString('en-GB')} km covered
+                </span>
+              ) : null}
+            </p>
+          )}
+        </div>
+
+        <SearchSelect
+          label="Return condition"
+          placeholder={options ? 'Select the condition' : 'Loading…'}
+          options={CONDITION_OPTIONS}
+          value={condition}
+          onChange={(v) => setConditionEdit((v || null) as VehicleCondition | null)}
+          error={errors.condition}
+        />
 
         <MultiSelect
           label="Other places visited (optional)"
@@ -164,6 +226,17 @@ function CompleteForm({ request, onClose }: { request: TransportRequest; onClose
             ))}
           </div>
         )}
+
+        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+          <label className="text-sm font-bold text-gray-900">Notes (optional)</label>
+          <textarea
+            rows={3}
+            placeholder="Damage, fuel level, anything worth recording…"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className={textareaClass}
+          />
+        </div>
 
         <div className="flex justify-end gap-2 mt-1">
           <Button variant="outline" onClick={onClose} disabled={complete.isPending}>

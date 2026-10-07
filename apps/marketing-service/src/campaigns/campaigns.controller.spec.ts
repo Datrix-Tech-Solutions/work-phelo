@@ -16,9 +16,11 @@ describe('CampaignsController authorization contract', () => {
   it.each([
     ['list', P.CAMPAIGNS_VIEW],
     ['get', P.CAMPAIGNS_VIEW],
+    ['recipientOptions', P.CAMPAIGNS_CREATE],
     ['preview', P.CAMPAIGNS_CREATE],
     ['estimate', P.CAMPAIGNS_CREATE],
     ['create', P.CAMPAIGNS_CREATE],
+    ['update', P.CAMPAIGNS_CREATE],
     ['send', P.CAMPAIGNS_SEND],
     ['cancel', P.CAMPAIGNS_CANCEL],
   ] as const)('gates %s behind %s', (method, permission) => {
@@ -32,7 +34,17 @@ describe('CampaignsController authorization contract', () => {
       .filter((name) => name !== 'constructor')
       .sort();
     expect(declared).toEqual(
-      ['list', 'get', 'preview', 'estimate', 'create', 'send', 'cancel'].sort(),
+      [
+        'list',
+        'get',
+        'recipientOptions',
+        'preview',
+        'estimate',
+        'create',
+        'update',
+        'send',
+        'cancel',
+      ].sort(),
     );
   });
 });

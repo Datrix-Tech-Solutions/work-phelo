@@ -25,6 +25,8 @@ const APPROVE_PERMISSION = 'marketing.appointments.all:APPROVE';
 interface Props {
   appointment: Appointment | null;
   onClose: () => void;
+  /** Opens the transport request form for an approved appointment. */
+  onRequestTransport?: (appointment: Appointment) => void;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -37,7 +39,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** Mount with `key={appointment.id}` so the manager choice resets between appointments. */
-export function AppointmentDetailPanel({ appointment, onClose }: Props) {
+export function AppointmentDetailPanel({ appointment, onClose, onRequestTransport }: Props) {
   const toast = useToast();
   const userId = useAuthStore((s) => s.user?.id);
   const canApprove = usePermissionRule(APPROVE_PERMISSION);
@@ -69,7 +71,14 @@ export function AppointmentDetailPanel({ appointment, onClose }: Props) {
     }
   }
 
-  const hasActions = (canApprove && pending) || canCancel || canComplete;
+  // Only an approved appointment with a prospect can have a vehicle requested for it.
+  const canRequestTransport =
+    !!onRequestTransport &&
+    appointment?.status === 'APPROVED' &&
+    !!appointment.prospectId &&
+    (isOwn || isManager || canApprove);
+
+  const hasActions = (canApprove && pending) || canCancel || canComplete || canRequestTransport;
 
   return (
     <SidePanel
@@ -117,6 +126,15 @@ export function AppointmentDetailPanel({ appointment, onClose }: Props) {
                   Approve
                 </Button>
               </>
+            )}
+            {canRequestTransport && (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => onRequestTransport(appointment)}
+              >
+                Request Transport
+              </Button>
             )}
             {canComplete && (
               <Button

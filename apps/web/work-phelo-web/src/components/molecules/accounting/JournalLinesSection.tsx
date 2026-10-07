@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useFieldArray, useWatch, Controller, UseFormReturn } from 'react-hook-form';
+import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
@@ -159,40 +160,46 @@ export function JournalLinesSection({ form, allowedClasses }: JournalLinesSectio
     {
       key: 'debit',
       label: 'Debit',
-      width: '100px',
+      width: '130px',
       align: 'right',
-      renderField: (index) => {
-        const err = errors.lines?.[index]?.debit;
-        return (
-          <input
-            {...register(`lines.${index}.debit`, { valueAsNumber: true })}
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="0.00"
-            className={inputClass(err ? 'error' : undefined, 'py-2 text-sm text-right')}
-          />
-        );
-      },
+      renderField: (index) => (
+        <Controller
+          name={`lines.${index}.debit`}
+          control={control}
+          render={({ field }) => (
+            <NumberField
+              ariaLabel="Debit"
+              value={Number(field.value) || 0}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              error={errors.lines?.[index]?.debit?.message}
+              className="w-full py-2 text-sm text-right"
+            />
+          )}
+        />
+      ),
     },
     {
       key: 'credit',
       label: 'Credit',
-      width: '100px',
+      width: '130px',
       align: 'right',
-      renderField: (index) => {
-        const err = errors.lines?.[index]?.credit;
-        return (
-          <input
-            {...register(`lines.${index}.credit`, { valueAsNumber: true })}
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="0.00"
-            className={inputClass(err ? 'error' : undefined, 'py-2 text-sm text-right')}
-          />
-        );
-      },
+      renderField: (index) => (
+        <Controller
+          name={`lines.${index}.credit`}
+          control={control}
+          render={({ field }) => (
+            <NumberField
+              ariaLabel="Credit"
+              value={Number(field.value) || 0}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              error={errors.lines?.[index]?.credit?.message}
+              className="w-full py-2 text-sm text-right"
+            />
+          )}
+        />
+      ),
     },
   ];
 

@@ -9,13 +9,16 @@ import {
   MarketingCampaign,
   MarketingCampaignRecipientStatus,
   MarketingCampaignStatus,
-  MarketingCrmSettingCategory,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { campaignSmsText, estimateSmsSegments } from '../sms/sms-segments';
 import { SmsSenderIdentitiesService } from '../sms/sms-sender-identities.service';
 import { SmsWalletService } from '../sms/sms-wallet.service';
+import {
+  CampaignSegmentsService,
+  ResolvedSegments,
+} from './campaign-segments.service';
 import {
   CAMPAIGN_DISPATCHER,
   type CampaignDispatcher,
@@ -26,15 +29,16 @@ import {
   EstimateCampaignDto,
   PreviewCampaignRecipientsDto,
   QueryCampaignsDto,
+  RecipientOptionsQueryDto,
+  UpdateCampaignDto,
 } from './dto/campaign.dto';
 
 const NOT_FOUND_MESSAGE = 'Campaign not found';
-const INVALID_BUSINESS_TYPE_MESSAGE =
-  'A selected business type is invalid or inactive';
 const NO_PROSPECTS_MESSAGE =
-  'No prospects were found under the selected business types';
+  'No prospects or clients were found in the selected segments';
 const NO_REACHABLE_MESSAGE =
-  'None of the prospects under these business types have a primary contact reachable on the selected channels';
+  'None of the prospects or clients in these segments have a primary contact reachable on the selected channels';
+const NOT_EDITABLE_MESSAGE = 'Only scheduled campaigns can be edited';
 const PAST_DATE_MESSAGE = 'The scheduled date cannot be in the past';
 const NOT_CANCELLABLE_MESSAGE =
   'Only campaigns that have not started sending can be cancelled';
@@ -52,8 +56,10 @@ const MISSING_ADDRESS_DETAIL = {
   EMAIL: 'Primary contact has no email address',
 } as const;
 
+/** Who a recipient is: a prospect or a client, exactly one of the two. */
 export interface CampaignRecipientDraft {
-  prospectId: string;
+  prospectId: string | null;
+  clientId: string | null;
   contactId: string;
   companyName: string;
   contactName: string;
@@ -119,6 +125,7 @@ export class CampaignsService {
     private readonly wallet: SmsWalletService,
     @Inject(CAMPAIGN_DISPATCHER)
     private readonly dispatcher: CampaignDispatcher,
+    private readonly segments: CampaignSegmentsService,
   ) {}
 
   async list(user: RequestUser, query: QueryCampaignsDto = {}) {
@@ -165,26 +172,76 @@ export class CampaignsService {
     return this.toResponse(campaign, counts.get(id));
   }
 
+  /** Prospects or clients that can be picked when building a segment, optionally within some filters. */
+  async recipientOptions(user: RequestUser, query: RecipientOptionsQueryDto) {
+    const search = query.search?.trim().replace(/\s+/g, ' ').toLowerCase();
+    const filters = {
+      tenantId: user.tenantId,
+      ...(query.businessTypeIds?.length
+        ? { businessTypeId: { in: query.businessTypeIds } }
+        : {}),
+      ...(query.ids?.length ? { id: { in: query.ids } } : {}),
+      ...(search ? { normalizedCompanyName: { contains: search } } : {}),
+    };
+    const take = query.ids?.length ?? query.limit ?? 30;
+    const select = {
+      id: true,
+      companyName: true,
+      locationLabel: true,
+      contacts: {
+        where: { isPrimary: true },
+        take: 1,
+        select: { name: true },
+      },
+    };
+    const orderBy = [{ companyName: 'asc' as const }, { id: 'asc' as const }];
+
+    const people =
+      query.recipientType === 'CLIENT'
+        ? await this.prisma.marketingClient.findMany({
+            where: filters,
+            orderBy,
+            take,
+            select,
+          })
+        : await this.prisma.marketingProspect.findMany({
+            where: {
+              ...filters,
+              ...(query.pipelineStageIds?.length
+                ? { pipelineStageId: { in: query.pipelineStageIds } }
+                : {}),
+            },
+            orderBy,
+            take,
+            select,
+          });
+    return people.map((person) => ({
+      id: person.id,
+      companyName: person.companyName,
+      locationLabel: person.locationLabel,
+      contactName: person.contacts[0]?.name ?? null,
+    }));
+  }
+
   /** How many messages a campaign would queue, without saving anything. */
   async preview(user: RequestUser, dto: PreviewCampaignRecipientsDto) {
-    await this.assertActiveBusinessTypes(user.tenantId, dto.businessTypeIds);
-    const { prospectCount, drafts } = await this.resolveRecipients(
-      user.tenantId,
-      dto.businessTypeIds,
+    const audience = await this.segments.resolve(user.tenantId, dto.segmentIds);
+    const { prospectCount, clientCount, drafts } = await this.resolveRecipients(
+      audience,
       dto.channels,
     );
     return {
       prospectCount,
+      clientCount,
       reachable: this.countDrafts(drafts, 'PENDING'),
       skipped: this.countDrafts(drafts, 'SKIPPED'),
     };
   }
 
   async estimate(user: RequestUser, dto: EstimateCampaignDto) {
-    await this.assertActiveBusinessTypes(user.tenantId, dto.businessTypeIds);
-    const { prospectCount, drafts } = await this.resolveRecipients(
-      user.tenantId,
-      dto.businessTypeIds,
+    const audience = await this.segments.resolve(user.tenantId, dto.segmentIds);
+    const { prospectCount, clientCount, drafts } = await this.resolveRecipients(
+      audience,
       dto.channels,
     );
     const smsDrafts = drafts.filter((draft) => draft.channel === 'SMS');
@@ -261,6 +318,7 @@ export class CampaignsService {
 
     return {
       prospectCount,
+      clientCount,
       recipientCount: this.countDrafts(drafts, 'PENDING'),
       smsRecipientCount: smsPendingCount,
       emailRecipientCount,
@@ -289,17 +347,77 @@ export class CampaignsService {
   }
 
   async create(user: RequestUser, dto: CreateCampaignDto) {
+    const plan = await this.plan(user, dto);
+
+    const campaign = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.marketingCampaign.create({
+        data: {
+          tenantId: user.tenantId,
+          ...this.campaignFields(dto, plan),
+          createdByUserId: user.id,
+        },
+      });
+      await tx.marketingCampaignRecipient.createMany({
+        data: plan.drafts.map((draft) => ({
+          ...draft,
+          tenantId: user.tenantId,
+          campaignId: created.id,
+        })),
+      });
+      return created;
+    });
+
+    const counts = await this.countRecipients(user.tenantId, [campaign.id]);
+    return this.toResponse(campaign, counts.get(campaign.id));
+  }
+
+  /**
+   * Changes a scheduled campaign, which has not started sending: the whole campaign is replaced by
+   * the new details and its recipients are worked out again, so a new audience, channel or message
+   * is what goes out.
+   */
+  async update(user: RequestUser, id: string, dto: UpdateCampaignDto) {
+    const existing = await this.findOwned(user.tenantId, id);
+    if (existing.status !== 'SCHEDULED') {
+      throw new BadRequestException(NOT_EDITABLE_MESSAGE);
+    }
+    const plan = await this.plan(user, dto);
+
+    const campaign = await this.prisma.$transaction(async (tx) => {
+      // Claim it only while it is still scheduled, so an edit and the scheduler cannot both win.
+      const claimed = await tx.marketingCampaign.updateMany({
+        where: { id, tenantId: user.tenantId, status: 'SCHEDULED' },
+        data: this.campaignFields(dto, plan),
+      });
+      if (claimed.count === 0) {
+        throw new BadRequestException(NOT_EDITABLE_MESSAGE);
+      }
+      await tx.marketingCampaignRecipient.deleteMany({
+        where: { tenantId: user.tenantId, campaignId: id },
+      });
+      await tx.marketingCampaignRecipient.createMany({
+        data: plan.drafts.map((draft) => ({
+          ...draft,
+          tenantId: user.tenantId,
+          campaignId: id,
+        })),
+      });
+      return tx.marketingCampaign.findUniqueOrThrow({ where: { id } });
+    });
+
+    const counts = await this.countRecipients(user.tenantId, [campaign.id]);
+    return this.toResponse(campaign, counts.get(campaign.id));
+  }
+
+  /** Everything a campaign is made of that comes from its details: audience, sender, recipients, cost. */
+  private async plan(user: RequestUser, dto: CreateCampaignDto) {
     const scheduledDate = this.parseScheduledDate(dto);
-    const businessTypes = await this.assertActiveBusinessTypes(
-      user.tenantId,
-      dto.businessTypeIds,
-    );
-    const { prospectCount, drafts } = await this.resolveRecipients(
-      user.tenantId,
-      dto.businessTypeIds,
+    const audience = await this.segments.resolve(user.tenantId, dto.segmentIds);
+    const { prospectCount, clientCount, drafts } = await this.resolveRecipients(
+      audience,
       dto.channels,
     );
-    if (prospectCount === 0)
+    if (prospectCount + clientCount === 0)
       throw new BadRequestException(NO_PROSPECTS_MESSAGE);
     if (this.countDrafts(drafts, 'PENDING') === 0) {
       throw new BadRequestException(NO_REACHABLE_MESSAGE);
@@ -336,39 +454,39 @@ export class CampaignsService {
       (total, draft) => total + (draft.estimatedCredits ?? 0),
       0,
     );
+    return {
+      scheduledDate,
+      audience,
+      sender,
+      drafts: preparedDrafts,
+      estimatedCredits,
+    };
+  }
 
-    const campaign = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.marketingCampaign.create({
-        data: {
-          tenantId: user.tenantId,
-          name: dto.name,
-          channels: dto.channels,
-          businessTypeIds: businessTypes.map((type) => type.id),
-          businessTypeNames: businessTypes.map((type) => type.name),
-          senderIdentityId: sender?.id ?? null,
-          senderIdSnapshot: sender?.senderId ?? null,
-          subject: dto.subject,
-          message: dto.message,
-          dispatchMode: dto.dispatchMode,
-          scheduledDate,
-          status:
-            dto.dispatchMode === 'SCHEDULED' ? 'SCHEDULED' : 'PENDING_DISPATCH',
-          estimatedCredits,
-          createdByUserId: user.id,
-        },
-      });
-      await tx.marketingCampaignRecipient.createMany({
-        data: preparedDrafts.map((draft) => ({
-          ...draft,
-          tenantId: user.tenantId,
-          campaignId: created.id,
-        })),
-      });
-      return created;
-    });
-
-    const counts = await this.countRecipients(user.tenantId, [campaign.id]);
-    return this.toResponse(campaign, counts.get(campaign.id));
+  /** The campaign columns a set of details and its plan decide. */
+  private campaignFields(
+    dto: CreateCampaignDto,
+    plan: Awaited<ReturnType<CampaignsService['plan']>>,
+  ) {
+    return {
+      name: dto.name,
+      channels: dto.channels,
+      businessTypeIds: plan.audience.businessTypes.map((type) => type.id),
+      businessTypeNames: plan.audience.businessTypes.map((type) => type.name),
+      segmentIds: plan.audience.segments.map((segment) => segment.id),
+      segmentNames: plan.audience.segments.map((segment) => segment.name),
+      senderIdentityId: plan.sender?.id ?? null,
+      senderIdSnapshot: plan.sender?.senderId ?? null,
+      subject: dto.subject,
+      message: dto.message,
+      dispatchMode: dto.dispatchMode,
+      scheduledDate: plan.scheduledDate,
+      status:
+        dto.dispatchMode === 'SCHEDULED'
+          ? ('SCHEDULED' as const)
+          : ('PENDING_DISPATCH' as const),
+      estimatedCredits: plan.estimatedCredits,
+    };
   }
 
   async send(user: RequestUser, id: string) {
@@ -689,33 +807,70 @@ export class CampaignsService {
   }
 
   /**
-   * One draft per prospect primary contact per channel. A contact without the
+   * One draft per prospect or client primary contact per channel. A contact without the
    * needed phone/email, or an address already used earlier in the campaign, is
-   * kept as SKIPPED so the counts explain themselves.
+   * kept as SKIPPED so the counts explain themselves. A prospect that became a client
+   * shares its contact details, so it is only contacted once.
    */
   private async resolveRecipients(
-    tenantId: string,
-    businessTypeIds: string[],
+    /** Match a prospect or client in any of the chosen segments, so one in several is listed once. */
+    audience: Pick<ResolvedSegments, 'prospectWhere' | 'clientWhere'>,
     channels: CampaignChannel[],
   ) {
-    const prospects = await this.prisma.marketingProspect.findMany({
-      where: { tenantId, businessTypeId: { in: businessTypeIds } },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        companyName: true,
-        contacts: {
-          where: { isPrimary: true },
-          take: 1,
-          select: { id: true, name: true, phone: true, email: true },
-        },
+    const select = {
+      id: true,
+      companyName: true,
+      contacts: {
+        where: { isPrimary: true },
+        take: 1,
+        select: { id: true, name: true, phone: true, email: true },
       },
-    });
+    } satisfies Prisma.MarketingProspectSelect & Prisma.MarketingClientSelect;
+    const orderBy = [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
+    const prospects = audience.prospectWhere
+      ? await this.prisma.marketingProspect.findMany({
+          where: audience.prospectWhere,
+          orderBy,
+          select,
+        })
+      : [];
+    const clients = audience.clientWhere
+      ? await this.prisma.marketingClient.findMany({
+          where: audience.clientWhere,
+          orderBy,
+          select,
+        })
+      : [];
+
+    const people: {
+      prospectId: string | null;
+      clientId: string | null;
+      companyName: string;
+      contacts: {
+        id: string;
+        name: string;
+        phone: string | null;
+        email: string | null;
+      }[];
+    }[] = [
+      ...prospects.map((person) => ({
+        prospectId: person.id,
+        clientId: null,
+        companyName: person.companyName,
+        contacts: person.contacts,
+      })),
+      ...clients.map((person) => ({
+        prospectId: null,
+        clientId: person.id,
+        companyName: person.companyName,
+        contacts: person.contacts,
+      })),
+    ];
 
     const seen = new Set<string>();
     const drafts: CampaignRecipientDraft[] = [];
-    for (const prospect of prospects) {
-      const contact = prospect.contacts[0];
+    for (const person of people) {
+      const contact = person.contacts[0];
       if (!contact) continue;
 
       for (const channel of channels) {
@@ -738,9 +893,10 @@ export class CampaignsService {
         }
 
         drafts.push({
-          prospectId: prospect.id,
+          prospectId: person.prospectId,
+          clientId: person.clientId,
           contactId: contact.id,
-          companyName: prospect.companyName,
+          companyName: person.companyName,
           contactName: contact.name,
           channel,
           address,
@@ -750,7 +906,11 @@ export class CampaignsService {
       }
     }
 
-    return { prospectCount: prospects.length, drafts };
+    return {
+      prospectCount: prospects.length,
+      clientCount: clients.length,
+      drafts,
+    };
   }
 
   private countDrafts(
@@ -761,25 +921,6 @@ export class CampaignsService {
   }
 
   /** Every id must be an active business type of this tenant; returned in the order requested. */
-  private async assertActiveBusinessTypes(tenantId: string, ids: string[]) {
-    const settings = await this.prisma.marketingCrmSettingOption.findMany({
-      where: {
-        id: { in: ids },
-        tenantId,
-        category: MarketingCrmSettingCategory.PROSPECT_BUSINESS_TYPE,
-        archivedAt: null,
-        isActive: true,
-      },
-      select: { id: true, name: true },
-    });
-    const byId = new Map(settings.map((setting) => [setting.id, setting]));
-    const ordered = ids.map((id) => byId.get(id));
-    if (ordered.some((setting) => !setting)) {
-      throw new BadRequestException(INVALID_BUSINESS_TYPE_MESSAGE);
-    }
-    return ordered as { id: string; name: string }[];
-  }
-
   /** "YYYY-MM-DD" as a UTC date, rejecting anything before today. */
   private parseScheduledDate(dto: CreateCampaignDto): Date | null {
     if (dto.dispatchMode !== 'SCHEDULED' || !dto.scheduledDate) return null;
@@ -873,6 +1014,10 @@ export class CampaignsService {
       id: campaign.id,
       name: campaign.name,
       channels: campaign.channels,
+      segments: campaign.segmentIds.map((id, index) => ({
+        id,
+        name: campaign.segmentNames[index] ?? '',
+      })),
       businessTypes: campaign.businessTypeIds.map((id, index) => ({
         id,
         name: campaign.businessTypeNames[index] ?? '',

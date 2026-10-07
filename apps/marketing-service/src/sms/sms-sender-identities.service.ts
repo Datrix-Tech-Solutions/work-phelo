@@ -55,16 +55,45 @@ export class SmsSenderIdentitiesService {
   }
 
   async create(user: RequestUser, dto: CreateSmsSenderIdentityDto) {
-    await this.assertUnique(user.tenantId, dto.senderId);
+    return this.createWithStatus(user.tenantId, user.id, dto);
+  }
+
+  /**
+   * Provisioned by a platform administrator on a tenant's behalf: the platform is the approver,
+   * so the identity skips the draft/submit/approve steps and can be used by campaigns at once.
+   */
+  async createApproved(
+    tenantId: string,
+    actorId: string,
+    dto: CreateSmsSenderIdentityDto,
+  ) {
+    return this.createWithStatus(tenantId, actorId, dto, {
+      status: 'APPROVED',
+      approvedBy: actorId,
+      approvedAt: new Date(),
+    });
+  }
+
+  private async createWithStatus(
+    tenantId: string,
+    actorId: string,
+    dto: CreateSmsSenderIdentityDto,
+    extra: Pick<
+      Prisma.MarketingSmsSenderIdentityUncheckedCreateInput,
+      'status' | 'approvedBy' | 'approvedAt'
+    > = {},
+  ) {
+    await this.assertUnique(tenantId, dto.senderId);
     const item = await this.prisma.marketingSmsSenderIdentity.create({
       data: {
-        tenantId: user.tenantId,
+        tenantId,
         senderId: dto.senderId,
         normalizedSenderId: normalizeSenderId(dto.senderId),
         displayName: dto.displayName || null,
         provider: dto.provider || null,
         providerReference: dto.providerReference || null,
-        createdBy: user.id,
+        createdBy: actorId,
+        ...extra,
       },
     });
     return this.toResponse(item);

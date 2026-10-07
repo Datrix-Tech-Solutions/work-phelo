@@ -1424,6 +1424,22 @@ describe('ProspectsService', () => {
       expect(prisma.marketingPipelineStage.findFirst).toHaveBeenCalledTimes(1);
     });
 
+    it('removes the phone and email of the primary contact when they are null', async () => {
+      const existing = makeExistingProspect();
+      prisma.marketingProspect.findFirst
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(existing);
+
+      await service.update(user, 'prospect-a', {
+        primaryContact: { phone: null, email: null },
+      });
+
+      expect(prisma.marketingProspectContact.update).toHaveBeenCalledWith({
+        where: { id: 'contact-primary' },
+        data: { phone: null, email: null },
+      });
+    });
+
     it('propagates transaction failures so aggregate child updates roll back', async () => {
       const existing = makeExistingProspect();
       prisma.marketingProspect.findFirst.mockResolvedValue(existing);

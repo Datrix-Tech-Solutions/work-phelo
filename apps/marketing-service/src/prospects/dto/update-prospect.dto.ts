@@ -27,19 +27,29 @@ export class UpdateProspectPrimaryContactDto {
   @MaxLength(160)
   name?: string;
 
-  @ApiPropertyOptional({ example: '+233201234567', maxLength: 40 })
+  @ApiPropertyOptional({
+    example: '+233201234567',
+    maxLength: 40,
+    nullable: true,
+    description: 'Send null to remove the phone number.',
+  })
   @OptionalCollapseWhitespaceString()
   @IsOptional()
   @IsString()
   @MaxLength(40)
-  phone?: string;
+  phone?: string | null;
 
-  @ApiPropertyOptional({ example: 'ama.mensah@example.com', maxLength: 254 })
+  @ApiPropertyOptional({
+    example: 'ama.mensah@example.com',
+    maxLength: 254,
+    nullable: true,
+    description: 'Send null to remove the email address.',
+  })
   @OptionalCollapseWhitespaceString()
   @IsOptional()
   @IsEmail()
   @MaxLength(254)
-  email?: string;
+  email?: string | null;
 
   @ApiPropertyOptional({
     example: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',

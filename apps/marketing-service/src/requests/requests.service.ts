@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  MarketingTransportPurpose,
   MarketingTransportRequestStatus as Status,
   MarketingTransportStopKind as StopKind,
   MarketingTransportStopSource as StopSource,
@@ -21,7 +22,6 @@ import {
   canComplete,
   isOverdue,
   minutesBetween,
-  tripState,
   WallClock,
 } from '../trips/trip-schedule';
 import { TripScheduleService } from '../trips/trip-schedule.service';
@@ -37,6 +37,7 @@ import {
   RequestStatusFilter,
   RescheduleTransportRequestDto,
   ReviewTransportRequestDto,
+  StartTransportRequestDto,
   TransportStopDto,
   UpdateTransportRequestDto,
 } from './dto/transport-request.dto';
@@ -106,7 +107,7 @@ export class RequestsService {
       tenantId: user.tenantId,
       ...this.visibilityWhere(user),
       AND: [
-        ...(query.status?.length ? [this.statusWhere(query.status, now)] : []),
+        ...(query.status?.length ? [this.statusWhere(query.status)] : []),
         ...(query.search
           ? [
               {
@@ -195,6 +196,10 @@ export class RequestsService {
       true,
     );
 
+    const appointment = dto.appointmentId
+      ? await this.appointmentForTransport(user, dto.appointmentId)
+      : null;
+
     const [resolved, stops] = await Promise.all([
       this.callHr(() =>
         this.directory.resolve(user.tenantId, {
@@ -202,7 +207,16 @@ export class RequestsService {
           employeeIds: dto.passengerIds,
         }),
       ),
-      this.resolveStops(user, dto.stops ?? []),
+      this.resolveStops(
+        user,
+        appointment
+          ? [
+              { kind: StopKind.PROSPECT, id: appointment.prospectId },
+              ...(dto.stops ?? []),
+            ]
+          : (dto.stops ?? []),
+        appointment?.prospectId,
+      ),
     ]);
     const requester = this.requesterFrom(user, resolved.person);
     const passengers = resolved.people.filter(
@@ -216,11 +230,17 @@ export class RequestsService {
         requesterEmployeeId: requester.employeeId,
         requesterName: requester.name,
         requesterDepartment: requester.department,
-        purpose: dto.purpose,
+        // A trip for an appointment is always a marketing trip.
+        purpose: appointment
+          ? MarketingTransportPurpose.MARKETING
+          : dto.purpose,
+        appointmentId: appointment?.id ?? null,
         travelDate: this.toDate(dto.travelDate),
         departureTime: dto.departureTime,
         returnTime: dto.returnTime ?? null,
-        destination: this.summarize(stops),
+        destination: appointment
+          ? this.summarize(stops)
+          : dto.destination || this.summarize(stops),
         notes: dto.notes || null,
         passengers: {
           create: passengers.map((person) => ({
@@ -245,6 +265,51 @@ export class RequestsService {
     // Tell the approvers (best-effort, not awaited so the request returns straight away).
     void this.notifier.requested(user.tenantId, response);
     return response;
+  }
+
+  /**
+   * The appointment a trip is requested for: it must be approved and have a prospect, the person
+   * must be its marketer, its manager or able to approve appointments, and it can't already have
+   * a live trip.
+   */
+  private async appointmentForTransport(user: RequestUser, id: string) {
+    const appointment = await this.prisma.marketingAppointment.findFirst({
+      where: { id, tenantId: user.tenantId },
+    });
+    const allowed =
+      appointment &&
+      (appointment.marketerUserId === user.id ||
+        appointment.managerUserId === user.id ||
+        this.hasPermission(
+          user,
+          MarketingCrmSettingsPermission.APPOINTMENTS_APPROVE_ALL,
+        ));
+    // Same response for "not yours" and "doesn't exist" so ids can't be probed.
+    if (!appointment || !allowed) {
+      throw new NotFoundException('Appointment not found');
+    }
+    if (appointment.status !== 'APPROVED') {
+      throw new ConflictException(
+        'Transport can only be requested for an approved appointment',
+      );
+    }
+    if (!appointment.prospectId) {
+      throw new ConflictException('This appointment no longer has a prospect');
+    }
+    const existing = await this.prisma.marketingTransportRequest.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        appointmentId: appointment.id,
+        status: { in: [Status.PENDING, Status.APPROVED, Status.COMPLETED] },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'This appointment already has a transport request',
+      );
+    }
+    return { id: appointment.id, prospectId: appointment.prospectId };
   }
 
   async update(user: RequestUser, id: string, dto: UpdateTransportRequestDto) {
@@ -286,6 +351,14 @@ export class RequestsService {
         ? await this.resolveStops(user, dto.stops)
         : undefined;
 
+    // Typed text (personal trips) wins; otherwise the places chosen, when they were sent.
+    const destination =
+      dto.destination !== undefined
+        ? dto.destination
+        : stops
+          ? this.summarize(stops)
+          : undefined;
+
     const updated = await this.prisma.$transaction(async (tx) => {
       if (passengers) {
         await tx.marketingTransportRequestPassenger.deleteMany({
@@ -324,9 +397,9 @@ export class RequestsService {
                 },
               }
             : {}),
+          ...(destination !== undefined ? { destination } : {}),
           ...(stops
             ? {
-                destination: this.summarize(stops),
                 stops: {
                   create: stops.map((stop) => ({
                     tenantId: user.tenantId,
@@ -425,6 +498,9 @@ export class RequestsService {
     if (existing.status !== Status.APPROVED) {
       throw new ConflictException('Only approved trips can be rescheduled');
     }
+    if (existing.startedAt) {
+      throw new ConflictException('A trip that has started cannot be moved');
+    }
     this.assertSchedule(
       dto.travelDate,
       dto.departureTime,
@@ -463,6 +539,94 @@ export class RequestsService {
   }
 
   /**
+   * What the start form is prefilled with: the vehicle's current mileage (from the fleet details)
+   * and its condition (from the HR asset).
+   */
+  async startOptions(user: RequestUser, id: string) {
+    const existing = await this.findForActor(user, id);
+    if (!existing.vehicleAssetId) {
+      throw new ConflictException('This trip has no vehicle allocated');
+    }
+    const [details, vehicle] = await Promise.all([
+      this.prisma.marketingFleetVehicle.findUnique({
+        where: {
+          tenantId_assetId: {
+            tenantId: user.tenantId,
+            assetId: existing.vehicleAssetId,
+          },
+        },
+      }),
+      this.callHr(() =>
+        this.fleet.getVehicle(user.tenantId, existing.vehicleAssetId),
+      ),
+    ]);
+    return {
+      vehicleName: existing.vehicleName,
+      mileage: details?.currentMileage ?? null,
+      condition: vehicle.condition ?? null,
+      now: this.trips.now(),
+    };
+  }
+
+  /**
+   * Starts an approved trip: it is on route from now until it is completed. Records the starting
+   * mileage and vehicle condition, when it actually left, and any notes. The requester can start
+   * their own; anyone who can approve can start any.
+   */
+  async start(user: RequestUser, id: string, dto: StartTransportRequestDto) {
+    const existing = await this.findForActor(user, id);
+    if (existing.status !== Status.APPROVED) {
+      throw new ConflictException('Only approved trips can be started');
+    }
+    if (existing.startedAt) {
+      throw new ConflictException('This trip has already started');
+    }
+    const now = this.trips.now();
+    const travelDate = this.fromDate(existing.travelDate);
+    if (travelDate > now.date) {
+      throw new ConflictException('A trip cannot start before its travel day');
+    }
+    // On the travel day the departure can't be in the future; a late start on a later day can be any time.
+    if (travelDate === now.date && dto.actualDepartureTime > now.time) {
+      throw new BadRequestException(
+        'The departure time cannot be in the future',
+      );
+    }
+
+    const starterName = this.requesterFrom(
+      user,
+      (
+        await this.callHr(() =>
+          this.directory.resolve(user.tenantId, { userId: user.id }),
+        )
+      ).person,
+    ).name;
+
+    // The status and startedAt conditions make a concurrent start lose cleanly.
+    const result = await this.prisma.marketingTransportRequest.updateMany({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        status: Status.APPROVED,
+        startedAt: null,
+      },
+      data: {
+        startedAt: new Date(),
+        startedByUserId: user.id,
+        startedByName: starterName,
+        actualDepartureTime: dto.actualDepartureTime,
+        startingMileage: dto.startingMileage,
+        startingCondition: dto.startingCondition,
+        startNotes: dto.notes || null,
+      },
+    });
+    if (result.count === 0) {
+      throw new ConflictException('This trip can no longer be started');
+    }
+    return this.findOne(user, id);
+  }
+
+  /**
    * Closes a trip once it can be closed (its return time has passed, or it never had one),
    * recording when it really got back so on-time returns can be seen, and any further places
    * that were visited. Final: a completed trip can't be changed.
@@ -485,12 +649,14 @@ export class RequestsService {
       travelDate: this.fromDate(existing.travelDate),
       departureTime: existing.departureTime,
       returnTime: existing.returnTime,
+      started: existing.startedAt !== null,
     };
+    if (!window.started) {
+      throw new ConflictException('Start the trip before completing it');
+    }
     if (!canComplete(now, window)) {
       throw new ConflictException(
-        existing.returnTime
-          ? 'A trip can only be completed after its return time'
-          : 'A trip can only be completed once it has departed',
+        'A trip can only be completed after its return time',
       );
     }
     if (dto.actualReturnTime <= existing.departureTime) {
@@ -501,6 +667,15 @@ export class RequestsService {
     if (window.travelDate === now.date && dto.actualReturnTime > now.time) {
       throw new BadRequestException(
         'The actual return time cannot be in the future',
+      );
+    }
+    if (
+      dto.endingMileage !== undefined &&
+      existing.startingMileage !== null &&
+      dto.endingMileage < existing.startingMileage
+    ) {
+      throw new BadRequestException(
+        'The ending mileage cannot be below the starting mileage',
       );
     }
 
@@ -530,10 +705,23 @@ export class RequestsService {
           completedByUserId: user.id,
           completedByName: this.requesterFrom(user, resolved.person).name,
           actualReturnTime: dto.actualReturnTime,
+          endingMileage: dto.endingMileage ?? null,
+          endingCondition: dto.endingCondition,
+          completionNotes: dto.notes || null,
         },
       });
       if (result.count === 0) {
         throw new ConflictException('This trip can no longer be completed');
+      }
+      // The vehicle's mileage follows each trip, so the next start is prefilled with it.
+      if (existing.vehicleAssetId && dto.endingMileage !== undefined) {
+        await tx.marketingFleetVehicle.updateMany({
+          where: {
+            tenantId: user.tenantId,
+            assetId: existing.vehicleAssetId,
+          },
+          data: { currentMileage: dto.endingMileage },
+        });
       }
       if (added.length) {
         await tx.marketingTransportRequestStop.createMany({
@@ -550,6 +738,19 @@ export class RequestsService {
         });
       }
     });
+    // The vehicle's condition lives on its HR asset. The trip is already completed, so a failure
+    // here is logged rather than undoing it.
+    if (existing.vehicleAssetId) {
+      try {
+        await this.fleet.updateVehicle(user.tenantId, existing.vehicleAssetId, {
+          condition: dto.endingCondition,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Could not record the condition of vehicle ${existing.vehicleAssetId} after trip ${id}: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+    }
     return this.findOne(user, id);
   }
 
@@ -943,8 +1144,9 @@ export class RequestsService {
   }
 
   /**
-   * Approved trips that are still out and nobody has resolved: past their return time, or, with
-   * no return time, already departed. They keep their vehicle and driver occupied.
+   * Started trips that are still out and nobody has resolved: past their return time, or, with
+   * no return time, simply still out. They keep their vehicle and driver occupied. A trip that
+   * was never started has not left, so it holds nothing.
    */
   private staleWhere(
     tenantId: string,
@@ -955,20 +1157,15 @@ export class RequestsService {
     return {
       tenantId,
       status: Status.APPROVED,
+      startedAt: { not: null },
       id: { not: excludeId },
       OR: [
+        { returnTime: null },
         {
           returnTime: { not: null },
           OR: [
             { travelDate: { lt: today } },
             { travelDate: today, returnTime: { lte: now.time } },
-          ],
-        },
-        {
-          returnTime: null,
-          OR: [
-            { travelDate: { lt: today } },
-            { travelDate: today, departureTime: { lte: now.time } },
           ],
         },
       ],
@@ -1071,53 +1268,30 @@ export class RequestsService {
   }
 
   /**
-   * ON_ROUTE isn't stored: an approved request reads as on route once its
-   * departure time has passed, and stays that way until it is completed,
-   * cancelled or rescheduled.
+   * ON_ROUTE isn't stored as a status: an approved request reads as on route once
+   * someone has started it, and stays that way until it is completed, cancelled
+   * or rescheduled.
    */
-  private displayStatus(
-    row: {
-      status: Status;
-      travelDate: Date;
-      departureTime: string;
-      returnTime: string;
-    },
-    now: WallClock,
-  ): Status | 'ON_ROUTE' {
-    if (row.status !== Status.APPROVED) return row.status;
-    const state = tripState(now, {
-      travelDate: this.fromDate(row.travelDate),
-      departureTime: row.departureTime,
-      returnTime: row.returnTime,
-    });
-    return state === 'ON_ROUTE' ? 'ON_ROUTE' : row.status;
+  private displayStatus(row: {
+    status: Status;
+    startedAt: Date | null;
+  }): Status | 'ON_ROUTE' {
+    return row.status === Status.APPROVED && row.startedAt
+      ? 'ON_ROUTE'
+      : row.status;
   }
 
   /** Turns the requested statuses (including the derived ON_ROUTE) into a query. */
   private statusWhere(
     statuses: RequestStatusFilter[],
-    now: WallClock,
   ): Prisma.MarketingTransportRequestWhereInput {
-    const today = new Date(`${now.date}T00:00:00.000Z`);
-    const departed: Prisma.MarketingTransportRequestWhereInput = {
-      OR: [
-        { travelDate: { lt: today } },
-        { travelDate: today, departureTime: { lte: now.time } },
-      ],
-    };
-    const notDeparted: Prisma.MarketingTransportRequestWhereInput = {
-      OR: [
-        { travelDate: { gt: today } },
-        { travelDate: today, departureTime: { gt: now.time } },
-      ],
-    };
     return {
       OR: statuses.map((status) => {
         if (status === 'ON_ROUTE')
-          return { status: Status.APPROVED, ...departed };
-        // APPROVED means approved and not yet departed; departed ones are ON_ROUTE.
+          return { status: Status.APPROVED, startedAt: { not: null } };
+        // APPROVED means approved and not yet started; started ones are ON_ROUTE.
         if (status === Status.APPROVED) {
-          return { status: Status.APPROVED, ...notDeparted };
+          return { status: Status.APPROVED, startedAt: null };
         }
         return { status };
       }),
@@ -1242,6 +1416,8 @@ export class RequestsService {
   private async resolveStops(
     user: RequestUser,
     refs: TransportStopDto[],
+    /** A prospect the person may use even when it is not assigned to them (an appointment's). */
+    allowedProspectId?: string,
   ): Promise<StopSnapshot[]> {
     const seen = new Set<string>();
     const unique = refs.filter((ref) => {
@@ -1281,7 +1457,16 @@ export class RequestsService {
             where: {
               tenantId: user.tenantId,
               id: { in: prospectIds },
-              ...(scope.allProspects ? {} : { assignedUserId: user.id }),
+              ...(scope.allProspects
+                ? {}
+                : allowedProspectId
+                  ? {
+                      OR: [
+                        { assignedUserId: user.id },
+                        { id: allowedProspectId },
+                      ],
+                    }
+                  : { assignedUserId: user.id }),
             },
             select,
           })
@@ -1315,8 +1500,9 @@ export class RequestsService {
     const occupants = this.occupants(row);
     return {
       id: row.id,
-      status: this.displayStatus(row, now),
+      status: this.displayStatus(row),
       purpose: row.purpose,
+      appointmentId: row.appointmentId,
       // Older requests kept a free-text purpose here; new ones leave it empty.
       businessPurpose: row.businessPurpose,
       travelDate: this.fromDate(row.travelDate),
@@ -1354,27 +1540,57 @@ export class RequestsService {
             note: row.reviewNote,
           }
         : null,
-      // The trip can be completed now: it has departed and its return time passed (or it had none).
+      // The trip can be completed now: it has been started and its return time passed (or it had none).
       completable:
         row.status === Status.APPROVED &&
         canComplete(now, {
           travelDate: this.fromDate(row.travelDate),
           departureTime: row.departureTime,
           returnTime: row.returnTime,
+          started: row.startedAt !== null,
         }),
       // Return time has passed on a trip nobody has completed yet.
       overdue:
         row.status === Status.APPROVED &&
+        row.startedAt !== null &&
         isOverdue(now, {
           travelDate: this.fromDate(row.travelDate),
           departureTime: row.departureTime,
           returnTime: row.returnTime,
+          started: true,
         }),
+      // The trip can be started now: approved, not started, and its day has come.
+      startable:
+        row.status === Status.APPROVED &&
+        row.startedAt === null &&
+        this.fromDate(row.travelDate) <= now.date,
+      start: row.startedAt
+        ? {
+            at: row.startedAt.toISOString(),
+            byName: row.startedByName,
+            actualDepartureTime: row.actualDepartureTime,
+            mileage: row.startingMileage,
+            condition: row.startingCondition,
+            notes: row.startNotes,
+            // Positive = left late, negative = early.
+            minutesLate: row.actualDepartureTime
+              ? minutesBetween(row.departureTime, row.actualDepartureTime)
+              : null,
+          }
+        : null,
       completion: row.completedAt
         ? {
             at: row.completedAt.toISOString(),
             byName: row.completedByName,
             actualReturnTime: row.actualReturnTime,
+            endingMileage: row.endingMileage,
+            endingCondition: row.endingCondition,
+            notes: row.completionNotes,
+            // Kilometres covered, from the starting and ending mileage.
+            distance:
+              row.startingMileage !== null && row.endingMileage !== null
+                ? row.endingMileage - row.startingMileage
+                : null,
             // Positive = came back late, negative = early, null = never recorded.
             minutesLate:
               row.actualReturnTime && row.returnTime

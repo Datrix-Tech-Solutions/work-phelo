@@ -1,4 +1,4 @@
-import type { TransportPurpose, TransportRequestStatus } from '@/types/marketing';
+import type { TransportPurpose, TransportRequestStatus, VehicleCondition } from '@/types/marketing';
 
 export const REQUEST_STATUS_BADGES: Record<
   TransportRequestStatus,
@@ -62,13 +62,29 @@ export function minutesBetween(from: string, to: string): number {
   return toMinutes(to) - toMinutes(from);
 }
 
+export const CONDITION_OPTIONS: { value: VehicleCondition; label: string }[] = [
+  { value: 'NEW', label: 'New' },
+  { value: 'GOOD', label: 'Good' },
+  { value: 'FAIR', label: 'Fair' },
+  { value: 'POOR', label: 'Poor' },
+];
+
+export const CONDITION_LABELS: Record<VehicleCondition, string> = {
+  NEW: 'New',
+  GOOD: 'Good',
+  FAIR: 'Fair',
+  POOR: 'Poor',
+};
+
 export const PURPOSE_OPTIONS: { value: TransportPurpose; label: string }[] = [
-  { value: 'OFFICIAL', label: 'Official' },
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'OPERATIONS', label: 'Operations' },
   { value: 'PERSONAL', label: 'Personal' },
 ];
 
 export const PURPOSE_LABELS: Record<TransportPurpose, string> = {
-  OFFICIAL: 'Official',
+  MARKETING: 'Marketing',
+  OPERATIONS: 'Operations',
   PERSONAL: 'Personal',
 };
 

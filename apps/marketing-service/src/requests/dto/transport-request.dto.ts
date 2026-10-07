@@ -21,11 +21,12 @@ import {
   MarketingTransportPurpose,
   MarketingTransportRequestStatus,
   MarketingTransportStopKind,
+  MarketingVehicleCondition,
 } from '../../../prisma/generated/client';
 
 /**
  * Statuses a request can be filtered by. ON_ROUTE is not stored: it is an approved
- * request whose departure time has passed, worked out from the clock when listing.
+ * request that someone has started.
  */
 export const REQUEST_STATUS_FILTERS = [
   ...Object.values(MarketingTransportRequestStatus),
@@ -57,7 +58,8 @@ export class TransportStopDto {
 export class CreateTransportRequestDto {
   @ApiProperty({
     enum: MarketingTransportPurpose,
-    description: 'Whether the trip is personal or official.',
+    description:
+      'Whether the trip is personal, for marketing or for operations.',
   })
   @IsEnum(MarketingTransportPurpose)
   purpose!: MarketingTransportPurpose;
@@ -84,6 +86,25 @@ export class CreateTransportRequestDto {
   @IsOptional()
   @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
   returnTime?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'An approved appointment this trip is for. The purpose becomes marketing and the appointment’s prospect is always a destination; stops adds more.',
+  })
+  @IsOptional()
+  @IsUUID()
+  appointmentId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Free-text destination and purpose, used for personal trips instead of picking clients or prospects.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  destination?: string;
 
   @ApiPropertyOptional({
     type: [TransportStopDto],
@@ -139,6 +160,16 @@ export class UpdateTransportRequestDto {
   @IsOptional()
   @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
   returnTime?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Free-text destination and purpose, used for personal trips. Replaces the saved destination.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  destination?: string;
 
   @ApiPropertyOptional({
     type: [TransportStopDto],
@@ -248,6 +279,29 @@ export class CompleteTransportRequestDto {
   actualReturnTime!: string;
 
   @ApiPropertyOptional({
+    example: 48390,
+    description:
+      'Odometer reading on return; not below the starting mileage. Optional.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(9_999_999)
+  endingMileage?: number;
+
+  @ApiProperty({ enum: MarketingVehicleCondition })
+  @IsEnum(MarketingVehicleCondition)
+  endingCondition!: MarketingVehicleCondition;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimOnly)
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+
+  @ApiPropertyOptional({
     type: [TransportStopDto],
     description:
       'Further clients or prospects actually visited, added to the ones planned.',
@@ -258,6 +312,39 @@ export class CompleteTransportRequestDto {
   @ValidateNested({ each: true })
   @Type(() => TransportStopDto)
   stops?: TransportStopDto[];
+}
+
+export class StartTransportRequestDto {
+  @ApiProperty({
+    example: '08:40',
+    description:
+      'When the vehicle actually left (24h HH:mm); not in the future on the travel day.',
+  })
+  @Matches(TIME_PATTERN, {
+    message: 'actualDepartureTime must be in HH:mm format',
+  })
+  actualDepartureTime!: string;
+
+  @ApiProperty({
+    example: 48210,
+    description: 'Odometer reading at departure.',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(9_999_999)
+  startingMileage!: number;
+
+  @ApiProperty({ enum: MarketingVehicleCondition })
+  @IsEnum(MarketingVehicleCondition)
+  startingCondition!: MarketingVehicleCondition;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trimOnly)
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
 }
 
 export class DestinationOptionsQueryDto {
@@ -325,7 +412,7 @@ export class QueryTransportRequestsDto {
     enum: REQUEST_STATUS_FILTERS,
     isArray: true,
     description:
-      'One or more statuses, comma-separated. APPROVED means approved and not yet departed; ON_ROUTE means approved, departed and not yet completed.',
+      'One or more statuses, comma-separated. APPROVED means approved and not yet started; ON_ROUTE means approved, started and not yet completed.',
   })
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>

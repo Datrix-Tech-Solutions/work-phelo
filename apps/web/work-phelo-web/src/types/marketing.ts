@@ -292,8 +292,10 @@ export interface UpdateProspectPayload {
   pipelineStageId?: string;
   primaryContact?: {
     name?: string;
-    phone?: string;
-    email?: string;
+    /** `null` removes the phone number. */
+    phone?: string | null;
+    /** `null` removes the email address. */
+    email?: string | null;
     decisionMakerTypeId?: string | null;
   };
   /** The complete desired set — existing rows left out are removed. */
@@ -478,8 +480,10 @@ export interface UpdateClientPayload {
   isBillable?: boolean;
   primaryContact?: {
     name?: string;
-    phone?: string;
-    email?: string;
+    /** `null` removes the phone number. */
+    phone?: string | null;
+    /** `null` removes the email address. */
+    email?: string | null;
     decisionMakerTypeId?: string | null;
   };
   location?: Partial<CreateProspectLocationPayload>;
@@ -579,8 +583,8 @@ export interface CreateFleetVehicleResult extends FleetVehicle {
 }
 
 /**
- * ON_ROUTE is derived: an approved request whose departure time has passed. It stays on
- * route until someone completes, cancels or reschedules it. COMPLETED is a real, final status.
+ * ON_ROUTE is derived: an approved request that someone has started. It stays on
+ * route until someone completes or cancels it. COMPLETED is a real, final status.
  */
 export type TransportRequestStatus =
   | 'PENDING'
@@ -598,7 +602,7 @@ export interface TransportRequestPerson {
   jobTitle?: string | null;
 }
 
-export type TransportPurpose = 'PERSONAL' | 'OFFICIAL';
+export type TransportPurpose = 'PERSONAL' | 'MARKETING' | 'OPERATIONS';
 
 /** A client or prospect a trip goes to, with the location saved when it was chosen. */
 export interface TransportStop {
@@ -628,6 +632,8 @@ export interface TransportRequest {
   purpose: TransportPurpose;
   /** Free-text purpose that requests made before purpose became personal / official still carry. */
   businessPurpose: string | null;
+  /** The appointment the trip was requested for, if any. */
+  appointmentId: string | null;
   /** YYYY-MM-DD */
   travelDate: string;
   /** 24h HH:mm */
@@ -637,8 +643,20 @@ export interface TransportRequest {
   /** The places chosen, joined into one line (or the old typed destination). */
   destination: string;
   stops: TransportStop[];
-  /** The trip has departed and its return time has passed (or it had none). */
+  /** The trip has been started and its return time has passed (or it had none). */
   completable: boolean;
+  /** Approved, not started, and its travel day has come. */
+  startable: boolean;
+  /** Set once someone starts the trip. minutesLate: positive = left late, negative = early. */
+  start: {
+    at: string;
+    byName: string | null;
+    actualDepartureTime: string | null;
+    mileage: number | null;
+    condition: VehicleCondition | null;
+    notes: string | null;
+    minutesLate: number | null;
+  } | null;
   notes: string | null;
   requester: { userId: string; name: string; department: string | null };
   /** People in the vehicle excluding the driver; the requester counts unless they drive. */
@@ -654,6 +672,11 @@ export interface TransportRequest {
     at: string;
     byName: string | null;
     actualReturnTime: string | null;
+    endingMileage: number | null;
+    endingCondition: VehicleCondition | null;
+    notes: string | null;
+    /** Kilometres covered (ending minus starting mileage); null when either is missing. */
+    distance: number | null;
     minutesLate: number | null;
   } | null;
   /** Set when an approver moved the trip; `previous` is where it was before. */
@@ -698,10 +721,14 @@ export interface TransportStopRef {
 
 export interface CreateTransportRequestPayload {
   purpose: TransportPurpose;
+  /** An approved appointment the trip is for; its prospect is always a destination. */
+  appointmentId?: string;
   travelDate: string;
   departureTime: string;
   returnTime?: string;
   stops?: TransportStopRef[];
+  /** Typed destination and purpose, used for personal trips instead of stops. */
+  destination?: string;
   passengerIds?: string[];
   notes?: string;
 }
@@ -745,9 +772,33 @@ export interface TransportRequestWindow {
 export interface RescheduleTransportRequestPayload
   extends ApproveTransportRequestPayload, TransportRequestWindow {}
 
+export type VehicleCondition = 'NEW' | 'GOOD' | 'FAIR' | 'POOR';
+
+/** What the start form is prefilled with. */
+export interface TransportRequestStartOptions {
+  vehicleName: string | null;
+  /** The vehicle's current mileage, when one is recorded. */
+  mileage: number | null;
+  /** The vehicle's condition as recorded on its asset. */
+  condition: VehicleCondition | null;
+  /** The business-timezone clock, used to prefill the departure time. */
+  now: { date: string; time: string };
+}
+
+export interface StartTransportRequestPayload {
+  /** HH:mm the vehicle actually left. */
+  actualDepartureTime: string;
+  startingMileage: number;
+  startingCondition: VehicleCondition;
+  notes?: string;
+}
+
 export interface CompleteTransportRequestPayload {
   /** HH:mm on the travel date. */
   actualReturnTime: string;
+  endingMileage?: number;
+  endingCondition: VehicleCondition;
+  notes?: string;
   /** Further places visited, added to the planned ones. */
   stops?: TransportStopRef[];
 }
@@ -863,6 +914,8 @@ export interface Campaign {
   id: string;
   name: string;
   channels: CampaignChannel[];
+  /** The segments the campaign was sent to, by the name they had at the time. */
+  segments: { id: string; name: string }[];
   businessTypes: { id: string; name: string }[];
   senderIdentityId: string | null;
   senderIdSnapshot: string | null;
@@ -908,7 +961,8 @@ export interface CampaignsQuery {
 export interface CreateCampaignPayload {
   name: string;
   channels: CampaignChannel[];
-  businessTypeIds: string[];
+  /** Saved segment ids, or `business-type:<id>` for a built-in business-type segment. */
+  segmentIds: string[];
   subject: string;
   message: string;
   dispatchMode: CampaignDispatchMode;
@@ -917,12 +971,64 @@ export interface CreateCampaignPayload {
 }
 
 export interface CampaignPreviewPayload {
-  businessTypeIds: string[];
+  segmentIds: string[];
   channels: CampaignChannel[];
+}
+
+export type SegmentRecipientType = 'PROSPECT' | 'CLIENT';
+
+/** A saved audience, or a built-in one (everyone with a business type). Shared across the tenant. */
+export interface CampaignSegment {
+  id: string;
+  name: string;
+  /** Built-in segments are read-only: one per business type. */
+  builtIn: boolean;
+  recipientType: SegmentRecipientType;
+  businessTypeIds: string[];
+  /** People who have any of these products or services. */
+  productIds: string[];
+  pipelineStageIds: string[];
+  /** Prospects always in, whether or not the filters match. */
+  includeProspectIds: string[];
+  /** Prospects always out, even when the filters match. */
+  excludeProspectIds: string[];
+  /** Client segments: clients always in, whether or not the filters match. */
+  includeClientIds: string[];
+  /** Client segments: clients always out, even when the filters match. */
+  excludeClientIds: string[];
+  /** How many prospects it holds; 0 for a client segment. */
+  prospectCount: number;
+  /** How many clients it holds; 0 for a prospect segment. */
+  clientCount: number;
+}
+
+export interface SegmentRulesPayload {
+  recipientType?: SegmentRecipientType;
+  businessTypeIds?: string[];
+  productIds?: string[];
+  pipelineStageIds?: string[];
+  includeProspectIds?: string[];
+  excludeProspectIds?: string[];
+  includeClientIds?: string[];
+  excludeClientIds?: string[];
+}
+
+export interface SaveSegmentPayload extends SegmentRulesPayload {
+  name: string;
+}
+
+/** A prospect or client that can be chosen as a campaign recipient. */
+export interface CampaignRecipientOption {
+  id: string;
+  companyName: string;
+  locationLabel: string;
+  /** The primary contact the campaign would message. */
+  contactName: string | null;
 }
 
 export interface CampaignPreview {
   prospectCount: number;
+  clientCount: number;
   /** Messages that will be queued. */
   reachable: number;
   /** Contacts with no phone/email for a chosen channel, or a repeated address. */
@@ -943,6 +1049,7 @@ export interface CampaignEstimateWarning {
 
 export interface CampaignEstimate {
   prospectCount: number;
+  clientCount: number;
   recipientCount: number;
   smsRecipientCount: number;
   emailRecipientCount: number;

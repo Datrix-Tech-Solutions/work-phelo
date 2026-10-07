@@ -17,6 +17,7 @@ import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelec
 import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import {
   AccountingCashbookSettlementMethod,
@@ -337,11 +338,9 @@ export function NewTransactionPanel({
   const taxAmount = taxBreakdown.reduce((sum, line) => sum + line.amount, 0);
   const total = subtotal + taxAmount;
 
-  // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
-  const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
-  const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
-  if (openKey !== null && openKey !== lastOpenKey) {
-    setLastOpenKey(openKey);
+  // A blank form with the transaction type's defaults — used on every fresh open, and
+  // between entries while the panel is locked for multiple entries.
+  function resetForNextEntry() {
     const configuredRoles = transactionType?.businessRoles ?? [];
     reset({
       ...DEFAULTS,
@@ -352,6 +351,14 @@ export function NewTransactionPanel({
       cashLines: [{ ...EMPTY_CASH_LINE, glAccountId: rule?.lines?.[0]?.account?.id ?? '' }],
     });
     setSelectedTaxTypeIds([]);
+  }
+
+  // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
+  const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
+  const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
+  if (openKey !== null && openKey !== lastOpenKey) {
+    setLastOpenKey(openKey);
+    resetForNextEntry();
   }
 
   const { data: entities = [], isLoading: isLoadingEntities } = useSubledgers(
@@ -394,6 +401,30 @@ export function NewTransactionPanel({
     reset(DEFAULTS);
     setSelectedTaxTypeIds([]);
     onClose();
+  };
+
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: close,
+    onContinue: resetForNextEntry,
+  });
+
+  // Success feedback for a saved entry. Unlocked: close and show the usual modal. Locked:
+  // the panel stays open and its Continue / Stop prompt takes the modal's place.
+  const finishSave = (posted: boolean) => {
+    const name = transactionType?.name ?? '';
+    entry.finishSave(
+      {
+        title: posted ? 'Transaction Posted!' : 'Transaction Submitted!',
+        message: posted
+          ? `Your ${name} has been posted.`
+          : `Your ${name} has been submitted for review.`,
+      },
+      () => {
+        close();
+        setSuccessInfo({ name, posted });
+      },
+    );
   };
 
   const toggleTaxType = (taxTypeId: string) => {
@@ -498,8 +529,7 @@ export function NewTransactionPanel({
             await postCashbookTransaction.mutateAsync(created.id);
           }
         }
-        close();
-        setSuccessInfo({ name: transactionType.name, posted: willPost });
+        finishSave(willPost);
       } catch (error) {
         toast.error(extractError(error, 'Failed to save transaction'));
       } finally {
@@ -547,8 +577,7 @@ export function NewTransactionPanel({
           costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
           description: values.description || undefined,
         });
-        close();
-        setSuccessInfo({ name: transactionType.name, posted: false });
+        finishSave(false);
       } catch (error) {
         toast.error(extractError(error, 'Failed to save transaction'));
       }
@@ -575,8 +604,7 @@ export function NewTransactionPanel({
 
     try {
       await createDocument.mutateAsync(payload);
-      close();
-      setSuccessInfo({ name: transactionType.name, posted: false });
+      finishSave(false);
     } catch (error) {
       toast.error(extractError(error, 'Failed to save transaction'));
     }
@@ -679,6 +707,7 @@ export function NewTransactionPanel({
       <SidePanel
         isOpen={isOpen}
         onClose={close}
+        {...entry.panelProps}
         title="New Transaction"
         description={
           transactionType ? `Recording a ${transactionType.name.toLowerCase()}.` : undefined

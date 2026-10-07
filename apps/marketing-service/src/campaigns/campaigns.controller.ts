@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -35,6 +36,8 @@ import {
   EstimateCampaignDto,
   PreviewCampaignRecipientsDto,
   QueryCampaignsDto,
+  RecipientOptionsQueryDto,
+  UpdateCampaignDto,
 } from './dto/campaign.dto';
 
 const { CAMPAIGNS_VIEW, CAMPAIGNS_CREATE, CAMPAIGNS_SEND, CAMPAIGNS_CANCEL } =
@@ -66,13 +69,27 @@ export class CampaignsController {
     return this.service.list(request.user, query);
   }
 
+  @Get('recipient-options')
+  @RequireAnyPermission(CAMPAIGNS_CREATE)
+  @ApiOperation({
+    summary: 'Prospects or clients that can be picked into a segment',
+    description:
+      'Prospects or clients under the given business types, optionally matching a company name, for picking into a segment.',
+  })
+  recipientOptions(
+    @Query() query: RecipientOptionsQueryDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.recipientOptions(request.user, query);
+  }
+
   @Post('preview')
   @HttpCode(HttpStatus.OK)
   @RequireAnyPermission(CAMPAIGNS_CREATE)
   @ApiOperation({
     summary: 'Preview how many messages a campaign would queue',
     description:
-      'Counts prospects under the business type and the primary contacts reachable on the chosen channels. Nothing is saved.',
+      'Counts the prospects and clients under the segments and the primary contacts reachable on the chosen channels. Nothing is saved.',
   })
   preview(
     @Body() dto: PreviewCampaignRecipientsDto,
@@ -106,10 +123,26 @@ export class CampaignsController {
   @ApiOperation({
     summary: 'Create a campaign',
     description:
-      'Targets the primary contact of every prospect under the business type and records one recipient per channel. Instant campaigns stay PENDING_DISPATCH until delivery is configured.',
+      'Targets the primary contact of every prospect and client under the segments and records one recipient per channel. Instant campaigns stay PENDING_DISPATCH until delivery is configured.',
   })
   create(@Body() dto: CreateCampaignDto, @Req() request: AuthedRequest) {
     return this.service.create(request.user, dto);
+  }
+
+  @Put(':id')
+  @RequireAnyPermission(CAMPAIGNS_CREATE)
+  @ApiOperation({
+    summary: 'Edit a scheduled campaign',
+    description:
+      'Only a campaign that is still SCHEDULED can be edited. The details replace the old ones and the recipients are worked out again from the new audience and channels.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCampaignDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.update(request.user, id, dto);
   }
 
   @Post(':id/send')

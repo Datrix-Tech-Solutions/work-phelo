@@ -4,6 +4,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import {
+  CONDITION_LABELS,
   PURPOSE_LABELS,
   REQUEST_STATUS_BADGES,
   describeReturn,
@@ -12,14 +13,38 @@ import {
   formatWindow,
 } from '@/lib/requestOptions';
 import { MapPin } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { TransportRequest } from '@/types/marketing';
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  wide,
+}: {
+  label: string;
+  children: React.ReactNode;
+  /** Takes the full row instead of one of the two columns. */
+  wide?: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
-      <div className="text-sm text-gray-900 whitespace-pre-line">{children}</div>
+    <div className={cn('flex flex-col gap-0.5 min-w-0', wide && 'col-span-2')}>
+      <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+        {label}
+      </span>
+      <div className="text-[13px] leading-snug text-gray-900 whitespace-pre-line wrap-break-word">
+        {children}
+      </div>
     </div>
+  );
+}
+
+/** A titled group of fields laid out two to a row. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+      <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-widest">{title}</h3>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2">{children}</div>
+    </section>
   );
 }
 
@@ -33,6 +58,7 @@ interface Props {
   canReview: boolean;
   /** What the viewer may do to an approved or on-route trip. */
   canReschedule: boolean;
+  canStart: boolean;
   canComplete: boolean;
   canCancel: boolean;
   /** Approving needs a vehicle and driver, so it opens the approval pop-up. */
@@ -41,6 +67,8 @@ interface Props {
   onReject: (request: TransportRequest) => void;
   /** Rescheduling is the approval pop-up again, with a date and times. */
   onReschedule: (request: TransportRequest) => void;
+  /** Starting asks for the starting mileage, vehicle condition and real departure time. */
+  onStart: (request: TransportRequest) => void;
   /** Completing asks for the real return time. */
   onComplete: (request: TransportRequest) => void;
   onCancel: (request: TransportRequest) => void;
@@ -51,17 +79,19 @@ export function RequestDetailPanel({
   onClose,
   canReview,
   canReschedule,
+  canStart,
   canComplete,
   canCancel,
   onApprove,
   onReject,
   onReschedule,
+  onStart,
   onComplete,
   onCancel,
 }: Props) {
   const badge = request ? REQUEST_STATUS_BADGES[request.status] : null;
   const reviewing = canReview && request?.status === 'PENDING';
-  const tripActions = !!request && (canReschedule || canComplete || canCancel);
+  const tripActions = !!request && (canReschedule || canStart || canComplete || canCancel);
 
   return (
     <SidePanel
@@ -98,13 +128,14 @@ export function RequestDetailPanel({
                 Reschedule
               </Button>
             )}
+            {canStart && <Button onClick={() => onStart(request)}>Start Trip</Button>}
             {canComplete && <Button onClick={() => onComplete(request)}>Complete Trip</Button>}
           </div>
         ) : undefined
       }
     >
       {request && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {request.status === 'ON_ROUTE' && request.completable && (
             <p className="text-xs text-amber-700 bg-amber-50 rounded-input px-3 py-2">
               {request.returnTime
@@ -113,98 +144,165 @@ export function RequestDetailPanel({
             </p>
           )}
 
-          <Field label="Requester">
-            {request.requester.name}
-            {request.requester.department ? ` · ${request.requester.department}` : ''}
-          </Field>
-          <Field label="Purpose">{PURPOSE_LABELS[request.purpose]}</Field>
-          {/* Requests made before purpose became personal / official keep their typed reason. */}
-          {request.businessPurpose && <Field label="Details">{request.businessPurpose}</Field>}
-          {request.stops.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                Destinations
-              </span>
-              {request.stops.map((stop) => (
+          <Section title="Trip">
+            <Field label="Requester">
+              {request.requester.name}
+              {request.requester.department ? ` · ${request.requester.department}` : ''}
+            </Field>
+            <Field label="Purpose">
+              {PURPOSE_LABELS[request.purpose]}
+              {/* Requests made before purpose became personal / marketing / operations keep their typed reason. */}
+              {request.businessPurpose ? `\n${request.businessPurpose}` : ''}
+            </Field>
+            <Field label="Travel Date">{formatTravelDate(request.travelDate)}</Field>
+            <Field label="Departure – Return">
+              {formatWindow(request.departureTime, request.returnTime)}
+            </Field>
+            <Field label="Passengers">
+              {request.passengers.length === 0
+                ? 'None'
+                : request.passengers
+                    .map((p) => (p.department ? `${p.name} (${p.department})` : p.name))
+                    .join('\n')}
+            </Field>
+            {request.reschedule && (
+              <Field label="Rescheduled">
+                {`From ${formatTravelDate(request.reschedule.previous.travelDate)}${
+                  request.reschedule.previous.departureTime
+                    ? ` ${formatWindow(request.reschedule.previous.departureTime, request.reschedule.previous.returnTime)}`
+                    : ''
+                }`}
+                {request.reschedule.byName ? `\nBy ${request.reschedule.byName}` : ''}
+                {request.reschedule.count > 1 ? ` (moved ${request.reschedule.count} times)` : ''}
+              </Field>
+            )}
+            {request.notes && (
+              <Field label="Notes" wide>
+                {request.notes}
+              </Field>
+            )}
+          </Section>
+
+          <Section title={request.stops.length > 1 ? 'Destinations' : 'Destination'}>
+            {request.stops.length > 0 ? (
+              request.stops.map((stop) => (
                 <div
                   key={`${stop.kind}:${stop.refId}`}
-                  className="rounded-xl border border-gray-200 px-3 py-2"
+                  className="rounded-lg border border-gray-200 px-2.5 py-1.5 min-w-0"
                 >
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
                     {stop.name}
                     <span className="ml-2 text-[11px] font-semibold uppercase tracking-tight text-gray-400">
                       {stop.kind === 'CLIENT' ? 'Client' : 'Prospect'}
                       {stop.source === 'VISITED' ? ' · added on completion' : ''}
                     </span>
                   </p>
-                  <p className="flex items-center gap-1 text-xs text-gray-500">
+                  <p className="flex items-center gap-1 text-xs text-gray-500 truncate">
                     <MapPin className="w-3 h-3 shrink-0" />
                     {stop.locationLabel}
                   </p>
                 </div>
-              ))}
-            </div>
-          ) : request.destination ? (
-            <Field label="Destination">{request.destination}</Field>
-          ) : null}
-          <Field label="Travel Date">{formatTravelDate(request.travelDate)}</Field>
-          <Field label="Departure – Return">
-            {formatWindow(request.departureTime, request.returnTime)}
-          </Field>
-          {request.reschedule && (
-            <Field label="Rescheduled">
-              {`From ${formatTravelDate(request.reschedule.previous.travelDate)}${
-                request.reschedule.previous.departureTime
-                  ? ` ${formatWindow(request.reschedule.previous.departureTime, request.reschedule.previous.returnTime)}`
-                  : ''
-              }`}
-              {request.reschedule.byName ? `\nBy ${request.reschedule.byName}` : ''}
-              {request.reschedule.count > 1 ? ` (moved ${request.reschedule.count} times)` : ''}
-            </Field>
-          )}
-          <Field label="Passengers">
-            {request.passengers.length === 0
-              ? 'None'
-              : request.passengers
-                  .map((p) => (p.department ? `${p.name} (${p.department})` : p.name))
-                  .join('\n')}
-          </Field>
-          {request.notes && <Field label="Notes">{request.notes}</Field>}
+              ))
+            ) : (
+              <Field label="Destination" wide>
+                {request.destination || '—'}
+              </Field>
+            )}
+          </Section>
 
-          {request.allocation && (
-            <>
-              <Field label="Vehicle">
-                {request.allocation.vehicle.name ?? 'Unknown'}
-                {request.allocation.vehicle.assetNumber
-                  ? ` · ${request.allocation.vehicle.assetNumber}`
-                  : ''}
-              </Field>
-              <Field label="Driver">
-                {request.allocation.driver.selfDriven
-                  ? `Self-driven (${request.allocation.driver.name ?? request.requester.name})`
-                  : (request.allocation.driver.name ?? 'Unknown')}
-              </Field>
-            </>
+          {(request.allocation || request.review) && (
+            <Section title="Allocation">
+              {request.allocation && (
+                <>
+                  <Field label="Vehicle">
+                    {request.allocation.vehicle.name ?? 'Unknown'}
+                    {request.allocation.vehicle.assetNumber
+                      ? ` · ${request.allocation.vehicle.assetNumber}`
+                      : ''}
+                  </Field>
+                  <Field label="Driver">
+                    {request.allocation.driver.selfDriven
+                      ? `Self-driven (${request.allocation.driver.name ?? request.requester.name})`
+                      : (request.allocation.driver.name ?? 'Unknown')}
+                  </Field>
+                </>
+              )}
+              {request.review && (
+                <Field label={request.status === 'REJECTED' ? 'Rejected by' : 'Approved by'} wide>
+                  {request.review.byName ?? 'Unknown'} · {longDate(request.review.at)}
+                  {request.review.note ? `\n${request.review.note}` : ''}
+                </Field>
+              )}
+            </Section>
           )}
 
-          {request.review && (
-            <Field label={request.status === 'REJECTED' ? 'Rejected by' : 'Approved by'}>
-              {request.review.byName ?? 'Unknown'} · {longDate(request.review.at)}
-              {request.review.note ? `\n${request.review.note}` : ''}
-            </Field>
+          {request.start && (
+            <Section title="Departure">
+              <Field label="Departed">
+                {request.start.actualDepartureTime
+                  ? `${formatClock(request.start.actualDepartureTime)}${
+                      request.start.minutesLate
+                        ? ` · ${Math.abs(request.start.minutesLate)} min ${
+                            request.start.minutesLate > 0 ? 'late' : 'early'
+                          }`
+                        : ''
+                    }`
+                  : 'Not recorded'}
+              </Field>
+              <Field label="Started by">
+                {request.start.byName ?? 'Unknown'} · {longDate(request.start.at)}
+              </Field>
+              {request.start.mileage !== null && (
+                <Field label="Starting mileage">
+                  {request.start.mileage.toLocaleString('en-GB')}
+                </Field>
+              )}
+              {request.start.condition && (
+                <Field label="Condition">{CONDITION_LABELS[request.start.condition]}</Field>
+              )}
+              {request.start.notes && (
+                <Field label="Notes" wide>
+                  {request.start.notes}
+                </Field>
+              )}
+            </Section>
           )}
 
           {request.completion && (
-            <Field label="Returned">
-              {request.completion.actualReturnTime
-                ? `${formatClock(request.completion.actualReturnTime)}${
-                    describeReturn(request.completion.minutesLate)
-                      ? ` · ${describeReturn(request.completion.minutesLate)}`
-                      : ''
-                  }`
-                : 'Not recorded'}
-              {`\nCompleted by ${request.completion.byName ?? 'Unknown'} · ${longDate(request.completion.at)}`}
-            </Field>
+            <Section title="Return">
+              <Field label="Returned">
+                {request.completion.actualReturnTime
+                  ? `${formatClock(request.completion.actualReturnTime)}${
+                      describeReturn(request.completion.minutesLate)
+                        ? ` · ${describeReturn(request.completion.minutesLate)}`
+                        : ''
+                    }`
+                  : 'Not recorded'}
+              </Field>
+              <Field label="Completed by">
+                {request.completion.byName ?? 'Unknown'} · {longDate(request.completion.at)}
+              </Field>
+              {request.completion.endingMileage !== null && (
+                <Field label="Ending mileage">
+                  {request.completion.endingMileage.toLocaleString('en-GB')}
+                </Field>
+              )}
+              {request.completion.distance !== null && (
+                <Field label="Distance covered">
+                  {request.completion.distance.toLocaleString('en-GB')} km
+                </Field>
+              )}
+              {request.completion.endingCondition && (
+                <Field label="Return condition">
+                  {CONDITION_LABELS[request.completion.endingCondition]}
+                </Field>
+              )}
+              {request.completion.notes && (
+                <Field label="Notes" wide>
+                  {request.completion.notes}
+                </Field>
+              )}
+            </Section>
           )}
         </div>
       )}

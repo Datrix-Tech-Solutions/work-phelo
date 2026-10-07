@@ -20,7 +20,7 @@ import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectMan
 import { EditProspectProductsModal } from '@/components/organisms/marketing/EditProspectProductsModal';
 import { EditProspectCompanyModal } from '@/components/organisms/marketing/EditProspectCompanyModal';
 import { ChangeProspectLocationModal } from '@/components/organisms/marketing/ChangeProspectLocationModal';
-import { ChangeProspectDecisionMakerModal } from '@/components/organisms/marketing/ChangeProspectDecisionMakerModal';
+import { EditPrimaryContactModal } from '@/components/organisms/marketing/EditPrimaryContactModal';
 import { ProspectInteractionTimeline } from '@/components/molecules/marketing/ProspectInteractionTimeline';
 import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
@@ -29,7 +29,7 @@ import { ProspectProductCard } from '@/components/molecules/marketing/ProspectPr
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import type { FollowUpStatus, ProspectFollowUp } from '@/types/marketing';
 import { useFollowUpWorklist, useProspectFollowUps } from '@/hooks/marketing/useFollowUps';
-import { useDeleteProspect, useProspect } from '@/hooks/marketing/useProspects';
+import { useDeleteProspect, useProspect, useUpdateProspect } from '@/hooks/marketing/useProspects';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -105,6 +105,7 @@ export default function ProspectDetailPage() {
   const toast = useToast();
 
   const { data: prospect, isLoading, isError } = useProspect(id);
+  const updateProspect = useUpdateProspect(id);
   // The assignee can convert their own prospect; the permission extends that to others' prospects.
   const currentUserId = useAuthStore((s) => s.user?.id);
   const hasCreateClientPermission = usePermissionRule('marketing.clients:CREATE');
@@ -119,7 +120,7 @@ export default function ProspectDetailPage() {
   const [editingProducts, setEditingProducts] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
-  const [changingDecisionMaker, setChangingDecisionMaker] = useState(false);
+  const [editingContact, setEditingContact] = useState(false);
   const [addingInteraction, setAddingInteraction] = useState(false);
   const [activeTab, setActiveTab] = useState<ProspectTab>('products');
 
@@ -189,7 +190,7 @@ export default function ProspectDetailPage() {
               { label: 'Manage Products', onClick: () => setEditingProducts(true) },
               { label: 'Edit Company Details', onClick: () => setEditingCompany(true) },
               { label: 'Change Location', onClick: () => setChangingLocation(true) },
-              { label: 'Change Decision Maker', onClick: () => setChangingDecisionMaker(true) },
+              { label: 'Edit Primary Contact', onClick: () => setEditingContact(true) },
               { label: 'Delete Prospect', onClick: () => setConfirmingDelete(true), danger: true },
             ]}
           />
@@ -308,14 +309,31 @@ export default function ProspectDetailPage() {
         />
       )}
 
-      {changingDecisionMaker && (
-        <ChangeProspectDecisionMakerModal
-          prospectId={id}
-          prospectName={prospect.companyName}
-          currentName={primaryContact?.name ?? ''}
-          currentRoleId={primaryContact?.decisionMaker?.id ?? ''}
+      {editingContact && (
+        <EditPrimaryContactModal
+          companyName={prospect.companyName}
+          current={{
+            name: primaryContact?.name ?? '',
+            phone: primaryContact?.phone ?? null,
+            email: primaryContact?.email ?? null,
+            roleId: primaryContact?.decisionMaker?.id ?? '',
+          }}
           isOpen
-          onClose={() => setChangingDecisionMaker(false)}
+          isSaving={updateProspect.isPending}
+          onClose={() => setEditingContact(false)}
+          onSave={(changes) =>
+            updateProspect.mutate(
+              { primaryContact: changes },
+              {
+                onSuccess: () => {
+                  toast.success('Primary contact updated');
+                  setEditingContact(false);
+                },
+                onError: (error) =>
+                  toast.error(apiErrorMessage(error, 'Failed to update primary contact')),
+              },
+            )
+          }
         />
       )}
 

@@ -17,19 +17,27 @@ import Link from 'next/link';
 import { CompanyHeader } from '@/components/organisms/shared/CompanyHeader';
 import { CompanyInfoCard } from '@/components/organisms/shared/CompanyInfoCard';
 import { ModuleConfiguration, Module } from '@/components/organisms/shared/ModuleConfiguration';
-import { ReinsuranceAccountingIntegrationControl } from '@/components/organisms/shared/ReinsuranceAccountingIntegrationControl';
 import { TenantAuditTable } from '@/components/organisms/superadmin/TenantAuditTable';
 import { EditCompanyPanel } from '@/components/organisms/superadmin/EditCompanyPanel';
 import { EditAdminPanel } from '@/components/organisms/superadmin/EditAdminPanel';
+import { TenantModuleConfigurationTab } from '@/components/organisms/superadmin/TenantModuleConfigurationTab';
 import { DEFAULT_MODULES } from '@/lib/ModuleDefaults';
 import { Icons } from '@/components/atoms/icons';
+
+const TAB_LABELS = {
+  information: 'Information',
+  configuration: 'Module Configuration',
+  activities: 'Recent Activities',
+} as const;
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
   const [editCompanyOpen, setEditCompanyOpen] = useState(false);
   const [editAdminOpen, setEditAdminOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'information' | 'activities'>('information');
+  const [activeTab, setActiveTab] = useState<'information' | 'configuration' | 'activities'>(
+    'information',
+  );
 
   const { data: tenant, isLoading: tenantLoading, error: tenantError } = useTenant(id);
   const { data: users = [] } = useTenantUsers(id);
@@ -95,7 +103,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <main className="flex-1 min-h-0 overflow-hidden w-full max-w-7xl mx-auto px-6 py-6 flex flex-col gap-5">
+    <main className="flex-1 min-h-0 overflow-hidden w-full px-6 py-6 flex flex-col gap-5">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400 shrink-0">
         <Link href="/dashboard" className="hover:text-gray-700 transition-colors">
@@ -124,7 +132,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
       {/* Tabs */}
       <div className="flex gap-1 shrink-0 border-b border-gray-200">
-        {(['information', 'activities'] as const).map((tab) => (
+        {(['information', 'configuration', 'activities'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -134,7 +142,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {tab === 'information' ? 'Information' : 'Recent Activities'}
+            {TAB_LABELS[tab]}
           </button>
         ))}
       </div>
@@ -192,9 +200,15 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
               });
             }}
           />
-          <div className="col-span-2">
-            <ReinsuranceAccountingIntegrationControl tenantId={tenant.id} canManage />
-          </div>
+        </div>
+      )}
+
+      {activeTab === 'configuration' && (
+        <div className="flex-1 min-h-0">
+          <TenantModuleConfigurationTab
+            tenantId={tenant.id}
+            marketingEnabled={moduleConfig.marketing ?? false}
+          />
         </div>
       )}
 
