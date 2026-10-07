@@ -9,6 +9,7 @@ import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { extractError } from '@/lib/extractError';
 import { Employee, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
@@ -119,6 +120,8 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
 
   const { mutateAsync: createEmployee, isPending } = useCreateEmployee();
 
+  const entry = useMultiEntryPanel({ isOpen, onStop: onClose, onContinue: () => {} });
+
   const onSubmit = async (d: InviteForm) => {
     const normalized = { ...d };
     if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
@@ -136,6 +139,8 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
           permissionSetId: selectedPermissionSetId,
         });
       }
+      // The form is cleared as soon as the invite goes out, so Stop and Continue both
+      // start from a blank form.
       reset({
         firstName: '',
         lastName: '',
@@ -154,8 +159,18 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
         compensationType: 'SALARY',
       });
       setSelectedPermissionSetId('');
-      onClose();
-      onSuccess(`${d.firstName} ${d.lastName}`);
+      const fullName = `${d.firstName} ${d.lastName}`;
+      // Locked: the panel's Continue / Stop prompt replaces the directory's success modal.
+      entry.finishSave(
+        {
+          title: 'Employee Invited!',
+          message: `An invite has been sent to ${fullName}. They will receive an email to set up their account.`,
+        },
+        () => {
+          onClose();
+          onSuccess(fullName);
+        },
+      );
     } catch (err) {
       toast.error(extractError(err, 'Failed to invite employee'));
     }
@@ -165,6 +180,7 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
+      {...entry.panelProps}
       title="Add New Employee"
       description="Add a new employee to onboard them onto WorkPhelo."
       footer={
