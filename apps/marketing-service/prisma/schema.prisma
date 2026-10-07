@@ -629,6 +629,35 @@ model MarketingTransportOfficer {
   @@schema("marketing")
 }
 
+enum MarketingSegmentRecipientType {
+  PROSPECT
+
+  @@schema("marketing")
+}
+
+/// A saved audience, shared across the tenant. It stores rules, so the people in it follow the data.
+model MarketingCampaignSegment {
+  id                 String                            @id @default(uuid())
+  tenantId           String
+  name               String
+  normalizedName     String
+  recipientType      MarketingSegmentRecipientType     @default(PROSPECT)
+  businessTypeIds    String[]
+  pipelineStageIds   String[]
+  /// Prospects always in the segment, even when the rules above don't match them.
+  includeProspectIds String[]
+  /// Prospects never in the segment, even when the rules above match them.
+  excludeProspectIds String[]
+  createdByUserId    String?
+  updatedByUserId    String?
+  createdAt          DateTime                          @default(now())
+  updatedAt          DateTime                          @updatedAt
+
+  @@unique([tenantId, normalizedName])
+  @@index([tenantId, createdAt])
+  @@schema("marketing")
+}
+
 model MarketingCampaign {
   id                String                        @id @default(uuid())
   tenantId          String
@@ -636,6 +665,9 @@ model MarketingCampaign {
   channels          MarketingCampaignChannel[]
   businessTypeIds   String[]
   businessTypeNames String[]
+  /// The segments chosen: a saved segment's id, or "business-type:<id>" for a built-in one.
+  segmentIds        String[]                      @default([])
+  segmentNames      String[]                      @default([])
   senderIdentityId  String?
   senderIdSnapshot  String?
   subject           String

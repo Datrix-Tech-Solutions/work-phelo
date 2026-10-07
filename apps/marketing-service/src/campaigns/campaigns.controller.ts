@@ -35,6 +35,7 @@ import {
   EstimateCampaignDto,
   PreviewCampaignRecipientsDto,
   QueryCampaignsDto,
+  RecipientOptionsQueryDto,
 } from './dto/campaign.dto';
 
 const { CAMPAIGNS_VIEW, CAMPAIGNS_CREATE, CAMPAIGNS_SEND, CAMPAIGNS_CANCEL } =
@@ -64,6 +65,20 @@ export class CampaignsController {
   @ApiOperation({ summary: 'List marketing campaigns' })
   list(@Query() query: QueryCampaignsDto, @Req() request: AuthedRequest) {
     return this.service.list(request.user, query);
+  }
+
+  @Get('recipient-options')
+  @RequireAnyPermission(CAMPAIGNS_CREATE)
+  @ApiOperation({
+    summary: 'Prospects that can be picked as campaign recipients',
+    description:
+      'Prospects under the given business types, optionally matching a company name. Campaigns contact every prospect under the segments by default; these can be chosen to narrow that.',
+  })
+  recipientOptions(
+    @Query() query: RecipientOptionsQueryDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.recipientOptions(request.user, query);
   }
 
   @Post('preview')

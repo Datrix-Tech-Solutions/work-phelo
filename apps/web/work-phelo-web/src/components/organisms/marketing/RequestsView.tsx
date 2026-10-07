@@ -27,9 +27,11 @@ interface Props {
   statuses: TransportRequestStatus[];
   /** The raise-a-request button only belongs on the active tab. */
   allowCreate?: boolean;
+  /** Rows open their details when clicked, so the View action can be left out. */
+  showViewAction?: boolean;
 }
 
-export function RequestsView({ statuses, allowCreate = false }: Props) {
+export function RequestsView({ statuses, allowCreate = false, showViewAction = true }: Props) {
   const toast = useToast();
   const userId = useAuthStore((s) => s.user?.id);
   // Everyone can raise, edit, complete and cancel their own requests (the rows below are limited to
@@ -120,6 +122,7 @@ export function RequestsView({ statuses, allowCreate = false }: Props) {
           totalPages={Math.max(1, data?.meta.totalPages ?? 1)}
           onPageChange={setPage}
           onView={setViewing}
+          showViewAction={showViewAction}
           onApprove={canApprove ? setApproving : undefined}
           onReject={canApprove ? setRejecting : undefined}
           canApprove={(row) => row.status === 'PENDING'}

@@ -46,7 +46,7 @@ export default function CampaignsPage() {
       {
         name: form.name.trim(),
         channels: form.outreachChannel,
-        businessTypeIds: form.targetSegment,
+        segmentIds: form.targetSegment,
         subject: form.subject.trim(),
         message: form.message.trim(),
         dispatchMode: form.dispatch === 'schedule' ? 'SCHEDULED' : 'INSTANT',

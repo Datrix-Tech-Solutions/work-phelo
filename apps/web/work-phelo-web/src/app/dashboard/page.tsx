@@ -153,7 +153,7 @@ export default function AdminDashboardPage() {
 
   return (
     <>
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-6 flex flex-col gap-6 min-h-0">
+      <main className="flex-1 w-full px-6 py-6 flex flex-col gap-6 min-h-0">
         {/* Welcome banner */}
         <WelcomeBanner userName={firstName} />
 

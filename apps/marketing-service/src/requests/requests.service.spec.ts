@@ -761,6 +761,24 @@ describe('RequestsService', () => {
       });
     });
 
+    it('completes without an ending mileage and leaves the vehicle mileage alone', async () => {
+      arrange(overdueTrip({ vehicleAssetId: 'veh-1' }));
+      fleet.updateVehicle.mockResolvedValue({});
+
+      await service.complete(user(), 'req-1', {
+        endingCondition: 'FAIR',
+        actualReturnTime: '11:40',
+      });
+
+      expect(callArg(tx.marketingTransportRequest.updateMany)).toMatchObject({
+        data: { endingMileage: null, endingCondition: 'FAIR' },
+      });
+      expect(tx.marketingFleetVehicle.updateMany).not.toHaveBeenCalled();
+      expect(fleet.updateVehicle).toHaveBeenCalledWith(TENANT, 'veh-1', {
+        condition: 'FAIR',
+      });
+    });
+
     it('rejects an ending mileage below the starting mileage', async () => {
       arrange(overdueTrip({ startingMileage: 50000 }));
 

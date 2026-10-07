@@ -45,7 +45,7 @@ const COLUMNS: Column<Campaign>[] = [
     key: 'businessType',
     label: 'Target Audience',
     width: 'minmax(120px, 1fr)',
-    render: (row) => row.businessTypes.map((type) => type.name).join(', '),
+    render: (row) => row.segments.map((segment) => segment.name).join(', '),
   },
   {
     key: 'recipients',

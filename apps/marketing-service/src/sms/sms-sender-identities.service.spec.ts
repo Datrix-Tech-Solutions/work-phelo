@@ -90,6 +90,32 @@ describe('SmsSenderIdentitiesService', () => {
     expect(result.status).toBe('DRAFT');
   });
 
+  it('creates an approved sender identity for another tenant on a platform admin’s behalf', async () => {
+    prisma.marketingSmsSenderIdentity.findFirst.mockResolvedValue(null);
+    prisma.marketingSmsSenderIdentity.create.mockResolvedValue(
+      sender({ tenantId: 'tenant-2', status: 'APPROVED' }),
+    );
+
+    const result = await service.createApproved('tenant-2', 'platform-1', {
+      senderId: 'Work Phelo',
+    });
+
+    expect(prisma.marketingSmsSenderIdentity.findFirst).toHaveBeenCalledWith({
+      where: like({ tenantId: 'tenant-2', normalizedSenderId: 'workphelo' }),
+      select: { id: true },
+    });
+    expect(prisma.marketingSmsSenderIdentity.create).toHaveBeenCalledWith({
+      data: like({
+        tenantId: 'tenant-2',
+        createdBy: 'platform-1',
+        status: 'APPROVED',
+        approvedBy: 'platform-1',
+        approvedAt: expect.any(Date) as Date,
+      }),
+    });
+    expect(result.status).toBe('APPROVED');
+  });
+
   it('rejects duplicate sender IDs within a tenant', async () => {
     prisma.marketingSmsSenderIdentity.findFirst.mockResolvedValue({
       id: 'sender-1',

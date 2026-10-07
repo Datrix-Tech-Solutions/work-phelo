@@ -7,8 +7,12 @@ import type {
   CampaignListResponse,
   CampaignPreview,
   CampaignPreviewPayload,
+  CampaignRecipientOption,
+  CampaignSegment,
   CampaignsQuery,
   CreateCampaignPayload,
+  SaveSegmentPayload,
+  SegmentRulesPayload,
 } from '@/types/marketing';
 
 const ENDPOINT = '/marketing/campaigns';
@@ -25,15 +29,110 @@ export function useCampaigns(query: CampaignsQuery = {}) {
   });
 }
 
+/** Who can be picked when building a segment, within some filters; `ids` looks specific ones up. */
+export function useCampaignRecipientOptions(
+  filters: { businessTypeIds?: string[]; pipelineStageIds?: string[]; ids?: string[] },
+  search: string,
+  enabled = true,
+) {
+  const { businessTypeIds = [], pipelineStageIds = [], ids = [] } = filters;
+  return useQuery({
+    queryKey: [
+      ...CAMPAIGNS_KEY,
+      'recipient-options',
+      businessTypeIds,
+      pipelineStageIds,
+      ids,
+      search,
+    ] as const,
+    queryFn: async () => {
+      const res = await api.get<CampaignRecipientOption[]>(`${ENDPOINT}/recipient-options`, {
+        params: {
+          ...(businessTypeIds.length ? { businessTypeIds: businessTypeIds.join(',') } : {}),
+          ...(pipelineStageIds.length ? { pipelineStageIds: pipelineStageIds.join(',') } : {}),
+          ...(ids.length ? { ids: ids.join(',') } : {}),
+          ...(search.trim() ? { search: search.trim() } : {}),
+        },
+      });
+      return res.data;
+    },
+    enabled,
+    placeholderData: (previous) => previous,
+  });
+}
+
+const SEGMENTS_KEY = [...CAMPAIGNS_KEY, 'segments'] as const;
+
+/** Saved segments (shared across the tenant) plus a built-in one per business type. */
+export function useCampaignSegments(enabled = true) {
+  return useQuery({
+    queryKey: SEGMENTS_KEY,
+    queryFn: async () => {
+      const res = await api.get<CampaignSegment[]>(`${ENDPOINT}/segments`);
+      return res.data;
+    },
+    enabled,
+  });
+}
+
+/** How many prospects some segment rules match; runs only once there is a rule. */
+export function useSegmentCount(rules: SegmentRulesPayload) {
+  const ready =
+    (rules.businessTypeIds?.length ?? 0) > 0 ||
+    (rules.pipelineStageIds?.length ?? 0) > 0 ||
+    (rules.includeProspectIds?.length ?? 0) > 0;
+  return useQuery({
+    queryKey: [...SEGMENTS_KEY, 'count', rules] as const,
+    queryFn: async () => {
+      const res = await api.post<{ prospectCount: number }>(`${ENDPOINT}/segments/count`, rules);
+      return res.data.prospectCount;
+    },
+    enabled: ready,
+    staleTime: 0,
+  });
+}
+
+export function useCreateSegment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: SaveSegmentPayload) => {
+      const res = await api.post<CampaignSegment>(`${ENDPOINT}/segments`, payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY }),
+  });
+}
+
+export function useUpdateSegment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: SaveSegmentPayload & { id: string }) => {
+      const res = await api.patch<CampaignSegment>(`${ENDPOINT}/segments/${id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY }),
+  });
+}
+
+export function useDeleteSegment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`${ENDPOINT}/segments/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY }),
+  });
+}
+
 /** Counts the messages a campaign would queue; runs only once the audience is chosen. */
 export function useCampaignPreview(payload: Partial<CampaignPreviewPayload>) {
-  const { businessTypeIds, channels } = payload;
-  const ready = (businessTypeIds?.length ?? 0) > 0 && (channels?.length ?? 0) > 0;
+  const { segmentIds, channels } = payload;
+  const ready = (segmentIds?.length ?? 0) > 0 && (channels?.length ?? 0) > 0;
   return useQuery({
-    queryKey: [...CAMPAIGNS_KEY, 'preview', businessTypeIds, channels] as const,
+    queryKey: [...CAMPAIGNS_KEY, 'preview', segmentIds, channels] as const,
     queryFn: async () => {
       const res = await api.post<CampaignPreview>(`${ENDPOINT}/preview`, {
-        businessTypeIds,
+        segmentIds,
         channels,
       });
       return res.data;
@@ -44,9 +143,9 @@ export function useCampaignPreview(payload: Partial<CampaignPreviewPayload>) {
 }
 
 export function useCampaignEstimate(payload: Partial<CampaignEstimatePayload>) {
-  const { businessTypeIds, channels, subject, message, senderIdentityId } = payload;
+  const { segmentIds, channels, subject, message, senderIdentityId } = payload;
   const ready =
-    (businessTypeIds?.length ?? 0) > 0 &&
+    (segmentIds?.length ?? 0) > 0 &&
     (channels?.length ?? 0) > 0 &&
     Boolean(subject?.trim()) &&
     Boolean(message?.trim());
@@ -54,7 +153,7 @@ export function useCampaignEstimate(payload: Partial<CampaignEstimatePayload>) {
     queryKey: [
       ...CAMPAIGNS_KEY,
       'estimate',
-      businessTypeIds,
+      segmentIds,
       channels,
       subject,
       message,
@@ -62,7 +161,7 @@ export function useCampaignEstimate(payload: Partial<CampaignEstimatePayload>) {
     ] as const,
     queryFn: async () => {
       const res = await api.post<CampaignEstimate>(`${ENDPOINT}/estimate`, {
-        businessTypeIds,
+        segmentIds,
         channels,
         subject,
         message,
