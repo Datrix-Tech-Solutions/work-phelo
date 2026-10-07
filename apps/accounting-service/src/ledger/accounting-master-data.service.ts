@@ -1757,6 +1757,7 @@ export class AccountingMasterDataService {
           description: this.optional(dto.description),
           postsToCashbook: dto.postsToCashbook ?? false,
           isLinked: dto.isLinked ?? false,
+          usesQuantityPrice: dto.usesQuantityPrice ?? true,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1832,6 +1833,9 @@ export class AccountingMasterDataService {
             ? { postsToCashbook: dto.postsToCashbook }
             : {}),
           ...(dto.isLinked !== undefined ? { isLinked: dto.isLinked } : {}),
+          ...(dto.usesQuantityPrice !== undefined
+            ? { usesQuantityPrice: dto.usesQuantityPrice }
+            : {}),
           updatedByUserId: user.id,
         },
       });
@@ -1899,6 +1903,7 @@ export class AccountingMasterDataService {
     description: string | null;
     postsToCashbook: boolean;
     isLinked: boolean;
+    usesQuantityPrice: boolean;
     createdAt: Date;
     rule?: { lines: unknown[] } | null;
   }) {
@@ -1914,6 +1919,7 @@ export class AccountingMasterDataService {
       description: transactionType.description,
       postsToCashbook: transactionType.postsToCashbook,
       isLinked: transactionType.isLinked,
+      usesQuantityPrice: transactionType.usesQuantityPrice,
       createdAt: transactionType.createdAt.toISOString(),
       rulesCount: transactionType.rule?.lines.length ?? 0,
     };

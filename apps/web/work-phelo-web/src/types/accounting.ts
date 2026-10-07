@@ -289,6 +289,8 @@ export interface TransactionTypeDefinition {
    *  note (payable) — it must reference an original posted invoice/bill and reduces its
    *  outstanding balance. Its rule is written in the note's own direction. */
   isLinked: boolean;
+  /** The New Transaction form asks for quantity × unit price (true) or a straight amount. */
+  usesQuantityPrice: boolean;
   createdAt: string;
   rulesCount: number;
 }
@@ -304,6 +306,7 @@ export interface CreateTransactionTypePayload {
   description?: string;
   postsToCashbook?: boolean;
   isLinked?: boolean;
+  usesQuantityPrice?: boolean;
 }
 
 export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
@@ -1149,12 +1152,14 @@ export interface UpdateInvoiceDraftPayload {
   externalReference?: string;
 }
 
-/** What can still be changed on a draft direct receipt or payment - its amount is fixed. */
+/** What can still be changed on a draft direct receipt or payment. Its amount only changes by
+ *  replacing its `lines` (and then equals their sum). */
 export interface UpdateCashbookDraftPayload {
   transactionDate?: string;
   cashAccountId?: string;
   settlementMethod?: AccountingCashbookSettlementMethod;
   offsetGlAccountId?: string;
+  lines?: CreateCashbookEntryLinePayload[];
   reference?: string;
   externalReference?: string;
   description?: string;
@@ -1449,10 +1454,38 @@ export interface CashbookTransaction {
   destinationCashAccount: CashbookAccountRef | null;
   offsetGlAccount: CashbookGLAccountRef | null;
   offsetSubledgerAccount: (CashbookGLAccountRef & { type: string }) | null;
+  /** The accounts the entry posts to. `amount` is the net cash: items + charges − deductions.
+   *  Empty on entries made before lines existed — read those as one item from `offsetGlAccount`. */
+  lines: CashbookTransactionLine[];
   postedJournalEntry: CashbookJournalRef | null;
   reversalJournalEntry: CashbookJournalRef | null;
   reversalOfTransaction: CashbookTransactionRef | null;
   reversalTransaction: CashbookTransactionRef | null;
+}
+
+/** ITEM is what the entry is for; a DEDUCTION (discount, withholding tax) takes away from the cash
+ *  that moves, a CHARGE (input VAT, bank charge) adds to it. */
+export type CashbookLineKind = 'ITEM' | 'DEDUCTION' | 'CHARGE';
+
+export interface CashbookTransactionLine {
+  id: string;
+  sequence: number;
+  kind: CashbookLineKind;
+  glAccountId: string;
+  glAccount: CashbookGLAccountRef;
+  amount: string;
+  quantity: string | null;
+  unitPrice: string | null;
+  description: string | null;
+}
+
+export interface CreateCashbookEntryLinePayload {
+  kind?: CashbookLineKind;
+  glAccountId: string;
+  amount: number;
+  quantity?: number;
+  unitPrice?: number;
+  description?: string;
 }
 
 export interface QueryCashbookParams {
@@ -1470,8 +1503,9 @@ export interface CreateCashbookEntryPayload {
   cashAccountId: string;
   /** The Transaction Type the entry is made under — its code builds the transaction number. */
   transactionTypeId?: string;
-  /** quantity × unitPrice, rounded to 2 decimals. */
-  amount: number;
+  /** quantity × unitPrice, rounded to 2 decimals. Send this with `offsetGlAccountId`, or `lines`
+   *  instead — the entry amount is then the sum of the lines. */
+  amount?: number;
   quantity?: number;
   unitPrice?: number;
   currency: string;
@@ -1482,7 +1516,9 @@ export interface CreateCashbookEntryPayload {
   counterpartyId?: string;
   externalReference?: string;
   description: string;
-  offsetGlAccountId: string;
+  offsetGlAccountId?: string;
+  /** Post to several accounts against one cash line. */
+  lines?: CreateCashbookEntryLinePayload[];
   offsetSubledgerAccountId?: string;
   exchangeRate?: number;
 }

@@ -10,6 +10,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   AccountingSettlementMethod,
   CashbookDirection,
+  CashbookLineKind,
   CashbookTransactionStatus,
   CashbookTransactionType,
   FiscalPeriodStatus,
@@ -40,7 +41,7 @@ import {
   UpdateCashbookDraftDto,
 } from './dto/draft-actions.dto';
 import { JournalsService } from './journals.service';
-import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import { netCashAmount, normalizeEntryLines } from './cashbook-lines.util';
 import {
   SourceEventsNotifier,
   SourceTransactionEvent,
@@ -82,6 +83,10 @@ const cashbookInclude = {
     },
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
+  lines: {
+    orderBy: { sequence: 'asc' as const },
+    include: { glAccount: { select: { id: true, code: true, name: true } } },
+  },
   offsetSubledgerAccount: {
     select: { id: true, code: true, name: true, type: true },
   },
@@ -459,7 +464,7 @@ export class CashbookService {
 
   /**
    * Completes a draft direct receipt or payment - the date, cash account, settlement method, account
-   * and references. The amount, quantity and unit price stay as they were raised and cannot be edited.
+   * and references. Its amount only changes by replacing its lines; the amount becomes their sum.
    */
   async updateDraftTransaction(
     user: RequestUser,
@@ -468,6 +473,11 @@ export class CashbookService {
   ) {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException('At least one field is required');
+    }
+    if (dto.lines && dto.offsetGlAccountId !== undefined) {
+      throw new BadRequestException(
+        'Send either lines or offsetGlAccountId, not both',
+      );
     }
     const transaction = await this.findEditableDraft(
       user.tenantId,
@@ -494,11 +504,42 @@ export class CashbookService {
       data.cashAccountId = cashAccount.id;
     }
     if (dto.offsetGlAccountId !== undefined) {
+      if (transaction.lines.length > 1) {
+        throw new BadRequestException(
+          'This entry has several lines — edit its lines instead',
+        );
+      }
       await this.assertPostingOffsetAccount(
         user.tenantId,
         dto.offsetGlAccountId,
       );
       data.offsetGlAccountId = dto.offsetGlAccountId;
+    }
+    let replacementLines: ReturnType<typeof normalizeEntryLines> | undefined;
+    if (dto.lines) {
+      replacementLines = normalizeEntryLines({ lines: dto.lines });
+      const { lines, total } = replacementLines;
+      await Promise.all(
+        [...new Set(lines.map((line) => line.glAccountId))].map((glAccountId) =>
+          this.assertPostingOffsetAccount(user.tenantId, glAccountId),
+        ),
+      );
+      const cashAccount = await this.prisma.accountingCashAccount.findFirst({
+        where: {
+          id:
+            (data.cashAccountId as string | undefined) ??
+            transaction.cashAccountId,
+          tenantId: user.tenantId,
+        },
+        select: { glAccountId: true },
+      });
+      if (cashAccount) {
+        this.assertLinesAvoidCashAccount(lines, cashAccount.glAccountId);
+      }
+      data.amount = total;
+      data.offsetGlAccountId = this.firstItem(lines).glAccountId;
+      data.quantity = lines.length === 1 ? (lines[0].quantity ?? null) : null;
+      data.unitPrice = lines.length === 1 ? (lines[0].unitPrice ?? null) : null;
     }
     if (dto.transactionDate !== undefined)
       data.transactionDate = new Date(dto.transactionDate);
@@ -512,19 +553,44 @@ export class CashbookService {
     }
     if (dto.description !== undefined) data.description = dto.description;
 
-    const claimed = await this.prisma.cashbookTransaction.updateMany({
-      where: {
-        id: transaction.id,
-        tenantId: user.tenantId,
-        status: CashbookTransactionStatus.DRAFT,
-      },
-      data,
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.cashbookTransaction.updateMany({
+        where: {
+          id: transaction.id,
+          tenantId: user.tenantId,
+          status: CashbookTransactionStatus.DRAFT,
+        },
+        data,
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException(
+          'Cashbook transaction was changed by another request',
+        );
+      }
+      if (replacementLines) {
+        await tx.cashbookTransactionLine.deleteMany({
+          where: { transactionId: transaction.id, tenantId: user.tenantId },
+        });
+        await tx.cashbookTransactionLine.createMany({
+          data: this.lineWrites(replacementLines.lines).map((line) => ({
+            ...line,
+            tenantId: user.tenantId,
+            transactionId: transaction.id,
+          })),
+        });
+      } else if (dto.offsetGlAccountId !== undefined && transaction.lines[0]) {
+        // A single-line entry keeps its one line in step with the header's account.
+        await tx.cashbookTransactionLine.update({
+          where: {
+            id_tenantId: {
+              id: transaction.lines[0].id,
+              tenantId: user.tenantId,
+            },
+          },
+          data: { glAccountId: dto.offsetGlAccountId },
+        });
+      }
     });
-    if (claimed.count !== 1) {
-      throw new ConflictException(
-        'Cashbook transaction was changed by another request',
-      );
-    }
     await this.recordAudit(
       user,
       'CASHBOOK_TRANSACTION_DRAFT_UPDATED',
@@ -587,6 +653,7 @@ export class CashbookService {
       include: {
         receivableReceipt: { select: { id: true } },
         payablePayment: { select: { id: true } },
+        lines: { select: { id: true }, orderBy: { sequence: 'asc' } },
       },
     });
     if (!transaction)
@@ -946,6 +1013,20 @@ export class CashbookService {
         postedAt: new Date(),
         postedJournalEntryId: reversalJournal.id,
         reversalOfTransactionId: transaction.id,
+        lines: {
+          create: this.lineWrites(
+            (transaction.lines ?? []).map((line) => ({
+              kind: line.kind,
+              glAccountId: line.glAccountId,
+              amount: line.amount,
+              quantity: line.quantity ? Number(line.quantity.toString()) : null,
+              unitPrice: line.unitPrice
+                ? Number(line.unitPrice.toString())
+                : null,
+              description: line.description,
+            })),
+          ),
+        },
       },
       include: cashbookInclude,
     });
@@ -1040,11 +1121,15 @@ export class CashbookService {
       direction: CashbookDirection;
     },
   ) {
-    assertQuantityPriceMatchesAmount(dto);
+    const { lines, total } = normalizeEntryLines(dto);
     const [cashAccount] = await Promise.all([
       this.resolveActiveCashAccount(user.tenantId, dto.cashAccountId),
-      this.assertPostingOffsetAccount(user.tenantId, dto.offsetGlAccountId),
+      ...[...new Set(lines.map((line) => line.glAccountId))].map(
+        (glAccountId) =>
+          this.assertPostingOffsetAccount(user.tenantId, glAccountId),
+      ),
     ]);
+    this.assertLinesAvoidCashAccount(lines, cashAccount.glAccountId);
     if (cashAccount.currency !== dto.currency) {
       throw new BadRequestException(
         'Cashbook transaction currency must match the cash account currency',
@@ -1074,9 +1159,11 @@ export class CashbookService {
           transactionType: dto.transactionType,
           direction: dto.direction,
           transactionNumber,
-          amount: dto.amount,
-          quantity: dto.quantity,
-          unitPrice: dto.unitPrice,
+          amount: total,
+          // A single-account entry keeps its quantity × price on the header too; with
+          // several lines each carries its own.
+          quantity: lines.length === 1 ? lines[0].quantity : undefined,
+          unitPrice: lines.length === 1 ? lines[0].unitPrice : undefined,
           currency: dto.currency,
           transactionDate: new Date(dto.transactionDate),
           settlementMethod: dto.settlementMethod,
@@ -1085,13 +1172,14 @@ export class CashbookService {
           counterpartyId: this.optional(dto.counterpartyId),
           externalReference: this.optional(dto.externalReference),
           description: dto.description,
-          offsetGlAccountId: dto.offsetGlAccountId,
+          offsetGlAccountId: this.firstItem(lines).glAccountId,
           offsetSubledgerAccountId: dto.offsetSubledgerAccountId,
           sourceModule: this.optional(dto.sourceModule),
           sourceRecordId: this.optional(dto.sourceRecordId),
           exchangeRate: dto.exchangeRate,
           createdByUserId: user.id,
           updatedByUserId: user.id,
+          lines: { create: this.lineWrites(lines) },
         },
         include: cashbookInclude,
       });
@@ -1104,7 +1192,8 @@ export class CashbookService {
       {
         transactionType: transaction.transactionType,
         transactionNumber: transaction.transactionNumber,
-        amount: dto.amount,
+        amount: total.toString(),
+        lineCount: lines.length,
         currency: dto.currency,
       },
     );
@@ -1184,22 +1273,99 @@ export class CashbookService {
       ];
     }
 
-    if (!offsetLine) {
+    // An entry made before lines existed has none: its header offset account and amount
+    // are its one item.
+    const entryLines = transaction.lines ?? [];
+    const offsets =
+      entryLines.length > 0
+        ? entryLines.map((line, index) => ({
+            kind: line.kind,
+            glAccountId: line.glAccountId,
+            subledgerAccountId:
+              index === 0
+                ? (transaction.offsetSubledgerAccountId ?? undefined)
+                : undefined,
+            description: line.description ?? transaction.description,
+            amount: Number(line.amount.toString()),
+          }))
+        : offsetLine
+          ? [{ kind: CashbookLineKind.ITEM, ...offsetLine, amount }]
+          : [];
+    if (offsets.length === 0) {
       throw new ConflictException(
         'Cashbook transaction is missing offset account',
       );
     }
-
-    if (transaction.direction === CashbookDirection.INFLOW) {
-      return [
-        { ...cashLine, debit: amount, credit: 0 },
-        { ...offsetLine, debit: 0, credit: amount },
-      ];
+    const net = netCashAmount(
+      offsets.map((line) => ({
+        kind: line.kind,
+        amount: new Prisma.Decimal(line.amount),
+      })),
+    );
+    if (!net.equals(new Prisma.Decimal(amount))) {
+      throw new ConflictException(
+        'Cashbook transaction lines do not add up to its amount',
+      );
     }
-    return [
-      { ...offsetLine, debit: amount, credit: 0 },
-      { ...cashLine, debit: 0, credit: amount },
-    ];
+
+    // An item or charge goes on the same side as the offset account always did (a payment
+    // debits it, a receipt credits it); a deduction goes on the other side. The cash line is
+    // the net of all of them.
+    const isInflow = transaction.direction === CashbookDirection.INFLOW;
+    const lineJournal = offsets.map(({ kind, amount: lineAmount, ...line }) => {
+      const addsToEntry = kind !== CashbookLineKind.DEDUCTION;
+      const onCreditSide = addsToEntry ? isInflow : !isInflow;
+      return {
+        ...line,
+        debit: onCreditSide ? 0 : lineAmount,
+        credit: onCreditSide ? lineAmount : 0,
+      };
+    });
+    return isInflow
+      ? [{ ...cashLine, debit: amount, credit: 0 }, ...lineJournal]
+      : [...lineJournal, { ...cashLine, debit: 0, credit: amount }];
+  }
+
+  // Nested under `lines: { create: [...] }` — tenantId comes from the parent entry through the
+  // composite FK, so it must not be passed here.
+  private lineWrites(
+    lines: {
+      kind?: CashbookLineKind;
+      glAccountId: string;
+      amount: Prisma.Decimal;
+      quantity?: number | null;
+      unitPrice?: number | null;
+      description?: string | null;
+    }[],
+  ) {
+    return lines.map((line, index) => ({
+      sequence: index + 1,
+      kind: line.kind ?? CashbookLineKind.ITEM,
+      glAccountId: line.glAccountId,
+      amount: line.amount,
+      quantity: line.quantity ?? null,
+      unitPrice: line.unitPrice ?? null,
+      description: this.optional(line.description ?? undefined) ?? null,
+    }));
+  }
+
+  /** The header's offset account mirrors the first item (a request needs at least one). */
+  private firstItem<T extends { kind: CashbookLineKind }>(lines: T[]): T {
+    return (
+      lines.find((line) => line.kind === CashbookLineKind.ITEM) ?? lines[0]
+    );
+  }
+
+  /** A line that posts to the entry's own cash account would just cancel itself out. */
+  private assertLinesAvoidCashAccount(
+    lines: { glAccountId: string }[],
+    cashGlAccountId: string,
+  ) {
+    if (lines.some((line) => line.glAccountId === cashGlAccountId)) {
+      throw new BadRequestException(
+        "A line cannot post to the entry's own cash account",
+      );
+    }
   }
 
   private async findTransactionForUpdate(

@@ -42,6 +42,7 @@ type FormValues = {
   description: string;
   postsToCashbook: boolean;
   isLinked: boolean;
+  usesQuantityPrice: boolean;
 };
 
 const DEFAULTS: FormValues = {
@@ -54,6 +55,7 @@ const DEFAULTS: FormValues = {
   description: '',
   postsToCashbook: false,
   isLinked: false,
+  usesQuantityPrice: true,
 };
 
 export function TransactionTypePanel({
@@ -106,6 +108,7 @@ export function TransactionTypePanel({
         description: transactionType.description ?? '',
         postsToCashbook: transactionType.postsToCashbook,
         isLinked: transactionType.isLinked,
+        usesQuantityPrice: transactionType.usesQuantityPrice,
       });
     else reset(DEFAULTS);
   }, [transactionType, reset]);
@@ -127,6 +130,7 @@ export function TransactionTypePanel({
         description: values.description || undefined,
         postsToCashbook: values.postsToCashbook,
         isLinked: values.isLinked,
+        usesQuantityPrice: values.usesQuantityPrice,
       };
       if (transactionType) await update({ id: transactionType.id, ...payload });
       else await create(payload);
@@ -242,6 +246,18 @@ export function TransactionTypePanel({
             )}
           />
         )}
+        <Controller
+          name="usesQuantityPrice"
+          control={control}
+          render={({ field }) => (
+            <ToggleRow
+              label="Track Quantity and Unit Price"
+              description="Ask for quantity × unit price and work out the amount. Turn off to enter a straight amount, e.g. rent or insurance."
+              enabled={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
         <Controller
           name="businessRoles"
           control={control}

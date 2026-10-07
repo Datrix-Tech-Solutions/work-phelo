@@ -1,5 +1,8 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsBoolean,
   IsEnum,
@@ -11,6 +14,7 @@ import {
   Length,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
@@ -19,6 +23,7 @@ import {
   CashbookTransactionStatus,
   CashbookTransactionType,
   CashbookDirection,
+  CashbookLineKind,
 } from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
@@ -115,6 +120,60 @@ export class QueryCashAccountsDto {
   isActive?: boolean;
 }
 
+/** One account a direct receipt or payment posts to, against the entry's single cash line. An
+ *  item or charge adds to the entry (a payment debits it, a receipt credits it); a deduction
+ *  takes away from it. */
+export class CashbookEntryLineDto {
+  @ApiPropertyOptional({
+    enum: CashbookLineKind,
+    default: CashbookLineKind.ITEM,
+    description:
+      'ITEM (default): what the entry is for. DEDUCTION: reduces the cash that moves (discount, withholding tax). CHARGE: adds to it (input VAT, bank charge). Deductions and charges take an amount only — no quantity or unit price.',
+  })
+  @IsOptional()
+  @IsEnum(CashbookLineKind)
+  kind?: CashbookLineKind;
+
+  @ApiProperty({
+    format: 'uuid',
+    description: 'Posting-enabled leaf GL account this line posts to.',
+  })
+  @IsUUID()
+  glAccountId!: string;
+
+  @ApiProperty({ example: 1000, minimum: 0.0001 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  amount!: number;
+
+  @ApiPropertyOptional({
+    example: 2,
+    minimum: 0.0001,
+    description:
+      'Optional descriptive quantity. Sent together with unitPrice; amount must equal quantity × unitPrice rounded to 2 decimals.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  quantity?: number;
+
+  @ApiPropertyOptional({ example: 13.69, minimum: 0.0001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  unitPrice?: number;
+
+  @ApiPropertyOptional({ example: 'January rent' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+}
+
 export class CashbookEntryDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
@@ -131,17 +190,23 @@ export class CashbookEntryDto {
   @IsUUID()
   transactionTypeId?: string;
 
-  @ApiProperty({ example: 1000, minimum: 0.0001 })
+  @ApiPropertyOptional({
+    example: 1000,
+    minimum: 0.0001,
+    description:
+      'Required unless `lines` is sent. With `lines` it is optional and, when sent, must equal the net cash: items plus charges minus deductions.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
-  amount!: number;
+  amount?: number;
 
   @ApiPropertyOptional({
     example: 2,
     minimum: 0.0001,
     description:
-      'Optional descriptive quantity. Sent together with unitPrice; amount must equal quantity × unitPrice rounded to 2 decimals.',
+      'Optional descriptive quantity. Sent together with unitPrice; amount must equal quantity × unitPrice rounded to 2 decimals. Single-account entries only — with `lines`, put it on each line.',
   })
   @IsOptional()
   @Type(() => Number)
@@ -204,13 +269,27 @@ export class CashbookEntryDto {
   @MaxLength(500)
   description!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Accounting-selected posting-enabled offset GL account. Receipt credits this account; payment/charge debits it.',
+      'Accounting-selected posting-enabled offset GL account. Receipt credits this account; payment/charge debits it. Required unless `lines` is sent.',
   })
+  @IsOptional()
   @IsUUID()
-  offsetGlAccountId!: string;
+  offsetGlAccountId?: string;
+
+  @ApiPropertyOptional({
+    type: [CashbookEntryLineDto],
+    description:
+      'Post to several accounts against one cash line. The entry amount is the net cash: items plus charges minus deductions. Send this instead of `offsetGlAccountId` and `amount`.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CashbookEntryLineDto)
+  lines?: CashbookEntryLineDto[];
 
   @ApiPropertyOptional({
     format: 'uuid',

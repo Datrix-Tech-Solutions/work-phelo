@@ -1,7 +1,15 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import {
+  Control,
+  Controller,
+  FieldErrors,
+  useFieldArray,
+  useForm,
+  UseFormRegister,
+  useWatch,
+} from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -9,8 +17,13 @@ import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelec
 import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
-import { AccountingCashbookSettlementMethod, TransactionTypeDefinition } from '@/types/accounting';
+import {
+  AccountingCashbookSettlementMethod,
+  CashbookLineKind,
+  TransactionTypeDefinition,
+} from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
   useCashAccountOptions,
@@ -45,6 +58,27 @@ function fmtAmount(value: number, currency: string) {
   return currency ? `${currency} ${formatted}` : formatted;
 }
 
+/** One account a direct receipt/payment posts to — the entry's amount is the sum of its lines. */
+type CashLineValues = {
+  /** ITEM is what the entry is for; a deduction (discount, withholding tax) reduces the cash
+   *  that moves, a charge (input VAT, bank charge) adds to it. */
+  kind: CashbookLineKind;
+  glAccountId: string;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+  description: string;
+};
+
+const EMPTY_CASH_LINE: CashLineValues = {
+  kind: 'ITEM',
+  glAccountId: '',
+  quantity: '',
+  unitPrice: '',
+  amount: '',
+  description: '',
+};
+
 type FormValues = {
   businessRole: string;
   businessEntity: string;
@@ -62,6 +96,7 @@ type FormValues = {
   sourceLedgerEntryId: string;
   settlementMethod: AccountingCashbookSettlementMethod | '';
   reference: string;
+  cashLines: CashLineValues[];
 };
 
 /** quantity × unit price, rounded half-up to 2 decimals (EPSILON guards float artefacts like 1.005). */
@@ -91,6 +126,7 @@ const DEFAULTS: FormValues = {
   sourceLedgerEntryId: '',
   settlementMethod: '',
   reference: '',
+  cashLines: [EMPTY_CASH_LINE],
 };
 
 export function NewTransactionPanel({
@@ -265,22 +301,46 @@ export function NewTransactionPanel({
 
   // Source-linked types (e.g. payroll) settle an existing open item, so the amount is keyed in
   // directly; everything else derives it from quantity × unit price.
+  // A type can also opt out of quantity × unit price and take a straight amount.
   const hasSource = !!transactionType?.sourceTypeId;
+  const isDirectAmount = hasSource || transactionType?.usesQuantityPrice === false;
   const derivedAmount = computeAmount(quantity, unitPrice);
-  const subtotal = hasSource ? Number(manualAmount) || 0 : derivedAmount;
+  const subtotal = isDirectAmount ? Number(manualAmount) || 0 : derivedAmount;
   const resolveAmount = (values: FormValues) =>
-    hasSource ? Number(values.amount) : computeAmount(values.quantity, values.unitPrice);
+    isDirectAmount ? Number(values.amount) : computeAmount(values.quantity, values.unitPrice);
+
+  // A direct receipt/payment can post to several accounts against one cash line. Types tied to
+  // a source keep the single-account form, since they settle one open item.
+  const usesLines = isCashbookType && !hasSource;
+  const {
+    fields: cashLineFields,
+    append: appendCashLine,
+    remove: removeCashLine,
+  } = useFieldArray({ control, name: 'cashLines' });
+  const cashLines = useWatch({ control, name: 'cashLines' });
+  // Quantity × price only applies to items; a deduction or charge is always a straight amount.
+  const cashLineAmount = (line: CashLineValues) =>
+    isDirectAmount || line.kind !== 'ITEM'
+      ? Number(line.amount) || 0
+      : computeAmount(line.quantity, line.unitPrice);
+  const sumOfKind = (kinds: CashbookLineKind[]) =>
+    (cashLines ?? [])
+      .filter((line) => kinds.includes(line.kind))
+      .reduce((sum, line) => sum + cashLineAmount(line), 0);
+  const itemsTotal = sumOfKind(['ITEM']);
+  const chargesTotal = sumOfKind(['CHARGE']);
+  const deductionsTotal = sumOfKind(['DEDUCTION']);
+  // The cash that actually moves — what the bank statement will show.
+  const cashLinesTotal = itemsTotal + chargesTotal - deductionsTotal;
   const taxBreakdown = taxLines
     .filter((line) => selectedTaxTypeIds.includes(line.taxTypeId))
     .map((line) => ({ ...line, amount: (subtotal * line.rate) / 100 }));
   const taxAmount = taxBreakdown.reduce((sum, line) => sum + line.amount, 0);
   const total = subtotal + taxAmount;
 
-  // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
-  const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
-  const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
-  if (openKey !== null && openKey !== lastOpenKey) {
-    setLastOpenKey(openKey);
+  // A blank form with the transaction type's defaults — used on every fresh open, and
+  // between entries while the panel is locked for multiple entries.
+  function resetForNextEntry() {
     const configuredRoles = transactionType?.businessRoles ?? [];
     reset({
       ...DEFAULTS,
@@ -288,8 +348,17 @@ export function NewTransactionPanel({
       entryDate: today(),
       cashAccountId: rule?.defaultCashAccountId ?? '',
       offsetGlAccountId: rule?.lines?.[0]?.account?.id ?? '',
+      cashLines: [{ ...EMPTY_CASH_LINE, glAccountId: rule?.lines?.[0]?.account?.id ?? '' }],
     });
     setSelectedTaxTypeIds([]);
+  }
+
+  // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
+  const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
+  const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
+  if (openKey !== null && openKey !== lastOpenKey) {
+    setLastOpenKey(openKey);
+    resetForNextEntry();
   }
 
   const { data: entities = [], isLoading: isLoadingEntities } = useSubledgers(
@@ -334,6 +403,30 @@ export function NewTransactionPanel({
     onClose();
   };
 
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: close,
+    onContinue: resetForNextEntry,
+  });
+
+  // Success feedback for a saved entry. Unlocked: close and show the usual modal. Locked:
+  // the panel stays open and its Continue / Stop prompt takes the modal's place.
+  const finishSave = (posted: boolean) => {
+    const name = transactionType?.name ?? '';
+    entry.finishSave(
+      {
+        title: posted ? 'Transaction Posted!' : 'Transaction Submitted!',
+        message: posted
+          ? `Your ${name} has been posted.`
+          : `Your ${name} has been submitted for review.`,
+      },
+      () => {
+        close();
+        setSuccessInfo({ name, posted });
+      },
+    );
+  };
+
   const toggleTaxType = (taxTypeId: string) => {
     setSelectedTaxTypeIds((prev) =>
       prev.includes(taxTypeId) ? prev.filter((id) => id !== taxTypeId) : [...prev, taxTypeId],
@@ -353,7 +446,28 @@ export function NewTransactionPanel({
         toast.error('Select a cash/bank account');
         return;
       }
-      if (!values.offsetGlAccountId) {
+      if (usesLines) {
+        if (values.cashLines.some((line) => !line.glAccountId)) {
+          toast.error(
+            `Select the account to ${isCashbookReceipt ? 'credit' : 'debit'} on every line`,
+          );
+          return;
+        }
+        if (values.cashLines.some((line) => !(cashLineAmount(line) > 0))) {
+          toast.error('Every line needs an amount above zero');
+          return;
+        }
+        if (!values.cashLines.some((line) => line.kind === 'ITEM')) {
+          toast.error('Add at least one item line');
+          return;
+        }
+        if (!(cashLinesTotal > 0)) {
+          toast.error(
+            `The deductions leave nothing to ${isCashbookReceipt ? 'receive' : 'pay'} — the net amount must be above zero`,
+          );
+          return;
+        }
+      } else if (!values.offsetGlAccountId) {
         toast.error(`Select the account to ${isCashbookReceipt ? 'credit' : 'debit'}`);
         return;
       }
@@ -383,11 +497,25 @@ export function NewTransactionPanel({
           const created = await createCashbookEntry.mutateAsync({
             cashAccountId: values.cashAccountId,
             transactionTypeId: transactionType.id,
-            offsetGlAccountId: values.offsetGlAccountId,
-            amount: resolveAmount(values),
-            ...(hasSource
-              ? {}
-              : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
+            ...(usesLines
+              ? {
+                  lines: values.cashLines.map((line) => ({
+                    kind: line.kind,
+                    glAccountId: line.glAccountId,
+                    amount: cashLineAmount(line),
+                    ...(isDirectAmount || line.kind !== 'ITEM'
+                      ? {}
+                      : { quantity: Number(line.quantity), unitPrice: Number(line.unitPrice) }),
+                    description: line.description || undefined,
+                  })),
+                }
+              : {
+                  offsetGlAccountId: values.offsetGlAccountId,
+                  amount: resolveAmount(values),
+                  ...(isDirectAmount
+                    ? {}
+                    : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
+                }),
             currency: values.currency,
             transactionDate: values.entryDate || today(),
             settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
@@ -401,8 +529,7 @@ export function NewTransactionPanel({
             await postCashbookTransaction.mutateAsync(created.id);
           }
         }
-        close();
-        setSuccessInfo({ name: transactionType.name, posted: willPost });
+        finishSave(willPost);
       } catch (error) {
         toast.error(extractError(error, 'Failed to save transaction'));
       } finally {
@@ -440,8 +567,9 @@ export function NewTransactionPanel({
           documentDate: values.entryDate || today(),
           currency: values.currency,
           amount: resolveAmount(values),
-          quantity: Number(values.quantity),
-          unitPrice: Number(values.unitPrice),
+          ...(isDirectAmount
+            ? {}
+            : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
           transactionTypeId: transactionType.id,
           ...scopedOffset,
           originalDocumentId: values.originalDocumentId,
@@ -449,8 +577,7 @@ export function NewTransactionPanel({
           costCentreId: showCostCentre && values.costCentreId ? values.costCentreId : undefined,
           description: values.description || undefined,
         });
-        close();
-        setSuccessInfo({ name: transactionType.name, posted: false });
+        finishSave(false);
       } catch (error) {
         toast.error(extractError(error, 'Failed to save transaction'));
       }
@@ -463,7 +590,7 @@ export function NewTransactionPanel({
       dueDate: values.dueDate || undefined,
       currency: values.currency,
       amount: resolveAmount(values),
-      ...(hasSource
+      ...(isDirectAmount
         ? {}
         : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
       transactionTypeId: transactionType.id,
@@ -477,14 +604,13 @@ export function NewTransactionPanel({
 
     try {
       await createDocument.mutateAsync(payload);
-      close();
-      setSuccessInfo({ name: transactionType.name, posted: false });
+      finishSave(false);
     } catch (error) {
       toast.error(extractError(error, 'Failed to save transaction'));
     }
   };
 
-  const amountFields = hasSource ? (
+  const amountFields = isDirectAmount ? (
     <div className="grid grid-cols-2 gap-3">
       <Controller
         name="amount"
@@ -581,6 +707,7 @@ export function NewTransactionPanel({
       <SidePanel
         isOpen={isOpen}
         onClose={close}
+        {...entry.panelProps}
         title="New Transaction"
         description={
           transactionType ? `Recording a ${transactionType.name.toLowerCase()}.` : undefined
@@ -735,24 +862,66 @@ export function NewTransactionPanel({
               )}
             />
 
-            <Controller
-              name="offsetGlAccountId"
-              control={control}
-              rules={{ required: 'Account is required' }}
-              render={({ field }) => (
-                <SearchSelect
-                  label={isCashbookReceipt ? 'Account to Credit' : 'Account to Debit'}
-                  placeholder={isLoadingGlAccounts ? 'Loading…' : 'Select account…'}
-                  options={glAccountOptions}
-                  value={field.value}
-                  onChange={field.onChange}
-                  disabled={!!sourceLedgerEntryId}
-                  error={errors.offsetGlAccountId?.message}
+            {usesLines ? (
+              <>
+                <CashEntryLines
+                  control={control}
+                  register={register}
+                  errors={errors}
+                  fields={cashLineFields}
+                  lines={cashLines ?? []}
+                  isDirectAmount={isDirectAmount}
+                  accountLabel={isCashbookReceipt ? 'Account to Credit' : 'Account to Debit'}
+                  accountOptions={glAccountOptions}
+                  isLoadingAccounts={isLoadingGlAccounts}
+                  total={cashLinesTotal}
+                  itemsTotal={itemsTotal}
+                  chargesTotal={chargesTotal}
+                  deductionsTotal={deductionsTotal}
+                  isReceipt={isCashbookReceipt}
+                  currency={currency}
+                  lineAmount={cashLineAmount}
+                  onAdd={(kind) => appendCashLine({ ...EMPTY_CASH_LINE, kind })}
+                  onRemove={removeCashLine}
                 />
-              )}
-            />
+                <Controller
+                  name="currency"
+                  control={control}
+                  rules={{ required: 'Currency is required' }}
+                  render={({ field }) => (
+                    <SearchSelect
+                      label="Currency"
+                      placeholder="Select currency…"
+                      options={currencyOptions}
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={errors.currency?.message}
+                    />
+                  )}
+                />
+              </>
+            ) : (
+              <>
+                <Controller
+                  name="offsetGlAccountId"
+                  control={control}
+                  rules={{ required: 'Account is required' }}
+                  render={({ field }) => (
+                    <SearchSelect
+                      label={isCashbookReceipt ? 'Account to Credit' : 'Account to Debit'}
+                      placeholder={isLoadingGlAccounts ? 'Loading…' : 'Select account…'}
+                      options={glAccountOptions}
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled={!!sourceLedgerEntryId}
+                      error={errors.offsetGlAccountId?.message}
+                    />
+                  )}
+                />
 
-            {amountFields}
+                {amountFields}
+              </>
+            )}
 
             <Controller
               name="entryDate"
@@ -1013,5 +1182,201 @@ export function NewTransactionPanel({
         }
       />
     </>
+  );
+}
+
+/** The accounts a direct receipt or payment posts to — one card per line, with the cash that
+ *  actually moves at the bottom. A deduction (discount, withholding tax) reduces that cash and a
+ *  charge (input VAT, bank charge) adds to it; the user never has to think in debits and credits. */
+function CashEntryLines({
+  control,
+  register,
+  errors,
+  fields,
+  lines,
+  isDirectAmount,
+  accountLabel,
+  accountOptions,
+  isLoadingAccounts,
+  total,
+  itemsTotal,
+  chargesTotal,
+  deductionsTotal,
+  isReceipt,
+  currency,
+  lineAmount,
+  onAdd,
+  onRemove,
+}: {
+  control: Control<FormValues>;
+  register: UseFormRegister<FormValues>;
+  errors: FieldErrors<FormValues>;
+  fields: { id: string }[];
+  lines: CashLineValues[];
+  isDirectAmount: boolean;
+  accountLabel: string;
+  accountOptions: SearchSelectOption[];
+  isLoadingAccounts: boolean;
+  total: number;
+  itemsTotal: number;
+  chargesTotal: number;
+  deductionsTotal: number;
+  isReceipt: boolean;
+  currency: string;
+  lineAmount: (line: CashLineValues) => number;
+  onAdd: (kind: CashbookLineKind) => void;
+  onRemove: (index: number) => void;
+}) {
+  const verb = isReceipt ? 'received' : 'paid';
+  const itemCount = lines.filter((line) => line.kind === 'ITEM').length;
+  const hasAdjustments = deductionsTotal > 0 || chargesTotal > 0;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <span className="text-sm font-bold text-gray-900">Lines</span>
+
+      {fields.map((field, index) => {
+        const lineErrors = errors.cashLines?.[index];
+        const kind = lines[index]?.kind ?? 'ITEM';
+        const isItem = kind === 'ITEM';
+        return (
+          <div key={field.id} className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500">
+                {isItem
+                  ? `Line ${index + 1}`
+                  : kind === 'DEDUCTION'
+                    ? `Deduction — reduces the cash ${verb}`
+                    : `Charge — adds to the cash ${verb}`}
+              </span>
+              {(!isItem || itemCount > 1) && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  className="text-xs font-medium text-red-600 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+
+            <Controller
+              name={`cashLines.${index}.glAccountId`}
+              control={control}
+              rules={{ required: 'Account is required' }}
+              render={({ field: f }) => (
+                <SearchSelect
+                  label={isItem ? accountLabel : 'Account'}
+                  placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
+                  options={accountOptions}
+                  value={f.value}
+                  onChange={f.onChange}
+                  error={lineErrors?.glAccountId?.message}
+                />
+              )}
+            />
+
+            {isDirectAmount || !isItem ? (
+              <Controller
+                name={`cashLines.${index}.amount`}
+                control={control}
+                rules={{
+                  validate: (v) => Number(v) > 0 || 'Amount must be greater than 0',
+                }}
+                render={({ field: f }) => (
+                  <NumberField
+                    label="Amount"
+                    value={Number(f.value) || 0}
+                    onChange={(value) => f.onChange(String(value))}
+                    error={lineErrors?.amount?.message}
+                  />
+                )}
+              />
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                <Controller
+                  name={`cashLines.${index}.quantity`}
+                  control={control}
+                  rules={{ validate: (v) => Number(v) > 0 || 'Must be above 0' }}
+                  render={({ field: f }) => (
+                    <NumberField
+                      label="Quantity"
+                      placeholder="0"
+                      value={Number(f.value) || 0}
+                      onChange={(value) => f.onChange(String(value))}
+                      error={lineErrors?.quantity?.message}
+                    />
+                  )}
+                />
+                <Controller
+                  name={`cashLines.${index}.unitPrice`}
+                  control={control}
+                  rules={{ validate: (v) => Number(v) > 0 || 'Must be above 0' }}
+                  render={({ field: f }) => (
+                    <NumberField
+                      label="Unit Price"
+                      value={Number(f.value) || 0}
+                      onChange={(value) => f.onChange(String(value))}
+                      error={lineErrors?.unitPrice?.message}
+                    />
+                  )}
+                />
+                <NumberField
+                  label="Amount"
+                  value={lines[index] ? lineAmount(lines[index]) : 0}
+                  onChange={() => {}}
+                  disabled
+                />
+              </div>
+            )}
+
+            <FormField
+              label={isItem ? 'Line Description' : 'Description'}
+              registration={register(`cashLines.${index}.description`)}
+              placeholder={isItem ? 'Optional' : 'e.g. Early payment discount, VAT, bank charge'}
+            />
+          </div>
+        );
+      })}
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={() => onAdd('ITEM')}>
+          Add Line
+        </Button>
+        <Button type="button" variant="outline" onClick={() => onAdd('DEDUCTION')}>
+          Add Deduction
+        </Button>
+        <Button type="button" variant="outline" onClick={() => onAdd('CHARGE')}>
+          Add Charge
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-1 rounded-xl bg-gray-50 px-3 py-2 text-sm">
+        {hasAdjustments && (
+          <>
+            <div className="flex items-center justify-between text-gray-600">
+              <span>Amount</span>
+              <span>{fmtAmount(itemsTotal, currency)}</span>
+            </div>
+            {deductionsTotal > 0 && (
+              <div className="flex items-center justify-between text-gray-600">
+                <span>Less deductions</span>
+                <span>− {fmtAmount(deductionsTotal, currency)}</span>
+              </div>
+            )}
+            {chargesTotal > 0 && (
+              <div className="flex items-center justify-between text-gray-600">
+                <span>Plus charges</span>
+                <span>+ {fmtAmount(chargesTotal, currency)}</span>
+              </div>
+            )}
+          </>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-gray-700">Cash {verb}</span>
+          <span className="font-semibold text-gray-900">{fmtAmount(total, currency)}</span>
+        </div>
+      </div>
+    </div>
   );
 }
