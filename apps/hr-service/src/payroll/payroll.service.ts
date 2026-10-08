@@ -653,7 +653,12 @@ export class PayrollService {
   async runPayroll(tenantId: string, runBy: string, dto: RunPayrollDto) {
     const existing = await this.prisma.payrollRun.findUnique({
       where: {
-        tenantId_month_year: { tenantId, month: dto.month, year: dto.year },
+        tenantId_month_year_payslipKey: {
+          tenantId,
+          month: dto.month,
+          year: dto.year,
+          payslipKey: 'legacy',
+        },
       },
     });
 
@@ -750,7 +755,12 @@ export class PayrollService {
 
     return this.prisma.payrollRun.upsert({
       where: {
-        tenantId_month_year: { tenantId, month: dto.month, year: dto.year },
+        tenantId_month_year_payslipKey: {
+          tenantId,
+          month: dto.month,
+          year: dto.year,
+          payslipKey: 'legacy',
+        },
       },
       update: {
         status: 'DRAFT',
@@ -1277,10 +1287,48 @@ export class PayrollService {
    *  on, rather than letting the approval silently go through with nothing posted. */
   private async postPayrollAccrual(
     tenantId: string,
-    run: { id: string; month: number; year: number },
+    run: { id: string; month: number; year: number; payslipKey?: string },
     actingUserId: string,
   ): Promise<void> {
     try {
+      // A run made with payroll configurations already holds its totals by accounting role.
+      if (run.payslipKey && run.payslipKey !== 'legacy') {
+        const totals = await this.prisma.payrollRun.findUniqueOrThrow({
+          where: { id: run.id },
+          select: {
+            totalGross: true,
+            totalNet: true,
+            totalIncomeTax: true,
+            totalEmployeeSocialSecurity: true,
+            totalEmployerSocialSecurity: true,
+            totalPension: true,
+            totalOtherDeductions: true,
+          },
+        });
+        const { end } = this.getMonthBounds(run.month, run.year);
+        await this.accountingClient.postPayrollRoleAccrual(
+          {
+            tenantId,
+            payrollRunId: run.id,
+            periodLabel: `${run.month}/${run.year}`,
+            transactionDate: end.toISOString().slice(0, 10),
+            totalGross: Number(totals.totalGross),
+            totalNet: Number(totals.totalNet),
+            totalIncomeTax: Number(totals.totalIncomeTax),
+            totalEmployeeSocialSecurity: Number(
+              totals.totalEmployeeSocialSecurity,
+            ),
+            totalEmployerSocialSecurity: Number(
+              totals.totalEmployerSocialSecurity,
+            ),
+            totalPension: Number(totals.totalPension),
+            totalOtherDeductions: Number(totals.totalOtherDeductions),
+          },
+          actingUserId,
+        );
+        return;
+      }
+
       const [totals, otherDeductions] = await Promise.all([
         this.prisma.payrollRun.findUniqueOrThrow({
           where: { id: run.id },
@@ -1557,6 +1605,7 @@ export class PayrollService {
           include: {
             allowanceItems: true,
             deductionItems: true,
+            lines: { orderBy: { sortOrder: 'asc' } },
             employee: {
               select: {
                 firstName: true,

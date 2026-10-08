@@ -1,7 +1,10 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { PayrollIntegrationService } from './payroll-integration.service';
-import { PostPayrollAccrualDto } from './dto/payroll-integration.dto';
+import {
+  PostPayrollAccrualDto,
+  PostPayrollRoleAccrualDto,
+} from './dto/payroll-integration.dto';
 
 const DTO: PostPayrollAccrualDto = {
   tenantId: 'tenant-1',
@@ -177,6 +180,115 @@ describe('PayrollIntegrationService.postAccrual', () => {
     await expect(
       service.postAccrual('hr-service', 'approver-1', DTO),
     ).rejects.toThrow(BadRequestException);
+  });
+});
+
+const ROLE_DTO: PostPayrollRoleAccrualDto = {
+  tenantId: 'tenant-1',
+  payrollRunId: 'run-2',
+  periodLabel: '10/2026',
+  transactionDate: '2026-10-31',
+  totalGross: 6000,
+  totalNet: 4220,
+  totalIncomeTax: 1029.75,
+  totalEmployeeSocialSecurity: 275,
+  totalEmployerSocialSecurity: 650,
+  totalPension: 250,
+  totalOtherDeductions: 225.25,
+};
+
+describe('PayrollIntegrationService.postRoleAccrual', () => {
+  const allMapped = {
+    ...MAPPED,
+    statutoryPensionPayable: { id: 'a-pen', code: '2124', name: 'Pension' },
+    otherDeductionsPayable: { id: 'a-oth', code: '2125', name: 'Other' },
+  };
+
+  it('posts the totals by role and balances', async () => {
+    const { service, journals } = build({ mapped: allMapped });
+
+    await service.postRoleAccrual('hr-service', 'approver-1', ROLE_DTO);
+
+    const { lines } = journals.create.mock.calls[0][1] as {
+      lines: { glAccountId: string; debit?: number; credit?: number }[];
+    };
+    const by = (id: string) => lines.find((l) => l.glAccountId === id);
+    expect(by('a-sal')?.debit).toBe(6000);
+    expect(by('a-ess')?.debit).toBe(650);
+    expect(by('a-net')?.credit).toBe(4220);
+    expect(by('a-tax')?.credit).toBe(1029.75);
+    // Owed to the social security fund: the employees' share plus the employer's.
+    expect(by('a-ss')?.credit).toBe(925);
+    expect(by('a-pen')?.credit).toBe(250);
+    expect(by('a-oth')?.credit).toBe(225.25);
+
+    const debits = lines.reduce((sum, l) => sum + (l.debit ?? 0), 0);
+    const credits = lines.reduce((sum, l) => sum + (l.credit ?? 0), 0);
+    expect(Math.round(debits * 100)).toBe(Math.round(credits * 100));
+  });
+
+  it('needs no account for roles the run has nothing for', async () => {
+    // A commission payroll: pay and a flat tax only, so no social security, pension or other accounts.
+    const { service, journals } = build({
+      mapped: {
+        ...MAPPED,
+        employerSocialSecurityExpense: null,
+        socialSecurityPayable: null,
+      },
+    });
+
+    await service.postRoleAccrual('hr-service', 'approver-1', {
+      ...ROLE_DTO,
+      totalGross: 1000,
+      totalNet: 900,
+      totalIncomeTax: 100,
+      totalEmployeeSocialSecurity: 0,
+      totalEmployerSocialSecurity: 0,
+      totalPension: 0,
+      totalOtherDeductions: 0,
+    });
+
+    const { lines } = journals.create.mock.calls[0][1] as { lines: unknown[] };
+    expect(lines).toHaveLength(3);
+  });
+
+  it('names a missing account only for a role that has an amount', async () => {
+    const { service, journals } = build({
+      mapped: {
+        ...MAPPED,
+        statutoryPensionPayable: null,
+        otherDeductionsPayable: null,
+      },
+    });
+
+    await expect(
+      service.postRoleAccrual('hr-service', 'approver-1', ROLE_DTO),
+    ).rejects.toThrow(/Statutory Pension Payable, Other Deductions Payable/);
+    expect(journals.create).not.toHaveBeenCalled();
+  });
+
+  it('raises one open item per liability, remembering which role each belongs to', async () => {
+    const { service, sourceLedger } = build({ mapped: allMapped });
+
+    await service.postRoleAccrual('hr-service', 'approver-1', ROLE_DTO);
+
+    const roles = sourceLedger.createEntry.mock.calls.map(
+      (call) => (call[0] as { sourceRole: string }).sourceRole,
+    );
+    expect(roles).toEqual([
+      'netPayPayable',
+      'incomeTaxPayable',
+      'socialSecurityPayable',
+      'statutoryPensionPayable',
+      'otherDeductionsPayable',
+    ]);
+  });
+
+  it('refuses when payroll is not linked', async () => {
+    const { service } = build({ source: { id: 'src-1', isActive: false } });
+    await expect(
+      service.postRoleAccrual('hr-service', 'approver-1', ROLE_DTO),
+    ).rejects.toThrow(ConflictException);
   });
 });
 

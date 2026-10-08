@@ -26,6 +26,7 @@ import {
 } from '../auth/guards/internal-service-auth.guard';
 import {
   PostPayrollAccrualDto,
+  PostPayrollRoleAccrualDto,
   QueryPayrollSettlementStatusDto,
 } from './dto/payroll-integration.dto';
 import { PayrollIntegrationService } from './payroll-integration.service';
@@ -103,6 +104,47 @@ export class InternalPayrollIntegrationController {
       );
     }
     return this.service.postAccrual(
+      request.internalServiceName,
+      request.internalActingUserId,
+      dto,
+    );
+  }
+
+  @Post('post-role-accrual')
+  @ApiOperation({
+    summary:
+      'Post (or draft) the accrual of a payroll run made with payroll configurations',
+    description:
+      'Same as post-accrual, but the run arrives already totalled by role (pay, income tax, ' +
+      'social security, pension, other deductions). Idempotent per payrollRunId.',
+  })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.service, required: true })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.timestamp, required: true })
+  @ApiHeader({
+    name: INTERNAL_SERVICE_AUTH_HEADERS.signature,
+    required: true,
+    description:
+      'Hex HMAC-SHA256 of service:timestamp:POST:/internal/payroll-integration/post-role-accrual.',
+  })
+  @ApiCreatedResponse({
+    description: 'The created (or already-existing) journal entry.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'An account is not chosen for a role the run has an amount for, or no open fiscal period covers the date.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid service credentials.' })
+  postRoleAccrual(
+    @Req() request: AuthenticatedInternalRequest,
+    @Body() dto: PostPayrollRoleAccrualDto,
+  ) {
+    this.assertCaller(request);
+    if (!request.internalActingUserId) {
+      throw new ForbiddenException(
+        'A signed request that names the acting user is required to post a payroll accrual.',
+      );
+    }
+    return this.service.postRoleAccrual(
       request.internalServiceName,
       request.internalActingUserId,
       dto,

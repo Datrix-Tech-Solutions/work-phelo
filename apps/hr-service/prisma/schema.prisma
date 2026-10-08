@@ -498,8 +498,8 @@ model Employee {
   resignation           ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
-  @@index([tenantId, payrollGroupId])
   @@unique([tenantId, email])
+  @@index([tenantId, payrollGroupId])
   @@schema("hr")
 }
 
@@ -1044,44 +1044,54 @@ model ShiftAssignmentOverride {
 // ── Payroll ───────────────────────────────────────────────────────────────
 
 model PayrollRun {
-  id                 String         @id @default(uuid())
-  tenantId           String
-  month              Int
-  year               Int
-  status             PayrollStatus  @default(DRAFT)
-  totalGross         Decimal        @db.Decimal(15, 2)
-  totalNet           Decimal        @db.Decimal(15, 2)
-  totalSSNIT         Decimal        @db.Decimal(15, 2)
-  totalTier1         Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier2         Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier3         Decimal        @default(0) @db.Decimal(15, 2)
-  totalPAYE          Decimal        @db.Decimal(15, 2)
-  totalEmployerCost  Decimal        @default(0) @db.Decimal(15, 2)
-  runBy              String
-  submittedBy        String?
-  submittedAt        DateTime?
-  approvedBy         String?
-  approvedAt         DateTime?
-  approvalNote       String?
-  returnToDraftNote  String?
-  paidAt             DateTime?
-  payslipsReleasedAt DateTime?
+  id                          String         @id @default(uuid())
+  tenantId                    String
+  month                       Int
+  year                        Int
+  status                      PayrollStatus  @default(DRAFT)
+  totalGross                  Decimal        @db.Decimal(15, 2)
+  totalNet                    Decimal        @db.Decimal(15, 2)
+  totalSSNIT                  Decimal        @db.Decimal(15, 2)
+  totalTier1                  Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier2                  Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier3                  Decimal        @default(0) @db.Decimal(15, 2)
+  totalPAYE                   Decimal        @db.Decimal(15, 2)
+  totalEmployerCost           Decimal        @default(0) @db.Decimal(15, 2)
+  runBy                       String
+  submittedBy                 String?
+  submittedAt                 DateTime?
+  approvedBy                  String?
+  approvedAt                  DateTime?
+  approvalNote                String?
+  returnToDraftNote           String?
+  paidAt                      DateTime?
+  payslipsReleasedAt          DateTime?
   /// True when the run was approved while payroll was linked to Accounting, so its accrual was
   /// posted there and it is settled there. Fixed at approval: linking or unlinking later never
   /// changes a run that already exists.
-  postedToAccounting Boolean        @default(false)
-  notes              String?
-  payrollCountry     PayrollCountry @default(GH)
-  payrollCurrency    String         @default("GHS")
-  tier3Enabled       Boolean        @default(false)
-  tier3Rate          Decimal?       @db.Decimal(5, 2)
-  tier3SchemeName    String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  postedToAccounting          Boolean        @default(false)
+  notes                       String?
+  payrollCountry              PayrollCountry @default(GH)
+  payrollCurrency             String         @default("GHS")
+  tier3Enabled                Boolean        @default(false)
+  tier3Rate                   Decimal?       @db.Decimal(5, 2)
+  tier3SchemeName             String?
+  /// "legacy" for runs made by the old calculators; otherwise the payslip type the run is for
+  /// (monthly, commission or monthly_commission), so each type has its own run each month.
+  payslipKey                  String         @default("legacy")
+  /// Totals by accounting role, for runs made with payroll configurations. Old runs keep the
+  /// tier and PAYE columns above and leave these at zero.
+  totalEmployeeSocialSecurity Decimal        @default(0) @db.Decimal(15, 2)
+  totalPension                Decimal        @default(0) @db.Decimal(15, 2)
+  totalIncomeTax              Decimal        @default(0) @db.Decimal(15, 2)
+  totalOtherDeductions        Decimal        @default(0) @db.Decimal(15, 2)
+  totalEmployerSocialSecurity Decimal        @default(0) @db.Decimal(15, 2)
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @updatedAt
 
   items PayrollItem[]
 
-  @@unique([tenantId, month, year])
+  @@unique([tenantId, month, year, payslipKey])
   @@schema("hr")
 }
 
@@ -1110,6 +1120,17 @@ model PayrollItem {
   taxPolicySnapshot         PayrollTaxPolicy         @default(STANDARD_PAYE)
   compensationTypeSnapshot  EmployeeCompensationType @default(SALARY)
   commissionTaxableSnapshot Boolean                  @default(true)
+  /// Set for payslips made with a payroll configuration: who it was for and what was used.
+  payrollGroupId            String?
+  configurationId           String?
+  configurationVersion      Int?
+  /// The figure the commission rate was applied to (for example sales).
+  commissionFigure          Decimal                  @default(0) @db.Decimal(15, 2)
+  /// Totals by accounting role (income tax already net of any tax credits).
+  employeeSocialSecurity    Decimal                  @default(0) @db.Decimal(15, 2)
+  pension                   Decimal                  @default(0) @db.Decimal(15, 2)
+  incomeTax                 Decimal                  @default(0) @db.Decimal(15, 2)
+  employerSocialSecurity    Decimal                  @default(0) @db.Decimal(15, 2)
   totalDeductions           Decimal                  @db.Decimal(15, 2)
   netSalary                 Decimal                  @db.Decimal(15, 2)
   createdAt                 DateTime                 @default(now())
@@ -1119,6 +1140,7 @@ model PayrollItem {
   employee       Employee               @relation(fields: [employeeId], references: [id])
   allowanceItems PayrollItemAllowance[]
   deductionItems PayrollItemDeduction[]
+  lines          PayrollItemLine[]
 
   @@unique([payrollRunId, employeeId])
   @@schema("hr")
@@ -1151,6 +1173,32 @@ model PayrollItemDeduction {
   payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, payrollItemId])
+  @@schema("hr")
+}
+
+/// One line of a payslip made with a payroll configuration: a component, the accounting role it
+/// posts to, and what it came to. Together the lines are the payslip, for any configuration.
+model PayrollItemLine {
+  id            String   @id @default(uuid())
+  tenantId      String
+  payrollItemId String
+  sortOrder     Int
+  componentId   String
+  code          String
+  name          String
+  kind          String
+  role          String?
+  amount        Decimal  @db.Decimal(15, 2)
+  /// Tax credits taken off this line (deductions only).
+  relief        Decimal  @default(0) @db.Decimal(15, 2)
+  /// False for a deduction that only lowers taxable income and is not taken from pay.
+  takenFromPay  Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollItemId])
+  @@index([tenantId, role])
   @@schema("hr")
 }
 

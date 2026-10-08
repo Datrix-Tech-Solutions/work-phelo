@@ -9,8 +9,6 @@ import {
 } from 'lucide-react';
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { usePayrollSettings } from '@/hooks';
-import { getPayrollLabels } from '@/lib/payrollDisplay';
 import { Permission } from '@/lib/permissionMap';
 
 /* ── Icons ── */
@@ -40,9 +38,6 @@ export function usePayrollSidebarGroups(tenantSlug: string): {
   const canViewHistory = canManagePayroll || canApprovePayroll;
   const canConfigurePayroll = usePermission(Permission.MANAGE_PAYROLL_SETTINGS);
 
-  const { data: payrollSettings } = usePayrollSettings();
-  const contributionsLabel = getPayrollLabels(payrollSettings?.payrollCountry).tabLabel;
-
   const base = `/${tenantSlug}/hr/payroll`;
 
   const groups: NavGroup[] = [
@@ -59,7 +54,7 @@ export function usePayrollSidebarGroups(tenantSlug: string): {
         },
         {
           key: 'contributions',
-          label: contributionsLabel,
+          label: 'Social security',
           icon: <ContributionsIcon />,
           href: `${base}/contributions`,
           enabled: canManagePayroll,

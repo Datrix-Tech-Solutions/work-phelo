@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InternalServiceClient } from '@work-phelo/internal-auth';
 
 const POST_ACCRUAL_PATH = '/internal/payroll-integration/post-accrual';
+const POST_ROLE_ACCRUAL_PATH =
+  '/internal/payroll-integration/post-role-accrual';
 const STATUS_PATH = '/internal/payroll-integration/status';
 
 export interface PostPayrollAccrualRequest {
@@ -16,6 +18,21 @@ export interface PostPayrollAccrualRequest {
   totalTier2: number;
   totalTier3: number;
   totalEmployerCost: number;
+  totalOtherDeductions: number;
+}
+
+/** A run made with payroll configurations, already totalled by accounting role. */
+export interface PostPayrollRoleAccrualRequest {
+  tenantId: string;
+  payrollRunId: string;
+  periodLabel: string;
+  transactionDate: string;
+  totalGross: number;
+  totalNet: number;
+  totalIncomeTax: number;
+  totalEmployeeSocialSecurity: number;
+  totalEmployerSocialSecurity: number;
+  totalPension: number;
   totalOtherDeductions: number;
 }
 
@@ -74,6 +91,17 @@ export class HrAccountingClient {
     actingUserId: string,
   ): Promise<unknown> {
     return this.http.post(POST_ACCRUAL_PATH, { body: payload, actingUserId });
+  }
+
+  /** Posts the accrual of a run made with payroll configurations, totalled by role. */
+  postPayrollRoleAccrual(
+    payload: PostPayrollRoleAccrualRequest,
+    actingUserId: string,
+  ): Promise<unknown> {
+    return this.http.post(POST_ROLE_ACCRUAL_PATH, {
+      body: payload,
+      actingUserId,
+    });
   }
 
   getPayrollSettlementStatus(tenantId: string, payrollRunId: string) {
