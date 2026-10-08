@@ -6,6 +6,7 @@ import { NumberField } from '@/components/atoms/NumberField';
 import {
   BASE_LABELS,
   INPUT_LABELS,
+  CURRENCIES,
   PAYSLIP_TYPES,
   PAYSLIP_TYPE_ORDER,
   formatAmount,
@@ -26,6 +27,7 @@ interface SamplePayslipProps {
   error: string | null;
   payslipType: PayslipTypeKey;
   onTypeChange: (type: PayslipTypeKey) => void;
+  onCurrencyChange: (currency: string) => void;
   inputs: PayInputs;
   onInputChange: (input: PayInput, value: number) => void;
   /** Amounts typed in for the variable components, by component id. */
@@ -206,6 +208,7 @@ export function SamplePayslip({
   error,
   payslipType,
   onTypeChange,
+  onCurrencyChange,
   inputs,
   onInputChange,
   variables,
@@ -226,6 +229,15 @@ export function SamplePayslip({
     <aside className={cardClass('p-4 lg:sticky lg:top-3')} aria-label="Sample payslip">
       <h2 className="text-base font-bold text-gray-900">Sample payslip</h2>
       <div className="mt-2">
+        <SearchSelect
+          label="Currency"
+          clearable={false}
+          options={CURRENCIES.map((c) => ({ value: c.code, label: c.code, sublabel: c.label }))}
+          value={currency}
+          onChange={(v) => v && onCurrencyChange(v)}
+        />
+      </div>
+      <div className="mt-3">
         <SearchSelect
           label="Payslip type"
           clearable={false}

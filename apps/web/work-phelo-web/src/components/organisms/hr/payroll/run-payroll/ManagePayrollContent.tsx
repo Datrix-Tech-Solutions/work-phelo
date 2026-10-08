@@ -11,7 +11,6 @@ import { NumberField } from '@/components/atoms/NumberField';
 import { Input } from '@/components/atoms/Input';
 import { Avatar } from '@/components/atoms/Avatar';
 import { TypeChip } from '@/components/atoms/TypeChip';
-import { usePayrollSettings } from '@/hooks';
 import { usePayrollRuns, useRunConfiguredPayroll } from '@/hooks/hr/usePayroll';
 import { useToast } from '@/hooks/useToast';
 import { ConfirmModal } from '@/components/organisms/hr/payroll/pay-components/ConfirmModal';
@@ -21,8 +20,8 @@ import {
   payrollConfigurationError,
   usePayrollConfigurations,
 } from '@/hooks/hr/usePayrollConfigurations';
-import { resolvePayrollCurrency } from '@/lib/payrollDisplay';
 import {
+  DEFAULT_CURRENCY,
   PAYSLIP_TYPES,
   PAYSLIP_TYPE_ORDER,
   formatAmount,
@@ -50,8 +49,6 @@ function monthEndIso(now = new Date()): string {
 /** Manage Payroll: each payslip type worked out from the employees in its payroll groups. */
 export function ManagePayrollContent() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const { data: settings } = usePayrollSettings();
-  const currency = resolvePayrollCurrency(settings?.payrollCurrency, settings?.payrollCountry);
   const { data: employeeData, isLoading: loadingEmployees } = useAllEmployees();
   const groupStore = usePayrollGroups();
   const configStore = usePayrollConfigurations();
@@ -89,6 +86,9 @@ export function ManagePayrollContent() {
   const visibleTypes = PAYSLIP_TYPE_ORDER.filter((key) => rows.some((r) => typeOf(r) === key));
   const tab = visibleTypes.includes(chosenTab) ? chosenTab : (visibleTypes[0] ?? chosenTab);
   const tabRows = rows.filter((r) => typeOf(r) === tab);
+  // A run is paid in one currency: the one its configurations share.
+  const tabCurrencies = [...new Set(tabRows.map((r) => r.configuration.currency))];
+  const currency = tabCurrencies[0] ?? DEFAULT_CURRENCY;
   const visibleRows = tabRows.filter((r) =>
     `${r.employee.firstName} ${r.employee.lastName}`
       .toLowerCase()
@@ -112,11 +112,13 @@ export function ManagePayrollContent() {
     ? 'Payroll for this month was already run in the old system. See History.'
     : locked
       ? null
-      : unassigned.length > 0
-        ? `Running is blocked until everyone on payroll has a payroll group (${unassigned.length} without one). Add them on Payroll Groups.`
-        : problems > 0
-          ? `${problems} ${problems === 1 ? 'payslip' : 'payslips'} can't be worked out yet. Open ${problems === 1 ? 'it' : 'them'} to see why.`
-          : null;
+      : tabCurrencies.length > 1
+        ? `${type.label} payroll uses configurations in different currencies (${tabCurrencies.join(', ')}). Use one currency for them.`
+        : unassigned.length > 0
+          ? `Running is blocked until everyone on payroll has a payroll group (${unassigned.length} without one). Add them on Payroll Groups.`
+          : problems > 0
+            ? `${problems} ${problems === 1 ? 'payslip' : 'payslips'} can't be worked out yet. Open ${problems === 1 ? 'it' : 'them'} to see why.`
+            : null;
 
   const runNow = async () => {
     try {

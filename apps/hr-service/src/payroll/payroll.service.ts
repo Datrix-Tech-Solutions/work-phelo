@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   UnprocessableEntityException,
+  Logger,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -96,6 +97,8 @@ type PayrollNotificationRecipient = {
 
 @Injectable()
 export class PayrollService {
+  private readonly logger = new Logger(PayrollService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
@@ -1239,7 +1242,7 @@ export class PayrollService {
     tenantId: string,
   ): Promise<
     | { mode: 'STANDALONE' }
-    | { mode: 'UNKNOWN'; message: string }
+    | { mode: 'UNKNOWN' }
     | { mode: 'ACCOUNTING'; ready: boolean; missingRoles: string[] }
   > {
     if (!this.accountingClient.isConfigured()) return { mode: 'STANDALONE' };
@@ -1253,10 +1256,13 @@ export class PayrollService {
         missingRoles: status.missingRoles.map((role) => role.label),
       };
     } catch (error) {
-      return {
-        mode: 'UNKNOWN',
-        message: error instanceof Error ? error.message : String(error),
-      };
+      // The detail is for the logs; the person approving only needs to know to try again.
+      this.logger.error(
+        `Accounting link check failed for tenant ${tenantId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { mode: 'UNKNOWN' };
     }
   }
 
@@ -1265,7 +1271,8 @@ export class PayrollService {
     if (check.mode === 'UNKNOWN') {
       throw new UnprocessableEntityException({
         code: 'ACCOUNTING_STATUS_UNAVAILABLE',
-        message: `Could not check whether payroll is linked to Accounting (${check.message}). Nothing was approved — try again.`,
+        message:
+          "Payroll couldn't confirm its link to Accounting just now. Nothing was approved. Please try again in a moment.",
       });
     }
     if (check.mode === 'ACCOUNTING' && !check.ready) {
@@ -1369,10 +1376,15 @@ export class PayrollService {
         actingUserId,
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Posting payroll run ${run.id} to accounting failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       throw new UnprocessableEntityException({
         code: 'ACCOUNTING_POSTING_FAILED',
-        message: `Could not post the payroll accrual to accounting: ${message}`,
+        message:
+          "Payroll couldn't be posted to Accounting just now. Nothing was approved. Please try again in a moment.",
       });
     }
   }

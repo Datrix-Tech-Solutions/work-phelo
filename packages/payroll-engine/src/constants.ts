@@ -230,3 +230,20 @@ export const COMPENSATION_PAYSLIP_TYPE: Record<CompensationType, PayslipTypeKey>
   COMMISSION: 'commission',
   SALARY_PLUS_COMMISSION: 'monthly_commission',
 };
+
+/** The currencies a configuration can pay in, with the country whose number formatting goes with each. */
+export const CURRENCIES = [
+  { code: 'GHS', label: 'Ghana cedi', country: 'GH' },
+  { code: 'NGN', label: 'Nigerian naira', country: 'NG' },
+  { code: 'KES', label: 'Kenyan shilling', country: 'KE' },
+] as const;
+
+export type CurrencyCode = (typeof CURRENCIES)[number]['code'];
+
+export const CURRENCY_CODES: CurrencyCode[] = CURRENCIES.map((c) => c.code);
+
+export const DEFAULT_CURRENCY: CurrencyCode = 'GHS';
+
+export function countryForCurrency(code: string): 'GH' | 'NG' | 'KE' {
+  return CURRENCIES.find((c) => c.code === code)?.country ?? 'GH';
+}

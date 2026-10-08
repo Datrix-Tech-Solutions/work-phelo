@@ -140,24 +140,33 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
   const first = runs[0];
   const active = runs.find((r) => r.id === chosen) ?? first;
 
+  const closeApproval = () => {
+    setApproving(false);
+    setFailures([]);
+  };
+
+  // Anything that goes wrong stays in the pop-up, where the person can read it and try again.
   const doApprove = async () => {
+    setFailures([]);
     try {
       const result = await approve.mutateAsync({
         month: first.month,
         year: first.year,
         note: approveNote.trim() || undefined,
       });
-      setApproving(false);
-      setApproveNote('');
-      setFailures(result.failed.map((f) => `${typeLabel(f.payslipType)}: ${f.message}`));
       if (result.approved.length) {
         toast.success(
           `Approved ${result.approved.length} ${result.approved.length === 1 ? 'run' : 'runs'}.`,
         );
       }
+      if (result.failed.length) {
+        setFailures(result.failed.map((f) => `${typeLabel(f.payslipType)}: ${f.message}`));
+      } else {
+        closeApproval();
+        setApproveNote('');
+      }
     } catch (e) {
-      setApproving(false);
-      toast.error(payrollConfigurationError(e, 'Could not approve payroll'));
+      setFailures([payrollConfigurationError(e, 'Could not approve payroll')]);
     }
   };
 
@@ -182,17 +191,6 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
         </Button>
       </div>
 
-      {failures.length > 0 && (
-        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-          <p className="font-medium">These could not be approved and are still waiting:</p>
-          <ul className="mt-1 list-disc pl-5">
-            {failures.map((message) => (
-              <li key={message}>{message}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {runs.map((run) => (
           <RunCard key={run.id} run={run} onReturn={setReturning} />
@@ -208,12 +206,12 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
 
       <Modal
         isOpen={approving}
-        onClose={() => setApproving(false)}
+        onClose={closeApproval}
         title="Approve payroll"
         description={`This approves ${runs.map((r) => typeLabel(r.payslipKey)).join(', ')} for ${periodLabel(first)}. Each posts to accounting if payroll is linked there.`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setApproving(false)}>
+            <Button variant="ghost" onClick={closeApproval}>
               Cancel
             </Button>
             <Button
@@ -226,7 +224,17 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
           </>
         }
       >
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col gap-3">
+          {failures.length > 0 && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="font-medium">These could not be approved and are still waiting:</p>
+              <ul className="mt-1 list-disc pl-5">
+                {failures.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <Input
             label="Note (optional)"
             value={approveNote}

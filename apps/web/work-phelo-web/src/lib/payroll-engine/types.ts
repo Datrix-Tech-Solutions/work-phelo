@@ -177,6 +177,8 @@ export interface SavedConfiguration {
   name: string;
   /** `null` when another configuration has taken over its payslip type. */
   payslipType: PayslipTypeKey | null;
+  /** The currency its payslips are paid in. */
+  currency: string;
   /** Oldest first. */
   versions: ConfigurationVersion[];
 }

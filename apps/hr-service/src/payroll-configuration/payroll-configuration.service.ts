@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  DEFAULT_CURRENCY,
   checkConfiguration,
   type PayComponent,
 } from '@work-phelo/payroll-engine';
@@ -46,6 +47,7 @@ export interface ConfigurationView {
   id: string;
   name: string;
   payslipType: PayslipTypeKey | null;
+  currency: string;
   /** Oldest first. */
   versions: ConfigurationVersionView[];
 }
@@ -89,6 +91,7 @@ function toView(row: ConfigurationRow): ConfigurationView {
     id: row.id,
     name: row.name,
     payslipType: row.payslipType ? ENUM_TO_TYPE[row.payslipType] : null,
+    currency: row.currency,
     versions: [...row.versions]
       .sort((a, b) => a.version - b.version)
       .map(toVersionView),
@@ -132,6 +135,7 @@ export class PayrollConfigurationService {
           tenantId,
           name: dto.name.trim(),
           payslipType: TYPE_TO_ENUM[dto.payslipType],
+          currency: dto.currency ?? DEFAULT_CURRENCY,
           createdBy: userId,
           versions: {
             create: {
@@ -152,7 +156,7 @@ export class PayrollConfigurationService {
 
   /**
    * Saves a configuration. Changed components publish a new version with its own effective date;
-   * with no component changes only the name and payslip type are updated.
+   * with no component changes only the name, payslip type and currency are updated.
    */
   async update(
     tenantId: string,
@@ -193,6 +197,7 @@ export class PayrollConfigurationService {
         data: {
           name: dto.name.trim(),
           payslipType: TYPE_TO_ENUM[dto.payslipType],
+          ...(dto.currency ? { currency: dto.currency } : {}),
           ...(changed
             ? {
                 versions: {

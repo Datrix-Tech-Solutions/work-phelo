@@ -91,10 +91,10 @@ function ProjectRow({
   const incompleteTasks = group.tasks.filter((t) => t.status !== 'DONE');
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="border border-gray-200 rounded-card overflow-hidden bg-white">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 bg-white hover:bg-gray-50 transition-colors text-left"
       >
         {expanded ? (
           <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
@@ -167,17 +167,17 @@ export function MyProjectsPanel({ isOpen, onClose, tenantSlug }: Props) {
       onClose={onClose}
       title="My Projects"
       description="Your active tasks across assigned projects."
+      width="sm:w-[480px]"
     >
       {isLoading ? (
         <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+            <div key={i} className="h-24 bg-gray-100 rounded-card animate-pulse" />
           ))}
         </div>
       ) : projectGroups.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
-          <p className="text-sm font-medium text-gray-900">All caught up!</p>
-          <p className="text-xs text-gray-400">You have no pending tasks assigned to you.</p>
+        <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+          <p className="text-sm text-gray-400">No pending tasks assigned to you</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

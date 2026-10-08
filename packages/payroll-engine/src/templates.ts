@@ -13,6 +13,8 @@ export interface PayrollTemplate {
   /** ISO country code the rules belong to. */
   country: 'GH' | 'NG' | 'KE';
   payslipType: PayslipTypeKey;
+  /** The currency the template's amounts and bands are written in. */
+  currency: string;
   description: string;
   /** Things the template does not cover, so nobody assumes it does. */
   notes: string[];
@@ -223,6 +225,7 @@ export const PAYROLL_TEMPLATES: PayrollTemplate[] = [
     name: 'Ghana',
     country: 'GH',
     payslipType: 'monthly',
+    currency: 'GHS',
     description: 'SSNIT Tier 1 and Tier 2, PAYE on the monthly bands and employer SSNIT.',
     notes: [
       'Transport allowance is tax exempt. Housing allowance is taxable.',
@@ -235,6 +238,7 @@ export const PAYROLL_TEMPLATES: PayrollTemplate[] = [
     name: 'Nigeria',
     country: 'NG',
     payslipType: 'monthly',
+    currency: 'NGN',
     description: 'Employee and employer pension, consolidated relief and PAYE on the annual bands.',
     notes: [
       'Follows the bands and relief of the old Nigeria calculator.',
@@ -248,6 +252,7 @@ export const PAYROLL_TEMPLATES: PayrollTemplate[] = [
     name: 'Kenya',
     country: 'KE',
     payslipType: 'monthly',
+    currency: 'KES',
     description: 'NSSF both sides, PAYE on the monthly bands and the personal relief.',
     notes: [
       'NSSF is 6% of pay up to 108,000.',
