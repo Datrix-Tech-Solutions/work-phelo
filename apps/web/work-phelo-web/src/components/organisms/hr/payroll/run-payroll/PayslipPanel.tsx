@@ -31,6 +31,8 @@ interface PayslipPanelProps {
   monthEnd: string;
   /** The figures typed in for this run can't change once it is with approval. */
   readOnly: boolean;
+  basic: number;
+  onBasic: (value: number) => void;
   commission: number;
   onCommission: (value: number) => void;
   amounts: Record<string, number>;
@@ -71,6 +73,8 @@ export function PayslipPanel({
   currency,
   monthEnd,
   readOnly,
+  basic,
+  onBasic,
   commission,
   onCommission,
   amounts,
@@ -144,10 +148,10 @@ export function PayslipPanel({
             input === 'basic' ? (
               <NumberField
                 key={input}
-                label={`${INPUT_LABELS.basic} (${currency}), from the employee record`}
-                value={Number(employee.basicSalary) || 0}
-                disabled
-                onChange={() => undefined}
+                label={`${INPUT_LABELS.basic} (${currency}) for this run`}
+                value={basic}
+                disabled={readOnly}
+                onChange={onBasic}
               />
             ) : (
               <NumberField
@@ -255,11 +259,7 @@ export function PayslipPanel({
               Earnings
             </h3>
             {type.inputs.includes('basic') && (
-              <Line
-                label="Basic salary"
-                amount={Number(employee.basicSalary) || 0}
-                currency={currency}
-              />
+              <Line label="Basic salary" amount={basic} currency={currency} />
             )}
             {earnings.map((c) => (
               <Line

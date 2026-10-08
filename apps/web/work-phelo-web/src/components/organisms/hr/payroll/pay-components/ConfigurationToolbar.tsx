@@ -14,6 +14,7 @@ interface ConfigurationToolbarProps {
   dirty: boolean;
   onOpen: (id: string) => void;
   onNew: () => void;
+  onTemplate: () => void;
   onSave: () => void;
   onDiscard: () => void;
 }
@@ -24,6 +25,7 @@ export function ConfigurationToolbar({
   dirty,
   onOpen,
   onNew,
+  onTemplate,
   onSave,
   onDiscard,
 }: ConfigurationToolbarProps) {
@@ -66,6 +68,9 @@ export function ConfigurationToolbar({
         )}
         <Button variant="outline" onClick={onNew}>
           New configuration
+        </Button>
+        <Button variant="outline" onClick={onTemplate}>
+          Use a template
         </Button>
         <Button onClick={onSave}>Save configuration</Button>
       </div>

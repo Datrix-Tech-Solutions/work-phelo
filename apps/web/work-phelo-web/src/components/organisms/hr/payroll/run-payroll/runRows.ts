@@ -26,6 +26,8 @@ export interface Row {
 }
 
 export interface RunFigures {
+  /** Basic salary changed for this run only, by employee id. The employee record is untouched. */
+  basic: Record<string, number>;
   /** The commission figure typed in for each employee this run. */
   commission: Record<string, number>;
   /** Amounts typed in for the "typed each run" components, by employee then component id. */
@@ -41,6 +43,11 @@ export function isOnPayroll(employee: Employee): boolean {
 }
 
 const sum = (list: number[]) => list.reduce((total, n) => total + n, 0);
+
+/** The basic salary for this run: what was typed in, otherwise the employee record's. */
+export function basicFor(employee: Employee, figures: RunFigures): number {
+  return figures.basic[employee.id] ?? (Number(employee.basicSalary) || 0);
+}
 
 /** What an employee has in allowances of the kind a component pays. */
 export function allowancesFor(employee: Employee, component: PayComponent) {
@@ -120,7 +127,7 @@ export function buildRows(input: {
         result = calculatePayslip(
           components,
           {
-            basic: type.inputs.includes('basic') ? Number(employee.basicSalary) || 0 : 0,
+            basic: type.inputs.includes('basic') ? basicFor(employee, figures) : 0,
             commission: type.inputs.includes('commission')
               ? (figures.commission[employee.id] ?? 0)
               : 0,

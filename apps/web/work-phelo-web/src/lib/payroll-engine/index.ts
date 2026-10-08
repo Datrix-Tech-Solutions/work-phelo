@@ -12,3 +12,4 @@ export * from './summary';
 export * from './validation';
 export * from './versions';
 export { evaluateFormula, formulaRefs } from './formula';
+export * from './templates';

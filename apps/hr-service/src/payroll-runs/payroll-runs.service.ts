@@ -193,6 +193,7 @@ export class PayrollRunsService {
 
     const commissionFigures = dto.commissionFigures ?? {};
     const runAmounts = dto.amounts ?? {};
+    const basicSalaries = dto.basicSalaries ?? {};
     const shortfalls: string[] = [];
 
     const payslips = members.map(({ employee, group, configuration }) => {
@@ -202,7 +203,10 @@ export class PayrollRunsService {
         ? Math.max(0, Number(commissionFigures[employee.id]) || 0)
         : 0;
       const basic = type.inputs.includes('basic')
-        ? Number(employee.basicSalary) || 0
+        ? Math.max(
+            0,
+            Number(basicSalaries[employee.id] ?? employee.basicSalary) || 0,
+          )
         : 0;
 
       const allowanceRecords = employee.allowances.map((a) => ({

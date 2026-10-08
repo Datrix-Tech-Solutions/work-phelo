@@ -59,6 +59,12 @@ function RunCard({ run, onReturn }: { run: PayrollRun; onReturn: (run: PayrollRu
           {formatAmount(n(run.totalEmployerCost), currency)}
         </dd>
       </dl>
+      {run.notes && (
+        <p className="rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
+          <span className="font-medium text-gray-700">Message: </span>
+          {run.notes}
+        </p>
+      )}
       <Button variant="outline" size="sm" onClick={() => onReturn(run)}>
         Return to draft
       </Button>

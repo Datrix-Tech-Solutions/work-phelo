@@ -2,7 +2,7 @@ import { DEFAULT_PARAMS, DEFAULT_ROLE, type ComponentTemplate } from './constant
 import type { PayBase, PayComponent, SavedPayComponent } from './types';
 
 let seq = 0;
-const uid = () => `pc_${Date.now().toString(36)}_${(seq++).toString(36)}`;
+export const newComponentId = () => `pc_${Date.now().toString(36)}_${(seq++).toString(36)}`;
 
 export function newComponent(
   tpl: ComponentTemplate,
@@ -34,7 +34,7 @@ export function newComponent(
       : undefined;
 
   return {
-    id: uid(),
+    id: newComponentId(),
     code,
     name: names[tpl.kind],
     kind: tpl.kind,
@@ -89,7 +89,7 @@ export function fromSaved(saved: SavedPayComponent, existing: PayComponent[]): P
   return {
     ...clone(saved.component),
     code,
-    id: uid(),
+    id: newComponentId(),
     enabled: true,
     sourceTemplateId: saved.id,
   };

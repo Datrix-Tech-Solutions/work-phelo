@@ -38,23 +38,12 @@ const COPY: Record<Kind, { amount: string; total: string; empty: string }> = {
   },
 };
 
-const PAYSLIP_LABELS: Record<string, string> = {
-  monthly: 'Salary',
-  commission: 'Commission',
-  monthly_commission: 'Salary + Commission',
-};
-
 function fmtStatus(status: string) {
   return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function runLabel(run: PayrollRun) {
   return payrollMonthLabel(run.month, run.year);
-}
-
-function runSublabel(run: PayrollRun) {
-  const type = run.payslipKey ? PAYSLIP_LABELS[run.payslipKey] : undefined;
-  return type ? `${type} · ${fmtStatus(run.status)}` : fmtStatus(run.status);
 }
 
 const num = (value?: string | null) => parseFloat(value || '0') || 0;
@@ -216,8 +205,7 @@ export function SocialSecurityContent() {
               placeholder="Select payroll run…"
               options={availableRuns.map<SearchSelectOption>((r) => ({
                 value: r.id,
-                label: runLabel(r),
-                sublabel: runSublabel(r),
+                label: `${runLabel(r)}, ${fmtStatus(r.status)}`,
               }))}
               value={selectedRunId || runId}
               onChange={(v) => setSelectedRunId(v)}

@@ -29,6 +29,7 @@ import {
   type PayComponent,
   type PayInput,
   type PayInputs,
+  type PayrollTemplate,
   type PayslipTypeKey,
   type SavedPayComponent,
   type VariableAmounts,
@@ -38,6 +39,7 @@ import { ComponentEditor } from './ComponentEditor';
 import { SamplePayslip } from './SamplePayslip';
 import { AddComponentModal } from './AddComponentModal';
 import { ConfigurationToolbar } from './ConfigurationToolbar';
+import { TemplatePickerModal } from './TemplatePickerModal';
 import { ConfigurationHistory } from './ConfigurationHistory';
 import { ConfirmModal } from './ConfirmModal';
 import { SaveConfigurationModal } from './SaveConfigurationModal';
@@ -62,6 +64,7 @@ export function PayComponentsWorkspace() {
   const [inputs, setInputs] = useState<PayInputs>({ basic: 5000, commission: 10000 });
   const [variables, setVariables] = useState<VariableAmounts>({});
   const [adding, setAdding] = useState(false);
+  const [pickingTemplate, setPickingTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'configuration' | 'history'>('configuration');
 
@@ -195,6 +198,19 @@ export function PayComponentsWorkspace() {
     });
   };
 
+  /** Begins a new configuration from a template's components, which are then the user's to change. */
+  const useTemplate = (template: PayrollTemplate) => {
+    setPickingTemplate(false);
+    guardUnsaved(() => {
+      const built = template.build();
+      setComponents(built);
+      setConfigId(null);
+      setSelectedId(built[0]?.id ?? null);
+      setPreviewType(template.payslipType);
+      toast.success(`${template.name} template loaded. Change what you need, then save it.`);
+    });
+  };
+
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const saveConfiguration = async (input: {
@@ -265,6 +281,7 @@ export function PayComponentsWorkspace() {
               dirty={dirty}
               onOpen={openConfiguration}
               onNew={newConfiguration}
+              onTemplate={() => setPickingTemplate(true)}
               onSave={() => setSaving(true)}
               onDiscard={discardChanges}
             />
@@ -300,9 +317,20 @@ export function PayComponentsWorkspace() {
                         ? 'Build the payslip one component at a time.'
                         : 'Select a component to edit it.'}
                     </p>
-                    <Button size="sm" onClick={() => setAdding(true)}>
-                      Add component
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => setAdding(true)}>
+                        Add component
+                      </Button>
+                      {components.length === 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setPickingTemplate(true)}
+                        >
+                          Start from a template
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </section>
@@ -343,6 +371,12 @@ export function PayComponentsWorkspace() {
           pendingDiscard?.();
           setPendingDiscard(null);
         }}
+      />
+
+      <TemplatePickerModal
+        isOpen={pickingTemplate}
+        onClose={() => setPickingTemplate(false)}
+        onPick={useTemplate}
       />
 
       <AddComponentModal
