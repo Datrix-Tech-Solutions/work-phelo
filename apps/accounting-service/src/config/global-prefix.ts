@@ -45,6 +45,14 @@ export const ACCOUNTING_GLOBAL_PREFIX_EXCLUSIONS: RouteInfo[] = [
     method: RequestMethod.POST,
   },
   {
+    path: 'internal/payroll-integration/post-role-accrual',
+    method: RequestMethod.POST,
+  },
+  {
+    path: 'internal/payroll-integration/status',
+    method: RequestMethod.GET,
+  },
+  {
     path: 'internal/payroll-integration/:payrollRunId/settlement-status',
     method: RequestMethod.GET,
   },

@@ -5,7 +5,11 @@ jest.mock('../messaging/rabbitmq.publisher', () => ({
 }));
 jest.mock('../payroll/payroll.service', () => ({ PayrollService: class {} }));
 
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { PayrollRunsService, monthEndIso } from './payroll-runs.service';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -104,6 +108,7 @@ const configRow = (over: Record<string, unknown> = {}) => ({
   tenantId: TENANT,
   name: 'Regular employees',
   payslipType: 'MONTHLY',
+  currency: 'GHS',
   versions: [
     {
       version: 1,
@@ -174,11 +179,6 @@ function build(
       findMany: jest
         .fn()
         .mockResolvedValue(options.configurations ?? [configRow()]),
-    },
-    tenantConfig: {
-      findUnique: jest
-        .fn()
-        .mockResolvedValue({ payrollCountry: 'GH', payrollCurrency: 'GHS' }),
     },
     $transaction: jest.fn(),
   };
@@ -334,6 +334,35 @@ describe('PayrollRunsService.run', () => {
     expect(items.map((i: { employeeId: string }) => i.employeeId)).toEqual([
       'kofi',
     ]);
+  });
+
+  it("pays in the configuration's currency", async () => {
+    const { service, prisma } = build({
+      configurations: [configRow({ currency: 'KES' })],
+    });
+
+    await service.run(TENANT, ACTOR, dto());
+
+    const data = prisma.payrollRun.create.mock.calls[0][0].data;
+    expect(data.payrollCurrency).toBe('KES');
+    expect(data.payrollCountry).toBe('KE');
+  });
+
+  it('refuses a run whose configurations are in different currencies', async () => {
+    const second = configRow({ id: 'cfg-2', name: 'Lagos', currency: 'NGN' });
+    const { service, prisma } = build({
+      employees: [
+        employee('kofi'),
+        employee('ade', { payrollGroupId: 'group-2' }),
+      ],
+      groups: [group(), group({ id: 'group-2', configurationId: 'cfg-2' })],
+      configurations: [configRow(), second],
+    });
+
+    await expect(service.run(TENANT, ACTOR, dto())).rejects.toThrow(
+      /different currencies \(GHS, NGN\)/,
+    );
+    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
   });
 
   it('refuses to run while anyone on payroll has no group', async () => {
@@ -539,7 +568,12 @@ describe('PayrollRunsService.approveMonth', () => {
       { id: 'r2', payslipKey: 'commission' },
     ]);
     payroll.approvePayroll
-      .mockRejectedValueOnce(new Error('Accounting could not be reached'))
+      .mockRejectedValueOnce(
+        new UnprocessableEntityException({
+          code: 'ACCOUNTING_NOT_READY',
+          message: 'No account is chosen for Net pay payable.',
+        }),
+      )
       .mockResolvedValueOnce({});
 
     const result = await service.approveMonth(TENANT, ACTOR, {
@@ -552,12 +586,31 @@ describe('PayrollRunsService.approveMonth', () => {
       {
         runId: 'r1',
         payslipType: 'monthly',
-        message: 'Accounting could not be reached',
+        message: 'No account is chosen for Net pay payable.',
       },
     ]);
     expect(payroll.approvePayroll).toHaveBeenCalledWith(TENANT, 'r1', ACTOR, {
       note: 'Approved',
     });
+  });
+
+  it('does not show an unexpected fault to the person approving', async () => {
+    const { service, prisma, payroll } = build();
+    prisma.payrollRun.findMany.mockResolvedValue([
+      { id: 'r1', payslipKey: 'monthly' },
+    ]);
+    payroll.approvePayroll.mockRejectedValueOnce(
+      new Error('connect ECONNREFUSED 127.0.0.1:3002'),
+    );
+
+    const result = await service.approveMonth(TENANT, ACTOR, {
+      month: 10,
+      year: 2026,
+    });
+
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].message).not.toContain('ECONNREFUSED');
+    expect(result.failed[0].message).toMatch(/something went wrong/i);
   });
 
   it('says so when nothing is waiting', async () => {

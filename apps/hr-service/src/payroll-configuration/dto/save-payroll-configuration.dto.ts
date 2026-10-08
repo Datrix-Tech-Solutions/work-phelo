@@ -11,6 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { CURRENCY_CODES } from '@work-phelo/payroll-engine';
 import {
   MAX_COMPONENTS,
   PAYSLIP_TYPE_KEYS,
@@ -32,6 +33,15 @@ export class SavePayrollConfigurationDto {
   })
   @IsIn(PAYSLIP_TYPE_KEYS)
   payslipType!: PayslipTypeKey;
+
+  @ApiPropertyOptional({
+    enum: CURRENCY_CODES,
+    description:
+      'The currency its payslips are paid in. Keeps the current one on an update, and is Ghana cedis on a new configuration, when left out.',
+  })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  currency?: string;
 
   @ApiProperty({
     type: 'array',

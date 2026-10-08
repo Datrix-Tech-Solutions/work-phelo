@@ -14,6 +14,7 @@ const config: SavedConfiguration = {
   id: 'cfg',
   name: 'Ghana',
   payslipType: 'monthly',
+  currency: 'GHS',
   versions: [
     {
       version: 1,

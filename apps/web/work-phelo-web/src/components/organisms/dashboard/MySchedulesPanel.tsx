@@ -60,7 +60,7 @@ function formatShortDate(iso: string): string {
 
 function ScheduleRow({ entry }: { entry: ScheduleEntry }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border border-gray-100 rounded-xl bg-gray-50">
+    <div className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-gray-500 w-20 shrink-0">{formatShortDate(entry.date)}</span>
         <span
@@ -274,23 +274,21 @@ export function MySchedulesPanel({ isOpen, onClose }: MySchedulesPanelProps) {
       onClose={onClose}
       title="My Schedules"
       description="Your upcoming shifts grouped by time period."
+      width="sm:w-[480px]"
     >
       {isLoading ? (
         <div className="flex flex-col gap-6">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="flex flex-col gap-2">
               <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-12 w-full rounded-xl" />
-              <Skeleton className="h-12 w-full rounded-xl" />
+              <Skeleton className="h-12 w-full rounded-card" />
+              <Skeleton className="h-12 w-full rounded-card" />
             </div>
           ))}
         </div>
       ) : allEntries.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
-          <p className="text-sm font-medium text-gray-600">No upcoming schedules</p>
-          <p className="text-xs text-gray-400">
-            You have no scheduled shifts for the coming period.
-          </p>
+        <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+          <p className="text-sm text-gray-400">No upcoming schedules</p>
         </div>
       ) : (
         <div className="flex flex-col gap-6">

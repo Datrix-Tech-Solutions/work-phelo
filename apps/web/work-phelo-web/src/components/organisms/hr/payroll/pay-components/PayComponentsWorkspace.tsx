@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { usePayrollSettings } from '@/hooks';
 import {
   payrollConfigurationError,
   usePayrollConfigurations,
@@ -9,12 +8,12 @@ import {
 import { useSavedPayComponents } from '@/hooks/hr/useSavedPayComponents';
 import { useToast } from '@/hooks/useToast';
 import { useUnsavedChangesGuard } from '@/hooks/hr/useUnsavedChangesGuard';
-import { resolvePayrollCurrency } from '@/lib/payrollDisplay';
 import { cardClass } from '@/lib/utils';
 import { Button } from '@/components/atoms/Button';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { pageContent } from '@/lib/layout';
 import {
+  DEFAULT_CURRENCY,
   PAYSLIP_TYPES,
   PayrollEngineError,
   calculatePayslip,
@@ -50,9 +49,6 @@ import { SaveConfigurationModal } from './SaveConfigurationModal';
  * types. State lives in the browser for now; the backend comes once the screens are settled.
  */
 export function PayComponentsWorkspace() {
-  const { data: settings } = usePayrollSettings();
-  const currency = resolvePayrollCurrency(settings?.payrollCurrency, settings?.payrollCountry);
-
   const toast = useToast();
   const savedStore = useSavedPayComponents();
   const configStore = usePayrollConfigurations();
@@ -60,6 +56,7 @@ export function PayComponentsWorkspace() {
   const [components, setComponents] = useState<PayComponent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [configId, setConfigId] = useState<string | null>(null);
+  const [currency, setCurrency] = useState<string>(DEFAULT_CURRENCY);
   const [previewType, setPreviewType] = useState<PayslipTypeKey>('monthly');
   const [inputs, setInputs] = useState<PayInputs>({ basic: 5000, commission: 10000 });
   const [variables, setVariables] = useState<VariableAmounts>({});
@@ -99,7 +96,8 @@ export function PayComponentsWorkspace() {
   const previewErrors = check.errors.filter((m) => m !== error);
 
   const dirty = current
-    ? !sameComponents(latestVersion(current).components, components)
+    ? !sameComponents(latestVersion(current).components, components) ||
+      current.currency !== currency
     : components.length > 0;
 
   const selected = components.find((c) => c.id === selectedId) ?? null;
@@ -174,6 +172,7 @@ export function PayComponentsWorkspace() {
         ? (JSON.parse(JSON.stringify(latestVersion(current).components)) as PayComponent[])
         : [];
       setComponents(saved);
+      setCurrency(current?.currency ?? DEFAULT_CURRENCY);
       setSelectedId(saved[0]?.id ?? null);
     });
 
@@ -184,6 +183,7 @@ export function PayComponentsWorkspace() {
       const copy = JSON.parse(JSON.stringify(latestVersion(target).components)) as PayComponent[];
       setComponents(copy);
       setConfigId(target.id);
+      setCurrency(target.currency ?? DEFAULT_CURRENCY);
       setSelectedId(copy[0]?.id ?? null);
       if (target.payslipType) setPreviewType(target.payslipType);
     });
@@ -194,6 +194,7 @@ export function PayComponentsWorkspace() {
     guardUnsaved(() => {
       setComponents([]);
       setConfigId(null);
+      setCurrency(DEFAULT_CURRENCY);
       setSelectedId(null);
     });
   };
@@ -205,6 +206,7 @@ export function PayComponentsWorkspace() {
       const built = template.build();
       setComponents(built);
       setConfigId(null);
+      setCurrency(template.currency);
       setSelectedId(built[0]?.id ?? null);
       setPreviewType(template.payslipType);
       toast.success(`${template.name} template loaded. Change what you need, then save it.`);
@@ -224,6 +226,7 @@ export function PayComponentsWorkspace() {
       const { id, published } = await configStore.save({
         id: configId ?? undefined,
         ...input,
+        currency,
         components,
         baseVersion: current ? latestVersion(current).version : undefined,
       });
@@ -241,6 +244,7 @@ export function PayComponentsWorkspace() {
     guardUnsaved(() => {
       const copy = JSON.parse(JSON.stringify(version.components)) as PayComponent[];
       setConfigId(configuration.id);
+      setCurrency(configuration.currency ?? DEFAULT_CURRENCY);
       setComponents(copy);
       setSelectedId(copy[0]?.id ?? null);
       if (configuration.payslipType) setPreviewType(configuration.payslipType);
@@ -341,6 +345,7 @@ export function PayComponentsWorkspace() {
                   result={result}
                   error={error}
                   payslipType={previewType}
+                  onCurrencyChange={setCurrency}
                   onTypeChange={setPreviewType}
                   inputs={inputs}
                   onInputChange={changeInput}

@@ -24,8 +24,6 @@ interface MyTeamCardProps {
   viewAllHref: string;
 }
 
-const VISIBLE = 6;
-
 const STATUS: Record<string, { label: string; pill: string; dot: string }> = {
   ACTIVE: {
     label: 'Available',
@@ -50,11 +48,8 @@ const STATUS: Record<string, { label: string; pill: string; dot: string }> = {
 };
 
 export function MyTeamCard({ members, departmentName, viewAllHref }: MyTeamCardProps) {
-  const shown = members.slice(0, VISIBLE);
-  const extra = members.length - shown.length;
-
   return (
-    <div className={cardClass('p-3 flex flex-col shrink-0 border-gray-200')}>
+    <div className={cardClass('p-3 flex flex-col min-h-0 max-h-96 lg:max-h-none border-gray-200')}>
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-baseline gap-2 min-w-0">
@@ -77,16 +72,16 @@ export function MyTeamCard({ members, departmentName, viewAllHref }: MyTeamCardP
       <div className="h-px bg-gray-100 -mx-5 shrink-0" />
 
       {/* Roster */}
-      {shown.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+      {members.length === 0 ? (
+        <div className="flex flex-col items-center justify-center flex-1 gap-2 py-8 text-center">
           <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
             <Users className="w-5 h-5 text-gray-400" />
           </div>
           <p className="text-sm text-gray-400">No one else in your department yet.</p>
         </div>
       ) : (
-        <div className="flex flex-col divide-y divide-gray-100">
-          {shown.map((m) => {
+        <div className="flex flex-col divide-y divide-gray-100 flex-1 min-h-0 overflow-y-auto">
+          {members.map((m) => {
             const s = STATUS[m.status] ?? STATUS.ACTIVE;
             return (
               <div key={m.id} className="flex items-center gap-3 py-2.5">
@@ -114,15 +109,6 @@ export function MyTeamCard({ members, departmentName, viewAllHref }: MyTeamCardP
               </div>
             );
           })}
-
-          {extra > 0 && (
-            <Link
-              href={viewAllHref}
-              className="py-2.5 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              +{extra} more
-            </Link>
-          )}
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsNotEmpty,
   IsNotEmptyObject,
   IsNumber,
@@ -93,6 +94,17 @@ export class CreateClientDto {
   @IsUUID('all', { each: true })
   productIds?: string[];
 
+  @ApiPropertyOptional({
+    type: () => [AddClientProductDto],
+    description:
+      'Products/services with their expected revenue, commission rate and expected close date. Use this or productIds, not both.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AddClientProductDto)
+  products?: AddClientProductDto[];
+
   @ApiProperty({ type: CreateProspectLocationDto })
   @IsNotEmptyObject()
   @ValidateNested()
@@ -154,4 +166,9 @@ export class AddClientProductDto {
   @Min(0)
   @Max(100)
   commissionRate?: number;
+
+  @ApiPropertyOptional({ example: '2026-10-31' })
+  @IsOptional()
+  @IsDateString()
+  expectedCloseDate?: string;
 }

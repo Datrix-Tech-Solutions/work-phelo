@@ -142,8 +142,8 @@ export function QuickActionsCard({
     'group relative flex w-full items-center gap-3 rounded-2xl border border-(--qa-tile-border,rgba(255,255,255,0.4)) bg-(--qa-tile-bg,rgba(255,255,255,0.95)) px-3 py-2.5 text-left shadow-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-1 hover:bg-(--tint) hover:shadow-lg';
 
   return (
-    <QuickActionsPanel>
-      <div className="flex flex-col gap-2.5">
+    <QuickActionsPanel className="min-h-0 shrink">
+      <div className="flex flex-col gap-2.5 min-h-0 overflow-y-auto">
         {visible.map(({ key, label, icon: Icon, color, onClick, badge }) => (
           <button
             key={key}

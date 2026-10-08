@@ -17,14 +17,9 @@ interface OnLeaveCardProps {
   people: OnLeavePerson[];
 }
 
-const VISIBLE = 6;
-
 export function OnLeaveCard({ people }: OnLeaveCardProps) {
-  const shown = people.slice(0, VISIBLE);
-  const extra = people.length - shown.length;
-
   return (
-    <div className={cardClass('p-3 flex flex-col shrink-0 border-gray-200')}>
+    <div className={cardClass('p-3 flex flex-col min-h-0 max-h-96 lg:max-h-none border-gray-200')}>
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <h2 className="text-base font-bold text-(--module-btn-bg,var(--color-brand))">On Leave</h2>
@@ -34,16 +29,16 @@ export function OnLeaveCard({ people }: OnLeaveCardProps) {
       <div className="h-px bg-gray-100 -mx-5 shrink-0" />
 
       {/* List */}
-      {shown.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+      {people.length === 0 ? (
+        <div className="flex flex-col items-center justify-center flex-1 gap-2 py-8 text-center">
           <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
             <CalendarClock className="w-5 h-5 text-gray-400" />
           </div>
           <p className="text-sm text-gray-400">No one is on leave today.</p>
         </div>
       ) : (
-        <div className="flex flex-col divide-y divide-gray-100">
-          {shown.map((p) => (
+        <div className="flex flex-col divide-y divide-gray-100 flex-1 min-h-0 overflow-y-auto">
+          {people.map((p) => (
             <div key={p.id} className="flex items-center gap-3 py-2.5">
               <Avatar name={p.name} avatarUrl={p.avatarUrl} size={36} />
               <div className="min-w-0 flex-1">
@@ -52,8 +47,6 @@ export function OnLeaveCard({ people }: OnLeaveCardProps) {
               </div>
             </div>
           ))}
-
-          {extra > 0 && <p className="py-2.5 text-xs font-medium text-gray-400">+{extra} more</p>}
         </div>
       )}
     </div>

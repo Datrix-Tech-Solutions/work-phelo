@@ -57,6 +57,7 @@ const configRow = (
   tenantId: TENANT,
   name: 'Ghana monthly payroll',
   payslipType,
+  currency: 'GHS',
   createdBy: USER,
   createdAt: new Date('2026-10-01T09:00:00.000Z'),
   updatedAt: new Date('2026-10-01T09:00:00.000Z'),
@@ -149,6 +150,21 @@ describe('PayrollConfigurationService', () => {
         createdBy: USER,
       });
       expect(result.published).toBe(true);
+    });
+
+    it('saves the currency it was given, and cedis when none was', async () => {
+      prisma.payrollConfiguration.create.mockImplementation(async ({ data }) =>
+        configRow([
+          versionRow(1, '2026-10-01', data.versions.create.components),
+        ]),
+      );
+
+      await service.create(TENANT, USER, dto({ currency: 'KES' }));
+      await service.create(TENANT, USER, dto());
+
+      const calls = prisma.payrollConfiguration.create.mock.calls;
+      expect(calls[0][0].data.currency).toBe('KES');
+      expect(calls[1][0].data.currency).toBe('GHS');
     });
 
     it('needs an effective date', async () => {
@@ -255,6 +271,20 @@ describe('PayrollConfigurationService', () => {
 
       const data = prisma.payrollConfiguration.update.mock.calls[0][0].data;
       expect(data.name).toBe('Renamed');
+      expect(data.versions).toBeUndefined();
+      expect(result.published).toBe(false);
+    });
+
+    it('changes only the currency without publishing a version', async () => {
+      const result = await service.update(
+        TENANT,
+        USER,
+        'cfg-1',
+        dto({ currency: 'NGN', effectiveFrom: undefined, baseVersion: 1 }),
+      );
+
+      const data = prisma.payrollConfiguration.update.mock.calls[0][0].data;
+      expect(data.currency).toBe('NGN');
       expect(data.versions).toBeUndefined();
       expect(result.published).toBe(false);
     });
