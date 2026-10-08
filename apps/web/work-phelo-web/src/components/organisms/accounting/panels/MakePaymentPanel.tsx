@@ -25,6 +25,7 @@ import {
   useCashAccountOptions,
   useCompletePaymentRequest,
   useGLAccountOptions,
+  useTaxTypes,
   useTransactionTypeRules,
   useCreatePayablePayment,
   useCreateReceivableReceipt,
@@ -197,6 +198,8 @@ export function MakePaymentPanel({
   // its settlement lines as ticks; the user can untick them or add one-off lines.
   const { data: rules = [] } = useTransactionTypeRules();
   const { options: glAccountOptions, isLoading: isLoadingGlAccounts } = useGLAccountOptions();
+  const { data: taxTypes = [] } = useTaxTypes();
+  const paymentDate = useWatch({ control, name: 'paymentDate' });
   const rule = useMemo(
     () => rules.find((r) => r.transactionTypeId === document?.transactionTypeId),
     [rules, document?.transactionTypeId],
@@ -490,6 +493,8 @@ export function MakePaymentPanel({
                 currency={document.currency}
                 accountOptions={glAccountOptions}
                 isLoadingAccounts={isLoadingGlAccounts}
+                taxTypes={taxTypes}
+                settlementDate={paymentDate}
               />
               {activeAdjustments.length > 0 && (
                 <div className="flex flex-col gap-1 rounded-xl bg-gray-50 px-3 py-2 text-sm">

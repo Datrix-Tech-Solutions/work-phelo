@@ -211,7 +211,11 @@ export function TradeDocumentDetailPanel({
     return {
       key: line.glAccountId + line.taxTypeId,
       accountLabel: account ? `${account.code} – ${account.name}` : line.glAccountId,
-      taxTypeLabel: taxType?.name ?? null,
+      taxTypeLabel:
+        line.kind === 'DEDUCTION' || line.kind === 'CHARGE' ? null : (taxType?.name ?? null),
+      kind: line.kind ?? 'TAX',
+      note: line.description ?? null,
+      direction: line.direction ?? null,
       amount: line.amount,
     };
   });
@@ -428,21 +432,57 @@ export function TradeDocumentDetailPanel({
                   {fmtAmount(document.totalAmount, document.currency)}
                 </span>
 
-                <span className="text-gray-900">
-                  {document.offsetGlAccount.code} – {document.offsetGlAccount.name}
-                </span>
-                <span className="text-gray-700">{offsetDirection}</span>
-                <span className="text-right text-gray-900">
-                  {fmtAmount(document.subtotalAmount, document.currency)}
-                </span>
+                {document.lines.length > 0 ? (
+                  document.lines.map((item) => (
+                    <Fragment key={item.id}>
+                      <span className="text-gray-900">
+                        {item.glAccount.code} – {item.glAccount.name}
+                        {item.description && (
+                          <span className="ml-2 text-xs text-gray-500">{item.description}</span>
+                        )}
+                        {item.costCentre && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            · {item.costCentre.code}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-gray-700">{offsetDirection}</span>
+                      <span className="text-right text-gray-900">
+                        {fmtAmount(item.amount, document.currency)}
+                      </span>
+                    </Fragment>
+                  ))
+                ) : (
+                  <>
+                    <span className="text-gray-900">
+                      {document.offsetGlAccount.code} – {document.offsetGlAccount.name}
+                    </span>
+                    <span className="text-gray-700">{offsetDirection}</span>
+                    <span className="text-right text-gray-900">
+                      {fmtAmount(document.subtotalAmount, document.currency)}
+                    </span>
+                  </>
+                )}
 
                 {taxLines.map((line) => (
                   <Fragment key={line.key}>
                     <span className="text-gray-900">
                       {line.accountLabel}
                       {line.taxTypeLabel ? ` (${line.taxTypeLabel})` : ''}
+                      {line.kind !== 'TAX' && (
+                        <span className="ml-2 text-xs font-medium text-gray-500">
+                          {line.kind === 'DEDUCTION' ? 'Deduction' : 'Charge'}
+                          {line.note ? ` · ${line.note}` : ''}
+                        </span>
+                      )}
                     </span>
-                    <span className="text-gray-700">{offsetDirection}</span>
+                    <span className="text-gray-700">
+                      {line.direction
+                        ? line.direction === 'DR'
+                          ? 'Debit'
+                          : 'Credit'
+                        : offsetDirection}
+                    </span>
                     <span className="text-right text-gray-900">
                       {fmtAmount(line.amount, document.currency)}
                     </span>

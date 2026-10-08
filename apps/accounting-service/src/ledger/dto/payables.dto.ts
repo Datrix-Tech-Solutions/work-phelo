@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -20,6 +21,11 @@ import {
   AccountingSettlementMethod,
 } from '../../../prisma/generated/client';
 import { SettlementAdjustmentDto } from './cashbook.dto';
+import {
+  DocumentAdjustmentDto,
+  DocumentTaxDto,
+} from './document-adjustments.dto';
+import { DocumentLineDto } from './document-lines.dto';
 
 const uppercase = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
@@ -47,15 +53,30 @@ export class CreatePayableBillDto {
   @Length(3, 3)
   currency!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 1000,
     minimum: 0.0001,
-    description: 'The subtotal, before any tax lines the rule adds on top.',
+    description:
+      'The subtotal, before any taxes, deductions or charges. Required unless `lines` is sent; with `lines` it is optional and, when sent, must equal their sum.',
   })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
-  amount!: number;
+  amount?: number;
+
+  @ApiPropertyOptional({
+    type: [DocumentLineDto],
+    description:
+      "The items on the document, each with its own account (inside the rule's scope), amount and optional cost centre. The subtotal is their sum. Send this instead of `amount`, `quantity`, `unitPrice`, `offsetGlAccountId` and `costCentreId`.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentLineDto)
+  lines?: DocumentLineDto[];
 
   @ApiPropertyOptional({
     example: 2,
@@ -102,6 +123,30 @@ export class CreatePayableBillDto {
   @IsOptional()
   @IsUUID()
   offsetGlAccountId?: string;
+
+  @ApiPropertyOptional({
+    type: [DocumentTaxDto],
+    description:
+      'Taxes added on the form: a tax type and the account it posts to. Each amount is the tax type rate × the amount, worked out by the server.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentTaxDto)
+  taxes?: DocumentTaxDto[];
+
+  @ApiPropertyOptional({
+    type: [DocumentAdjustmentDto],
+    description:
+      'Deductions (reduce what is owed) and charges (add to it) added on the form. The total is the amount, plus taxes and charges, less deductions.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentAdjustmentDto)
+  adjustments?: DocumentAdjustmentDto[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -171,11 +216,17 @@ export class CreatePayableCreditNoteDto extends PartialType(
   @Length(3, 3)
   currency!: string;
 
-  @ApiProperty({ example: 250, minimum: 0.0001 })
+  @ApiPropertyOptional({
+    example: 250,
+    minimum: 0.0001,
+    description:
+      'Required unless `lines` is sent (a Rule-driven note); with `lines` it must equal their sum.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
-  amount!: number;
+  amount?: number;
 
   @ApiPropertyOptional({ example: 0, minimum: 0 })
   @IsOptional()

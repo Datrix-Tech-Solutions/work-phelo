@@ -84,6 +84,7 @@ export class TransactionTypeRulesService {
 
   async createTaxType(user: RequestUser, dto: CreateTaxTypeDto) {
     try {
+      await this.assertTaxAccounts(user.tenantId, dto);
       const taxType = await this.prisma.taxType.create({
         data: {
           tenantId: user.tenantId,
@@ -92,6 +93,8 @@ export class TransactionTypeRulesService {
           rate: dto.rate,
           effectiveFrom: new Date(dto.effectiveFrom),
           effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+          payableAccountId: dto.payableAccountId ?? null,
+          receivableAccountId: dto.receivableAccountId ?? null,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -113,6 +116,7 @@ export class TransactionTypeRulesService {
   ) {
     const taxType = await this.findTaxType(user.tenantId, taxTypeId);
     try {
+      await this.assertTaxAccounts(user.tenantId, dto);
       const updated = await this.prisma.taxType.update({
         where: { id_tenantId: { id: taxType.id, tenantId: user.tenantId } },
         data: {
@@ -128,6 +132,12 @@ export class TransactionTypeRulesService {
               }
             : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          ...(dto.payableAccountId !== undefined
+            ? { payableAccountId: dto.payableAccountId }
+            : {}),
+          ...(dto.receivableAccountId !== undefined
+            ? { receivableAccountId: dto.receivableAccountId }
+            : {}),
           updatedByUserId: user.id,
         },
       });
@@ -162,6 +172,19 @@ export class TransactionTypeRulesService {
     });
   }
 
+  /** The default accounts must exist for this tenant; the forms re-check they can be posted to. */
+  private async assertTaxAccounts(
+    tenantId: string,
+    dto: {
+      payableAccountId?: string | null;
+      receivableAccountId?: string | null;
+    },
+  ) {
+    for (const accountId of [dto.payableAccountId, dto.receivableAccountId]) {
+      if (accountId) await this.masterData.findGLAccount(tenantId, accountId);
+    }
+  }
+
   private async findTaxType(tenantId: string, id: string) {
     const taxType = await this.prisma.taxType.findFirst({
       where: { id, tenantId },
@@ -178,6 +201,8 @@ export class TransactionTypeRulesService {
     effectiveFrom: Date;
     effectiveTo: Date | null;
     isActive: boolean;
+    payableAccountId: string | null;
+    receivableAccountId: string | null;
   }) {
     return {
       id: taxType.id,
@@ -189,6 +214,8 @@ export class TransactionTypeRulesService {
         ? taxType.effectiveTo.toISOString()
         : null,
       isActive: taxType.isActive,
+      payableAccountId: taxType.payableAccountId,
+      receivableAccountId: taxType.receivableAccountId,
     };
   }
 

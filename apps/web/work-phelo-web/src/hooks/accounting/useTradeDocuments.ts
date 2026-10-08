@@ -112,6 +112,7 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     offsetGlAccount: raw.offsetGlAccount,
     costCentre: raw.costCentre ?? null,
     controlAccount: raw.arAccount ?? raw.apAccount,
+    lines: raw.lines ?? [],
     taxBreakdown: raw.taxBreakdown ?? [],
     postedJournalEntry: raw.postedJournalEntry ?? null,
     reversalJournalEntry: raw.reversalJournalEntry ?? null,
