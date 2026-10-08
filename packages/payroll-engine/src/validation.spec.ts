@@ -1,5 +1,12 @@
 import { checkConfiguration, checkReminders } from './validation';
-import { component, ghanaMonthly, paye, ssnitEmployer, ssnitTier1 } from './payroll.fixtures';
+import {
+  component,
+  ghanaMonthly,
+  paye,
+  ssnitEmployer,
+  ssnitTier1,
+  tier3Pension,
+} from './payroll.fixtures';
 
 const commissionEarning = () =>
   component({
@@ -180,7 +187,7 @@ describe('checkReminders', () => {
       method: 'variable',
       role: 'other_deductions',
     });
-    const all = [...ghanaMonthly(), loan];
+    const all = [...ghanaMonthly(), tier3Pension(), loan];
     expect(checkReminders(all)).toEqual([]);
     expect(checkReminders([paye(), ssnitEmployer()])[0]).not.toContain('Income tax');
   });

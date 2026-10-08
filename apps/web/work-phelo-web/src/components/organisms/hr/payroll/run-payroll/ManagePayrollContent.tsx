@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { TrendingDown, TrendingUp, Users } from 'lucide-react';
@@ -10,9 +10,15 @@ import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { NumberField } from '@/components/atoms/NumberField';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { usePayrollSettings } from '@/hooks';
+import { usePayrollRuns, useRunConfiguredPayroll } from '@/hooks/hr/usePayroll';
+import { useToast } from '@/hooks/useToast';
+import { ConfirmModal } from '@/components/organisms/hr/payroll/pay-components/ConfirmModal';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
 import { usePayrollGroups } from '@/hooks/hr/usePayrollGroups';
-import { usePayrollConfigurations } from '@/hooks/hr/usePayrollConfigurations';
+import {
+  payrollConfigurationError,
+  usePayrollConfigurations,
+} from '@/hooks/hr/usePayrollConfigurations';
 import { resolvePayrollCurrency } from '@/lib/payrollDisplay';
 import {
   PAYSLIP_TYPES,
@@ -24,6 +30,13 @@ import {
 } from '@/lib/payroll-engine';
 import { buildRows, type RunFigures, type Row } from './runRows';
 import { PayslipPanel } from './PayslipPanel';
+
+const STATUS_LABELS = {
+  DRAFT: { label: 'Returned to draft', color: 'gray' },
+  PENDING_APPROVAL: { label: 'Waiting for approval', color: 'amber' },
+  APPROVED: { label: 'Approved', color: 'green' },
+  PAID: { label: 'Paid', color: 'green' },
+} as const;
 
 /** The last day of this month, which decides which version of each configuration applies. */
 function monthEndIso(now = new Date()): string {
@@ -38,28 +51,28 @@ export function ManagePayrollContent() {
   const { data: employeeData, isLoading: loadingEmployees } = useAllEmployees();
   const groupStore = usePayrollGroups();
   const configStore = usePayrollConfigurations();
+  const { data: allRuns = [] } = usePayrollRuns();
+  const runPayroll = useRunConfiguredPayroll();
+  const toast = useToast();
 
   const [tab, setTab] = useState<PayslipTypeKey>('monthly');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [figures, setFigures] = useState<RunFigures>({ commission: {}, amounts: {} });
+  const [confirmingRun, setConfirmingRun] = useState(false);
 
   const now = new Date();
   const period = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   const monthEnd = monthEndIso(now);
   const loading = loadingEmployees || groupStore.isLoading || configStore.isLoading;
 
-  const { rows } = useMemo(
-    () =>
-      buildRows({
-        employees: employeeData?.data ?? [],
-        groups: groupStore.groups,
-        configurations: configStore.configurations,
-        figures,
-        monthEnd,
-      }),
-    [employeeData, groupStore.groups, configStore.configurations, figures, monthEnd],
-  );
+  const { rows, unassigned } = buildRows({
+    employees: employeeData?.data ?? [],
+    groups: groupStore.groups,
+    configurations: configStore.configurations,
+    figures,
+    monthEnd,
+  });
 
   const typeOf = (row: Row) => row.configuration.payslipType!;
   const tabRows = rows.filter((r) => typeOf(r) === tab);
@@ -74,6 +87,44 @@ export function ManagePayrollContent() {
   const hasAllowances = tabRows.some((r) =>
     r.components.some((c) => c.enabled && c.params.source === 'allowance'),
   );
+
+  // What has already been run for this month: each payslip type is its own run.
+  const monthRuns = allRuns.filter(
+    (r) => r.month === now.getMonth() + 1 && r.year === now.getFullYear(),
+  );
+  const oldSystemRun = monthRuns.find((r) => !r.payslipKey || r.payslipKey === 'legacy');
+  const tabRun = monthRuns.find((r) => r.payslipKey === tab);
+  // Once a run is with approval (or beyond) its figures are fixed; a run returned to draft can change.
+  const locked = !!tabRun && tabRun.status !== 'DRAFT';
+  const problems = tabRows.filter((r) => r.problem).length;
+  const blockedReason = oldSystemRun
+    ? 'Payroll for this month was already run in the old system. See History.'
+    : locked
+      ? null
+      : unassigned.length > 0
+        ? `Running is blocked until everyone on payroll has a payroll group (${unassigned.length} without one). Add them on Payroll Groups.`
+        : problems > 0
+          ? `${problems} ${problems === 1 ? 'payslip' : 'payslips'} can't be worked out yet. Open ${problems === 1 ? 'it' : 'them'} to see why.`
+          : null;
+
+  const runNow = async () => {
+    try {
+      await runPayroll.mutateAsync({
+        payslipType: tab,
+        month: now.getMonth() + 1,
+        year: now.getFullYear(),
+        commissionFigures: Object.fromEntries(
+          tabRows.map((r) => [r.id, figures.commission[r.id] ?? 0]),
+        ),
+        amounts: Object.fromEntries(tabRows.map((r) => [r.id, figures.amounts[r.id] ?? {}])),
+      });
+      setConfirmingRun(false);
+      toast.success(`${type.label} payroll sent for approval.`);
+    } catch (e) {
+      setConfirmingRun(false);
+      toast.error(payrollConfigurationError(e, 'Could not run payroll'));
+    }
+  };
 
   const total = (pick: (r: PayslipResult) => number, list: Row[] = tabRows) =>
     list.reduce((sum, r) => sum + (r.result ? pick(r.result) : 0), 0);
@@ -137,6 +188,7 @@ export function ManagePayrollContent() {
                 <NumberField
                   ariaLabel={`${r.employee.firstName} ${r.employee.lastName} commission figure`}
                   value={figures.commission[r.id] ?? 0}
+                  disabled={locked}
                   onChange={(value) => setCommission(r.id, value)}
                 />
               </div>
@@ -220,8 +272,31 @@ export function ManagePayrollContent() {
               month: 'short',
               year: 'numeric',
             })}
-            . Running payroll comes with stored runs, which are the next step.
+            .
           </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {tabRun ? (
+            <>
+              <TypeChip
+                label={STATUS_LABELS[tabRun.status].label}
+                color={STATUS_LABELS[tabRun.status].color}
+              />
+              {locked && (
+                <span className="text-gray-500">
+                  The figures are locked while it is with approval or beyond.
+                </span>
+              )}
+              {!locked && (
+                <span className="text-gray-500">
+                  It was returned to draft. Run it again when ready.
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-gray-500">{type.label} payroll has not been run yet.</span>
+          )}
+          {blockedReason && <span className="text-amber-700">{blockedReason}</span>}
         </div>
       </div>
 
@@ -272,9 +347,12 @@ export function ManagePayrollContent() {
         searchValue={search}
         onSearch={setSearch}
         actionButton={{
-          label: `Run ${type.label} payroll`,
-          onClick: () => undefined,
-          disabled: true,
+          label:
+            tabRun?.status === 'DRAFT'
+              ? `Run ${type.label} payroll again`
+              : `Run ${type.label} payroll`,
+          onClick: () => setConfirmingRun(true),
+          disabled: locked || !!blockedReason || tabRows.length === 0 || runPayroll.isPending,
         }}
         onRowClick={(r) => setSelectedId(r.id)}
         emptyMessage={`No one is paid ${type.label.toLowerCase()} through a payroll group yet.`}
@@ -284,13 +362,22 @@ export function ManagePayrollContent() {
         noInternalScroll
       />
 
+      <ConfirmModal
+        isOpen={confirmingRun}
+        title={`Run ${type.label} payroll?`}
+        description={`${tabRows.length} ${tabRows.length === 1 ? 'payslip' : 'payslips'} for ${period} will be worked out and sent for approval. After that the figures are locked.`}
+        confirmLabel={runPayroll.isPending ? 'Running…' : 'Run payroll'}
+        onCancel={() => setConfirmingRun(false)}
+        onConfirm={() => void runNow()}
+      />
+
       {selected && (
         <PayslipPanel
           key={selected.id}
           row={selected}
           currency={currency}
           monthEnd={monthEnd}
-          readOnly={false}
+          readOnly={locked}
           commission={figures.commission[selected.id] ?? 0}
           onCommission={(value) => setCommission(selected.id, value)}
           amounts={figures.amounts[selected.id] ?? {}}

@@ -55,8 +55,21 @@ export const ssnitTier2 = () =>
     name: 'SSNIT Tier 2',
     kind: 'deduction',
     method: 'percent',
-    role: 'pension',
+    // Tier 2 is remitted to SSNIT with Tier 1, so it is paid to the same recipient.
+    role: 'employee_social_security',
     params: { rate: 5, baseCap: 69000 },
+    tags: { reducesTaxable: true },
+  });
+
+/** The voluntary tier 3 pension, paid straight to a private fund. */
+export const tier3Pension = () =>
+  component({
+    code: 'TIER3',
+    name: 'Tier 3 pension',
+    kind: 'deduction',
+    method: 'percent',
+    role: 'pension',
+    params: { rate: 5 },
     tags: { reducesTaxable: true },
   });
 

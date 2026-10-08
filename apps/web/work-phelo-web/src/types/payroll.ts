@@ -45,6 +45,14 @@ export interface PayrollRun {
   tier3Enabled: boolean;
   tier3Rate?: string | null;
   tier3SchemeName?: string | null;
+  /** "legacy" for runs made by the old calculators; otherwise the payslip type the run is for. */
+  payslipKey?: string;
+  /** Totals by accounting role, for runs made with payroll configurations. */
+  totalEmployeeSocialSecurity?: string;
+  totalPension?: string;
+  totalIncomeTax?: string;
+  totalOtherDeductions?: string;
+  totalEmployerSocialSecurity?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -81,6 +89,22 @@ export interface PayrollItemDeduction {
   amount: string;
 }
 
+/** One line of a payslip made with a payroll configuration. */
+export interface PayrollItemLine {
+  id: string;
+  payrollItemId: string;
+  sortOrder: number;
+  componentId: string;
+  code: string;
+  name: string;
+  kind: 'earning' | 'deduction' | 'credit' | 'employer';
+  /** The accounting role the line posts to. Tax credits have none. */
+  role: string | null;
+  amount: string;
+  relief: string;
+  takenFromPay: boolean;
+}
+
 export interface PayrollItem {
   id: string;
   tenantId: string;
@@ -93,6 +117,15 @@ export interface PayrollItem {
   transportAmount: string;
   otherDeductions: string;
   deductionItems?: PayrollItemDeduction[];
+  lines?: PayrollItemLine[];
+  payrollGroupId?: string | null;
+  configurationId?: string | null;
+  configurationVersion?: number | null;
+  commissionFigure?: string;
+  employeeSocialSecurity?: string;
+  pension?: string;
+  incomeTax?: string;
+  employerSocialSecurity?: string;
   overtimePay: string;
   bonus: string;
   thirteenthMonth: string;
@@ -159,6 +192,22 @@ export interface PayrollAccountingStatus {
 }
 
 // ── DTOs ───────────────────────────────────────────────────────────────────────
+
+/** Runs payroll for one payslip type and month, and sends it for approval. */
+export interface RunConfiguredPayrollDto {
+  payslipType: 'monthly' | 'commission' | 'monthly_commission';
+  month: number;
+  year: number;
+  /** The commission figure typed in for each employee, by employee id. */
+  commissionFigures?: Record<string, number>;
+  /** Amounts typed in for this run, by employee id and then component id. */
+  amounts?: Record<string, Record<string, number>>;
+}
+
+export interface ApprovePayrollMonthResult {
+  approved: { runId: string; payslipType: string }[];
+  failed: { runId: string; payslipType: string; message: string }[];
+}
 
 export interface PayrollDecisionDto {
   note: string;

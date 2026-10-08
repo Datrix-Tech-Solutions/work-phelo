@@ -17,6 +17,7 @@ import { AccountingHrClient } from '../hr-integration/client/hr.client';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import {
   PostPayrollAccrualDto,
+  PostPayrollRoleAccrualDto,
   SeedPayrollAccountItemDto,
   SeedPayrollAccountsDto,
 } from './dto/payroll-integration.dto';
@@ -482,6 +483,86 @@ export class PayrollIntegrationService {
       },
     ];
 
+    return this.postAccrualJournal({
+      dto,
+      source,
+      user,
+      accounts,
+      debitLines,
+      creditLines,
+    });
+  }
+
+  /** Same as postAccrual, for a run made with payroll configurations: the run's amounts arrive
+   *  already totalled by role, so there is nothing to derive. Idempotent per payrollRunId. */
+  async postRoleAccrual(
+    callingService: string,
+    actingUserId: string,
+    dto: PostPayrollRoleAccrualDto,
+  ) {
+    const source = await this.setup.getSource(dto.tenantId);
+    if (!source.isActive) {
+      throw new ConflictException(
+        'Payroll is not linked to Accounting. Link it from Accounting > Source Types first.',
+      );
+    }
+    const user = this.internalRequestUser(
+      dto.tenantId,
+      callingService,
+      actingUserId,
+    );
+    const accounts = await this.setup.getMappedAccounts(dto.tenantId);
+
+    const debitLines: { key: PayrollAccountRole; amount: number }[] = [
+      { key: 'salariesWagesExpense', amount: round2(dto.totalGross) },
+      {
+        key: 'employerSocialSecurityExpense',
+        amount: round2(dto.totalEmployerSocialSecurity),
+      },
+    ];
+    // What is owed to the social security fund is the employees' share plus the employer's.
+    const creditLines: { key: PayrollAccountRole; amount: number }[] = [
+      { key: 'netPayPayable', amount: round2(dto.totalNet) },
+      { key: 'incomeTaxPayable', amount: round2(dto.totalIncomeTax) },
+      {
+        key: 'socialSecurityPayable',
+        amount: round2(
+          dto.totalEmployeeSocialSecurity + dto.totalEmployerSocialSecurity,
+        ),
+      },
+      { key: 'statutoryPensionPayable', amount: round2(dto.totalPension) },
+      {
+        key: 'otherDeductionsPayable',
+        amount: round2(dto.totalOtherDeductions),
+      },
+    ];
+
+    return this.postAccrualJournal({
+      dto,
+      source,
+      user,
+      accounts,
+      debitLines,
+      creditLines,
+    });
+  }
+
+  /** The part both kinds of accrual share: check the accounts, make the journal, and raise an
+   *  open item per liability. */
+  private async postAccrualJournal(input: {
+    dto: {
+      tenantId: string;
+      payrollRunId: string;
+      periodLabel: string;
+      transactionDate: string;
+    };
+    source: Awaited<ReturnType<PayrollSetupService['getSource']>>;
+    user: RequestUser;
+    accounts: Awaited<ReturnType<PayrollSetupService['getMappedAccounts']>>;
+    debitLines: { key: PayrollAccountRole; amount: number }[];
+    creditLines: { key: PayrollAccountRole; amount: number }[];
+  }) {
+    const { dto, source, user, accounts, debitLines, creditLines } = input;
     const missing = [...debitLines, ...creditLines]
       .filter((line) => line.amount > 0 && !accounts[line.key])
       .map((line) => payrollRole(line.key)!.label);

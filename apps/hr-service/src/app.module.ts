@@ -12,6 +12,7 @@ import { TimeModule } from './time/time.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { PayrollConfigurationModule } from './payroll-configuration/payroll-configuration.module';
 import { PayrollGroupsModule } from './payroll-groups/payroll-groups.module';
+import { PayrollRunsModule } from './payroll-runs/payroll-runs.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
@@ -51,6 +52,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     PayrollModule,
     PayrollConfigurationModule,
     PayrollGroupsModule,
+    PayrollRunsModule,
     AppraisalsModule,
     DashboardModule,
     AssetsModule,
