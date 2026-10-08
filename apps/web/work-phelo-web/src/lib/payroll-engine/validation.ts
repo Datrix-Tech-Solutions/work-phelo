@@ -1,9 +1,13 @@
+// GENERATED from packages/payroll-engine/src/validation.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import {
   ALLOWANCE_TYPES,
   BASE_LABELS,
   DEFAULT_ROLE,
   PAYSLIP_TYPES,
   REQUIRED_ROLES,
+  RESERVED_CODES,
   ROLE_LABELS,
 } from './constants';
 import { calculatePayslip, isDeductedFromPay } from './engine';
@@ -193,6 +197,11 @@ export function checkConfiguration(
 
   const codes = new Map<string, string>();
   components.forEach((c) => {
+    if ((RESERVED_CODES as readonly string[]).includes(c.code.toUpperCase())) {
+      errors.push(
+        `"${c.name}": the code ${c.code} is reserved for a built-in figure in formulas. Use another code, such as ${c.code}_EARN.`,
+      );
+    }
     const code = c.code.toLowerCase();
     if (codes.has(code)) {
       errors.push(`"${c.name}" and "${codes.get(code)}" both use the code ${c.code}.`);

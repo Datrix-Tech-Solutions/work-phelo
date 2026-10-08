@@ -230,7 +230,7 @@ export default function UpcomingFollowUpsPage() {
                     className="inline-flex items-center gap-1.5"
                   >
                     <ClipboardPlus className="w-3.5 h-3.5" />
-                    Record Reminder
+                    Record Follow-up
                   </TableButton>
                 )}
                 {/* Automatic follow-ups have no record to cancel or reschedule. */}
@@ -377,7 +377,7 @@ export default function UpcomingFollowUpsPage() {
                   setRecordingProspectId(item.prospectId);
                 }}
               >
-                Record Interaction
+                Record Follow-up
               </Button>
             </div>
           ))}

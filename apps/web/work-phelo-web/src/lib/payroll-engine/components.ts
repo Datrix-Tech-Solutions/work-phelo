@@ -1,3 +1,6 @@
+// GENERATED from packages/payroll-engine/src/components.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import { DEFAULT_PARAMS, DEFAULT_ROLE, type ComponentTemplate } from './constants';
 import type { PayBase, PayComponent, SavedPayComponent } from './types';
 

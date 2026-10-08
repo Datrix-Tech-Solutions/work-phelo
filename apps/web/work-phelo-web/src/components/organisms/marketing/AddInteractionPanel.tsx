@@ -61,7 +61,7 @@ export function AddInteractionPanel({
   const addInteraction = useAddProspectInteraction(prospectId ?? '');
   const addClientInteraction = useAddClientInteraction(clientId ?? '');
   // Clients call these "follow-ups"; prospects keep "interaction" in this panel.
-  const noun = clientId ? 'Follow-up' : 'Interaction';
+  const noun = 'Follow-up';
   const completeFollowUp = useCompleteFollowUp();
   const isSaving =
     addInteraction.isPending || addClientInteraction.isPending || completeFollowUp.isPending;

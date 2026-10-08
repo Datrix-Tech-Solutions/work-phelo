@@ -1,11 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { ConfirmModal } from '@/components/organisms/hr/payroll/pay-components/ConfirmModal';
 import { usePayrollGroups } from '@/hooks/hr/usePayrollGroups';
-import { usePayrollConfigurations } from '@/hooks/hr/usePayrollConfigurations';
+import { useAllEmployees } from '@/hooks/hr/useEmployees';
+import {
+  payrollConfigurationError,
+  usePayrollConfigurations,
+} from '@/hooks/hr/usePayrollConfigurations';
 import { useToast } from '@/hooks/useToast';
 import {
   FREQUENCY_LABELS,
@@ -15,16 +20,23 @@ import {
   type PayrollGroupInput,
 } from '@/lib/payroll-groups';
 import { PAYSLIP_TYPES, versionInForce } from '@/lib/payroll-engine';
+import { isOnPayroll } from '@/components/organisms/hr/payroll/run-payroll/runRows';
 import { PayrollGroupPanel } from './PayrollGroupPanel';
 
-export function PayrollGroupsContent({ tenantSlug }: { tenantSlug: string }) {
+export function PayrollGroupsContent() {
   const toast = useToast();
-  const store = usePayrollGroups(tenantSlug);
+  const store = usePayrollGroups();
   const configStore = usePayrollConfigurations();
+  const { data: employeeData } = useAllEmployees();
+  const employees = employeeData?.data ?? [];
 
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<PayrollGroup | 'new' | null>(null);
   const [deleting, setDeleting] = useState<PayrollGroup | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // People on payroll with no group can't be paid, so they are named here, where groups are made.
+  const withoutGroup = employees.filter((e) => isOnPayroll(e) && !e.payrollGroupId);
 
   const rows = useMemo(
     () => store.groups.filter((g) => g.name.toLowerCase().includes(search.trim().toLowerCase())),
@@ -39,6 +51,11 @@ export function PayrollGroupsContent({ tenantSlug }: { tenantSlug: string }) {
     },
     { key: 'frequency', label: 'Pay frequency', render: (g) => FREQUENCY_LABELS[g.frequency] },
     { key: 'payday', label: 'Payday', render: (g) => describePayday(g.payday) },
+    {
+      key: 'employees',
+      label: 'Employees',
+      render: (g) => <span className="tabular-nums">{g.employeeCount}</span>,
+    },
     {
       key: 'configuration',
       label: 'Configuration',
@@ -64,17 +81,52 @@ export function PayrollGroupsContent({ tenantSlug }: { tenantSlug: string }) {
     { key: 'reminder', label: 'Payday reminder', render: (g) => describeReminder(g.reminder) },
   ];
 
-  const save = (input: PayrollGroupInput) => {
-    store.save(input);
-    setEditing(null);
-    toast.success(input.id ? `Saved "${input.name.trim()}"` : `Created "${input.name.trim()}"`);
+  const save = async (input: PayrollGroupInput, employeeIds: string[]) => {
+    setSaveError(null);
+    try {
+      const saved = await store.save(input);
+      await store.setEmployees(saved.id, employeeIds);
+      setEditing(null);
+      toast.success(input.id ? `Saved "${input.name.trim()}"` : `Created "${input.name.trim()}"`);
+    } catch (e) {
+      // Kept in the panel, where the person can fix it and try again.
+      setSaveError(payrollConfigurationError(e, 'Could not save the group'));
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    const target = deleting;
+    setDeleting(null);
+    try {
+      await store.remove(target.id);
+      toast.success(`Deleted "${target.name}"`);
+    } catch (e) {
+      toast.error(payrollConfigurationError(e, 'Could not delete the group'));
+    }
   };
 
   return (
     <>
+      {withoutGroup.length > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            {withoutGroup.length} {withoutGroup.length === 1 ? 'employee has' : 'employees have'} no
+            payroll group (
+            {withoutGroup
+              .slice(0, 6)
+              .map((e) => `${e.firstName} ${e.lastName}`)
+              .join(', ')}
+            {withoutGroup.length > 6 ? `, and ${withoutGroup.length - 6} more` : ''}). Open a group
+            and add them under Employees, so nobody is left out of payroll.
+          </p>
+        </div>
+      )}
       <DataTable
         columns={columns}
         data={rows}
+        isLoading={store.isLoading}
         searchPlaceholder="Search groups..."
         searchValue={search}
         onSearch={setSearch}
@@ -97,7 +149,13 @@ export function PayrollGroupsContent({ tenantSlug }: { tenantSlug: string }) {
           group={editing === 'new' ? null : editing}
           groups={store.groups}
           configurations={configStore.configurations}
-          onClose={() => setEditing(null)}
+          employees={employees}
+          onClose={() => {
+            setEditing(null);
+            setSaveError(null);
+          }}
+          isSaving={store.isSaving}
+          error={saveError}
           onSave={save}
         />
       )}
@@ -105,14 +163,11 @@ export function PayrollGroupsContent({ tenantSlug }: { tenantSlug: string }) {
       <ConfirmModal
         isOpen={deleting !== null}
         title="Delete payroll group"
-        description={`Delete "${deleting?.name ?? ''}"? Employees in it will need another group before payroll can include them.`}
+        description={`Delete "${deleting?.name ?? ''}"? ${deleting && deleting.employeeCount > 0 ? `${deleting.employeeCount} ${deleting.employeeCount === 1 ? 'employee' : 'employees'} in it will be left without a group. ` : ''}Payroll can't include employees who have no group.`}
         confirmLabel="Delete"
         danger
         onCancel={() => setDeleting(null)}
-        onConfirm={() => {
-          if (deleting) store.remove(deleting.id);
-          setDeleting(null);
-        }}
+        onConfirm={confirmDelete}
       />
     </>
   );

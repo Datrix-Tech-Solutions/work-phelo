@@ -16,7 +16,6 @@ import {
   EmploymentType,
   Gender,
   MaritalStatus,
-  PayrollTaxPolicy,
 } from '../../../prisma/generated/client';
 
 export class CreateEmployeeDto {
@@ -254,33 +253,4 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsEnum(EmployeeCompensationType)
   compensationType?: EmployeeCompensationType;
-
-  @ApiPropertyOptional({
-    description: 'Payroll tax handling policy for this employee',
-    enum: PayrollTaxPolicy,
-    example: PayrollTaxPolicy.FIXED_AMOUNT,
-  })
-  @IsOptional()
-  @IsEnum(PayrollTaxPolicy)
-  taxPolicy?: PayrollTaxPolicy;
-
-  @ApiPropertyOptional({
-    description: 'Fixed tax amount used when taxPolicy is FIXED_AMOUNT',
-    example: 250,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Type(() => Number)
-  fixedTaxAmount?: number;
-
-  @ApiPropertyOptional({
-    description:
-      'Whether commission earnings should be included in PAYE taxable income',
-    example: true,
-  })
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  commissionTaxable?: boolean;
 }

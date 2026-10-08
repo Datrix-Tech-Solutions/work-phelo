@@ -1,3 +1,6 @@
+// GENERATED from packages/payroll-engine/src/rounding.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import type { RoundingMode } from './types';
 
 /**

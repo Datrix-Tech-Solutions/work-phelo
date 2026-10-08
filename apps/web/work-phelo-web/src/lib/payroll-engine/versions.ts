@@ -1,3 +1,6 @@
+// GENERATED from packages/payroll-engine/src/versions.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import type { ConfigurationVersion, PayComponent, SavedConfiguration } from './types';
 
 /** Today's date as YYYY-MM-DD in the user's own timezone. */
