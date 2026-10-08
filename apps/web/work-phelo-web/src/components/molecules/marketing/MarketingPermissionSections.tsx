@@ -49,6 +49,15 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     ],
   },
   {
+    key: 'targets',
+    label: 'Sales Targets',
+    umbrellaKey: 'manage_targets',
+    tags: [
+      { key: 'manage_targets', label: 'Manage Sales Targets' },
+      { key: 'view_all_targets', label: 'View All Sales Targets' },
+    ],
+  },
+  {
     key: 'campaigns',
     label: 'Campaigns',
     umbrellaKey: 'manage_campaigns',
@@ -146,6 +155,9 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
 
   assign_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients', ['ASSIGN'])],
 
+  // Sales targets — everyone sees their own progress; this pill adds every rep's.
+  view_all_targets: pairs('marketing.targets.all', ['VIEW']),
+
   // Transport — each "manage" pill carries the full set for its area.
   manage_requests: [
     ...pairs('marketing.requests', ['VIEW', 'CREATE', 'EDIT', 'CANCEL']),
@@ -182,6 +194,7 @@ const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_crm_configuration: pairs('marketing.crm-settings', CRUD),
   manage_prospects: [],
   manage_clients: [],
+  manage_targets: pairs('marketing.targets', CRUD),
   manage_campaigns: [
     ...pairs('marketing.campaigns', ['VIEW', 'CREATE', 'RUN', 'CANCEL']),
     ...pairs('marketing.sms-sender-identities', ['VIEW', 'CREATE', 'EDIT', 'DELETE']),

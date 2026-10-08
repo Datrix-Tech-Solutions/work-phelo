@@ -376,8 +376,7 @@
 
 /* Page left inset — single knob for the left padding of module content pages
    (see lib/layout.ts). Default matches the old px-4/sm:px-6/lg:px-8 gutter, so HR
-   is unchanged; every other module shell zeroes it. Set a non-zero value here
-   (e.g. 0.25rem) to give those modules a small left inset. */
+   is unchanged. A module shell can override it (e.g. `.layout-x { --page-pl: 0 }`). */
 :root {
   --page-pl: 1rem;
 }
@@ -390,12 +389,6 @@
   :root {
     --page-pl: 2rem;
   }
-}
-.layout-operations,
-.layout-accounting,
-.layout-marketing {
-  --page-pl: 1px;
-  --tab-first-pl: 1px; /* first tab label lines up with the page title */
 }
 
 /* Dark-mode module overrides — only the tokens previously mixed toward *white*

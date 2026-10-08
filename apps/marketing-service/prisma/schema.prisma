@@ -891,3 +891,25 @@ model MarketingTransportRequestStop {
   @@index([tenantId, refId])
   @@schema("marketing")
 }
+
+/// What a sales rep is expected to bring in over a period. Achieved revenue is never stored: it is
+/// read from Accounting (money received) for the rep's billable clients, within the dates. A null
+/// productId is the rep's total across everything; a set productId counts only that product.
+model MarketingSalesTarget {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String
+  productId       String?
+  startDate       DateTime @db.Date
+  endDate         DateTime @db.Date
+  amount          Decimal  @db.Decimal(18, 2)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId, userId, startDate])
+  @@index([tenantId, startDate, endDate])
+  @@index([tenantId, productId])
+  @@schema("marketing")
+}

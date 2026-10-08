@@ -48,6 +48,8 @@ describe('permission entitlements', () => {
     'marketing.clients',
     'marketing.clients.all',
     'marketing.clients.billing',
+    'marketing.targets',
+    'marketing.targets.all',
     'marketing.prospects.interactions',
     'marketing.prospects.interactions.all',
     'marketing.follow-ups',
