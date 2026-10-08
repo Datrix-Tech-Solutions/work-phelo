@@ -49,7 +49,9 @@ interface SearchSelectProps {
 
 function ChevronDown({ open }: { open: boolean }) {
   return (
-    <Icons.ChevronDown className={cn('transition-transform duration-150', open && 'rotate-180')} />
+    <Icons.ChevronDown
+      className={cn('w-4 h-4 transition-transform duration-150', open && 'rotate-180')}
+    />
   );
 }
 

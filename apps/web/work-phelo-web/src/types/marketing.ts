@@ -411,8 +411,8 @@ export interface CreateClientPayload {
   /** Required when the client is billable: the first transaction sent to Accounting. */
   billing?: ClientBillingInput;
   primaryContact: CreateProspectContactPayload;
-  /** Products/services the client is linked to — they start as PENDING. */
-  productIds: string[];
+  /** Products/services the client is linked to, with their terms — they start as PENDING. */
+  products: AddClientProductPayload[];
   location: CreateProspectLocationPayload;
 }
 
@@ -469,6 +469,8 @@ export interface AddClientProductPayload {
   expectedValue?: number;
   /** Percentage of the expected value. */
   commissionRate?: number;
+  /** YYYY-MM-DD. */
+  expectedCloseDate?: string;
 }
 
 export interface UpdateClientPayload {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { ChevronDown, MapPin } from 'lucide-react';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Button } from '@/components/atoms/Button';
 import { CompanyLocationMap } from '@/components/organisms/marketing/CompanyLocationMap';
@@ -19,9 +19,12 @@ export interface CompanyLocationFields {
 interface Props {
   values: CompanyLocationFields;
   onChange: (values: CompanyLocationFields) => void;
+  /** Hide the map behind a toggle; search and current location stay visible. */
+  collapsibleMap?: boolean;
 }
 
-export function CompanyLocationForm({ values, onChange }: Props) {
+export function CompanyLocationForm({ values, onChange, collapsibleMap = false }: Props) {
+  const [mapOpen, setMapOpen] = useState(false);
   const [query, setQuery] = useState('');
   const { data: suggestions = [] } = useGeocodeSearch(query);
 
@@ -98,7 +101,21 @@ export function CompanyLocationForm({ values, onChange }: Props) {
         </div>
       )}
 
-      <CompanyLocationMap lat={values.lat} lng={values.lng} onChange={handleMapChange} />
+      {collapsibleMap && (
+        <button
+          type="button"
+          onClick={() => setMapOpen((o) => !o)}
+          aria-expanded={mapOpen}
+          className="flex items-center gap-1.5 self-start text-sm font-medium text-(--module-btn-bg,var(--color-brand)) hover:underline"
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${mapOpen ? 'rotate-180' : ''}`} />
+          {mapOpen ? 'Hide map' : 'Pick on map'}
+        </button>
+      )}
+
+      {(!collapsibleMap || mapOpen) && (
+        <CompanyLocationMap lat={values.lat} lng={values.lng} onChange={handleMapChange} />
+      )}
     </div>
   );
 }
