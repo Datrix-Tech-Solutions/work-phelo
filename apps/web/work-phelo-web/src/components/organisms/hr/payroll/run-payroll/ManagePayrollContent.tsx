@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { TrendingDown, TrendingUp, Users } from 'lucide-react';
@@ -66,17 +66,13 @@ export function ManagePayrollContent() {
   const monthEnd = monthEndIso(now);
   const loading = loadingEmployees || groupStore.isLoading || configStore.isLoading;
 
-  const { rows, unassigned } = useMemo(
-    () =>
-      buildRows({
-        employees: employeeData?.data ?? [],
-        groups: groupStore.groups,
-        configurations: configStore.configurations,
-        figures,
-        monthEnd,
-      }),
-    [employeeData, groupStore.groups, configStore.configurations, figures, monthEnd],
-  );
+  const { rows, unassigned } = buildRows({
+    employees: employeeData?.data ?? [],
+    groups: groupStore.groups,
+    configurations: configStore.configurations,
+    figures,
+    monthEnd,
+  });
 
   const typeOf = (row: Row) => row.configuration.payslipType!;
   const tabRows = rows.filter((r) => typeOf(r) === tab);
