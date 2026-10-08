@@ -123,7 +123,6 @@ export class PayrollConfigurationService {
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
-      await this.releasePayslipType(tx, tenantId, dto.payslipType);
       return tx.payrollConfiguration.create({
         data: {
           tenantId,
@@ -185,7 +184,6 @@ export class PayrollConfigurationService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      await this.releasePayslipType(tx, tenantId, dto.payslipType, id);
       return tx.payrollConfiguration.update({
         where: { id },
         data: {
@@ -213,25 +211,24 @@ export class PayrollConfigurationService {
   }
 
   /**
-   * The version a payroll run dated `date` uses for a payslip type: the latest one that has started
-   * by then. Null when the type has no configuration or none has started yet.
+   * The version of a configuration a payroll run dated `date` uses: the latest one that has
+   * started by then. Null when none has started yet. A payroll group names its configuration, so
+   * the lookup is by configuration, not by payslip type.
    */
   async versionInForce(
     tenantId: string,
-    payslipType: PayslipTypeKey,
+    configurationId: string,
     date: string,
-  ): Promise<(ConfigurationVersionView & { configurationId: string }) | null> {
+  ): Promise<ConfigurationVersionView | null> {
     const row = await this.prisma.payrollConfigurationVersion.findFirst({
       where: {
         tenantId,
+        configurationId,
         effectiveFrom: { lte: toDate(date) },
-        configuration: { tenantId, payslipType: TYPE_TO_ENUM[payslipType] },
       },
       orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
     });
-    return row
-      ? { ...toVersionView(row), configurationId: row.configurationId }
-      : null;
+    return row ? toVersionView(row) : null;
   }
 
   // ── Saved components ─────────────────────────────────────────────────────
@@ -305,23 +302,6 @@ export class PayrollConfigurationService {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, enabled, sourceTemplateId, ...rest } = components[0];
     return rest;
-  }
-
-  /** A payslip type has one configuration at a time, so whoever had it loses it. */
-  private async releasePayslipType(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    type: PayslipTypeKey,
-    keepId?: string,
-  ) {
-    await tx.payrollConfiguration.updateMany({
-      where: {
-        tenantId,
-        payslipType: TYPE_TO_ENUM[type],
-        ...(keepId ? { id: { not: keepId } } : {}),
-      },
-      data: { payslipType: null },
-    });
   }
 
   private async findOrThrow(tenantId: string, id: string) {

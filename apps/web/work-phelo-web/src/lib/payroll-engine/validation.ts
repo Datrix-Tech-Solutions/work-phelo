@@ -21,6 +21,8 @@ export interface ConfigurationCheck {
   errors: string[];
   /** Worth knowing, but it can still be saved. */
   warnings: string[];
+  /** Friendly nudges about things left out. They never block or change anything. */
+  reminders: string[];
 }
 
 const INPUTS: PayInput[] = ['basic', 'commission'];
@@ -35,6 +37,9 @@ export function roleOf(c: PayComponent): PayRole | undefined {
 export function checkRoles(components: PayComponent[], typeKey: PayslipTypeKey): string[] {
   const enabled = components.filter((c) => c.enabled);
   const carried = new Set(enabled.map(roleOf));
+  // A payslip type with a basic salary already pays Salary and wages through it, even if no
+  // earning component is added on top.
+  if (PAYSLIP_TYPES[typeKey].inputs.includes('basic')) carried.add('salary_wages');
   const messages: string[] = [];
 
   enabled
@@ -49,6 +54,25 @@ export function checkRoles(components: PayComponent[], typeKey: PayslipTypeKey):
       ),
     );
   return messages;
+}
+
+/** The optional parts of a configuration, which are easy to forget. */
+const OPTIONAL_ROLES: PayRole[] = [
+  'income_tax',
+  'employee_social_security',
+  'employer_social_security',
+  'pension',
+  'other_deductions',
+];
+
+/** A gentle nudge about optional parts that aren't set up. It never blocks or changes anything. */
+export function checkReminders(components: PayComponent[]): string[] {
+  const carried = new Set(components.filter((c) => c.enabled).map(roleOf));
+  const missing = OPTIONAL_ROLES.filter((role) => !carried.has(role));
+  if (!missing.length) return [];
+  return [
+    `Not set up yet: ${missing.map((role) => ROLE_LABELS[role]).join(', ')}. These are optional, so add any you need, such as tax, social security or loans. This is only a reminder.`,
+  ];
 }
 
 /** The typed-in figures a component is calculated from. */
@@ -213,5 +237,5 @@ export function checkConfiguration(
     else throw e;
   }
 
-  return { errors, warnings };
+  return { errors, warnings, reminders: checkReminders(components) };
 }

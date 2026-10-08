@@ -6,9 +6,7 @@ import { cardClass } from '@/lib/utils';
 import { PAYSLIP_TYPES, latestVersion, type SavedConfiguration } from '@/lib/payroll-engine';
 
 const usedFor = (c: SavedConfiguration) =>
-  c.payslipType
-    ? `Used for ${PAYSLIP_TYPES[c.payslipType].label}`
-    : 'Not used for any payslip type';
+  c.payslipType ? `${PAYSLIP_TYPES[c.payslipType].label} payslips` : 'No payslip type';
 
 interface ConfigurationToolbarProps {
   configurations: SavedConfiguration[];

@@ -167,10 +167,8 @@ export function ConfigurationHistory({
                   <span className="truncate text-sm font-semibold text-gray-900">
                     {configuration.name}
                   </span>
-                  {configuration.payslipType ? (
+                  {configuration.payslipType && (
                     <TypeChip label={PAYSLIP_TYPES[configuration.payslipType].label} color="blue" />
-                  ) : (
-                    <TypeChip label="Not in use" color="gray" />
                   )}
                   {isCurrent && dirty && <TypeChip label="Unsaved changes" color="amber" />}
                 </span>

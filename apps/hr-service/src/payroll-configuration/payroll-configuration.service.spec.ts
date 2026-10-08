@@ -130,7 +130,7 @@ describe('PayrollConfigurationService', () => {
   });
 
   describe('create', () => {
-    it('creates version 1 and takes the payslip type from any other configuration', async () => {
+    it('creates version 1 and leaves other configurations of the same type alone', async () => {
       prisma.payrollConfiguration.create.mockImplementation(async ({ data }) =>
         configRow([
           versionRow(1, '2026-10-01', data.versions.create.components),
@@ -139,10 +139,7 @@ describe('PayrollConfigurationService', () => {
 
       const result = await service.create(TENANT, USER, dto());
 
-      expect(prisma.payrollConfiguration.updateMany).toHaveBeenCalledWith({
-        where: { tenantId: TENANT, payslipType: 'MONTHLY' },
-        data: { payslipType: null },
-      });
+      expect(prisma.payrollConfiguration.updateMany).not.toHaveBeenCalled();
       const data = prisma.payrollConfiguration.create.mock.calls[0][0].data;
       expect(data.payslipType).toBe('MONTHLY');
       expect(data.versions.create).toMatchObject({
@@ -282,21 +279,17 @@ describe('PayrollConfigurationService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
-    it('moves the payslip type over from another configuration', async () => {
+    it('can change the payslip type without touching other configurations', async () => {
       await service.update(
         TENANT,
         USER,
         'cfg-1',
         dto({ payslipType: 'commission', effectiveFrom: undefined }),
       );
-      expect(prisma.payrollConfiguration.updateMany).toHaveBeenCalledWith({
-        where: {
-          tenantId: TENANT,
-          payslipType: 'COMMISSION',
-          id: { not: 'cfg-1' },
-        },
-        data: { payslipType: null },
-      });
+      expect(
+        prisma.payrollConfiguration.update.mock.calls[0][0].data.payslipType,
+      ).toBe('COMMISSION');
+      expect(prisma.payrollConfiguration.updateMany).not.toHaveBeenCalled();
     });
 
     it('404s for a configuration of another tenant', async () => {
@@ -308,14 +301,14 @@ describe('PayrollConfigurationService', () => {
   });
 
   describe('versionInForce', () => {
-    it('asks for the latest version that has started for the payslip type', async () => {
+    it('asks for the latest version of the configuration that has started', async () => {
       prisma.payrollConfigurationVersion.findFirst.mockResolvedValue(
         versionRow(2, '2026-07-01', [component()]),
       );
 
       const result = await service.versionInForce(
         TENANT,
-        'monthly',
+        'cfg-1',
         '2026-10-06',
       );
 
@@ -323,19 +316,19 @@ describe('PayrollConfigurationService', () => {
         {
           where: {
             tenantId: TENANT,
+            configurationId: 'cfg-1',
             effectiveFrom: { lte: new Date('2026-10-06T00:00:00.000Z') },
-            configuration: { tenantId: TENANT, payslipType: 'MONTHLY' },
           },
           orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
         },
       );
-      expect(result).toMatchObject({ version: 2, configurationId: 'cfg-1' });
+      expect(result).toMatchObject({ version: 2 });
     });
 
-    it('returns null when nothing has started', async () => {
+    it('returns null when no version has started', async () => {
       prisma.payrollConfigurationVersion.findFirst.mockResolvedValue(null);
       expect(
-        await service.versionInForce(TENANT, 'commission', '2020-01-01'),
+        await service.versionInForce(TENANT, 'cfg-1', '2020-01-01'),
       ).toBeNull();
     });
   });

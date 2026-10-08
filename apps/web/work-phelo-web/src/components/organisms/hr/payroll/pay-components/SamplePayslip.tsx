@@ -34,6 +34,7 @@ interface SamplePayslipProps {
   /** Problems with this configuration for the previewed payslip type. */
   errors: string[];
   warnings: string[];
+  reminders: string[];
   currency: string;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -211,6 +212,7 @@ export function SamplePayslip({
   onVariableChange,
   errors,
   warnings,
+  reminders,
   currency,
   selectedId,
   onSelect,
@@ -260,12 +262,15 @@ export function SamplePayslip({
       {[
         ...errors.map((m) => ['err', m] as const),
         ...warnings.map((m) => ['warn', m] as const),
+        ...reminders.map((m) => ['info', m] as const),
       ].map(([tone, message]) => (
         <p
           key={message}
           className={cn(
             'mt-3 rounded-lg px-3 py-2 text-xs',
-            tone === 'err' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800',
+            tone === 'err' && 'bg-red-50 text-red-700',
+            tone === 'warn' && 'bg-amber-50 text-amber-800',
+            tone === 'info' && 'bg-gray-100 text-gray-600',
           )}
         >
           {message}
