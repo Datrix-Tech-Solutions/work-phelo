@@ -76,7 +76,12 @@ export class AssigneesService {
     if (!this.canAssignAny(user)) {
       throw new ForbiddenException(NO_PERMISSION_MESSAGE);
     }
-    const users = await this.activeModuleUsers(user.tenantId);
+    return this.activeUsers(user.tenantId);
+  }
+
+  /** Active Marketing users, sorted by name. The caller decides who may see the list. */
+  async activeUsers(tenantId: string) {
+    const users = await this.activeModuleUsers(tenantId);
     return users
       .map((u) => ({ userId: u.id, name: this.fullName(u), email: u.email }))
       .sort((a, b) => a.name.localeCompare(b.name));

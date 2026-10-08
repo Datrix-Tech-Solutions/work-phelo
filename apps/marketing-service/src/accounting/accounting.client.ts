@@ -178,7 +178,14 @@ export class AccountingClient {
   }
 
   receiptsSummary(
-    input: { tenantId: string; entityIds: string[]; transactionIds?: string[] },
+    input: {
+      tenantId: string;
+      entityIds: string[];
+      transactionIds?: string[];
+      /** YYYY-MM-DD, inclusive: only receipts dated within the range count. */
+      from?: string;
+      to?: string;
+    },
     actingUserId: string,
   ) {
     return this.http.post<ReceiptsSummary>(`${BASE}/receipts-summary`, {

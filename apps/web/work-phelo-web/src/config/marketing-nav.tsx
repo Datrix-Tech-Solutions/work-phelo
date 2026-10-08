@@ -7,6 +7,7 @@ import {
   ClipboardClock,
   ClipboardList,
   Handshake,
+  Target,
   LayoutDashboard,
   Truck,
   SquareUser,
@@ -22,6 +23,7 @@ const TransportOfficersIcon = () => <SquareUser className="w-5 h-5" />;
 const FleetIcon = () => <Truck className="w-5 h-5" />;
 
 const ClientsIcon = () => <Users className="w-5 h-5" />;
+const TargetsIcon = () => <Target className="w-5 h-5" />;
 const CampaignsIcon = () => <Megaphone className="w-5 h-5" />;
 
 const UserManagementIcon = () => <UserKey className="w-5 h-5" />;
@@ -92,7 +94,19 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
-
+  {
+    label: 'Targets and Reports',
+    items: [
+      {
+        key: 'targets',
+        label: 'Sales Targets',
+        icon: <TargetsIcon />,
+        href: 'targets',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
   {
     label: 'Transport',
     items: [

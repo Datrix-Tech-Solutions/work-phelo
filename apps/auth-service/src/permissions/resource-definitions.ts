@@ -235,6 +235,17 @@ export const RESOURCES = [
     description: 'Raise and review client billing transactions in Accounting',
   },
   {
+    name: 'marketing.targets',
+    module: 'MARKETING',
+    description: 'Set and review sales rep revenue targets',
+  },
+  {
+    name: 'marketing.targets.all',
+    module: 'MARKETING',
+    description:
+      'Tenant-wide view of every sales rep target and their progress',
+  },
+  {
     name: 'marketing.prospects.interactions',
     module: 'MARKETING',
     description: 'Marketing prospect interaction history records',

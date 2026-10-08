@@ -1316,3 +1316,31 @@ export interface Assignee {
   name: string;
   email: string;
 }
+
+/** A sales rep's revenue target for a period, with what they have achieved so far. */
+export interface SalesTarget {
+  id: string;
+  userId: string;
+  userName: string | null;
+  /** Set for a product target; null is the rep's total across everything. */
+  productId: string | null;
+  productName: string | null;
+  /** YYYY-MM-DD, inclusive. */
+  startDate: string;
+  endDate: string;
+  amount: string;
+  /** Money Accounting has received in the period; null when Accounting could not be reached. */
+  achieved: string | null;
+  remaining: string | null;
+  percent: number | null;
+  currency: string | null;
+  canEdit: boolean;
+}
+
+export interface CreateSalesTargetPayload {
+  userId: string;
+  productId?: string;
+  startDate: string;
+  endDate: string;
+  amount: number;
+}
