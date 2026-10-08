@@ -200,8 +200,12 @@ export interface RunConfiguredPayrollDto {
   year: number;
   /** The commission figure typed in for each employee, by employee id. */
   commissionFigures?: Record<string, number>;
+  /** Basic salary to use for this run instead of the employee record's, by employee id. */
+  basicSalaries?: Record<string, number>;
   /** Amounts typed in for this run, by employee id and then component id. */
   amounts?: Record<string, Record<string, number>>;
+  /** A message for the approver. */
+  notes?: string;
 }
 
 export interface ApprovePayrollMonthResult {

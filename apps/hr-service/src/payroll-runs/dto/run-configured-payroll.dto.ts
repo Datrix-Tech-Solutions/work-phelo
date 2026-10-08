@@ -47,6 +47,15 @@ export class RunConfiguredPayrollDto {
   @ApiPropertyOptional({
     type: Object,
     description:
+      'Basic salary to use for this run instead of the one on the employee record, by employee id. The record itself is not changed.',
+  })
+  @IsOptional()
+  @IsObject()
+  basicSalaries?: Record<string, number>;
+
+  @ApiPropertyOptional({
+    type: Object,
+    description:
       'Amounts typed in for this run for components that are entered each run, by employee id and then component id.',
   })
   @IsOptional()

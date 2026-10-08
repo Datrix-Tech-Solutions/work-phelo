@@ -8,6 +8,8 @@ import { DataTable, type Column } from '@/components/organisms/shared/DataTable'
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { NumberField } from '@/components/atoms/NumberField';
+import { Input } from '@/components/atoms/Input';
+import { Avatar } from '@/components/atoms/Avatar';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { usePayrollSettings } from '@/hooks';
 import { usePayrollRuns, useRunConfiguredPayroll } from '@/hooks/hr/usePayroll';
@@ -28,8 +30,10 @@ import {
   type PayslipResult,
   type PayslipTypeKey,
 } from '@/lib/payroll-engine';
-import { buildRows, type RunFigures, type Row } from './runRows';
+import { basicFor, buildRows, type RunFigures, type Row } from './runRows';
 import { PayslipPanel } from './PayslipPanel';
+import { MonthPill, type PayrollMonth } from './MonthPill';
+import { PayrollDraftsPanel } from './PayrollDraftsPanel';
 
 const STATUS_LABELS = {
   DRAFT: { label: 'Returned to draft', color: 'gray' },
@@ -55,15 +59,21 @@ export function ManagePayrollContent() {
   const runPayroll = useRunConfiguredPayroll();
   const toast = useToast();
 
-  const [tab, setTab] = useState<PayslipTypeKey>('monthly');
+  const [chosenTab, setTab] = useState<PayslipTypeKey>('monthly');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [figures, setFigures] = useState<RunFigures>({ commission: {}, amounts: {} });
+  const [figures, setFigures] = useState<RunFigures>({ basic: {}, commission: {}, amounts: {} });
   const [confirmingRun, setConfirmingRun] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [runNote, setRunNote] = useState('');
 
-  const now = new Date();
-  const period = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-  const monthEnd = monthEndIso(now);
+  const [runMonth, setRunMonth] = useState<PayrollMonth>(() => {
+    const today = new Date();
+    return { month: today.getMonth() + 1, year: today.getFullYear() };
+  });
+  const monthDate = new Date(runMonth.year, runMonth.month - 1, 1);
+  const period = monthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const monthEnd = monthEndIso(monthDate);
   const loading = loadingEmployees || groupStore.isLoading || configStore.isLoading;
 
   const { rows, unassigned } = buildRows({
@@ -75,6 +85,9 @@ export function ManagePayrollContent() {
   });
 
   const typeOf = (row: Row) => row.configuration.payslipType!;
+  // Payslip types nobody is paid through don't get a tab.
+  const visibleTypes = PAYSLIP_TYPE_ORDER.filter((key) => rows.some((r) => typeOf(r) === key));
+  const tab = visibleTypes.includes(chosenTab) ? chosenTab : (visibleTypes[0] ?? chosenTab);
   const tabRows = rows.filter((r) => typeOf(r) === tab);
   const visibleRows = tabRows.filter((r) =>
     `${r.employee.firstName} ${r.employee.lastName}`
@@ -84,14 +97,12 @@ export function ManagePayrollContent() {
   const countFor = (key: PayslipTypeKey) => rows.filter((r) => typeOf(r) === key).length;
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const type = PAYSLIP_TYPES[tab];
-  const hasAllowances = tabRows.some((r) =>
-    r.components.some((c) => c.enabled && c.params.source === 'allowance'),
-  );
 
   // What has already been run for this month: each payslip type is its own run.
-  const monthRuns = allRuns.filter(
-    (r) => r.month === now.getMonth() + 1 && r.year === now.getFullYear(),
-  );
+  const monthRuns = allRuns.filter((r) => r.month === runMonth.month && r.year === runMonth.year);
+  const drafts = allRuns
+    .filter((r) => r.status === 'DRAFT' && r.payslipKey && r.payslipKey !== 'legacy')
+    .sort((a, b) => (b.year !== a.year ? b.year - a.year : b.month - a.month));
   const oldSystemRun = monthRuns.find((r) => !r.payslipKey || r.payslipKey === 'legacy');
   const tabRun = monthRuns.find((r) => r.payslipKey === tab);
   // Once a run is with approval (or beyond) its figures are fixed; a run returned to draft can change.
@@ -111,14 +122,19 @@ export function ManagePayrollContent() {
     try {
       await runPayroll.mutateAsync({
         payslipType: tab,
-        month: now.getMonth() + 1,
-        year: now.getFullYear(),
+        month: runMonth.month,
+        year: runMonth.year,
+        basicSalaries: Object.fromEntries(
+          tabRows.map((r) => [r.id, basicFor(r.employee, figures)]),
+        ),
         commissionFigures: Object.fromEntries(
           tabRows.map((r) => [r.id, figures.commission[r.id] ?? 0]),
         ),
         amounts: Object.fromEntries(tabRows.map((r) => [r.id, figures.amounts[r.id] ?? {}])),
+        notes: runNote.trim() || undefined,
       });
       setConfirmingRun(false);
+      setRunNote('');
       toast.success(`${type.label} payroll sent for approval.`);
     } catch (e) {
       setConfirmingRun(false);
@@ -134,6 +150,8 @@ export function ManagePayrollContent() {
       .filter((c) => c.enabled && c.kind === 'earning' && c.params.source === 'allowance')
       .reduce((sum, c) => sum + (row.result?.byId.get(c.id)?.amount ?? 0), 0);
 
+  const setBasic = (id: string, value: number) =>
+    setFigures((f) => ({ ...f, basic: { ...f.basic, [id]: value } }));
   const setCommission = (id: string, value: number) =>
     setFigures((f) => ({ ...f, commission: { ...f.commission, [id]: value } }));
   const setAmount = (id: string, componentId: string, value: number) =>
@@ -150,11 +168,24 @@ export function ManagePayrollContent() {
       key: 'name',
       label: 'Employee',
       render: (r) => (
-        <span className="flex flex-col">
-          <span className="font-medium text-gray-900">
-            {r.employee.firstName} {r.employee.lastName}
+        <span className="flex items-center gap-3">
+          <Avatar
+            name={`${r.employee.firstName} ${r.employee.lastName}`}
+            avatarUrl={r.employee.avatarUrl}
+            size="sm"
+          />
+          <span className="flex flex-col">
+            <span className="font-medium text-gray-900">
+              {r.employee.firstName} {r.employee.lastName}
+            </span>
+            {r.problem ? (
+              <span className="text-xs text-red-600">{r.problem}</span>
+            ) : (
+              r.employee.department?.name && (
+                <span className="text-xs text-gray-500">{r.employee.department.name}</span>
+              )
+            )}
           </span>
-          {r.problem && <span className="text-xs text-red-600">{r.problem}</span>}
         </span>
       ),
     },
@@ -173,7 +204,17 @@ export function ManagePayrollContent() {
           {
             key: 'basic',
             label: 'Basic salary',
-            render: (r: Row) => formatAmount(Number(r.employee.basicSalary) || 0, currency),
+            render: (r: Row) => (
+              // Typing here must not open the payslip behind it.
+              <div onClick={(e) => e.stopPropagation()}>
+                <NumberField
+                  ariaLabel={`${r.employee.firstName} ${r.employee.lastName} basic salary`}
+                  value={basicFor(r.employee, figures)}
+                  disabled={locked}
+                  onChange={(value) => setBasic(r.id, value)}
+                />
+              </div>
+            ),
           },
         ]
       : []),
@@ -211,7 +252,6 @@ export function ManagePayrollContent() {
       render: (r) => <span className="font-semibold text-gray-900">{money(r, (x) => x.net)}</span>,
     },
   ];
-  const columns = allColumns.filter((c) => c.key !== 'allowances' || hasAllowances);
 
   const groupsLink = (
     <Link
@@ -253,48 +293,33 @@ export function ManagePayrollContent() {
       )}
 
       <div className="flex flex-col gap-3">
-        <TabBar
-          tabs={PAYSLIP_TYPE_ORDER.map((key) => ({
-            key,
-            label: PAYSLIP_TYPES[key].label,
-            count: countFor(key),
-          }))}
-          activeTab={tab}
-          onTabChange={(key) => setTab(key as PayslipTypeKey)}
-        />
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <TypeChip label={period} color="gray" />
-          <span>
-            Each payslip is worked out with the version of its group&apos;s configuration in force
-            on{' '}
-            {new Date(`${monthEnd}T00:00:00`).toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-            .
-          </span>
-        </div>
+        {visibleTypes.length > 0 && (
+          <TabBar
+            tabs={visibleTypes.map((key) => ({
+              key,
+              label: PAYSLIP_TYPES[key].label,
+              count: countFor(key),
+            }))}
+            activeTab={tab}
+            onTabChange={(key) => setTab(key as PayslipTypeKey)}
+          />
+        )}
         <div className="flex flex-wrap items-center gap-2 text-xs">
+          <MonthPill
+            value={runMonth}
+            onChange={(m) => {
+              setRunMonth(m);
+              setFigures({ basic: {}, commission: {}, amounts: {} });
+              setSelectedId(null);
+            }}
+          />
           {tabRun ? (
-            <>
-              <TypeChip
-                label={STATUS_LABELS[tabRun.status].label}
-                color={STATUS_LABELS[tabRun.status].color}
-              />
-              {locked && (
-                <span className="text-gray-500">
-                  The figures are locked while it is with approval or beyond.
-                </span>
-              )}
-              {!locked && (
-                <span className="text-gray-500">
-                  It was returned to draft. Run it again when ready.
-                </span>
-              )}
-            </>
+            <TypeChip
+              label={STATUS_LABELS[tabRun.status].label}
+              color={STATUS_LABELS[tabRun.status].color}
+            />
           ) : (
-            <span className="text-gray-500">{type.label} payroll has not been run yet.</span>
+            <TypeChip label="Not run" color="gray" />
           )}
           {blockedReason && <span className="text-amber-700">{blockedReason}</span>}
         </div>
@@ -340,12 +365,17 @@ export function ManagePayrollContent() {
       </div>
 
       <DataTable
-        columns={columns}
+        columns={allColumns}
         data={visibleRows}
         isLoading={loading}
         searchPlaceholder="Search employee name..."
         searchValue={search}
         onSearch={setSearch}
+        secondaryButton={{
+          label: 'Drafts',
+          badgeCount: drafts.length,
+          onClick: () => setDraftsOpen(true),
+        }}
         actionButton={{
           label:
             tabRun?.status === 'DRAFT'
@@ -369,6 +399,62 @@ export function ManagePayrollContent() {
         confirmLabel={runPayroll.isPending ? 'Running…' : 'Run payroll'}
         onCancel={() => setConfirmingRun(false)}
         onConfirm={() => void runNow()}
+      >
+        <dl className="mb-4 divide-y divide-gray-100 rounded-lg border border-gray-200 text-sm">
+          {[
+            ['Payslips', String(tabRows.length)],
+            [
+              'Total gross',
+              formatAmount(
+                total((r) => r.gross),
+                currency,
+              ),
+            ],
+            [
+              'Total deductions',
+              formatAmount(
+                total((r) => r.totalDeductions),
+                currency,
+              ),
+            ],
+            [
+              'Total net pay',
+              formatAmount(
+                total((r) => r.net),
+                currency,
+              ),
+            ],
+            [
+              'Employer cost',
+              formatAmount(
+                total((r) => r.employerCost),
+                currency,
+              ),
+            ],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between px-3 py-2">
+              <dt className="text-gray-500">{label}</dt>
+              <dd className="font-semibold text-gray-900">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <Input
+          label="Message (optional)"
+          placeholder="Anything the approver should know"
+          value={runNote}
+          onChange={(e) => setRunNote(e.target.value)}
+        />
+      </ConfirmModal>
+
+      <PayrollDraftsPanel
+        isOpen={draftsOpen}
+        onClose={() => setDraftsOpen(false)}
+        drafts={drafts}
+        onLoad={(run, loaded) => {
+          setRunMonth({ month: run.month, year: run.year });
+          setFigures(loaded);
+          setTab(run.payslipKey as PayslipTypeKey);
+        }}
       />
 
       {selected && (
@@ -378,6 +464,8 @@ export function ManagePayrollContent() {
           currency={currency}
           monthEnd={monthEnd}
           readOnly={locked}
+          basic={basicFor(selected.employee, figures)}
+          onBasic={(value) => setBasic(selected.id, value)}
           commission={figures.commission[selected.id] ?? 0}
           onCommission={(value) => setCommission(selected.id, value)}
           amounts={figures.amounts[selected.id] ?? {}}
