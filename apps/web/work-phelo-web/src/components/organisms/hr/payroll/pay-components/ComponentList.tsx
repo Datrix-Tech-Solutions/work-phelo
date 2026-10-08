@@ -2,7 +2,8 @@
 
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
-import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
+import { TypeChip } from '@/components/atoms/TypeChip';
+import { ROLE_COLORS } from './roleColors';
 import { cn, cardClass } from '@/lib/utils';
 import {
   KIND_LABELS,
@@ -10,22 +11,11 @@ import {
   ROLE_LABELS,
   isDeductedFromPay,
   roleOf,
-  type PayRole,
   formatNumber,
   summarize,
   type PayComponent,
   type PayslipResult,
 } from '@/lib/payroll-engine';
-
-const ROLE_COLORS: Record<PayRole, TypeChipColor> = {
-  salary_wages: 'green',
-  income_tax: 'red',
-  employee_social_security: 'blue',
-  employer_social_security: 'purple',
-  pension: 'teal',
-  other_deductions: 'gray',
-  tax_credit: 'amber',
-};
 
 function RoleChip({ component }: { component: PayComponent }) {
   const role = roleOf(component);

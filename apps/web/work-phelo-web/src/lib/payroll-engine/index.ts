@@ -1,3 +1,6 @@
+// GENERATED from packages/payroll-engine/src/index.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 export * from './types';
 export * from './constants';
 export * from './engine';

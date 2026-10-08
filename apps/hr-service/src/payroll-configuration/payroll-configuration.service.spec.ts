@@ -157,6 +157,41 @@ describe('PayrollConfigurationService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    it("refuses what the engine's own checks refuse", async () => {
+      // A commission payslip needs an earning built from the commission figure.
+      const error = await service
+        .create(TENANT, USER, dto({ payslipType: 'commission' }))
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(JSON.stringify(error.getResponse())).toContain(
+        'commission figure',
+      );
+      expect(prisma.payrollConfiguration.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a component code that is a built-in name', async () => {
+      const error = await service
+        .create(
+          TENANT,
+          USER,
+          dto({
+            components: [
+              component({
+                id: 'c',
+                code: 'COMMISSION',
+                name: 'Sales',
+                kind: 'earning',
+                method: 'fixed',
+                role: 'salary_wages',
+                params: { amount: 10 },
+              }),
+            ],
+          }),
+        )
+        .catch((e) => e);
+      expect(JSON.stringify(error.getResponse())).toContain('reserved');
+    });
+
     it('rejects invalid components with the reasons', async () => {
       const error = await service
         .create(
@@ -284,11 +319,11 @@ describe('PayrollConfigurationService', () => {
         TENANT,
         USER,
         'cfg-1',
-        dto({ payslipType: 'commission', effectiveFrom: undefined }),
+        dto({ payslipType: 'monthly_commission', effectiveFrom: undefined }),
       );
       expect(
         prisma.payrollConfiguration.update.mock.calls[0][0].data.payslipType,
-      ).toBe('COMMISSION');
+      ).toBe('MONTHLY_COMMISSION');
       expect(prisma.payrollConfiguration.updateMany).not.toHaveBeenCalled();
     });
 

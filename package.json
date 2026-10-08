@@ -26,7 +26,9 @@
     "dev:infra": "docker compose -f infrastructure/docker-compose.dev.yml up rabbitmq redis -d",
     "prepare": "husky",
     "check-types": "turbo run check-types",
-    "check-rbac": "node scripts/check-rbac-alignment.mjs"
+    "check-rbac": "node scripts/check-rbac-alignment.mjs",
+    "sync:payroll-engine": "node scripts/sync-payroll-engine.mjs",
+    "check-payroll-engine": "node scripts/sync-payroll-engine.mjs --check"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.4.0",

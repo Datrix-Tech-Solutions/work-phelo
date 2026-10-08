@@ -1,3 +1,6 @@
+// GENERATED from packages/payroll-engine/src/constants.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import type {
   CalcMethod,
   ComponentKind,
@@ -116,7 +119,7 @@ export const ROUNDING_OPTIONS = [
 
 /** What the person types in for each input, on the sample payslip. */
 export const INPUT_LABELS: Record<PayInput, string> = {
-  basic: 'Monthly basic',
+  basic: 'Basic salary',
   commission: 'Commission basis',
 };
 
@@ -131,8 +134,8 @@ export interface PayslipType {
 export const PAYSLIP_TYPES: Record<PayslipTypeKey, PayslipType> = {
   monthly: {
     key: 'monthly',
-    label: 'Monthly',
-    description: 'Paid a monthly basic salary.',
+    label: 'Salary',
+    description: 'Paid a basic salary.',
     inputs: ['basic'],
   },
   commission: {
@@ -143,8 +146,8 @@ export const PAYSLIP_TYPES: Record<PayslipTypeKey, PayslipType> = {
   },
   monthly_commission: {
     key: 'monthly_commission',
-    label: 'Monthly + Commission',
-    description: 'Paid a monthly basic salary and commission.',
+    label: 'Salary + Commission',
+    description: 'Paid a basic salary and commission.',
     inputs: ['basic', 'commission'],
   },
 };
@@ -211,3 +214,22 @@ export const ALLOWANCE_TYPES = [
   { value: 'CLOTHING', label: 'Clothing' },
   { value: 'OTHER', label: 'Other' },
 ];
+
+/**
+ * Names a formula reads as built-in figures, so no component may use them as its code: a component
+ * called COMMISSION would otherwise be read as the commission figure instead.
+ */
+export const RESERVED_CODES = ['BASIC', 'COMMISSION', 'GROSS', 'PENSIONABLE', 'TAXABLE'] as const;
+
+/** How an employee is paid, as recorded on the employee. */
+export type CompensationType = 'SALARY' | 'COMMISSION' | 'SALARY_PLUS_COMMISSION';
+
+/**
+ * The payslip type each compensation type is paid through, which decides which payroll groups an
+ * employee can be placed in: a group's configuration has one payslip type.
+ */
+export const COMPENSATION_PAYSLIP_TYPE: Record<CompensationType, PayslipTypeKey> = {
+  SALARY: 'monthly',
+  COMMISSION: 'commission',
+  SALARY_PLUS_COMMISSION: 'monthly_commission',
+};

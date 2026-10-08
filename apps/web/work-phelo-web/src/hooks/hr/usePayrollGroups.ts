@@ -1,35 +1,61 @@
-'use client';
-
-import { useCallback } from 'react';
-import { useLocalStorageList } from '@/hooks/hr/useLocalStorageList';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import type { PayrollGroup, PayrollGroupInput } from '@/lib/payroll-groups';
 
-let seq = 0;
-const newId = () => `pg_${Date.now().toString(36)}_${(seq++).toString(36)}`;
+const KEY = ['payroll', 'groups'];
 
-/** The payroll groups. Kept in the browser until the backend exists. */
-export function usePayrollGroups(tenantSlug: string) {
-  const [groups, setGroups] = useLocalStorageList<PayrollGroup>(`payroll.groups.${tenantSlug}`);
+/** The payroll groups: sets of employees paid the same way. */
+export function usePayrollGroups() {
+  const queryClient = useQueryClient();
+  // Waits for the refreshed list, so a saved group is there when the save resolves.
+  const refresh = () => queryClient.invalidateQueries({ queryKey: KEY });
+
+  const query = useQuery({
+    queryKey: KEY,
+    queryFn: async () => {
+      const res = await api.get<PayrollGroup[]>('/hr/payroll-groups');
+      return res.data;
+    },
+  });
 
   /** Creates the group, or updates it when the input has an id. */
-  const save = useCallback(
-    (input: PayrollGroupInput): string => {
-      const id = input.id ?? newId();
-      const group: PayrollGroup = { ...input, id, name: input.name.trim() };
-      setGroups((list) =>
-        list.some((g) => g.id === id)
-          ? list.map((g) => (g.id === id ? group : g))
-          : [...list, group],
-      );
-      return id;
+  const save = useMutation({
+    mutationFn: async ({ id, ...body }: PayrollGroupInput) => {
+      const res = id
+        ? await api.put<PayrollGroup>(`/hr/payroll-groups/${id}`, body)
+        : await api.post<PayrollGroup>('/hr/payroll-groups', body);
+      return res.data;
     },
-    [setGroups],
-  );
+    onSuccess: refresh,
+  });
 
-  const remove = useCallback(
-    (id: string) => setGroups((list) => list.filter((g) => g.id !== id)),
-    [setGroups],
-  );
+  /** Sets who is in a group; anyone listed is moved out of the group they were in. */
+  const setEmployees = useMutation({
+    mutationFn: async ({ id, employeeIds }: { id: string; employeeIds: string[] }) => {
+      await api.put(`/hr/payroll-groups/${id}/employees`, { employeeIds });
+    },
+    onSuccess: async () => {
+      await Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['employees'] })]);
+    },
+  });
 
-  return { groups, save, remove };
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/hr/payroll-groups/${id}`);
+    },
+    onSuccess: refresh,
+  });
+
+  return {
+    groups: query.data ?? [],
+    isLoading: query.isLoading,
+    save: save.mutateAsync,
+    setEmployees: (id: string, employeeIds: string[]) =>
+      setEmployees.mutateAsync({ id, employeeIds }),
+    isSaving: save.isPending || setEmployees.isPending,
+    remove: async (id: string) => {
+      await remove.mutateAsync(id);
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+  };
 }

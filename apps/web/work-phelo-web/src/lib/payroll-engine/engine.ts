@@ -1,5 +1,8 @@
+// GENERATED from packages/payroll-engine/src/engine.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import { evaluateFormula, formulaRefs } from './formula';
-import { roundAmount } from './rounding';
+import { roundAmount, roundHalfUp } from './rounding';
 import {
   PayrollEngineError,
   type ComponentResult,
@@ -248,24 +251,29 @@ export function calculatePayslip(
       r.targetName = target.name;
     });
 
-  const gross = ctx.gross;
-  const totalDeductions = comps
-    .filter((c) => c.kind === 'deduction' && isDeductedFromPay(c))
-    .reduce((s, c) => {
-      const r = results.get(c.id);
-      return r ? s + r.amount - r.relief : s;
-    }, 0);
-  const totalEmployer = sum(comps.filter((c) => c.kind === 'employer'));
+  // Totals are sums of rounded lines, so they are tidied to 2 decimals to drop the tiny
+  // floating-point noise that adding decimals leaves (4620.250000000001) before they are stored.
+  const tidy = (n: number) => roundHalfUp(n, 2);
+  const gross = tidy(ctx.gross);
+  const totalDeductions = tidy(
+    comps
+      .filter((c) => c.kind === 'deduction' && isDeductedFromPay(c))
+      .reduce((s, c) => {
+        const r = results.get(c.id);
+        return r ? s + r.amount - r.relief : s;
+      }, 0),
+  );
+  const totalEmployer = tidy(sum(comps.filter((c) => c.kind === 'employer')));
 
   return {
     byId: results,
     gross,
-    taxable: ctx.taxable,
-    pensionable: ctx.pensionable,
+    taxable: tidy(ctx.taxable),
+    pensionable: tidy(ctx.pensionable),
     totalDeductions,
-    net: Math.max(0, gross - totalDeductions),
-    shortfall: Math.max(0, totalDeductions - gross),
+    net: Math.max(0, tidy(gross - totalDeductions)),
+    shortfall: Math.max(0, tidy(totalDeductions - gross)),
     totalEmployer,
-    employerCost: gross + totalEmployer,
+    employerCost: tidy(gross + totalEmployer),
   };
 }

@@ -21,7 +21,7 @@ export default function PayrollGroupsPage({ params }: { params: Promise<{ tenant
         <h1 className="text-xl font-bold text-gray-900">Payroll Groups</h1>
       </div>
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto flex flex-col`}>
-        <PayrollGroupsContent tenantSlug={tenantSlug} />
+        <PayrollGroupsContent />
       </div>
     </div>
   );

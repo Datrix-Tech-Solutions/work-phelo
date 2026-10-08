@@ -27,6 +27,8 @@ interface Props {
   onClose: () => void;
   /** Opens the transport request form for an approved appointment. */
   onRequestTransport?: (appointment: Appointment) => void;
+  /** Called after the appointment is marked completed, so the caller can open the follow-up form. */
+  onCompleted?: (appointment: Appointment) => void;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -39,7 +41,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** Mount with `key={appointment.id}` so the manager choice resets between appointments. */
-export function AppointmentDetailPanel({ appointment, onClose, onRequestTransport }: Props) {
+export function AppointmentDetailPanel({
+  appointment,
+  onClose,
+  onRequestTransport,
+  onCompleted,
+}: Props) {
   const toast = useToast();
   const userId = useAuthStore((s) => s.user?.id);
   const canApprove = usePermissionRule(APPROVE_PERMISSION);
@@ -61,11 +68,12 @@ export function AppointmentDetailPanel({ appointment, onClose, onRequestTranspor
   const canCancel = live && (isOwn || canApprove);
   const canComplete = appointment?.status === 'APPROVED' && (isOwn || isManager || canApprove);
 
-  async function run(action: () => Promise<unknown>, done: string) {
+  async function run(action: () => Promise<unknown>, done: string, after?: () => void) {
     try {
       await action();
       toast.success(done);
       onClose();
+      after?.();
     } catch (err) {
       toast.error(extractError(err));
     }
@@ -140,7 +148,11 @@ export function AppointmentDetailPanel({ appointment, onClose, onRequestTranspor
               <Button
                 disabled={busy}
                 onClick={() =>
-                  run(() => complete.mutateAsync(appointment.id), 'Appointment marked completed')
+                  run(
+                    () => complete.mutateAsync(appointment.id),
+                    'Appointment marked completed',
+                    () => onCompleted?.(appointment),
+                  )
                 }
               >
                 Mark Completed

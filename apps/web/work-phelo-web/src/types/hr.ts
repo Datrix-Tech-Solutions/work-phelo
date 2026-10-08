@@ -121,6 +121,8 @@ export interface Employee {
   assets?: import('@/types/asset').EmployeeAsset[];
   allowances?: EmployeeAllowance[];
   deductions?: EmployeeDeduction[];
+  /** The payroll group the employee is paid through, set from the group's own page. */
+  payrollGroupId?: string | null;
   offboarding?: OffboardingRecord;
 }
 

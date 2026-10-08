@@ -1,3 +1,6 @@
+// GENERATED from packages/payroll-engine/src/summary.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import { ALLOWANCE_TYPES, BASE_LABELS } from './constants';
 import type { PayComponent } from './types';
 

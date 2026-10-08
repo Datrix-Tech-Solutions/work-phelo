@@ -178,7 +178,7 @@ export default function ClientDetailPage() {
             label={client.convertedAt ? 'Converted On' : 'Date Created'}
             value={formatDate(client.convertedAt ?? client.createdAt)}
           />
-          <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
+          <DetailField label="Last Follow up" value={formatDate(lastInteraction)} />
           <DetailField
             label="Achieved Revenue"
             value={formatMoney(billingSummary?.achievedRevenue)}

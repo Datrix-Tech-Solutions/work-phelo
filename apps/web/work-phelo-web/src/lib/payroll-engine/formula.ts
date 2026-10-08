@@ -1,3 +1,6 @@
+// GENERATED from packages/payroll-engine/src/formula.ts by scripts/sync-payroll-engine.mjs.
+// Do not edit this copy. Change the package, then run: npm run sync:payroll-engine
+
 import { PayrollEngineError } from './types';
 
 type Token = { t: 'n'; v: number } | { t: 'id'; v: string } | { t: 'op'; v: string };

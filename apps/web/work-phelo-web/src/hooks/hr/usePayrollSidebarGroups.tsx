@@ -1,4 +1,12 @@
-import { ClipboardList, Landmark, CheckCircle2, History, Layers, Coins } from 'lucide-react';
+import {
+  ClipboardList,
+  Landmark,
+  CheckCircle2,
+  History,
+  Layers,
+  Coins,
+  PlayCircle,
+} from 'lucide-react';
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { usePayrollSettings } from '@/hooks';

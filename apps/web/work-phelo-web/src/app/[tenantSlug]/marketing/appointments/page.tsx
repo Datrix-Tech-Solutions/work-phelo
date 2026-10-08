@@ -8,6 +8,7 @@ import {
   NewAppointmentErrors,
 } from '@/components/molecules/marketing/NewAppointmentForm';
 import { AppointmentDetailPanel } from '@/components/organisms/marketing/AppointmentDetailPanel';
+import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
 import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
 import { AppointmentsPanel } from '@/components/organisms/marketing/AppointmentsPanel';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -52,6 +53,7 @@ export default function AppointmentsPage() {
 
   // The appointment a vehicle is being requested for; the request form is open while this is set.
   const [transportFor, setTransportFor] = useState<Appointment | null>(null);
+  const [followUpFor, setFollowUpFor] = useState<Appointment | null>(null);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState<NewAppointmentFields>(EMPTY_FORM);
@@ -123,6 +125,15 @@ export default function AppointmentsPage() {
           closeDetail();
           setTransportFor(appointment);
         }}
+        onCompleted={(appointment) => {
+          if (appointment.prospectId) setFollowUpFor(appointment);
+        }}
+      />
+
+      <AddInteractionPanel
+        prospectId={followUpFor?.prospectId ?? undefined}
+        isOpen={!!followUpFor}
+        onClose={() => setFollowUpFor(null)}
       />
 
       <RequestPanel

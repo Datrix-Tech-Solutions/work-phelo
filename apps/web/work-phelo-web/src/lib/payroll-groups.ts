@@ -17,9 +17,11 @@ export interface PayrollGroup {
   /** The configuration (see the payroll engine) this group is calculated with. */
   configurationId: string | null;
   reminder: { enabled: boolean; daysBefore: number };
+  /** How many employees are in the group. */
+  employeeCount: number;
 }
 
-export type PayrollGroupInput = Omit<PayrollGroup, 'id'> & { id?: string };
+export type PayrollGroupInput = Omit<PayrollGroup, 'id' | 'employeeCount'> & { id?: string };
 
 export const FREQUENCY_OPTIONS: {
   value: PayFrequency;

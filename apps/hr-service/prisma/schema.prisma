@@ -460,6 +460,8 @@ model Employee {
   taxPolicy            PayrollTaxPolicy         @default(STANDARD_PAYE)
   fixedTaxAmount       Decimal?                 @db.Decimal(15, 2)
   commissionTaxable    Boolean                  @default(true)
+  /// The payroll group this employee is paid through. Set from the group's own page.
+  payrollGroupId       String?
   emailHash            String?
   avatarUrl            String?
   createdAt            DateTime                 @default(now())
@@ -467,6 +469,7 @@ model Employee {
 
   department            Department?                 @relation(fields: [departmentId], references: [id])
   branch                Branch?                     @relation(fields: [branchId], references: [id])
+  payrollGroup          PayrollGroup?               @relation(fields: [payrollGroupId], references: [id], onDelete: SetNull)
   leaveBalances         LeaveBalance[]
   leaveRequests         LeaveRequest[]
   coveringLeaveRequests LeaveRequest[]              @relation("LeaveCoverageEmployee")
@@ -495,6 +498,7 @@ model Employee {
   resignation           ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
+  @@index([tenantId, payrollGroupId])
   @@unique([tenantId, email])
   @@schema("hr")
 }
@@ -1175,6 +1179,7 @@ model PayrollConfiguration {
   updatedAt   DateTime            @updatedAt
 
   versions PayrollConfigurationVersion[]
+  groups   PayrollGroup[]
 
   @@index([tenantId, payslipType])
   @@schema("hr")
@@ -1198,6 +1203,51 @@ model PayrollConfigurationVersion {
 
   @@unique([configurationId, version])
   @@index([tenantId, configurationId, effectiveFrom])
+  @@schema("hr")
+}
+
+/// How often a payroll group is paid. Only monthly is calculated so far.
+enum PayrollPayFrequency {
+  MONTHLY
+  BIWEEKLY
+  WEEKLY
+
+  @@schema("hr")
+}
+
+/// Whether payday is a fixed day of the month or its last day.
+enum PayrollPaydayKind {
+  DAY_OF_MONTH
+  LAST_DAY
+
+  @@schema("hr")
+}
+
+/// A set of employees paid the same way: how often, on which day, with which payroll
+/// configuration, and when to remind the people who run payroll. Employees join a group later.
+model PayrollGroup {
+  id                 String              @id @default(uuid())
+  tenantId           String
+  name               String
+  frequency          PayrollPayFrequency @default(MONTHLY)
+  paydayKind         PayrollPaydayKind
+  /// 1 to 28 when `paydayKind` is DAY_OF_MONTH; null for the last day of the month.
+  paydayDay          Int?
+  configurationId    String
+  reminderEnabled    Boolean             @default(true)
+  reminderDaysBefore Int                 @default(3)
+  createdBy          String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  /// A configuration that groups still use can't be deleted.
+  configuration PayrollConfiguration @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  /// Deleting a group leaves its employees without one.
+  employees     Employee[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([configurationId])
   @@schema("hr")
 }
 

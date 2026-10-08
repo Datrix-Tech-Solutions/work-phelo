@@ -4,6 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  checkConfiguration,
+  type PayComponent,
+} from '@work-phelo/payroll-engine';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayrollPayslipType, Prisma } from '../../prisma/generated/client';
 import {
@@ -115,7 +119,7 @@ export class PayrollConfigurationService {
     userId: string,
     dto: SavePayrollConfigurationDto,
   ): Promise<ConfigurationView & { published: true }> {
-    const components = this.checkedComponents(dto.components);
+    const components = this.checkedComponents(dto.components, dto.payslipType);
     if (!dto.effectiveFrom) {
       throw new BadRequestException(
         'Choose the date the configuration takes effect from.',
@@ -156,7 +160,7 @@ export class PayrollConfigurationService {
     id: string,
     dto: SavePayrollConfigurationDto,
   ): Promise<ConfigurationView & { published: boolean }> {
-    const components = this.checkedComponents(dto.components);
+    const components = this.checkedComponents(dto.components, dto.payslipType);
     const existing = await this.findOrThrow(tenantId, id);
     const latest = [...existing.versions].sort(
       (a, b) => b.version - a.version,
@@ -283,9 +287,22 @@ export class PayrollConfigurationService {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private checkedComponents(input: unknown[]): PayComponentData[] {
+  /**
+   * Cleans the components, then runs the payroll engine's own checks on them: the same ones the
+   * page runs before it lets someone save, so the server refuses what the page would (calculation
+   * loops, reserved codes, a commission payslip that nothing is built on, and so on).
+   */
+  private checkedComponents(
+    input: unknown[],
+    payslipType: PayslipTypeKey,
+  ): PayComponentData[] {
     const { components, errors } = validateComponents(input);
     if (errors.length) throw new BadRequestException(errors);
+    const { errors: engineErrors } = checkConfiguration(
+      components as unknown as PayComponent[],
+      payslipType,
+    );
+    if (engineErrors.length) throw new BadRequestException(engineErrors);
     return components;
   }
 
