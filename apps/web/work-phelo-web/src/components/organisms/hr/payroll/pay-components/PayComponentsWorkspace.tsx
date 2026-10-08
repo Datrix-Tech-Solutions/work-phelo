@@ -320,6 +320,7 @@ export function PayComponentsWorkspace() {
                   onVariableChange={(id, value) => setVariables((v) => ({ ...v, [id]: value }))}
                   errors={previewErrors}
                   warnings={check.warnings}
+                  reminders={check.reminders}
                   currency={currency}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
@@ -364,7 +365,6 @@ export function PayComponentsWorkspace() {
           isSaving={configStore.isSaving}
           error={saveError}
           components={components}
-          configurations={configStore.configurations}
           current={current}
           previewType={previewType}
           onSave={saveConfiguration}

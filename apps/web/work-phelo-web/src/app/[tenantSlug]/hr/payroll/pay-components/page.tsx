@@ -1,22 +1,17 @@
 'use client';
 
-import { use, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { usePermission } from '@/hooks/hr/usePermission';
+import { useRedirectWhenDenied } from '@/hooks/hr/useRedirectWhenDenied';
 import { Permission } from '@/lib/permissionMap';
 import { PayComponentsWorkspace } from '@/components/organisms/hr/payroll/pay-components/PayComponentsWorkspace';
 import { pageHeader } from '@/lib/layout';
 
 export default function PayComponentsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
-  const router = useRouter();
   const canConfigurePayroll = usePermission(Permission.MANAGE_PAYROLL_SETTINGS);
 
-  useEffect(() => {
-    if (canConfigurePayroll === false) {
-      router.replace(`/${tenantSlug}/hr/payroll`);
-    }
-  }, [canConfigurePayroll, tenantSlug, router]);
+  useRedirectWhenDenied(canConfigurePayroll === false, `/${tenantSlug}/hr/payroll`);
 
   if (!canConfigurePayroll) return null;
 

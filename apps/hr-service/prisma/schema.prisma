@@ -1166,8 +1166,9 @@ model PayrollConfiguration {
   id          String              @id @default(uuid())
   tenantId    String
   name        String
-  /// The payslip type this configuration is used for. Null once another configuration took the
-  /// type over. A type has at most one configuration per tenant.
+  /// The payslip type this configuration is for, which decides the figures it is calculated from
+  /// (basic salary, commission, or both). Several configurations can share a type; payroll groups
+  /// choose which one they use.
   payslipType PayrollPayslipType?
   createdBy   String
   createdAt   DateTime            @default(now())
@@ -1175,8 +1176,7 @@ model PayrollConfiguration {
 
   versions PayrollConfigurationVersion[]
 
-  @@unique([tenantId, payslipType])
-  @@index([tenantId])
+  @@index([tenantId, payslipType])
   @@schema("hr")
 }
 

@@ -4,10 +4,12 @@ import { PayrollSetupService } from './payroll-setup.service';
 
 const USER = { id: 'u1', tenantId: 'tenant-1' } as unknown as RequestUser;
 
-const ALL_CORE = [
-  'salariesWagesExpense',
+// Pay and net pay are all a payroll needs; tax and social security exist only when a tenant's
+// payroll configuration has them, so their accounts are optional.
+const ALL_CORE = ['salariesWagesExpense', 'netPayPayable'];
+const EVERY_ACCOUNT = [
+  ...ALL_CORE,
   'employerSocialSecurityExpense',
-  'netPayPayable',
   'incomeTaxPayable',
   'socialSecurityPayable',
 ];
@@ -113,17 +115,40 @@ describe('PayrollSetupService', () => {
 
     it('is linked but not ready, naming what is missing, when a core account is cleared', async () => {
       const { service } = build({
-        mapped: ALL_CORE.filter((role) => role !== 'incomeTaxPayable'),
+        mapped: ALL_CORE.filter((role) => role !== 'netPayPayable'),
       });
 
       await expect(service.getStatus('tenant-1')).resolves.toMatchObject({
         linked: true,
         ready: false,
         reason: 'ACCOUNTS_MISSING',
-        missingRoles: [
-          { key: 'incomeTaxPayable', label: 'Income Tax Payable' },
-        ],
+        missingRoles: [{ key: 'netPayPayable', label: 'Net Pay Payable' }],
       });
+    });
+
+    it('is ready with only pay and net pay chosen, for a payroll without tax or social security', async () => {
+      const { service } = build({ mapped: ALL_CORE });
+
+      const status = await service.getStatus('tenant-1');
+
+      expect(status.missingRoles).toEqual([]);
+      expect(status.ready).toBe(true);
+    });
+
+    it('does not require the tax and social security accounts', async () => {
+      const { service } = build({ mapped: ALL_CORE });
+
+      const status = await service.getStatus('tenant-1');
+
+      expect(status.missingRoles.map((r) => r.key)).not.toEqual(
+        expect.arrayContaining(['incomeTaxPayable']),
+      );
+      expect(status.missingRoles.map((r) => r.key)).not.toContain(
+        'socialSecurityPayable',
+      );
+      expect(status.missingRoles.map((r) => r.key)).not.toContain(
+        'employerSocialSecurityExpense',
+      );
     });
 
     it('does not require the optional pension and other-deductions accounts', async () => {
@@ -140,10 +165,10 @@ describe('PayrollSetupService', () => {
 
   describe('assertReadyToLink', () => {
     it('names every missing account', async () => {
-      const { service } = build({ mapped: ['netPayPayable'] });
+      const { service } = build({ mapped: [] });
 
       await expect(service.assertReadyToLink('tenant-1')).rejects.toThrow(
-        /Salaries and Wages Expense.*Income Tax Payable/,
+        /Salaries and Wages Expense.*Net Pay Payable/,
       );
     });
 
@@ -156,7 +181,7 @@ describe('PayrollSetupService', () => {
     });
 
     it('passes when everything core is chosen', async () => {
-      const { service } = build();
+      const { service } = build({ mapped: EVERY_ACCOUNT });
 
       await expect(service.assertReadyToLink('tenant-1')).resolves.toBe(
         undefined,

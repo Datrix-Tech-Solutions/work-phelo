@@ -27,8 +27,8 @@ export class SavePayrollConfigurationDto {
   @ApiProperty({
     enum: PAYSLIP_TYPE_KEYS,
     description:
-      'The payslip type this configuration is used for. A type uses one configuration at a time, so ' +
-      'saving for a type takes it from the configuration that had it.',
+      'The payslip type, which decides the figures the configuration is calculated from. Several ' +
+      'configurations can share a type; payroll groups choose which one they use.',
   })
   @IsIn(PAYSLIP_TYPE_KEYS)
   payslipType!: PayslipTypeKey;

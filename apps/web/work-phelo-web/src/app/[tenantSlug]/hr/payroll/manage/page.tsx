@@ -1,22 +1,17 @@
 'use client';
 
-import { use, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { usePermission } from '@/hooks/hr/usePermission';
+import { useRedirectWhenDenied } from '@/hooks/hr/useRedirectWhenDenied';
 import { Permission } from '@/lib/permissionMap';
 import { ManagePayrollTab } from '@/components/organisms/hr/payroll/ManagePayrollTab';
 import { pageHeader, pageContent } from '@/lib/layout';
 
 export default function ManagePayrollPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
-  const router = useRouter();
   const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
 
-  useEffect(() => {
-    if (canManagePayroll === false) {
-      router.replace(`/${tenantSlug}/hr/payroll`);
-    }
-  }, [canManagePayroll, tenantSlug, router]);
+  useRedirectWhenDenied(canManagePayroll === false, `/${tenantSlug}/hr/payroll`);
 
   if (!canManagePayroll) return null;
 

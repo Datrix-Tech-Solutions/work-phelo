@@ -176,16 +176,17 @@ export const DEFAULT_ROLE: Partial<Record<ComponentKind, PayRole>> = {
   employer: 'employer_social_security',
 };
 
-/** What payroll needs to post to accounting, by payslip type. Pension and other deductions are optional. */
+/**
+ * What payroll needs to post to accounting. Only pay is required, for every payslip type: a basic
+ * salary covers it, and a commission payslip needs an earning built from the commission figure.
+ * Income tax, social security, pension and other deductions are posted only when a configuration
+ * has them, so a configuration can leave them out (an exempt contractor, say). Net pay is worked
+ * out, so it is never a role.
+ */
 export const REQUIRED_ROLES: Record<PayslipTypeKey, PayRole[]> = {
-  monthly: ['salary_wages', 'income_tax', 'employee_social_security', 'employer_social_security'],
-  commission: ['salary_wages', 'income_tax'],
-  monthly_commission: [
-    'salary_wages',
-    'income_tax',
-    'employee_social_security',
-    'employer_social_security',
-  ],
+  monthly: ['salary_wages'],
+  commission: ['salary_wages'],
+  monthly_commission: ['salary_wages'],
 };
 
 export const VARIABLE_SOURCE_LABELS: Record<VariableSource, string> = {

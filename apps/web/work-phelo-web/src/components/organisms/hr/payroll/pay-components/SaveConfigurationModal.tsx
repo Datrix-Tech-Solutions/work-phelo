@@ -23,7 +23,6 @@ interface SaveConfigurationModalProps {
   isOpen: boolean;
   onClose: () => void;
   components: PayComponent[];
-  configurations: SavedConfiguration[];
   /** The configuration being edited, if it was opened or saved before. */
   current: SavedConfiguration | null;
   /** The payslip type the sample was previewing, ticked by default for a new configuration. */
@@ -43,7 +42,6 @@ export function SaveConfigurationModal({
   isOpen,
   onClose,
   components,
-  configurations,
   current,
   previewType,
   isSaving,
@@ -64,14 +62,13 @@ export function SaveConfigurationModal({
   const check = useMemo(() => checkConfiguration(components, type), [type, components]);
   const canSave =
     name.trim() !== '' && check.errors.length === 0 && (!hasChanges || effectiveFrom !== '');
-  const takenFrom = configurations.find((c) => c.id !== current?.id && c.payslipType === type);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Save configuration"
-      description="Choose the payslip type this configuration is used for and when changes take effect."
+      description="Choose the payslip type, which decides the figures it is calculated from, and when changes take effect."
       width="max-w-lg"
       footer={
         <>
@@ -100,7 +97,7 @@ export function SaveConfigurationModal({
         />
 
         <SearchSelect
-          label="Used for"
+          label="Payslip type"
           clearable={false}
           options={PAYSLIP_TYPE_ORDER.map((key) => ({
             value: key,
@@ -142,12 +139,6 @@ export function SaveConfigurationModal({
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
-        {takenFrom && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            {PAYSLIP_TYPES[type].label} payslips currently use &ldquo;{takenFrom.name}&rdquo;.
-            Saving replaces it.
-          </p>
-        )}
         {check.errors.map((message) => (
           <p key={message} className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
             {message}
@@ -155,6 +146,11 @@ export function SaveConfigurationModal({
         ))}
         {check.warnings.map((message) => (
           <p key={message} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {message}
+          </p>
+        ))}
+        {check.reminders.map((message) => (
+          <p key={message} className="rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-600">
             {message}
           </p>
         ))}

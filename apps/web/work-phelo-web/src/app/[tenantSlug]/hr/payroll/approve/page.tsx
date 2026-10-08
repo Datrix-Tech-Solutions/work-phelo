@@ -1,8 +1,8 @@
 'use client';
 
-import { use, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { usePermission } from '@/hooks/hr/usePermission';
+import { useRedirectWhenDenied } from '@/hooks/hr/useRedirectWhenDenied';
 import { Permission } from '@/lib/permissionMap';
 import { ApprovePayrollTab } from '@/components/organisms/hr/payroll/ApprovePayrollTab';
 import { pageHeader, pageContent } from '@/lib/layout';
@@ -13,14 +13,9 @@ export default function ApprovePayrollPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
-  const router = useRouter();
   const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
 
-  useEffect(() => {
-    if (canApprovePayroll === false) {
-      router.replace(`/${tenantSlug}/hr/payroll`);
-    }
-  }, [canApprovePayroll, tenantSlug, router]);
+  useRedirectWhenDenied(canApprovePayroll === false, `/${tenantSlug}/hr/payroll`);
 
   if (!canApprovePayroll) return null;
 
