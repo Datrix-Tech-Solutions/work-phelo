@@ -209,7 +209,7 @@ describe('PayrollIntegrationService.postRoleAccrual', () => {
 
     await service.postRoleAccrual('hr-service', 'approver-1', ROLE_DTO);
 
-    const { lines } = journals.create.mock.calls[0][1] as {
+    const { lines } = (journals.create.mock.calls as unknown[][])[0][1] as {
       lines: { glAccountId: string; debit?: number; credit?: number }[];
     };
     const by = (id: string) => lines.find((l) => l.glAccountId === id);
@@ -248,7 +248,9 @@ describe('PayrollIntegrationService.postRoleAccrual', () => {
       totalOtherDeductions: 0,
     });
 
-    const { lines } = journals.create.mock.calls[0][1] as { lines: unknown[] };
+    const { lines } = (journals.create.mock.calls as unknown[][])[0][1] as {
+      lines: unknown[];
+    };
     expect(lines).toHaveLength(3);
   });
 
@@ -272,7 +274,7 @@ describe('PayrollIntegrationService.postRoleAccrual', () => {
 
     await service.postRoleAccrual('hr-service', 'approver-1', ROLE_DTO);
 
-    const roles = sourceLedger.createEntry.mock.calls.map(
+    const roles = (sourceLedger.createEntry.mock.calls as unknown[][]).map(
       (call) => (call[0] as { sourceRole: string }).sourceRole,
     );
     expect(roles).toEqual([
