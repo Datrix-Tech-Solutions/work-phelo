@@ -1222,6 +1222,9 @@ model PayrollConfiguration {
   /// (basic salary, commission, or both). Several configurations can share a type; payroll groups
   /// choose which one they use.
   payslipType PayrollPayslipType?
+  /// The currency its payslips are paid in. A payroll run uses the currency of the
+  /// configurations it is made from.
+  currency    String              @default("GHS")
   createdBy   String
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt

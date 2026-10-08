@@ -18,7 +18,7 @@ function AssetRow({ asset }: { asset: EmployeeAsset }) {
   });
 
   return (
-    <div className="flex items-center gap-4 border border-gray-200 rounded-xl overflow-hidden bg-white">
+    <div className="flex items-center gap-4 border border-gray-200 rounded-card overflow-hidden bg-white">
       <div className="w-20 h-16 shrink-0 bg-brand-tint flex items-center justify-center">
         <AssetTypeIcon type={asset.type} size="sm" className="w-7 h-7" />
       </div>
@@ -43,9 +43,9 @@ export function MyAssetsPanel({ isOpen, onClose }: MyAssetsPanelProps) {
       width="sm:w-[480px]"
     >
       {isLoading ? (
-        <div className="flex flex-col gap-3 p-4">
+        <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+            <div key={i} className="h-16 bg-gray-100 rounded-card animate-pulse" />
           ))}
         </div>
       ) : assets.length === 0 ? (
@@ -53,7 +53,7 @@ export function MyAssetsPanel({ isOpen, onClose }: MyAssetsPanelProps) {
           <p className="text-sm text-gray-400">No assets assigned to you.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 p-4">
+        <div className="flex flex-col gap-3">
           {assets.map((asset) => (
             <AssetRow key={asset.id} asset={asset} />
           ))}

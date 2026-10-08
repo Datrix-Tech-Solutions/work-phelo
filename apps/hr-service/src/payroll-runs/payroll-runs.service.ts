@@ -1,13 +1,17 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import {
   PAYSLIP_TYPES,
   buildPayslipLines,
   calculatePayslip,
+  DEFAULT_CURRENCY,
   checkConfiguration,
+  countryForCurrency,
   roleTotals,
   sumRoleTotals,
   variableAmounts,
@@ -27,7 +31,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { PayrollService } from '../payroll/payroll.service';
-import { defaultPayrollCurrency } from '../common/payroll-calculator.helper';
 import type {
   ApprovePayrollMonthDto,
   RunConfiguredPayrollDto,
@@ -53,6 +56,8 @@ const list = (names: string[]) =>
 
 @Injectable()
 export class PayrollRunsService {
+  private readonly logger = new Logger(PayrollRunsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
@@ -94,36 +99,31 @@ export class PayrollRunsService {
     const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
     const end = new Date(year, month, 0, 23, 59, 59, 999);
 
-    const [employees, groups, configurationRows, tenantConfig] =
-      await Promise.all([
-        this.prisma.employee.findMany({
-          where: {
-            tenantId,
-            employmentStatus: {
-              in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
+    const [employees, groups, configurationRows] = await Promise.all([
+      this.prisma.employee.findMany({
+        where: {
+          tenantId,
+          employmentStatus: {
+            in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
+          },
+        },
+        include: {
+          allowances: {
+            where: {
+              isRecurring: true,
+              effectiveFrom: { lte: end },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
             },
           },
-          include: {
-            allowances: {
-              where: {
-                isRecurring: true,
-                effectiveFrom: { lte: end },
-                OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
-              },
-            },
-            deductions: { where: { startDate: { lte: end } } },
-          },
-        }),
-        this.prisma.payrollGroup.findMany({ where: { tenantId } }),
-        this.prisma.payrollConfiguration.findMany({
-          where: { tenantId },
-          include: { versions: true },
-        }),
-        this.prisma.tenantConfig.findUnique({
-          where: { tenantId },
-          select: { payrollCountry: true, payrollCurrency: true },
-        }),
-      ]);
+          deductions: { where: { startDate: { lte: end } } },
+        },
+      }),
+      this.prisma.payrollGroup.findMany({ where: { tenantId } }),
+      this.prisma.payrollConfiguration.findMany({
+        where: { tenantId },
+        include: { versions: true },
+      }),
+    ]);
 
     const onPayroll = await this.verifiedOnly(tenantId, employees);
     if (onPayroll.length === 0) {
@@ -144,6 +144,7 @@ export class PayrollRunsService {
         id: row.id,
         name: row.name,
         payslipType: toPayslipType(row.payslipType),
+        currency: row.currency ?? DEFAULT_CURRENCY,
         versions: [...row.versions]
           .sort((a, b) => a.version - b.version)
           .map((v) => ({
@@ -171,6 +172,18 @@ export class PayrollRunsService {
         `No one is paid ${type.label.toLowerCase()} through a payroll group.`,
       );
     }
+
+    // A run is paid in one currency, so every configuration it uses must agree.
+    const currencies = [
+      ...new Set(members.map(({ configuration }) => configuration.currency)),
+    ];
+    if (currencies.length > 1) {
+      throw new BadRequestException(
+        `${type.label} payroll uses configurations in different currencies (${currencies.join(', ')}). ` +
+          'Change the configurations or payroll groups so they share one currency.',
+      );
+    }
+    const currency = currencies[0];
 
     // Each configuration's version in force must be usable before anyone is calculated.
     const versions = new Map<string, ReturnType<typeof versionInForce>>();
@@ -297,9 +310,7 @@ export class PayrollRunsService {
     const totalNet = sum((p) => p.result.net);
     const totalEmployerCost = sum((p) => p.result.employerCost);
 
-    const country = tenantConfig?.payrollCountry ?? PayrollCountry.GH;
-    const currency =
-      tenantConfig?.payrollCurrency ?? defaultPayrollCurrency(country);
+    const country = countryForCurrency(currency) as PayrollCountry;
 
     const run = await this.prisma.$transaction(async (tx) => {
       // A run returned to draft is replaced by the new one.
@@ -433,10 +444,23 @@ export class PayrollRunsService {
         });
         approved.push({ runId: run.id, payslipType: run.payslipKey });
       } catch (error) {
+        // Messages written for people come from HTTP exceptions; anything else is a fault to log.
+        if (!(error instanceof HttpException)) {
+          this.logger.error(
+            `Approving payroll run ${run.id} failed: ${
+              error instanceof Error
+                ? (error.stack ?? error.message)
+                : String(error)
+            }`,
+          );
+        }
         failed.push({
           runId: run.id,
           payslipType: run.payslipKey,
-          message: error instanceof Error ? error.message : String(error),
+          message:
+            error instanceof HttpException
+              ? error.message
+              : 'Something went wrong approving this payroll. Please try again, and contact support if it keeps happening.',
         });
       }
     }

@@ -152,163 +152,180 @@ export function EditEmployeePanel({
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Personal Information
         </p>
-        <FormField
-          label="First Name"
-          registration={editForm.register('firstName', { required: 'Required' })}
-          error={editForm.formState.errors.firstName}
-          placeholder="eg; Kofi"
-        />
-        <FormField
-          label="Last Name"
-          registration={editForm.register('lastName', { required: 'Required' })}
-          error={editForm.formState.errors.lastName}
-          placeholder="eg; Boateng"
-        />
-
-        <DatePicker
-          label="Date of Birth"
-          value={editDobValue}
-          onChange={(v) => {
-            editForm.setValue('dateOfBirth', v);
-            editForm.clearErrors('dateOfBirth');
-          }}
-          error={editForm.formState.errors.dateOfBirth?.message}
-          disableFuture
-        />
-        <SearchSelect
-          label="Gender"
-          placeholder="Select gender"
-          value={editGenderValue}
-          onChange={(v) => editForm.setValue('gender', v as Gender)}
-          options={[
-            { value: 'MALE', label: 'Male' },
-            { value: 'FEMALE', label: 'Female' },
-          ]}
-        />
-        <FormField
-          label="Address"
-          registration={editForm.register('address')}
-          placeholder="eg; 12 Accra Road"
-        />
-        <FormField label="City" registration={editForm.register('city')} placeholder="eg; Accra" />
-        <FormField
-          label="Region"
-          registration={editForm.register('region')}
-          placeholder="eg; Greater Accra"
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField
+            label="Last Name"
+            registration={editForm.register('lastName', { required: 'Required' })}
+            error={editForm.formState.errors.lastName}
+            placeholder="eg; Boateng"
+          />
+          <FormField
+            label="First Name"
+            registration={editForm.register('firstName', { required: 'Required' })}
+            error={editForm.formState.errors.firstName}
+            placeholder="eg; Kofi"
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <DatePicker
+            label="Date of Birth"
+            value={editDobValue}
+            onChange={(v) => {
+              editForm.setValue('dateOfBirth', v);
+              editForm.clearErrors('dateOfBirth');
+            }}
+            error={editForm.formState.errors.dateOfBirth?.message}
+            disableFuture
+          />
+          <SearchSelect
+            label="Gender"
+            placeholder="Select gender"
+            value={editGenderValue}
+            onChange={(v) => editForm.setValue('gender', v as Gender)}
+            options={[
+              { value: 'MALE', label: 'Male' },
+              { value: 'FEMALE', label: 'Female' },
+            ]}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <FormField
+            label="Address"
+            registration={editForm.register('address')}
+            placeholder="eg; 12 Accra Road"
+          />
+          <FormField
+            label="City"
+            registration={editForm.register('city')}
+            placeholder="eg; Accra"
+          />
+          <FormField
+            label="Region"
+            registration={editForm.register('region')}
+            placeholder="eg; Greater Accra"
+          />
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Job Information
         </p>
-        <FormField
-          label="Job Title"
-          registration={editForm.register('jobTitle', { required: 'Required' })}
-          error={editForm.formState.errors.jobTitle}
-          placeholder="eg; UI/UX Engineer"
-        />
-        <SearchSelect
-          label="Department"
-          placeholder="Select department"
-          value={editDeptValue}
-          onChange={(v) => editForm.setValue('departmentId', v)}
-          options={departments.map((d) => ({ value: d.id, label: d.name }))}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {employees.length > 0 && (
+            <SearchSelect
+              label="Reporting Manager"
+              placeholder="Select manager (optional)"
+              value={editManagerValue}
+              onChange={(v) => editForm.setValue('managerId', v)}
+              options={employees
+                .filter((e) => e.id !== employee.id)
+                .map((e) => ({
+                  value: e.id,
+                  label: `${e.firstName} ${e.lastName}`,
+                  sublabel: e.jobTitle,
+                }))}
+            />
+          )}
+          <SearchSelect
+            label="Department"
+            placeholder="Select department"
+            value={editDeptValue}
+            onChange={(v) => editForm.setValue('departmentId', v)}
+            options={departments.map((d) => ({ value: d.id, label: d.name }))}
+          />
+          <FormField
+            label="Job Title"
+            registration={editForm.register('jobTitle', { required: 'Required' })}
+            error={editForm.formState.errors.jobTitle}
+            placeholder="eg; UI/UX Engineer"
+          />
+        </div>
         {branches.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <SearchSelect
+              label="Branch"
+              placeholder="Select branch (optional)"
+              value={editBranchValue}
+              onChange={(v) => editForm.setValue('branchId', v)}
+              options={branches.map((b) => ({ value: b.id, label: b.name }))}
+            />
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <SearchSelect
-            label="Branch"
-            placeholder="Select branch (optional)"
-            value={editBranchValue}
-            onChange={(v) => editForm.setValue('branchId', v)}
-            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+            label="Employment Type"
+            placeholder="Select type"
+            value={editTypeValue}
+            onChange={(v) => editForm.setValue('employmentType', v as EmploymentType)}
+            options={[
+              { value: 'FULL_TIME', label: 'Full Time' },
+              { value: 'PART_TIME', label: 'Part Time' },
+              { value: 'CONTRACT', label: 'Contract' },
+              { value: 'INTERN', label: 'Intern' },
+            ]}
           />
-        )}
-        {employees.length > 0 && (
           <SearchSelect
-            label="Reporting Manager"
-            placeholder="Select manager (optional)"
-            value={editManagerValue}
-            onChange={(v) => editForm.setValue('managerId', v)}
-            options={employees
-              .filter((e) => e.id !== employee.id)
-              .map((e) => ({
-                value: e.id,
-                label: `${e.firstName} ${e.lastName}`,
-                sublabel: e.jobTitle,
-              }))}
+            label="Employment Status"
+            placeholder="Select status"
+            value={editStatusValue}
+            onChange={(v) => editForm.setValue('employmentStatus', v as EmploymentStatus)}
+            options={[
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'PROBATION', label: 'Probation' },
+              { value: 'SUSPENDED', label: 'Suspended' },
+            ]}
           />
-        )}
-        <DatePicker
-          label="Date Hired"
-          value={editHireDateValue}
-          onChange={(v) => editForm.setValue('hireDate', v)}
-          disableFuture
-        />
-        <SearchSelect
-          label="Employment Type"
-          placeholder="Select type"
-          value={editTypeValue}
-          onChange={(v) => editForm.setValue('employmentType', v as EmploymentType)}
-          options={[
-            { value: 'FULL_TIME', label: 'Full Time' },
-            { value: 'PART_TIME', label: 'Part Time' },
-            { value: 'CONTRACT', label: 'Contract' },
-            { value: 'INTERN', label: 'Intern' },
-          ]}
-        />
-        <SearchSelect
-          label="Employment Status"
-          placeholder="Select status"
-          value={editStatusValue}
-          onChange={(v) => editForm.setValue('employmentStatus', v as EmploymentStatus)}
-          options={[
-            { value: 'ACTIVE', label: 'Active' },
-            { value: 'PROBATION', label: 'Probation' },
-            { value: 'SUSPENDED', label: 'Suspended' },
-          ]}
-        />
-        {editTypeValue !== 'CONTRACT' && (
-          <MonthPicker
-            label="Probation End Date"
-            value={probationValue}
-            onChange={(v) => editForm.setValue('probationEndsAt', v)}
-            disablePast={true}
+          <DatePicker
+            label="Date Hired"
+            value={editHireDateValue}
+            onChange={(v) => editForm.setValue('hireDate', v)}
+            disableFuture
           />
-        )}
-        {editTypeValue === 'CONTRACT' && (
-          <MonthPicker
-            label="Contract End Date"
-            value={contractEndValue}
-            onChange={(v) => editForm.setValue('contractEndDate', v)}
-            disablePast={true}
-          />
-        )}
+          {editTypeValue !== 'CONTRACT' && (
+            <MonthPicker
+              label="Probation End Date"
+              value={probationValue}
+              onChange={(v) => editForm.setValue('probationEndsAt', v)}
+              disablePast={true}
+            />
+          )}
+          {editTypeValue === 'CONTRACT' && (
+            <MonthPicker
+              label="Contract End Date"
+              value={contractEndValue}
+              onChange={(v) => editForm.setValue('contractEndDate', v)}
+              disablePast={true}
+            />
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-          Banking & Compliance
+          Payroll Profile
         </p>
-        <SearchSelect
-          label="Compensation Type"
-          placeholder="Select compensation type"
-          value={compensationTypeValue}
-          onChange={(v) => editForm.setValue('compensationType', v as EmployeeCompensationType)}
-          options={[
-            { value: 'SALARY', label: 'Salary' },
-            { value: 'COMMISSION', label: 'Commission' },
-            { value: 'SALARY_PLUS_COMMISSION', label: 'Salary + Commission' },
-          ]}
-        />
-        {(compensationTypeValue === 'SALARY' ||
-          compensationTypeValue === 'SALARY_PLUS_COMMISSION') && (
-          <NumberField
-            label={`Basic Salary (${tenantCurrency})`}
-            value={basicSalaryValue ?? 0}
-            onChange={(n) => editForm.setValue('basicSalary', n === 0 ? undefined : n)}
-            placeholder="0.00"
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SearchSelect
+            label="Compensation Type"
+            placeholder="Select compensation type"
+            value={compensationTypeValue}
+            onChange={(v) => editForm.setValue('compensationType', v as EmployeeCompensationType)}
+            options={[
+              { value: 'SALARY', label: 'Salary' },
+              { value: 'COMMISSION', label: 'Commission' },
+              { value: 'SALARY_PLUS_COMMISSION', label: 'Salary + Commission' },
+            ]}
           />
-        )}
+          {(compensationTypeValue === 'SALARY' ||
+            compensationTypeValue === 'SALARY_PLUS_COMMISSION') && (
+            <NumberField
+              label={`Basic Salary (${tenantCurrency})`}
+              value={basicSalaryValue ?? 0}
+              onChange={(n) => editForm.setValue('basicSalary', n === 0 ? undefined : n)}
+              placeholder="0.00"
+            />
+          )}
+        </div>
       </div>
     </SidePanel>
   );

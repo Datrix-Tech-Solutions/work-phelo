@@ -10,6 +10,8 @@ export interface SavePayrollConfigurationInput {
   id?: string;
   name: string;
   payslipType: PayslipTypeKey;
+  /** The currency its payslips are paid in. */
+  currency: string;
   components: PayComponent[];
   /** Used when the components changed, which publishes a new version. */
   effectiveFrom: string;
