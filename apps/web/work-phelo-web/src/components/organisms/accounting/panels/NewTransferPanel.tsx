@@ -167,7 +167,7 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
       <SidePanel
         isOpen={isOpen}
         onClose={close}
-        title="New Transfer"
+        title="New Contra Transaction"
         description="Move funds between two of your cash/bank accounts."
         footer={
           <div className="flex justify-end gap-3">
@@ -187,45 +187,47 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
         }
       >
         <div className="flex flex-col gap-4">
-          <Controller
-            name="cashAccountId"
-            control={control}
-            rules={{ required: 'From account is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="From Account"
-                placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select source account…'}
-                options={sourceOptions}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.cashAccountId?.message}
-              />
-            )}
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Controller
+              name="cashAccountId"
+              control={control}
+              rules={{ required: 'From account is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="From Account"
+                  placeholder={isLoadingCashAccounts ? 'Loading…' : 'Select source account…'}
+                  options={sourceOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.cashAccountId?.message}
+                />
+              )}
+            />
 
-          <Controller
-            name="destinationCashAccountId"
-            control={control}
-            rules={{ required: 'To account is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="To Account"
-                placeholder={
-                  !cashAccountId
-                    ? 'Select a source account first…'
-                    : isLoadingCashAccounts
-                      ? 'Loading…'
-                      : 'Select destination account…'
-                }
-                options={destinationOptions}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.destinationCashAccountId?.message}
-              />
-            )}
-          />
+            <Controller
+              name="destinationCashAccountId"
+              control={control}
+              rules={{ required: 'To account is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="To Account"
+                  placeholder={
+                    !cashAccountId
+                      ? 'Select a source account first…'
+                      : isLoadingCashAccounts
+                        ? 'Loading…'
+                        : 'Select destination account…'
+                  }
+                  options={destinationOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.destinationCashAccountId?.message}
+                />
+              )}
+            />
+          </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Controller
               name="amount"
               control={control}
@@ -243,6 +245,19 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
               )}
             />
             <Input label="Currency" readOnly value={sourceAccount?.currency ?? '—'} />
+            <Controller
+              name="transactionDate"
+              control={control}
+              rules={{ required: 'Date is required' }}
+              render={({ field }) => (
+                <DatePicker
+                  label="Transfer Date"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.transactionDate?.message}
+                />
+              )}
+            />
           </div>
 
           {isCrossCurrency && (
@@ -261,20 +276,6 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
             />
           )}
 
-          <Controller
-            name="transactionDate"
-            control={control}
-            rules={{ required: 'Date is required' }}
-            render={({ field }) => (
-              <DatePicker
-                label="Transfer Date"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.transactionDate?.message}
-              />
-            )}
-          />
-
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -285,7 +286,7 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
           </label>
 
           {hasCharge && (
-            <div className="flex flex-col gap-4 rounded-xl border border-gray-200 p-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Controller
                 name="chargeAmount"
                 control={control}

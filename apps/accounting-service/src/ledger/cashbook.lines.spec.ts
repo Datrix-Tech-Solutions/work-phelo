@@ -211,6 +211,67 @@ describe('CashbookService multi-line entries', () => {
     ]);
   });
 
+  describe('with an entity (counterpartyId)', () => {
+    const withEntity = (direction: CashbookDirection) => ({
+      ...posted(direction),
+      counterpartyType: 'VENDOR',
+      counterpartyId: 'vendor-1',
+    });
+    const vendor = {
+      id: 'vendor-1',
+      status: 'ACTIVE',
+      currency: null,
+    };
+
+    it('tags every offset line with the entity, but not the cash line', async () => {
+      const { prisma, journals, service } = setup();
+      prisma.subledgerAccount = {
+        findFirst: jest.fn().mockResolvedValue(vendor),
+      };
+      prisma.cashbookTransaction.findFirst.mockResolvedValue({
+        ...withEntity(CashbookDirection.OUTFLOW),
+        lines: [
+          {
+            glAccountId: 'insurance',
+            amount: decimal('70000'),
+            description: null,
+          },
+          {
+            glAccountId: 'insurance',
+            amount: decimal('2000'),
+            description: null,
+          },
+          { glAccountId: 'rent', amount: decimal('4000'), description: null },
+        ],
+      });
+      await service.postTransaction(actor, 'cb-1');
+
+      const lines = journals.createPostedInTransaction.mock.calls[0][2].lines;
+      expect(
+        lines.map((l: any) => [l.glAccountId, l.subledgerAccountId]),
+      ).toEqual([
+        ['insurance', 'vendor-1'],
+        ['insurance', 'vendor-1'],
+        ['rent', 'vendor-1'],
+        ['cash-gl', undefined],
+      ]);
+    });
+
+    it('leaves the entity off when it is in another currency', async () => {
+      const { prisma, journals, service } = setup();
+      prisma.subledgerAccount = {
+        findFirst: jest.fn().mockResolvedValue({ ...vendor, currency: 'USD' }),
+      };
+      prisma.cashbookTransaction.findFirst.mockResolvedValue(
+        withEntity(CashbookDirection.OUTFLOW),
+      );
+      await service.postTransaction(actor, 'cb-1');
+
+      const lines = journals.createPostedInTransaction.mock.calls[0][2].lines;
+      expect(lines.every((l: any) => !l.subledgerAccountId)).toBe(true);
+    });
+  });
+
   it('refuses to post lines that do not add up to the entry amount', async () => {
     const { prisma, service } = setup();
     prisma.cashbookTransaction.findFirst.mockResolvedValue({

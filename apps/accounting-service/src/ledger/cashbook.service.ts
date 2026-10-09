@@ -1210,7 +1210,10 @@ export class CashbookService {
       tenantId,
       transaction.transactionDate,
     );
-    const lines = this.journalLines(transaction);
+    const lines = this.journalLines(
+      transaction,
+      await this.resolveCounterpartySubledger(tx, tenantId, transaction),
+    );
     return {
       transactionDate: transaction.transactionDate.toISOString(),
       fiscalPeriodId: period.id,
@@ -1231,7 +1234,43 @@ export class CashbookService {
     };
   }
 
-  private journalLines(transaction: CashbookRecord): JournalLineDto[] {
+  /**
+   * The entity a direct entry names (counterpartyId) when it carries no explicit offset
+   * subledger. Skipped when it is inactive or in another currency, which the journal would
+   * reject, so an entity never blocks a posting that worked without it.
+   */
+  private async resolveCounterpartySubledger(
+    tx: TransactionClient,
+    tenantId: string,
+    transaction: CashbookRecord,
+  ): Promise<string | null> {
+    if (
+      transaction.offsetSubledgerAccountId ||
+      !transaction.counterpartyId ||
+      transaction.transactionType === CashbookTransactionType.TRANSFER
+    ) {
+      return null;
+    }
+    const subledger = await tx.subledgerAccount.findFirst({
+      where: { tenantId, id: transaction.counterpartyId },
+    });
+    if (
+      !subledger ||
+      subledger.status !== RecordStatus.ACTIVE ||
+      (subledger.currency && subledger.currency !== transaction.currency)
+    ) {
+      return null;
+    }
+    return subledger.id;
+  }
+
+  private journalLines(
+    transaction: CashbookRecord,
+    counterpartyId: string | null = null,
+  ): JournalLineDto[] {
+    // With no explicit offset subledger, the entity goes on every offset line (the cash line
+    // never carries it), so its balance moves by the total of those lines.
+    const counterpartyFor = () => counterpartyId ?? undefined;
     const amount = Number(transaction.amount.toString());
     const cashLine = {
       glAccountId: transaction.cashAccount.glAccountId,
@@ -1240,7 +1279,8 @@ export class CashbookService {
     const offsetLine = transaction.offsetGlAccountId
       ? {
           glAccountId: transaction.offsetGlAccountId,
-          subledgerAccountId: transaction.offsetSubledgerAccountId ?? undefined,
+          subledgerAccountId:
+            transaction.offsetSubledgerAccountId ?? counterpartyFor(),
           description: transaction.description,
         }
       : null;
@@ -1282,9 +1322,9 @@ export class CashbookService {
             kind: line.kind,
             glAccountId: line.glAccountId,
             subledgerAccountId:
-              index === 0
-                ? (transaction.offsetSubledgerAccountId ?? undefined)
-                : undefined,
+              index === 0 && transaction.offsetSubledgerAccountId
+                ? transaction.offsetSubledgerAccountId
+                : counterpartyFor(),
             description: line.description ?? transaction.description,
             amount: Number(line.amount.toString()),
           }))

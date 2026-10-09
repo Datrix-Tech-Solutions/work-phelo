@@ -294,7 +294,7 @@ export function CashAccountsTable() {
           setPage(1);
         }}
         secondaryButton={{
-          label: 'New Transfer',
+          label: 'New Contra Transaction',
           onClick: () => setTransferPanelOpen(true),
         }}
         actionButton={{

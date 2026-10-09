@@ -204,23 +204,6 @@ export default function NewJournalEntryPage() {
               clearable={false}
             />
           </div>
-          <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isPending}>
-            Cancel
-          </Button>
-          {/* No backend workflow status for "review" yet (JournalStatus is only
-              DRAFT/POSTED/REVERSED) — this creates the same draft as "Save as Draft". */}
-          <Button
-            variant="primary"
-            isLoading={isPending}
-            loadingText="Saving…"
-            onClick={form.handleSubmit(onSubmit)}
-          >
-            {entryType === 'reversing'
-              ? 'Post Reversal'
-              : entryType === 'recurring'
-                ? 'Save Recurring Entry'
-                : 'Submit for Review'}
-          </Button>
         </div>
       </div>
 
@@ -249,6 +232,26 @@ export default function NewJournalEntryPage() {
           />
         </>
       )}
+
+      <div className="flex justify-end gap-3">
+        <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isPending}>
+          Cancel
+        </Button>
+        {/* No backend workflow status for "review" yet (JournalStatus is only
+            DRAFT/POSTED/REVERSED) — this creates the same draft as "Save as Draft". */}
+        <Button
+          variant="primary"
+          isLoading={isPending}
+          loadingText="Saving…"
+          onClick={form.handleSubmit(onSubmit)}
+        >
+          {entryType === 'reversing'
+            ? 'Post Reversal'
+            : entryType === 'recurring'
+              ? 'Save Recurring Entry'
+              : 'Submit for Review'}
+        </Button>
+      </div>
 
       <Modal
         isOpen={showCancelModal}

@@ -45,6 +45,7 @@ import {
   TransactionTypeDefinition,
 } from '@/types/accounting';
 import {
+  useAccountingConfig,
   useAccountingCurrencyOptions,
   useCashAccountOptions,
   useCashAccounts,
@@ -220,6 +221,8 @@ export function NewTransactionPanel({
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
   const { options: currencyOptions } = useAccountingCurrencyOptions();
+  const { data: accountingConfig } = useAccountingConfig();
+  const baseCurrency = accountingConfig?.baseCurrency ?? '';
   const { data: entityTypesData = [] } = useEntityTypes();
   const { data: rules = [] } = useTransactionTypeRules();
   const rule = useMemo(
@@ -382,6 +385,7 @@ export function NewTransactionPanel({
     const configuredRoles = transactionType?.businessRoles ?? [];
     reset({
       ...DEFAULTS,
+      currency: baseCurrency,
       businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
       entryDate: today(),
       cashAccountId: rule?.defaultCashAccountId ?? '',
@@ -1073,19 +1077,19 @@ export function NewTransactionPanel({
               />
             </div>
 
-            <FormField
-              label="Reference"
-              registration={register('reference')}
-              placeholder="Optional bank/cheque reference"
-            />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <FormField
+                label="Reference"
+                registration={register('reference')}
+                placeholder="Optional bank/cheque reference"
+              />
 
-            <FormField
-              label="Description"
-              type="textarea"
-              rows={2}
-              registration={register('description')}
-              placeholder={`What is this ${transactionType?.name.toLowerCase() ?? 'transaction'} for?`}
-            />
+              <FormField
+                label="Description"
+                registration={register('description')}
+                placeholder={`What is this ${transactionType?.name.toLowerCase() ?? 'transaction'} for?`}
+              />
+            </div>
 
             {usesLines ? (
               <>
