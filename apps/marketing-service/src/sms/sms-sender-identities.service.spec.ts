@@ -53,6 +53,8 @@ const sender = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('SmsSenderIdentitiesService', () => {
+  const originalReadinessMode = process.env.SMS_SENDER_READINESS_MODE;
+  const originalMaxAge = process.env.SMS_SENDER_PROVIDER_STATUS_MAX_AGE_HOURS;
   const tx = {
     marketingSmsSenderIdentity: {
       updateMany: jest.fn(),
@@ -80,6 +82,8 @@ describe('SmsSenderIdentitiesService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    delete process.env.SMS_SENDER_READINESS_MODE;
+    delete process.env.SMS_SENDER_PROVIDER_STATUS_MAX_AGE_HOURS;
     rabbit.submitSmsSenderIdentity.mockResolvedValue({
       provider: 'pilosms',
       providerStatus: 'PENDING',
@@ -90,6 +94,19 @@ describe('SmsSenderIdentitiesService', () => {
     prisma.$transaction.mockImplementation((fn: (t: typeof tx) => unknown) =>
       fn(tx),
     );
+  });
+
+  afterAll(() => {
+    if (originalReadinessMode === undefined) {
+      delete process.env.SMS_SENDER_READINESS_MODE;
+    } else {
+      process.env.SMS_SENDER_READINESS_MODE = originalReadinessMode;
+    }
+    if (originalMaxAge === undefined) {
+      delete process.env.SMS_SENDER_PROVIDER_STATUS_MAX_AGE_HOURS;
+    } else {
+      process.env.SMS_SENDER_PROVIDER_STATUS_MAX_AGE_HOURS = originalMaxAge;
+    }
   });
 
   it('normalizes sender IDs ignoring case and whitespace', () => {
@@ -261,5 +278,110 @@ describe('SmsSenderIdentitiesService', () => {
     await expect(service.archive(user, 'sender-1')).rejects.toThrow(
       ConflictException,
     );
+  });
+
+  it('returns rollout inventory for legacy-approved senders missing provider approval', async () => {
+    prisma.marketingSmsSenderIdentity.findMany.mockResolvedValue([
+      sender({
+        status: 'APPROVED',
+        providerStatus: 'UNKNOWN',
+        ownershipStatus: 'VERIFIED',
+        internalReviewStatus: 'APPROVED',
+      }),
+    ]);
+
+    const result = await service.list(TENANT, {
+      status: 'APPROVED',
+      providerStatusNot: 'APPROVED',
+    });
+
+    expect(prisma.marketingSmsSenderIdentity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: like({
+          tenantId: TENANT,
+          status: 'APPROVED',
+          providerStatus: { not: 'APPROVED' },
+        }),
+      }),
+    );
+    expect(result.items[0].readiness).toMatchObject({
+      ready: true,
+      effectiveReady: false,
+      reasonCode: 'PROVIDER_UNKNOWN',
+    });
+  });
+
+  it('refreshes stale supported provider status before campaign dispatch readiness is enforced', async () => {
+    process.env.SMS_SENDER_READINESS_MODE = 'strict';
+    prisma.marketingSmsSenderIdentity.findFirst.mockResolvedValue(
+      sender({
+        status: 'APPROVED',
+        ownershipStatus: 'VERIFIED',
+        internalReviewStatus: 'APPROVED',
+        provider: 'sasusync',
+        providerStatus: 'APPROVED',
+        providerLastSyncedAt: null,
+      }),
+    );
+    rabbit.refreshSmsSenderIdentityStatus.mockResolvedValue({
+      provider: 'sasusync',
+      providerStatus: 'APPROVED',
+      providerReferenceId: 'sasu-1',
+      providerStatusReason: 'approved',
+      providerPayload: { status: 'approved' },
+    });
+    prisma.marketingSmsSenderIdentity.update.mockResolvedValue(
+      sender({
+        status: 'APPROVED',
+        ownershipStatus: 'VERIFIED',
+        internalReviewStatus: 'APPROVED',
+        provider: 'sasusync',
+        providerStatus: 'APPROVED',
+        providerLastSyncedAt: new Date(),
+      }),
+    );
+
+    const result = await service.evaluateForCampaign(TENANT, 'sender-1', {
+      refreshIfDue: true,
+      campaignId: 'campaign-1',
+    });
+
+    expect(rabbit.refreshSmsSenderIdentityStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'sasusync',
+        senderId: 'Work Phelo',
+      }),
+    );
+    expect(result).toMatchObject({
+      ready: true,
+      effectiveReady: true,
+      reasonCode: 'READY',
+    });
+  });
+
+  it('does not fake provider refresh for PiloSMS and blocks stale approval in strict mode', async () => {
+    process.env.SMS_SENDER_READINESS_MODE = 'strict';
+    prisma.marketingSmsSenderIdentity.findFirst.mockResolvedValue(
+      sender({
+        status: 'APPROVED',
+        ownershipStatus: 'VERIFIED',
+        internalReviewStatus: 'APPROVED',
+        provider: 'pilosms',
+        providerStatus: 'APPROVED',
+        providerLastSyncedAt: null,
+      }),
+    );
+
+    const result = await service.evaluateForCampaign(TENANT, 'sender-1', {
+      refreshIfDue: true,
+      campaignId: 'campaign-1',
+    });
+
+    expect(rabbit.refreshSmsSenderIdentityStatus).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ready: false,
+      providerStatusStale: true,
+      reasonCode: 'PROVIDER_STATUS_STALE',
+    });
   });
 });

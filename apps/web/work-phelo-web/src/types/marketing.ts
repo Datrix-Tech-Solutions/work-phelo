@@ -1096,6 +1096,38 @@ export type CommunicationProviderStatus =
   | 'SUSPENDED'
   | 'UNKNOWN';
 
+export type SmsSenderReadinessMode = 'legacy' | 'warn' | 'strict';
+
+export type SmsSenderReadinessReasonCode =
+  | 'READY'
+  | 'SENDER_NOT_FOUND'
+  | 'LEGACY_NOT_APPROVED'
+  | 'SENDER_ARCHIVED'
+  | 'SENDER_SUSPENDED'
+  | 'SENDER_REJECTED'
+  | 'OWNERSHIP_UNVERIFIED'
+  | 'OWNERSHIP_REJECTED'
+  | 'INTERNAL_REVIEW_PENDING'
+  | 'INTERNAL_REVIEW_REJECTED'
+  | 'PROVIDER_NOT_SUBMITTED'
+  | 'PROVIDER_PENDING'
+  | 'PROVIDER_REJECTED'
+  | 'PROVIDER_SUSPENDED'
+  | 'PROVIDER_UNKNOWN'
+  | 'PROVIDER_STATUS_STALE'
+  | 'PROVIDER_UNSUPPORTED';
+
+export interface SmsSenderReadiness {
+  ready: boolean;
+  legacyReady: boolean;
+  effectiveReady: boolean;
+  mode: SmsSenderReadinessMode;
+  reasonCode: SmsSenderReadinessReasonCode;
+  reasonMessage: string;
+  provider: string;
+  providerStatusStale: boolean;
+}
+
 export interface SmsSenderIdentity {
   id: string;
   senderId: string;
@@ -1112,6 +1144,7 @@ export interface SmsSenderIdentity {
   providerSubmittedAt: string | null;
   providerLastSyncedAt: string | null;
   providerStatusReason: string | null;
+  readiness?: SmsSenderReadiness;
   isDefault: boolean;
   requestedAt: string | null;
   approvedAt: string | null;
