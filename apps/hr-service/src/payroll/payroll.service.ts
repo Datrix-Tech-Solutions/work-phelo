@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
+import { InternalServiceClientError } from '@work-phelo/internal-auth';
 import { PrismaService } from '../prisma/prisma.service';
 import Decimal from 'decimal.js';
 import {
@@ -1381,10 +1382,22 @@ export class PayrollService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+      // Accounting words its own refusals for people (an account not chosen, no open fiscal
+      // period), so those are passed on. Anything else is a fault the person can't act on.
+      const status =
+        error instanceof InternalServiceClientError
+          ? error.statusCode
+          : undefined;
+      const refusal =
+        status !== undefined &&
+        status >= 400 &&
+        status < 500 &&
+        ![401, 403, 404, 408, 429].includes(status);
       throw new UnprocessableEntityException({
         code: 'ACCOUNTING_POSTING_FAILED',
-        message:
-          "Payroll couldn't be posted to Accounting just now. Nothing was approved. Please try again in a moment.",
+        message: refusal
+          ? `${error instanceof Error ? error.message : ''} Nothing was approved.`
+          : "Payroll couldn't be posted to Accounting just now. Nothing was approved. Please try again in a moment.",
       });
     }
   }
