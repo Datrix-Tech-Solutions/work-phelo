@@ -10,5 +10,6 @@ import { SalesTargetsService } from './sales-targets.service';
   imports: [AuthModule, PrismaModule, AccountingModule, AssigneesModule],
   controllers: [SalesTargetsController],
   providers: [SalesTargetsService],
+  exports: [SalesTargetsService],
 })
 export class SalesTargetsModule {}

@@ -10,12 +10,14 @@ import {
   Megaphone,
   Briefcase,
   Wallet,
+  LayoutDashboard,
   // Trophy,
   // CalendarRange,
 } from 'lucide-react';
 
 /* ── Icons ── */
 const DashboardIcon = () => <House className="w-5 h-5" />;
+const HrDashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
 const ProfileIcon = () => <UserCircle className="w-5 h-5" />;
 const TeamIcon = () => <Users className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
@@ -40,6 +42,14 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
         exact: true,
+      },
+      {
+        key: 'hr-dashboard',
+        label: 'Dashboard',
+        icon: <HrDashboardIcon />,
+        href: 'dashboard',
+        enabled: true,
+        active: true,
       },
       {
         key: 'profile',

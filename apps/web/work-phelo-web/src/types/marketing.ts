@@ -1399,3 +1399,42 @@ export interface CreateSalesTargetPayload {
   endDate: string;
   amount: number;
 }
+
+export interface MarketingDashboardStage {
+  stageId: string;
+  name: string;
+  probability: number;
+  prospects: number;
+  expected: string;
+  weighted: string;
+}
+
+/** Marketing dashboard figures for a period. Money is a 2dp string; null means it could not be read. */
+export interface MarketingDashboardSummary {
+  /** Currency Accounting reports in, when any client has an Accounting entity. */
+  currency: string | null;
+  newProspects: { current: number; previous: number };
+  conversion: {
+    created: number;
+    converted: number;
+    previousCreated: number;
+    previousConverted: number;
+  };
+  sales: { won: string; previousWon: string; wonDeals: number; expected: string };
+  achievedRevenue: { current: string | null; previous: string | null };
+  /** A snapshot of open prospects; ignores the period. */
+  pipeline: {
+    stages: MarketingDashboardStage[];
+    prospects: number;
+    expected: string;
+    weighted: string;
+  };
+  targets: {
+    count: number;
+    target: string;
+    achieved: string | null;
+    remaining: string | null;
+    percent: number | null;
+  };
+  clients: { total: number; new: number; billable: number; nonBillable: number };
+}

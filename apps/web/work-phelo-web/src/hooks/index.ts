@@ -71,6 +71,7 @@ export * from './accounting/useTradeDocuments';
 export * from './accounting/usePaymentRequests';
 export * from './accounting/useAgingReports';
 export * from './accounting/useTradeSummaries';
+export * from './accounting/useAccountingDashboard';
 export * from './accounting/useTradeSettlements';
 export * from './accounting/useFiscalPeriods';
 export * from './accounting/useSubledgers';

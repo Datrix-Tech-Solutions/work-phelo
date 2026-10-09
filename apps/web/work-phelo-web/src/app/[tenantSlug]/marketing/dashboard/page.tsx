@@ -1,9 +1,15 @@
 'use client';
 
+import { MarketingDashboardKpis } from '@/components/organisms/marketing/MarketingDashboardKpis';
+import { DashboardShell } from '@/components/organisms/shared/DashboardShell';
+import { useDashboardFilters } from '@/hooks/useDashboardFilters';
+
 export default function MarketingDashboardPage() {
+  const filters = useDashboardFilters();
+
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto py-6 pr-6 pl-(--page-pl)">
-      <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-    </div>
+    <DashboardShell filters={filters}>
+      <MarketingDashboardKpis period={filters.period} year={filters.year} />
+    </DashboardShell>
   );
 }
