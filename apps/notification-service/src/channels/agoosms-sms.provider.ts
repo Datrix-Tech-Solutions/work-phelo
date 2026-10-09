@@ -28,6 +28,10 @@ type AgooSmsResponse = {
 @Injectable()
 export class AgooSmsProvider implements SmsProvider {
   readonly provider = 'agoosms' as const;
+  readonly senderIdentityCapabilities = {
+    submitSenderIdentity: false,
+    refreshSenderIdentityStatus: false,
+  };
   private readonly logger = new Logger(AgooSmsProvider.name);
   private readonly apiKey = process.env.AGOOSMS_API_KEY;
   private readonly baseUrl =

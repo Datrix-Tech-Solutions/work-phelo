@@ -1,5 +1,11 @@
 import { Controller, HttpException, Logger } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import {
+  Ctx,
+  EventPattern,
+  MessagePattern,
+  Payload,
+  RmqContext,
+} from '@nestjs/microservices';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import { NotificationService } from './notification.service';
 import {
@@ -9,6 +15,9 @@ import {
   PasswordResetLinkEvent,
   PasswordResetOtpEvent,
   SmsOtpEvent,
+  SmsSenderIdentityProviderResult,
+  SmsSenderIdentityStatusCommand,
+  SmsSenderIdentitySubmissionCommand,
   EmployeeTerminationEvent,
   ResignationSubmittedEvent,
   LeaveRequestedEvent,
@@ -104,6 +113,26 @@ export class NotificationHandler {
       `[${pattern}] Permanent failure — acknowledging | ${details} | error=${this.formatError(error)}`,
     );
     channel.ack(message);
+  }
+
+  @MessagePattern(EventPatterns.NOTIFICATION_SMS_SENDER_SUBMIT)
+  async handleSmsSenderSubmit(
+    @Payload() data: WithMeta<SmsSenderIdentitySubmissionCommand>,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    this.logger.log(
+      `[${EventPatterns.NOTIFICATION_SMS_SENDER_SUBMIT}] Received | tenant=${data.tenantId} | senderIdentity=${data.senderIdentityId} | provider=${data.provider} | corrId=${data._meta?.correlationId}`,
+    );
+    return this.smsService.submitSenderIdentity(data);
+  }
+
+  @MessagePattern(EventPatterns.NOTIFICATION_SMS_SENDER_STATUS)
+  async handleSmsSenderStatus(
+    @Payload() data: WithMeta<SmsSenderIdentityStatusCommand>,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    this.logger.log(
+      `[${EventPatterns.NOTIFICATION_SMS_SENDER_STATUS}] Received | tenant=${data.tenantId} | senderIdentity=${data.senderIdentityId} | provider=${data.provider} | corrId=${data._meta?.correlationId}`,
+    );
+    return this.smsService.getSenderIdentityStatus(data);
   }
 
   @EventPattern(EventPatterns.NOTIFICATION_IN_APP_CREATE)

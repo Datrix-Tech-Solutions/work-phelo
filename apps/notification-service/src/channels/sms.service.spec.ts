@@ -59,6 +59,8 @@ describe('SmsService provider routing', () => {
     Promise<SmsSendResult>,
     [string, string, SmsSendOptions?]
   >;
+  const submitSenderIdentity = jest.fn();
+  const getSenderIdentityStatus = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -75,6 +77,14 @@ describe('SmsService provider routing', () => {
     agooSmsSendMessage = jest
       .fn<Promise<SmsSendResult>, [string, string, SmsSendOptions?]>()
       .mockImplementation(() => Promise.resolve(agooSmsResult));
+    submitSenderIdentity.mockResolvedValue({
+      provider: 'sasusync',
+      providerStatus: 'PENDING',
+    });
+    getSenderIdentityStatus.mockResolvedValue({
+      provider: 'sasusync',
+      providerStatus: 'APPROVED',
+    });
     termiiProvider = {
       provider: 'termii',
       sendMessage: termiiSendMessage,
@@ -85,10 +95,20 @@ describe('SmsService provider routing', () => {
     };
     sasuSyncProvider = {
       provider: 'sasusync',
+      senderIdentityCapabilities: {
+        submitSenderIdentity: true,
+        refreshSenderIdentityStatus: true,
+      },
       sendMessage: sasuSyncSendMessage,
+      submitSenderIdentity,
+      getSenderIdentityStatus,
     };
     agooSmsProvider = {
       provider: 'agoosms',
+      senderIdentityCapabilities: {
+        submitSenderIdentity: false,
+        refreshSenderIdentityStatus: false,
+      },
       sendMessage: agooSmsSendMessage,
     };
   });
@@ -184,6 +204,33 @@ describe('SmsService provider routing', () => {
     expect(() => createService()).toThrow(
       'Unsupported SMS_PROVIDER "other-provider". Expected "termii", "pilosms", "sasusync", or "agoosms".',
     );
+  });
+
+  it('routes sender identity lifecycle calls to capable selected provider', async () => {
+    process.env.SMS_PROVIDER = 'sasusync';
+
+    const service = createService();
+    await expect(
+      service.submitSenderIdentity({
+        senderId: 'TENANTSMS',
+        purpose: 'Marketing SMS campaign messages',
+      }),
+    ).resolves.toMatchObject({ providerStatus: 'PENDING' });
+    await expect(
+      service.getSenderIdentityStatus({ senderId: 'TENANTSMS' }),
+    ).resolves.toMatchObject({ providerStatus: 'APPROVED' });
+  });
+
+  it('rejects lifecycle calls for unsupported selected provider', async () => {
+    process.env.SMS_PROVIDER = 'agoosms';
+
+    const service = createService();
+    await expect(
+      service.submitSenderIdentity({
+        senderId: 'TENANTSMS',
+        purpose: 'Marketing SMS campaign messages',
+      }),
+    ).rejects.toThrow('agoosms does not support sender identity submission');
   });
 
   function createService(): SmsService {

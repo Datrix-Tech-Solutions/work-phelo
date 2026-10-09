@@ -5,6 +5,10 @@ import { SasuSyncSmsProvider } from './sasusync-sms.provider';
 import type {
   SmsProvider,
   SmsProviderName,
+  SmsSenderIdentityCapabilities,
+  SmsSenderIdentityProviderResult,
+  SmsSenderIdentityStatusInput,
+  SmsSenderIdentitySubmissionInput,
   SmsSendOptions,
   SmsSendResult,
 } from './sms-provider.interface';
@@ -53,6 +57,49 @@ export class SmsService {
       to,
       `Your WorkPhelo ${context} code is: ${otp}. Valid for 10 minutes. Do not share this code.`,
     );
+  }
+
+  getSenderIdentityCapabilities(): SmsSenderIdentityCapabilities {
+    return (
+      this.provider.senderIdentityCapabilities ?? {
+        submitSenderIdentity: false,
+        refreshSenderIdentityStatus: false,
+      }
+    );
+  }
+
+  async submitSenderIdentity(
+    input: SmsSenderIdentitySubmissionInput,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    if (!this.provider.senderIdentityCapabilities?.submitSenderIdentity) {
+      throw new Error(
+        `${this.provider.provider} does not support sender identity submission`,
+      );
+    }
+    if (!this.provider.submitSenderIdentity) {
+      throw new Error(
+        `${this.provider.provider} sender identity submission is not implemented`,
+      );
+    }
+    return this.provider.submitSenderIdentity(input);
+  }
+
+  async getSenderIdentityStatus(
+    input: SmsSenderIdentityStatusInput,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    if (
+      !this.provider.senderIdentityCapabilities?.refreshSenderIdentityStatus
+    ) {
+      throw new Error(
+        `${this.provider.provider} does not support sender identity status refresh`,
+      );
+    }
+    if (!this.provider.getSenderIdentityStatus) {
+      throw new Error(
+        `${this.provider.provider} sender identity status refresh is not implemented`,
+      );
+    }
+    return this.provider.getSenderIdentityStatus(input);
   }
 
   private resolveProviderName(): SmsProviderName {

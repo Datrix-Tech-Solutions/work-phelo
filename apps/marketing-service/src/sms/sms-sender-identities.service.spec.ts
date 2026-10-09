@@ -69,10 +69,24 @@ describe('SmsSenderIdentitiesService', () => {
     marketingCampaign: { count: jest.fn() },
     $transaction: jest.fn(),
   };
-  const service = new SmsSenderIdentitiesService(prisma as never);
+  const rabbit = {
+    submitSmsSenderIdentity: jest.fn(),
+    refreshSmsSenderIdentityStatus: jest.fn(),
+  };
+  const service = new SmsSenderIdentitiesService(
+    prisma as never,
+    rabbit as never,
+  );
 
   beforeEach(() => {
     jest.resetAllMocks();
+    rabbit.submitSmsSenderIdentity.mockResolvedValue({
+      provider: 'pilosms',
+      providerStatus: 'PENDING',
+      providerReferenceId: 'pilo-sender-1',
+      providerStatusReason: 'Sender registration requested',
+      providerPayload: { status: 1001 },
+    });
     prisma.$transaction.mockImplementation((fn: (t: typeof tx) => unknown) =>
       fn(tx),
     );
@@ -189,21 +203,34 @@ describe('SmsSenderIdentitiesService', () => {
 
   it('allows platform admins to approve pending sender identities', async () => {
     prisma.marketingSmsSenderIdentity.findFirst.mockResolvedValue(
-      sender({ status: 'PENDING_PROVIDER_APPROVAL' }),
+      sender({ status: 'PENDING_PROVIDER_APPROVAL', provider: 'pilosms' }),
     );
     prisma.marketingSmsSenderIdentity.update.mockResolvedValue(
-      sender({ status: 'APPROVED', approvedBy: 'platform-1' }),
+      sender({
+        status: 'PENDING_PROVIDER_APPROVAL',
+        approvedBy: 'platform-1',
+        internalReviewStatus: 'APPROVED',
+        providerStatus: 'PENDING',
+        providerReferenceId: 'pilo-sender-1',
+      }),
     );
 
     const result = await service.approve(platformUser, 'sender-1');
 
-    expect(result.status).toBe('APPROVED');
+    expect(result.status).toBe('PENDING_PROVIDER_APPROVAL');
+    expect(rabbit.submitSmsSenderIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'pilosms',
+        senderId: 'Work Phelo',
+      }),
+    );
     expect(prisma.marketingSmsSenderIdentity.update).toHaveBeenCalledWith({
       where: { id: 'sender-1' },
       data: like({
-        status: 'APPROVED',
+        status: 'PENDING_PROVIDER_APPROVAL',
         internalReviewStatus: 'APPROVED',
-        providerStatus: 'UNKNOWN',
+        providerStatus: 'PENDING',
+        providerReferenceId: 'pilo-sender-1',
         approvedBy: 'platform-1',
       }),
     });

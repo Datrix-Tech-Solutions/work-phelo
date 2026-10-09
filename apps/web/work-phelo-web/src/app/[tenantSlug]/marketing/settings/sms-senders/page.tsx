@@ -9,6 +9,7 @@ import { usePermissionRule } from '@/hooks/hr/usePermission';
 import {
   useArchiveSmsSenderIdentity,
   useCreateSmsSenderIdentity,
+  useRefreshSmsSenderProviderStatus,
   useSetDefaultSmsSenderIdentity,
   useSmsSenderIdentities,
   useSmsWalletBalance,
@@ -20,9 +21,22 @@ import { useToast } from '@/hooks/useToast';
 interface SenderForm {
   senderId: string;
   displayName: string;
+  purpose: string;
+  provider: string;
 }
 
-const EMPTY_FORM: SenderForm = { senderId: '', displayName: '' };
+const EMPTY_FORM: SenderForm = {
+  senderId: '',
+  displayName: '',
+  purpose: '',
+  provider: '',
+};
+
+const REFRESHABLE_PROVIDERS = new Set(['termii', 'sasusync']);
+
+function statusLabel(value: string) {
+  return value.replace(/_/g, ' ');
+}
 
 export default function SmsSendersPage() {
   const toast = useToast();
@@ -34,6 +48,7 @@ export default function SmsSendersPage() {
   const { data: wallet } = useSmsWalletBalance();
   const createSender = useCreateSmsSenderIdentity();
   const submitSender = useSubmitSmsSenderIdentity();
+  const refreshProvider = useRefreshSmsSenderProviderStatus();
   const defaultSender = useSetDefaultSmsSenderIdentity();
   const archiveSender = useArchiveSmsSenderIdentity();
   const [panelOpen, setPanelOpen] = useState(false);
@@ -46,6 +61,8 @@ export default function SmsSendersPage() {
       {
         senderId: form.senderId.trim(),
         ...(form.displayName.trim() ? { displayName: form.displayName.trim() } : {}),
+        ...(form.purpose.trim() ? { purpose: form.purpose.trim() } : {}),
+        ...(form.provider.trim() ? { provider: form.provider.trim() } : {}),
       },
       {
         onSuccess: () => {
@@ -69,6 +86,13 @@ export default function SmsSendersPage() {
     defaultSender.mutate(id, {
       onSuccess: () => toast.success('Default SMS sender ID updated'),
       onError: (error) => toast.error(apiErrorMessage(error, 'Failed to set default sender ID')),
+    });
+  }
+
+  function handleRefreshProviderStatus(id: string) {
+    refreshProvider.mutate(id, {
+      onSuccess: () => toast.success('Provider status refreshed'),
+      onError: (error) => toast.error(apiErrorMessage(error, 'Failed to refresh provider status')),
     });
   }
 
@@ -139,8 +163,24 @@ export default function SmsSendersPage() {
                     ) : null}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {sender.displayName || 'No display name'} · {sender.status.replace(/_/g, ' ')}
+                    {sender.displayName || 'No display name'} · Legacy {statusLabel(sender.status)}
                   </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Ownership {statusLabel(sender.ownershipStatus)} · Internal{' '}
+                    {statusLabel(sender.internalReviewStatus)} · Provider{' '}
+                    {statusLabel(sender.providerStatus)}
+                    {sender.provider ? ` (${sender.provider})` : ''}
+                  </p>
+                  {sender.providerStatusReason ? (
+                    <p className="mt-1 text-xs text-amber-700">
+                      Provider note: {sender.providerStatusReason}
+                    </p>
+                  ) : null}
+                  {sender.providerLastSyncedAt ? (
+                    <p className="mt-1 text-xs text-gray-400">
+                      Last provider sync {new Date(sender.providerLastSyncedAt).toLocaleString()}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {canSubmit && ['DRAFT', 'REJECTED'].includes(sender.status) && (
@@ -152,6 +192,17 @@ export default function SmsSendersPage() {
                       Submit
                     </Button>
                   )}
+                  {canEdit &&
+                    REFRESHABLE_PROVIDERS.has((sender.provider ?? '').toLowerCase()) &&
+                    ['SUBMITTED', 'PENDING', 'UNKNOWN'].includes(sender.providerStatus) && (
+                      <Button
+                        variant="outline"
+                        onClick={() => handleRefreshProviderStatus(sender.id)}
+                        isLoading={refreshProvider.isPending}
+                      >
+                        Refresh Provider
+                      </Button>
+                    )}
                   {canEdit && sender.status === 'APPROVED' && !sender.isDefault && (
                     <Button
                       variant="outline"
@@ -201,6 +252,18 @@ export default function SmsSendersPage() {
             value={form.displayName}
             onChange={(event) => setForm((prev) => ({ ...prev, displayName: event.target.value }))}
             placeholder="eg; Main campaigns"
+          />
+          <Input
+            label="Provider"
+            value={form.provider}
+            onChange={(event) => setForm((prev) => ({ ...prev, provider: event.target.value }))}
+            placeholder="eg; pilosms, termii, sasusync"
+          />
+          <Input
+            label="Purpose"
+            value={form.purpose}
+            onChange={(event) => setForm((prev) => ({ ...prev, purpose: event.target.value }))}
+            placeholder="eg; Marketing SMS campaigns for customers"
           />
         </div>
       </SidePanel>

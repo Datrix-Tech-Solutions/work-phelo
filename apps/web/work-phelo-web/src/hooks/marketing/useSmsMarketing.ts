@@ -85,6 +85,19 @@ export function useSubmitSmsSenderIdentity() {
   });
 }
 
+export function useRefreshSmsSenderProviderStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<SmsSenderIdentity>(
+        `${SENDER_ENDPOINT}/${id}/refresh-provider-status`,
+      );
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SMS_KEY }),
+  });
+}
+
 export function useSetDefaultSmsSenderIdentity() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { MessagingModule } from '../messaging/messaging.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { TenantMarketingEnabledGuard } from '../auth/guards/tenant-marketing-enabled.guard';
 import { DnsTxtResolver } from './dns-txt-resolver';
@@ -13,7 +14,7 @@ import { TenantDomainsService } from './tenant-domains.service';
 import { TenantModulesClient } from './tenant-modules.client';
 
 @Module({
-  imports: [AuthModule, PrismaModule],
+  imports: [AuthModule, PrismaModule, MessagingModule],
   controllers: [
     SmsSenderIdentitiesController,
     SmsWalletController,

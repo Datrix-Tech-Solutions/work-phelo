@@ -42,6 +42,8 @@ export const EventPatterns = {
   NOTIFICATION_PASSWORD_RESET_LINK: 'notification.password_reset_link',
   NOTIFICATION_PASSWORD_RESET_OTP: 'notification.password_reset_otp',
   NOTIFICATION_SMS_OTP: 'notification.sms_otp',
+  NOTIFICATION_SMS_SENDER_SUBMIT: 'notification.sms_sender.submit',
+  NOTIFICATION_SMS_SENDER_STATUS: 'notification.sms_sender.status',
   NOTIFICATION_IN_APP_CREATE: 'notification.in_app.create',
 
   // Reinsurance Operations domain events
@@ -745,4 +747,43 @@ export interface CampaignDeliveryResultEvent {
   failureReason?: string;
   chargedCredits: number;
   idempotencyKey: string;
+}
+
+// ── Marketing ↔ Notification SMS Sender Identity RPC ──────────────────────
+
+export type SmsProviderName = 'termii' | 'pilosms' | 'sasusync' | 'agoosms';
+
+export type SmsProviderVerificationStatus =
+  | 'NOT_SUBMITTED'
+  | 'SUBMITTED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SUSPENDED'
+  | 'UNKNOWN';
+
+export interface SmsSenderIdentitySubmissionCommand {
+  tenantId: string;
+  senderIdentityId: string;
+  provider: SmsProviderName;
+  senderId: string;
+  purpose: string;
+  tenantDomain?: string | null;
+}
+
+export interface SmsSenderIdentityStatusCommand {
+  tenantId: string;
+  senderIdentityId: string;
+  provider: SmsProviderName;
+  senderId: string;
+  providerReferenceId?: string | null;
+}
+
+export interface SmsSenderIdentityProviderResult {
+  provider: SmsProviderName;
+  providerStatus: SmsProviderVerificationStatus;
+  providerReferenceId?: string | null;
+  providerStatusReason?: string | null;
+  providerPayload?: Record<string, unknown> | null;
+  rawProviderStatus?: string | null;
 }
