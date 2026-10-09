@@ -1384,16 +1384,19 @@ export class PayrollService {
       );
       // Accounting words its own refusals for people (an account not chosen, no open fiscal
       // period), so those are passed on. Anything else is a fault the person can't act on.
+      const status =
+        error instanceof InternalServiceClientError
+          ? error.statusCode
+          : undefined;
       const refusal =
-        error instanceof InternalServiceClientError &&
-        error.statusCode !== undefined &&
-        error.statusCode >= 400 &&
-        error.statusCode < 500 &&
-        ![401, 403, 404, 408, 429].includes(error.statusCode);
+        status !== undefined &&
+        status >= 400 &&
+        status < 500 &&
+        ![401, 403, 404, 408, 429].includes(status);
       throw new UnprocessableEntityException({
         code: 'ACCOUNTING_POSTING_FAILED',
         message: refusal
-          ? `${(error as InternalServiceClientError).message} Nothing was approved.`
+          ? `${error instanceof Error ? error.message : ''} Nothing was approved.`
           : "Payroll couldn't be posted to Accounting just now. Nothing was approved. Please try again in a moment.",
       });
     }
