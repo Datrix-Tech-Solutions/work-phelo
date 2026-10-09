@@ -471,6 +471,14 @@ export class QueryCashbookDto {
   @IsEnum(CashbookTransactionStatus)
   status?: CashbookTransactionStatus;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Only entries that name this entity (customer, vendor, ...).',
+  })
+  @IsOptional()
+  @IsUUID()
+  counterpartyId?: string;
+
   @ApiPropertyOptional({ example: 'GHS' })
   @IsOptional()
   @Transform(uppercase)

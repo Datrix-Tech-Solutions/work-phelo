@@ -162,7 +162,6 @@ describe('CashbookService', () => {
         findFirst: jest.fn(),
         updateMany: jest.fn(),
       },
-      subledgerAccount: { findFirst: jest.fn().mockResolvedValue(null) },
       accountingAuditLog: {
         create: jest.fn(),
       },
