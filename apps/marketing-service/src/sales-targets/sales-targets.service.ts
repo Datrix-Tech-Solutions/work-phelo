@@ -89,6 +89,20 @@ export class SalesTargetsService {
     return this.withProgress(user, targets);
   }
 
+  /** Targets whose period overlaps [from, to] (YYYY-MM-DD), with progress, for dashboards. */
+  async listOverlapping(user: RequestUser, from: string, to: string) {
+    const targets = await this.prisma.marketingSalesTarget.findMany({
+      where: {
+        tenantId: user.tenantId,
+        ...(this.canViewAll(user) ? {} : { userId: user.id }),
+        startDate: { lte: asDate(to) },
+        endDate: { gte: asDate(from) },
+      },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    });
+    return this.withProgress(user, targets);
+  }
+
   async create(user: RequestUser, dto: CreateSalesTargetDto) {
     this.assertPeriod(dto.startDate, dto.endDate);
     await this.assertRep(user, dto.userId);
@@ -265,7 +279,8 @@ export class SalesTargetsService {
     });
   }
 
-  private async receivedByEntities(
+  /** Money Accounting received from these entities within the range (YYYY-MM-DD, inclusive). */
+  async receivedByEntities(
     user: RequestUser,
     entityIds: string[],
     range: Range,
