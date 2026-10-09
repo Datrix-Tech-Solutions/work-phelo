@@ -168,3 +168,66 @@ export class UpdateCashbookDraftDto {
   @MaxLength(500)
   description?: string;
 }
+
+/**
+ * Edits to a posted direct receipt, payment or contra transaction while its period is open. The
+ * entry keeps its number, type and currency; everything else on the form can change. Send `null`
+ * to clear the entity (or the charge on a contra transaction).
+ */
+export class EditPostedCashbookDto extends UpdateCashbookDraftDto {
+  @ApiPropertyOptional({ nullable: true, example: 'CUSTOMER' })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(80)
+  counterpartyType?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  counterpartyId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Contra transactions only: the account the money goes to.',
+  })
+  @IsOptional()
+  @IsUUID()
+  destinationCashAccountId?: string;
+
+  @ApiPropertyOptional({ description: 'Contra transactions only.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  amount?: number;
+
+  @ApiPropertyOptional({ nullable: true, description: 'Contra only.' })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  chargeAmount?: number | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description: 'Contra only.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  chargeGlAccountId?: string | null;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}

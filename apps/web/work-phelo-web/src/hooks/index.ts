@@ -81,6 +81,7 @@ export * from './accounting/useAccountCategories';
 export * from './accounting/useAccountGroups';
 export * from './accounting/useStandardAccountHierarchy';
 export * from './accounting/useJournals';
+export * from './accounting/useChangePosted';
 export * from './accounting/useRecurringJournals';
 export * from './accounting/usePostingRules';
 export * from './accounting/useReinsuranceBankConfirmations';

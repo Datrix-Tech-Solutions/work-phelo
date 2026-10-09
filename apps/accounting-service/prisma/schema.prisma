@@ -59,6 +59,9 @@ enum JournalStatus {
   DRAFT
   POSTED
   REVERSED
+  /// Taken out of the books while its period was open. Counted nowhere; lives in the archive and
+  /// can be restored (re-submitted) while its period is still open.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -152,6 +155,8 @@ enum CashbookTransactionStatus {
   REVERSED
   /// A draft the accountant turned down. Final - it is never posted, and the reason is kept.
   REJECTED
+  /// Taken out of the books while its period was open. Counted nowhere; restorable from the archive.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -185,6 +190,8 @@ enum AccountingReceivableStatus {
   REVERSED
   /// A draft the accountant turned down. Final - it is never posted, and the reason is kept.
   REJECTED
+  /// Taken out of the books while its period was open. Counted nowhere; restorable from the archive.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -207,6 +214,8 @@ enum AccountingPayableStatus {
   DRAFT
   POSTED
   REVERSED
+  /// Taken out of the books while its period was open. Counted nowhere; restorable from the archive.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -667,6 +676,12 @@ model JournalEntry {
   updatedAt                   DateTime                      @updatedAt
   postedAt                    DateTime?
   reversedAt                  DateTime?
+  voidedAt                    DateTime?
+  voidedByUserId              String?
+  voidReason                  String?
+  /// A voided reversal gives up its link to the original (so the original can be reversed again);
+  /// the id is kept here so a restore can put the link back.
+  voidedReversalOfJournalId   String?
   fiscalPeriod                FiscalPeriod                  @relation(fields: [fiscalPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
   recurringJournal            RecurringJournal?             @relation(fields: [recurringJournalId, tenantId], references: [id, tenantId], onDelete: Restrict)
   lines                       JournalLine[]
@@ -786,66 +801,72 @@ model BankStatementLine {
 }
 
 model CashbookTransaction {
-  id                       String                       @id @default(uuid())
-  tenantId                 String
-  cashAccountId            String
-  destinationCashAccountId String?
-  transactionType          CashbookTransactionType
-  direction                CashbookDirection
-  amount                   Decimal                      @db.Decimal(20, 4)
+  id                            String                       @id @default(uuid())
+  tenantId                      String
+  cashAccountId                 String
+  destinationCashAccountId      String?
+  transactionType               CashbookTransactionType
+  direction                     CashbookDirection
+  amount                        Decimal                      @db.Decimal(20, 4)
   /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
-  quantity                 Decimal?                     @db.Decimal(20, 4)
-  unitPrice                Decimal?                     @db.Decimal(20, 4)
-  currency                 String
-  transactionDate          DateTime
-  settlementMethod         AccountingSettlementMethod
-  reference                String?
-  counterpartyType         String?
-  counterpartyId           String?
-  externalReference        String?
-  description              String
+  quantity                      Decimal?                     @db.Decimal(20, 4)
+  unitPrice                     Decimal?                     @db.Decimal(20, 4)
+  currency                      String
+  transactionDate               DateTime
+  settlementMethod              AccountingSettlementMethod
+  reference                     String?
+  counterpartyType              String?
+  counterpartyId                String?
+  externalReference             String?
+  description                   String
   /// Set only for direct entries made from the Transactions page (Receipt/Payment types):
   /// <TransactionType code><YY>-<00001>, e.g. RCPT26-00001. Null for transfers, charges,
   /// adjustments, reversals, integration-event postings and rows created before it existed.
-  transactionNumber        String?
-  offsetGlAccountId        String?
-  offsetSubledgerAccountId String?
-  chargeAmount             Decimal?                     @db.Decimal(20, 4)
-  sourceEventInboxId       String?
-  sourceModule             String?
-  sourceEventType          String?
-  sourceRecordId           String?
-  sourceReference          String?
-  exchangeRate             Decimal?                     @db.Decimal(18, 8)
-  status                   CashbookTransactionStatus    @default(DRAFT)
-  createdByUserId          String
-  updatedByUserId          String
-  postedByUserId           String?
-  reversedByUserId         String?
-  rejectedByUserId         String?
-  rejectionReason          String?
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
-  postedAt                 DateTime?
-  reversedAt               DateTime?
-  rejectedAt               DateTime?
-  postedJournalEntryId     String?
-  reversalJournalEntryId   String?
-  reversalOfTransactionId  String?
-  cashAccount              AccountingCashAccount        @relation("CashbookCashAccount", fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  destinationCashAccount   AccountingCashAccount?       @relation("CashbookDestinationCashAccount", fields: [destinationCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  offsetGlAccount          GLAccount?                   @relation("CashbookOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  offsetSubledgerAccount   SubledgerAccount?            @relation("CashbookOffsetSubledger", fields: [offsetSubledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  sourceEventInbox         SourceEventInbox?            @relation("SourceEventCashbookTransaction", fields: [sourceEventInboxId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  postedJournalEntry       JournalEntry?                @relation("CashbookPostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalJournalEntry     JournalEntry?                @relation("CashbookReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalOfTransaction    CashbookTransaction?         @relation("CashbookTransactionReversal", fields: [reversalOfTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalTransaction      CashbookTransaction?         @relation("CashbookTransactionReversal")
-  bankStatementMatches     BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
-  receivableReceipt        AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
-  payablePayment           AccountingPayablePayment?    @relation("PayableCashbookTransaction")
-  sourceLedgerAllocations  SourceLedgerAllocation[]
-  lines                    CashbookTransactionLine[]
+  transactionNumber             String?
+  offsetGlAccountId             String?
+  offsetSubledgerAccountId      String?
+  chargeAmount                  Decimal?                     @db.Decimal(20, 4)
+  sourceEventInboxId            String?
+  sourceModule                  String?
+  sourceEventType               String?
+  sourceRecordId                String?
+  sourceReference               String?
+  exchangeRate                  Decimal?                     @db.Decimal(18, 8)
+  status                        CashbookTransactionStatus    @default(DRAFT)
+  createdByUserId               String
+  updatedByUserId               String
+  postedByUserId                String?
+  reversedByUserId              String?
+  rejectedByUserId              String?
+  rejectionReason               String?
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+  postedAt                      DateTime?
+  reversedAt                    DateTime?
+  rejectedAt                    DateTime?
+  voidedAt                      DateTime?
+  voidedByUserId                String?
+  voidReason                    String?
+  /// A voided reversal gives up its link to the original so the original can be reversed again;
+  /// the id is kept here so a restore can put it back.
+  voidedReversalOfTransactionId String?
+  postedJournalEntryId          String?
+  reversalJournalEntryId        String?
+  reversalOfTransactionId       String?
+  cashAccount                   AccountingCashAccount        @relation("CashbookCashAccount", fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  destinationCashAccount        AccountingCashAccount?       @relation("CashbookDestinationCashAccount", fields: [destinationCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetGlAccount               GLAccount?                   @relation("CashbookOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetSubledgerAccount        SubledgerAccount?            @relation("CashbookOffsetSubledger", fields: [offsetSubledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  sourceEventInbox              SourceEventInbox?            @relation("SourceEventCashbookTransaction", fields: [sourceEventInboxId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  postedJournalEntry            JournalEntry?                @relation("CashbookPostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalJournalEntry          JournalEntry?                @relation("CashbookReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfTransaction         CashbookTransaction?         @relation("CashbookTransactionReversal", fields: [reversalOfTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalTransaction           CashbookTransaction?         @relation("CashbookTransactionReversal")
+  bankStatementMatches          BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
+  receivableReceipt             AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
+  payablePayment                AccountingPayablePayment?    @relation("PayableCashbookTransaction")
+  sourceLedgerAllocations       SourceLedgerAllocation[]
+  lines                         CashbookTransactionLine[]
 
   @@unique([tenantId, transactionNumber])
   @@unique([id, tenantId])
@@ -1083,6 +1104,9 @@ model AccountingReceivableDocument {
   postedAt               DateTime?
   reversedAt             DateTime?
   rejectedAt             DateTime?
+  voidedAt               DateTime?
+  voidedByUserId         String?
+  voidReason             String?
   postedJournalEntryId   String?
   reversalJournalEntryId String?
   reversalOfDocumentId   String?
@@ -1143,6 +1167,9 @@ model AccountingReceivableReceipt {
   updatedAt             DateTime                         @updatedAt
   postedAt              DateTime?
   reversedAt            DateTime?
+  voidedAt              DateTime?
+  voidedByUserId        String?
+  voidReason            String?
   reversalOfReceiptId   String?
   customer              SubledgerAccount                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
   arAccount             GLAccount                        @relation("ReceivableReceiptArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
@@ -1229,6 +1256,9 @@ model AccountingPayableDocument {
   updatedAt              DateTime                        @updatedAt
   postedAt               DateTime?
   reversedAt             DateTime?
+  voidedAt               DateTime?
+  voidedByUserId         String?
+  voidReason             String?
   postedJournalEntryId   String?
   reversalJournalEntryId String?
   reversalOfDocumentId   String?
@@ -1289,6 +1319,9 @@ model AccountingPayablePayment {
   updatedAt             DateTime                      @updatedAt
   postedAt              DateTime?
   reversedAt            DateTime?
+  voidedAt              DateTime?
+  voidedByUserId        String?
+  voidReason            String?
   reversalOfPaymentId   String?
   vendor                SubledgerAccount              @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
   apAccount             GLAccount                     @relation("PayablePaymentApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)

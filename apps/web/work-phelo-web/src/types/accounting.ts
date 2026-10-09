@@ -761,7 +761,7 @@ export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   ],
 };
 
-export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'VOIDED';
 
 export type SourceEventStatus = 'RECEIVED' | 'PROCESSING' | 'POSTED' | 'FAILED' | 'IGNORED';
 
@@ -861,6 +861,11 @@ export interface JournalEntryRecord {
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set while the journal is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  /** Set on a voided reversal: the journal it reversed, kept so a restore can put the link back. */
+  voidedReversalOfJournalId?: string | null;
   lines: JournalLineRecord[];
 }
 
@@ -977,7 +982,7 @@ export const INVOICE_DEFAULTS: InvoiceFormValues = {
 };
 
 export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
-export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED';
+export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED' | 'VOIDED';
 export type AccountingTradeDocumentKind = 'INVOICE' | 'CREDIT_NOTE' | 'BILL';
 export type AccountingTradeDocumentPaymentState =
   | 'DRAFT'
@@ -1059,6 +1064,9 @@ export interface AccountingTradeDocument {
   /** Set when a draft was turned down - it never posts, and the reason is kept. */
   rejectedAt: string | null;
   rejectionReason: string | null;
+  /** Set while the document is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
   postedJournalEntryId: string | null;
   reversalJournalEntryId: string | null;
   reversalOfDocumentId: string | null;
@@ -1318,6 +1326,9 @@ export interface AccountingTradeSettlement {
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set while the receipt or payment is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
   reversalOfSettlementId: string | null;
   party: AccountingTradePartyRef;
   cashbookTransaction: {
@@ -1460,7 +1471,7 @@ export interface UpdateCashAccountPayload extends Partial<CreateCashAccountPaylo
 
 export type CashbookTransactionType = 'RECEIPT' | 'PAYMENT' | 'TRANSFER' | 'CHARGE' | 'ADJUSTMENT';
 export type CashbookDirection = 'INFLOW' | 'OUTFLOW' | 'TRANSFER';
-export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED';
+export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED' | 'VOIDED';
 export type AccountingCashbookSettlementMethod =
   | 'BANK_TRANSFER'
   | 'CHEQUE'
@@ -1540,6 +1551,11 @@ export interface CashbookTransaction {
   /** Set when a draft was turned down - it never posts, and the reason is kept. */
   rejectedAt: string | null;
   rejectionReason: string | null;
+  /** Set while the entry is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  /** Set on a voided reversal: the entry it reversed, kept so a restore can put the link back. */
+  voidedReversalOfTransactionId?: string | null;
   postedJournalEntryId: string | null;
   reversalJournalEntryId: string | null;
   reversalOfTransactionId: string | null;
@@ -2120,3 +2136,47 @@ export type SourceTypeSetup =
       ready: boolean;
       reason: SourceSetupReason | null;
     };
+
+/* ---- The archive: voided entries of every kind ---- */
+
+export type ArchiveKind =
+  | 'JOURNAL'
+  | 'CASHBOOK'
+  | 'INVOICE'
+  | 'CREDIT_NOTE'
+  | 'RECEIPT'
+  | 'BILL'
+  | 'DEBIT_NOTE'
+  | 'PAYMENT';
+
+export interface ArchiveItem {
+  kind: ArchiveKind;
+  id: string;
+  number: string;
+  date: string;
+  amount: string | null;
+  currency: string | null;
+  party: string | null;
+  description: string | null;
+  voidedAt: string | null;
+  voidedByUserId: string | null;
+  voidReason: string | null;
+  /** True while the entry's period is open - the only time it can be restored. */
+  restorable: boolean;
+}
+
+export interface ArchiveListResult {
+  items: ArchiveItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface QueryArchiveParams {
+  kind?: ArchiveKind;
+  from?: string;
+  to?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}

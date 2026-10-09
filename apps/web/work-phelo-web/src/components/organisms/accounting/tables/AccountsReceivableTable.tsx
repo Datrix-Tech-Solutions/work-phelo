@@ -16,6 +16,7 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   POSTED: 'success',
   REVERSED: 'danger',
   REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtDate(iso: string | null) {

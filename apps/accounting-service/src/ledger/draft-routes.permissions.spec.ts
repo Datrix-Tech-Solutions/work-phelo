@@ -48,4 +48,27 @@ describe('draft invoice and cashbook routes authorization', () => {
       AccountingPermission.JOURNALS_POST,
     ]);
   });
+
+  it('voiding, editing and restoring posted entries all need the post permission', () => {
+    const routes: Array<[object, string]> = [
+      [JournalsController.prototype.voidPosted, 'JOURNALS_POST'],
+      [JournalsController.prototype.editPosted, 'JOURNALS_POST'],
+      [JournalsController.prototype.restoreVoided, 'JOURNALS_POST'],
+      [CashbookController.prototype.voidPostedTransaction, 'CASHBOOK_POST'],
+      [CashbookController.prototype.editPostedTransaction, 'CASHBOOK_POST'],
+      [CashbookController.prototype.restoreVoidedTransaction, 'CASHBOOK_POST'],
+      [ReceivablesController.prototype.voidInvoice, 'RECEIVABLES_POST'],
+      [ReceivablesController.prototype.editPostedInvoice, 'RECEIVABLES_POST'],
+      [ReceivablesController.prototype.restoreInvoice, 'RECEIVABLES_POST'],
+      [ReceivablesController.prototype.voidReceipt, 'RECEIVABLES_POST'],
+      [PayablesController.prototype.voidBill, 'PAYABLES_POST'],
+      [PayablesController.prototype.editPostedBill, 'PAYABLES_POST'],
+      [PayablesController.prototype.restorePayment, 'PAYABLES_POST'],
+    ];
+    for (const [handler, permission] of routes) {
+      expect(permissionsOf(handler)).toEqual([
+        AccountingPermission[permission as keyof typeof AccountingPermission],
+      ]);
+    }
+  });
 });

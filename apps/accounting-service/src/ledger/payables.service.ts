@@ -20,9 +20,13 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { agingBucket, partyAging } from './aging.util';
 import { CashbookService } from './cashbook.service';
-import { CreateJournalDto } from './dto/accounting.dto';
+import { CreateJournalDto, VoidEntryDto } from './dto/accounting.dto';
 import { CreateCashbookPaymentDto } from './dto/cashbook.dto';
 import {
+  EditPayableBillDto,
+  EditPayableNoteDto,
+  EditPayablePaymentDto,
+  RestorePayableBillDto,
   CreatePayableBillDto,
   CreatePayableCreditNoteDto,
   CreatePayablePaymentDto,
@@ -46,6 +50,9 @@ import {
 import { resolveMainLineAccount } from './rule-account-scope';
 
 const zero = new Prisma.Decimal(0);
+/** Marks an allocation released because its payment or credit note was voided, so a restore can re-apply it. */
+const RELEASED_BY_VOID = 'VOIDED_WITH_SOURCE';
+const RESTORED_AFTER_VOID = 'VOIDED_WITH_SOURCE_RESTORED';
 // SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
 // payment-terms field the way the old AccountingVendor master record did — fall back to
 // the same 30-day default that record always used unless the bill sets an explicit due date.
@@ -303,7 +310,12 @@ export class PayablesService {
     return date;
   }
 
-  async createBill(user: RequestUser, dto: CreatePayableBillDto) {
+  /**
+   * Everything a bill form decides - the vendor, items, taxes and accounts - worked out and
+   * checked, without writing anything. Creating a bill and editing a posted one share it, so
+   * both hold a bill to exactly the same rules.
+   */
+  private async prepareBill(user: RequestUser, dto: CreatePayableBillDto) {
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
@@ -343,51 +355,60 @@ export class PayablesService {
         'The deductions leave nothing owed — the total must be above zero',
       );
     }
+    return {
+      transactionTypeCode,
+      lineWrites: this.documentLineWrites(itemLines, lineAccounts),
+      totalAmount,
+      fields: {
+        vendorId: vendor.id,
+        documentDate: new Date(dto.documentDate),
+        dueDate: new Date(
+          dto.dueDate ??
+            this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
+        ),
+        currency: dto.currency,
+        exchangeRate: dto.exchangeRate,
+        subtotalAmount,
+        // A single item keeps its quantity × price on the document; with several, each line
+        // carries its own.
+        quantity: itemLines.length === 1 ? itemLines[0].quantity : undefined,
+        unitPrice: itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
+        taxAmount,
+        totalAmount,
+        description: this.optional(dto.description),
+        externalReference: this.optional(dto.externalReference),
+        offsetGlAccountId: lineAccounts[0],
+        costCentreId:
+          itemLines.length === 1
+            ? this.optional(itemLines[0].costCentreId)
+            : null,
+        apAccountId,
+        transactionTypeId: dto.transactionTypeId,
+        taxBreakdown,
+      },
+    };
+  }
 
+  async createBill(user: RequestUser, dto: CreatePayableBillDto) {
+    const prepared = await this.prepareBill(user, dto);
     const document = await this.withDocumentNumberLock(
       user.tenantId,
-      `bill:${transactionTypeCode}`,
+      `bill:${prepared.transactionTypeCode}`,
       async (tx) => {
         const documentNumber = await this.nextRuleDocumentNumber(
           tx,
           user.tenantId,
-          transactionTypeCode,
+          prepared.transactionTypeCode,
         );
         return tx.accountingPayableDocument.create({
           data: {
             tenantId: user.tenantId,
-            vendorId: vendor.id,
             documentType: AccountingPayableDocumentType.BILL,
             documentNumber,
-            documentDate: new Date(dto.documentDate),
-            dueDate: new Date(
-              dto.dueDate ??
-                this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
-            ),
-            currency: dto.currency,
-            exchangeRate: dto.exchangeRate,
-            subtotalAmount,
-            // A single item keeps its quantity × price on the document; with several, each line
-            // carries its own.
-            quantity:
-              itemLines.length === 1 ? itemLines[0].quantity : undefined,
-            unitPrice:
-              itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
-            taxAmount,
-            totalAmount,
-            description: this.optional(dto.description),
-            externalReference: this.optional(dto.externalReference),
+            ...prepared.fields,
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId: lineAccounts[0],
-            costCentreId:
-              itemLines.length === 1
-                ? this.optional(itemLines[0].costCentreId)
-                : null,
-            lines: { create: this.documentLineWrites(itemLines, lineAccounts) },
-            apAccountId,
-            transactionTypeId: dto.transactionTypeId,
-            taxBreakdown,
+            lines: { create: prepared.lineWrites },
             createdByUserId: user.id,
             updatedByUserId: user.id,
           },
@@ -400,7 +421,10 @@ export class PayablesService {
       'PAYABLE_BILL_CREATED',
       'AccountingPayableDocument',
       document.id,
-      { documentNumber: document.documentNumber, totalAmount },
+      {
+        documentNumber: document.documentNumber,
+        totalAmount: prepared.totalAmount,
+      },
     );
     return document;
   }
@@ -826,7 +850,8 @@ export class PayablesService {
     const where: Prisma.AccountingPayablePaymentWhereInput = {
       tenantId,
       ...(query.vendorId ? { vendorId: query.vendorId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      // Voided entries live in the archive; they only show when asked for by status.
+      status: query.status ?? { not: AccountingPayableStatus.VOIDED },
       ...(query.currency ? { currency: query.currency } : {}),
       ...(query.cashAccountId
         ? { cashbookTransaction: { cashAccountId: query.cashAccountId } }
@@ -1357,6 +1382,689 @@ export class PayablesService {
     });
   }
 
+  // ---- Changing posted documents and payments (while their period is open) ----
+
+  /** Loads a posted or voided document for a void, edit or restore. Another module's documents change there. */
+  private async loadChangeableDocument(
+    tx: TransactionClient,
+    tenantId: string,
+    documentId: string,
+    documentType: AccountingPayableDocumentType,
+  ) {
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "accounting"."AccountingPayableDocument"
+      WHERE "tenantId" = ${tenantId} AND "id" = ${documentId}
+      FOR UPDATE
+    `;
+    const document = await tx.accountingPayableDocument.findFirst({
+      where: { id: documentId, tenantId, documentType },
+      include: payableDocumentInclude,
+    });
+    if (!document) throw new NotFoundException('Payable document not found');
+    if (document.sourceModule && document.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        'This document was raised by another module and changes there.',
+      );
+    }
+    if (!document.postedJournalEntryId) {
+      throw new ConflictException(
+        'This document has no posted journal to change',
+      );
+    }
+    return document;
+  }
+
+  /** A bill with payments or credit notes against it must have those voided first. */
+  private async assertBillUntouched(
+    tx: TransactionClient,
+    tenantId: string,
+    billId: string,
+  ) {
+    const [applied, creditNotes] = await Promise.all([
+      tx.accountingPayableAllocation.count({
+        where: { tenantId, billId, reversedAt: null },
+      }),
+      tx.accountingPayableDocument.count({
+        where: {
+          tenantId,
+          originalBillId: billId,
+          status: AccountingPayableStatus.POSTED,
+        },
+      }),
+    ]);
+    if (applied > 0 || creditNotes > 0) {
+      throw new ConflictException(
+        'This bill has payments or credit notes against it. Void those first.',
+      );
+    }
+  }
+
+  private async releaseAllocations(
+    tx: TransactionClient,
+    user: RequestUser,
+    where: { paymentId?: string; creditNoteId?: string },
+  ) {
+    await tx.accountingPayableAllocation.updateMany({
+      where: { tenantId: user.tenantId, reversedAt: null, ...where },
+      data: {
+        reversedAt: new Date(),
+        reversedByUserId: user.id,
+        reversalReason: RELEASED_BY_VOID,
+      },
+    });
+  }
+
+  /** Rewrites the document's journal from its current fields, keeping the journal's number. */
+  private async rewriteDocumentJournal(
+    tx: TransactionClient,
+    user: RequestUser,
+    documentId: string,
+  ) {
+    const fresh = await tx.accountingPayableDocument.findUniqueOrThrow({
+      where: { id_tenantId: { id: documentId, tenantId: user.tenantId } },
+      include: payableDocumentInclude,
+    });
+    const period = await this.resolveOpenPeriod(
+      tx,
+      user.tenantId,
+      fresh.documentDate,
+    );
+    await this.journals.rewriteSystemJournalInTransaction(
+      tx,
+      user,
+      fresh.postedJournalEntryId as string,
+      this.documentJournalDto(fresh, period.id),
+    );
+  }
+
+  private documentSnapshot(document: PayableDocument) {
+    return {
+      documentNumber: document.documentNumber,
+      vendorId: document.vendorId,
+      documentDate: document.documentDate.toISOString(),
+      currency: document.currency,
+      totalAmount: document.totalAmount.toString(),
+      description: document.description,
+    };
+  }
+
+  /** Rewrites a bill from the whole form again, keeping its number (and so its type). */
+  private async replaceBillInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: PayableDocument,
+    dto: CreatePayableBillDto,
+  ) {
+    if (dto.transactionTypeId !== document.transactionTypeId) {
+      throw new BadRequestException(
+        'The transaction type cannot change. Void this bill and raise a new one instead.',
+      );
+    }
+    const prepared = await this.prepareBill(user, dto);
+    await tx.accountingPayableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        ...prepared.fields,
+        quantity: prepared.fields.quantity ?? null,
+        unitPrice: prepared.fields.unitPrice ?? null,
+        exchangeRate: prepared.fields.exchangeRate ?? null,
+        updatedByUserId: user.id,
+        lines: { deleteMany: {}, create: prepared.lineWrites },
+      },
+    });
+    await this.rewriteDocumentJournal(tx, user, document.id);
+  }
+
+  private async updateNoteInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: PayableDocument,
+    dto: EditPayableNoteDto,
+  ) {
+    const { reason: _reason, ...changes } = dto;
+    void _reason;
+    if (Object.keys(changes).length === 0) return;
+    await tx.accountingPayableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        updatedByUserId: user.id,
+        ...(changes.documentDate !== undefined
+          ? { documentDate: new Date(changes.documentDate) }
+          : {}),
+        ...(changes.exchangeRate !== undefined
+          ? { exchangeRate: changes.exchangeRate }
+          : {}),
+        ...(changes.description !== undefined
+          ? { description: this.optional(changes.description) }
+          : {}),
+        ...(changes.externalReference !== undefined
+          ? { externalReference: this.optional(changes.externalReference) }
+          : {}),
+      },
+    });
+    await this.rewriteDocumentJournal(tx, user, document.id);
+  }
+
+  private findDocumentFresh(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingPayableDocumentType,
+  ) {
+    return documentType === AccountingPayableDocumentType.BILL
+      ? this.getBill(user, documentId)
+      : this.getCreditNote(user, documentId);
+  }
+
+  /**
+   * Takes a posted bill or credit note out of the books with its journal. A bill with
+   * payments or credit notes against it must wait until those are voided; a credit note lets go
+   * of what it was applied to.
+   */
+  private async voidDocument(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingPayableDocumentType,
+    dto: VoidEntryDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        documentId,
+        documentType,
+      );
+      if (document.status === AccountingPayableStatus.REVERSED) {
+        throw new ConflictException(
+          'This document has been reversed and cannot be voided.',
+        );
+      }
+      if (document.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted documents can be voided');
+      }
+      if (documentType === AccountingPayableDocumentType.BILL) {
+        await this.assertBillUntouched(tx, user.tenantId, document.id);
+      } else {
+        await this.releaseAllocations(tx, user, { creditNoteId: document.id });
+      }
+      await this.journals.voidSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+        dto.reason,
+      );
+      await tx.accountingPayableDocument.update({
+        where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingPayableStatus.VOIDED,
+          voidedAt: new Date(),
+          voidedByUserId: user.id,
+          voidReason: dto.reason,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_DOCUMENT_VOIDED',
+          entityType: 'AccountingPayableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason,
+            documentNumber: document.documentNumber,
+          },
+        },
+      });
+    });
+    return this.findDocumentFresh(user, documentId, documentType);
+  }
+
+  voidBill(user: RequestUser, billId: string, dto: VoidEntryDto) {
+    return this.voidDocument(
+      user,
+      billId,
+      AccountingPayableDocumentType.BILL,
+      dto,
+    );
+  }
+
+  voidCreditNote(user: RequestUser, creditNoteId: string, dto: VoidEntryDto) {
+    return this.voidDocument(
+      user,
+      creditNoteId,
+      AccountingPayableDocumentType.CREDIT_NOTE,
+      dto,
+    );
+  }
+
+  /** Edits a posted bill in place: the whole form again, same number. */
+  async editPostedBill(
+    user: RequestUser,
+    billId: string,
+    dto: EditPayableBillDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        billId,
+        AccountingPayableDocumentType.BILL,
+      );
+      if (document.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException(
+          document.status === AccountingPayableStatus.REVERSED
+            ? 'This bill has been reversed and cannot be edited.'
+            : 'Only posted bills can be edited',
+        );
+      }
+      await this.assertBillUntouched(tx, user.tenantId, document.id);
+      await this.replaceBillInTransaction(tx, user, document, dto.bill);
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_BILL_POSTED_EDITED',
+          entityType: 'AccountingPayableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: this.documentSnapshot(document),
+          },
+        },
+      });
+    });
+    return this.getBill(user, billId);
+  }
+
+  /** Edits what a posted credit note allows (its amount stays, as it is applied against a bill). */
+  async editPostedCreditNote(
+    user: RequestUser,
+    creditNoteId: string,
+    dto: EditPayableNoteDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        creditNoteId,
+        AccountingPayableDocumentType.CREDIT_NOTE,
+      );
+      if (document.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted credit notes can be edited');
+      }
+      await this.updateNoteInTransaction(tx, user, document, dto);
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_CREDIT_NOTE_POSTED_EDITED',
+          entityType: 'AccountingPayableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: this.documentSnapshot(document),
+          },
+        },
+      });
+    });
+    return this.getCreditNote(user, creditNoteId);
+  }
+
+  /** Brings a voided bill back under its own number, with corrections if the form was changed. */
+  async restoreBill(
+    user: RequestUser,
+    billId: string,
+    dto: RestorePayableBillDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        billId,
+        AccountingPayableDocumentType.BILL,
+      );
+      if (document.status !== AccountingPayableStatus.VOIDED) {
+        throw new ConflictException('Only voided bills can be restored');
+      }
+      if (dto.bill) {
+        await this.replaceBillInTransaction(tx, user, document, dto.bill);
+      }
+      await this.journals.reinstateSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+      );
+      await this.markDocumentRestored(tx, user, document);
+    });
+    return this.getBill(user, billId);
+  }
+
+  /** Brings a voided credit note back, applying it to its bill again when it was raised against one. */
+  async restoreCreditNote(
+    user: RequestUser,
+    creditNoteId: string,
+    dto: EditPayableNoteDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        creditNoteId,
+        AccountingPayableDocumentType.CREDIT_NOTE,
+      );
+      if (document.status !== AccountingPayableStatus.VOIDED) {
+        throw new ConflictException('Only voided credit notes can be restored');
+      }
+      if (document.originalBillId) {
+        const bill = await tx.accountingPayableDocument.findFirst({
+          where: { id: document.originalBillId, tenantId: user.tenantId },
+          select: { status: true, documentNumber: true },
+        });
+        if (bill?.status !== AccountingPayableStatus.POSTED) {
+          throw new ConflictException(
+            `Restore bill ${bill?.documentNumber ?? ''} before this credit note`.trim(),
+          );
+        }
+      }
+      await this.updateNoteInTransaction(tx, user, document, dto);
+      await this.journals.reinstateSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+      );
+      await this.markDocumentRestored(tx, user, document);
+      await this.reapplyReleasedAllocations(tx, user, {
+        creditNoteId: document.id,
+        sourceType: AccountingPayableAllocationSource.CREDIT_NOTE,
+        expectedApAccountId: document.apAccountId,
+      });
+    });
+    return this.getCreditNote(user, creditNoteId);
+  }
+
+  /** Applies a restored payment or credit note to the bills it was released from by the void. */
+  private async reapplyReleasedAllocations(
+    tx: TransactionClient,
+    user: RequestUser,
+    input: {
+      paymentId?: string;
+      creditNoteId?: string;
+      sourceType: AccountingPayableAllocationSource;
+      expectedApAccountId: string;
+    },
+  ) {
+    const released = await tx.accountingPayableAllocation.findMany({
+      where: {
+        tenantId: user.tenantId,
+        reversalReason: RELEASED_BY_VOID,
+        ...(input.paymentId ? { paymentId: input.paymentId } : {}),
+        ...(input.creditNoteId ? { creditNoteId: input.creditNoteId } : {}),
+      },
+    });
+    for (const allocation of released) {
+      try {
+        await this.createAllocation(tx, user, {
+          vendorId: allocation.vendorId,
+          billId: allocation.billId,
+          paymentId: input.paymentId,
+          creditNoteId: input.creditNoteId,
+          sourceType: input.sourceType,
+          amount: allocation.amount,
+          currency: allocation.currency,
+          expectedApAccountId: input.expectedApAccountId,
+        });
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          throw new ConflictException(
+            'The bill this was applied to is voided. Restore the bill first.',
+          );
+        }
+        throw error;
+      }
+      await tx.accountingPayableAllocation.update({
+        where: { id_tenantId: { id: allocation.id, tenantId: user.tenantId } },
+        data: { reversalReason: RESTORED_AFTER_VOID },
+      });
+    }
+  }
+
+  private async markDocumentRestored(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: PayableDocument,
+  ) {
+    await tx.accountingPayableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        status: AccountingPayableStatus.POSTED,
+        voidedAt: null,
+        voidedByUserId: null,
+        voidReason: null,
+        updatedByUserId: user.id,
+      },
+    });
+    await tx.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: 'PAYABLE_DOCUMENT_RESTORED',
+        entityType: 'AccountingPayableDocument',
+        entityId: document.id,
+        changedFields: { before: this.documentSnapshot(document) },
+      },
+    });
+  }
+
+  private paymentCashbookEdit(dto: EditPayablePaymentDto) {
+    return {
+      ...(dto.paymentDate !== undefined
+        ? { transactionDate: dto.paymentDate }
+        : {}),
+      ...(dto.cashAccountId !== undefined
+        ? { cashAccountId: dto.cashAccountId }
+        : {}),
+      ...(dto.settlementMethod !== undefined
+        ? { settlementMethod: dto.settlementMethod }
+        : {}),
+      ...(dto.reference !== undefined ? { reference: dto.reference } : {}),
+      ...(dto.externalReference !== undefined
+        ? { externalReference: dto.externalReference }
+        : {}),
+      ...(dto.description !== undefined
+        ? { description: dto.description }
+        : {}),
+      ...(dto.reason !== undefined ? { reason: dto.reason } : {}),
+    };
+  }
+
+  private paymentFieldEdit(dto: EditPayablePaymentDto) {
+    return {
+      ...(dto.paymentDate !== undefined
+        ? { paymentDate: new Date(dto.paymentDate) }
+        : {}),
+      ...(dto.reference !== undefined
+        ? { reference: this.optional(dto.reference) }
+        : {}),
+      ...(dto.description !== undefined
+        ? { description: this.optional(dto.description) }
+        : {}),
+      ...(dto.externalReference !== undefined
+        ? { externalReference: this.optional(dto.externalReference) }
+        : {}),
+    };
+  }
+
+  private async loadChangeablePayment(
+    tx: TransactionClient,
+    tenantId: string,
+    paymentId: string,
+  ) {
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "accounting"."AccountingPayablePayment"
+      WHERE "tenantId" = ${tenantId} AND "id" = ${paymentId}
+      FOR UPDATE
+    `;
+    const payment = await tx.accountingPayablePayment.findFirst({
+      where: { id: paymentId, tenantId },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.sourceModule && payment.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        'This payment was raised by another module and changes there.',
+      );
+    }
+    return payment;
+  }
+
+  /** Voids a posted payment with its cashbook entry and lets go of the bills it was applied to. */
+  async voidPayment(user: RequestUser, paymentId: string, dto: VoidEntryDto) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status === AccountingPayableStatus.REVERSED) {
+        throw new ConflictException(
+          'This payment has been reversed and cannot be voided.',
+        );
+      }
+      if (payment.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted payments can be voided');
+      }
+      await this.releaseAllocations(tx, user, { paymentId: payment.id });
+      await this.cashbook.voidInTransaction(
+        tx,
+        user,
+        payment.cashbookTransactionId,
+        dto,
+        true,
+      );
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingPayableStatus.VOIDED,
+          voidedAt: new Date(),
+          voidedByUserId: user.id,
+          voidReason: dto.reason,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_VOIDED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: {
+            reason: dto.reason,
+            paymentNumber: payment.paymentNumber,
+          },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
+  }
+
+  async editPostedPayment(
+    user: RequestUser,
+    paymentId: string,
+    dto: EditPayablePaymentDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted payments can be edited');
+      }
+      await this.cashbook.editInTransaction(
+        tx,
+        user,
+        payment.cashbookTransactionId,
+        this.paymentCashbookEdit(dto),
+        true,
+      );
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: { ...this.paymentFieldEdit(dto), updatedByUserId: user.id },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_POSTED_EDITED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: {
+              paymentDate: payment.paymentDate.toISOString(),
+              reference: payment.reference,
+              description: payment.description,
+            },
+          },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
+  }
+
+  /** Brings a voided payment back and applies it to the bills it was applied to before. */
+  async restorePayment(
+    user: RequestUser,
+    paymentId: string,
+    dto: EditPayablePaymentDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status !== AccountingPayableStatus.VOIDED) {
+        throw new ConflictException('Only voided payments can be restored');
+      }
+      await this.cashbook.restoreInTransaction(
+        tx,
+        user,
+        payment.cashbookTransactionId,
+        this.paymentCashbookEdit(dto),
+        true,
+      );
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: {
+          ...this.paymentFieldEdit(dto),
+          status: AccountingPayableStatus.POSTED,
+          voidedAt: null,
+          voidedByUserId: null,
+          voidReason: null,
+          updatedByUserId: user.id,
+        },
+      });
+      await this.reapplyReleasedAllocations(tx, user, {
+        paymentId: payment.id,
+        sourceType: AccountingPayableAllocationSource.PAYMENT,
+        expectedApAccountId: payment.apAccountId,
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_RESTORED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: { paymentNumber: payment.paymentNumber },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
+  }
+
   private async createAllocation(
     tx: TransactionClient,
     user: RequestUser,
@@ -1571,7 +2279,8 @@ export class PayablesService {
       tenantId,
       documentType,
       ...(query.vendorId ? { vendorId: query.vendorId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      // Voided entries live in the archive; they only show when asked for by status.
+      status: query.status ?? { not: AccountingPayableStatus.VOIDED },
       ...(query.currency ? { currency: query.currency } : {}),
       ...(query.fromDate || query.toDate
         ? {
@@ -2242,6 +2951,7 @@ export class PayablesService {
     outstanding: Prisma.Decimal,
     paidApplied?: Prisma.Decimal,
   ) {
+    if (document.status === AccountingPayableStatus.VOIDED) return 'VOIDED';
     if (document.status === AccountingPayableStatus.REVERSED) return 'REVERSED';
     if (document.status === AccountingPayableStatus.DRAFT) return 'DRAFT';
     if (outstanding.lte(0)) return 'PAID';

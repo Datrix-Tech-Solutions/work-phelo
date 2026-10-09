@@ -9,11 +9,17 @@ import { RejectDraftModal } from '@/components/organisms/accounting/panels/Rejec
 import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTransferPanel';
+import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
+import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import type { EntryChangeMode } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import {
   useDeleteCashbookDraft,
+  usePeriodOpenCheck,
   usePostCashbookTransaction,
   useRejectCashbookTransaction,
+  useRestoreCashbook,
   useTransactionTypes,
+  useVoidCashbook,
 } from '@/hooks';
 import { transactionTypeCodeFromNumber } from '@/lib/accounting/transactionTypeCode';
 import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
@@ -26,6 +32,7 @@ const STATUS_LABEL: Record<CashbookTransactionStatus, string> = {
   POSTED: 'POSTED',
   REVERSED: 'REVERSED',
   REJECTED: 'REJECTED',
+  VOIDED: 'Voided',
 };
 
 const STATUS_VARIANT: Record<CashbookTransactionStatus, 'success' | 'neutral' | 'danger'> = {
@@ -33,6 +40,7 @@ const STATUS_VARIANT: Record<CashbookTransactionStatus, 'success' | 'neutral' | 
   POSTED: 'success',
   REVERSED: 'danger',
   REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtDate(iso: string | null) {
@@ -84,8 +92,34 @@ export function CashbookTransactionDetailPanel({
   const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [choiceOpen, setChoiceOpen] = useState(false);
-  // The draft being redone: its form opens once this panel closes.
-  const [redoTarget, setRedoTarget] = useState<CashbookTransaction | null>(null);
+  // The entry whose form is opening (a draft to redo, a posted one to edit, a voided one to
+  // restore): its form opens once this panel closes.
+  const [formTarget, setFormTarget] = useState<{
+    transaction: CashbookTransaction;
+    mode: EntryChangeMode;
+  } | null>(null);
+  const redoTarget = formTarget?.transaction ?? null;
+  const setRedoTarget = (tx: CashbookTransaction | null) =>
+    setFormTarget(tx ? { transaction: tx, mode: 'redo' } : null);
+
+  // A posted entry made on the Transactions page can be edited or voided while its period is
+  // open; a voided one can be restored. Receipts and payments on an invoice or bill change from
+  // that document, and another module's entries there.
+  const isPeriodOpen = usePeriodOpenCheck();
+  const voidEntry = useVoidCashbook();
+  const restoreEntry = useRestoreCashbook();
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const isDirect =
+    !!transaction &&
+    !transaction.sourceModule &&
+    ['RECEIPT', 'PAYMENT', 'TRANSFER'].includes(transaction.transactionType);
+  const periodOpen = isPeriodOpen(transaction?.transactionDate);
+  const isReversalEntry = !!transaction?.reversalOfTransactionId;
+  const canChangePosted = isDirect && transaction?.status === 'POSTED' && periodOpen;
+  const canVoidPosted = canChangePosted;
+  const canRestore = isDirect && transaction?.status === 'VOIDED' && periodOpen;
+  const restoresAsIs = !!transaction?.voidedReversalOfTransactionId;
 
   // A draft entered on the Transactions page (not raised by another module) can be redone or
   // deleted. Receipts and payments redo in the form of the type they were made under, which is
@@ -102,6 +136,7 @@ export function CashbookTransactionDetailPanel({
   };
   const canRedo =
     transaction?.transactionType === 'TRANSFER' || (!!typeCode && !!redoType(transaction));
+  const canEditPosted = canChangePosted && !isReversalEntry && canRedo;
 
   // A direct receipt or payment can be completed or turned down. Customer receipts and vendor
   // payments (sourceModule ACCOUNTING) are handled through their own documents instead.
@@ -140,6 +175,30 @@ export function CashbookTransactionDetailPanel({
       onClose();
     } catch (error) {
       toast.error(extractError(error, 'Failed to delete the draft'));
+    }
+  };
+
+  const handleVoid = async (reason: string) => {
+    if (!transaction) return;
+    try {
+      await voidEntry.mutateAsync({ id: transaction.id, reason });
+      toast.success('Entry voided. It is in the archive now.');
+      setVoidOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to void the entry'));
+    }
+  };
+
+  const handleRestoreAsIs = async () => {
+    if (!transaction) return;
+    try {
+      await restoreEntry.mutateAsync({ id: transaction.id });
+      toast.success('Entry restored.');
+      setRestoreOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to restore the entry'));
     }
   };
 
@@ -200,6 +259,42 @@ export function CashbookTransactionDetailPanel({
                 Reject
               </Button>
             )}
+            {(canEditPosted || canVoidPosted) && (
+              <div className="flex items-center gap-2">
+                {canEditPosted && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setFormTarget({ transaction, mode: 'edit' });
+                      onClose();
+                    }}
+                  >
+                    Edit
+                  </Button>
+                )}
+                {canVoidPosted && (
+                  <Button size="sm" variant="danger" onClick={() => setVoidOpen(true)}>
+                    Void
+                  </Button>
+                )}
+              </div>
+            )}
+            {canRestore && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (restoresAsIs) {
+                    setRestoreOpen(true);
+                    return;
+                  }
+                  setFormTarget({ transaction, mode: 'restore' });
+                  onClose();
+                }}
+              >
+                Restore
+              </Button>
+            )}
             {canReviewDraft && (
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
@@ -217,6 +312,25 @@ export function CashbookTransactionDetailPanel({
           <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
             Raised from {sourceLabel}. Complete the remaining details, then post it — or reject it
             with a reason.
+          </div>
+        )}
+
+        {transaction && transaction.status === 'VOIDED' && (
+          <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            <p className="font-semibold">
+              Voided{transaction.voidedAt ? ` on ${fmtDate(transaction.voidedAt)}` : ''}
+            </p>
+            {transaction.voidReason && <p className="mt-1">{transaction.voidReason}</p>}
+            <p className="mt-1 text-xs text-gray-500">
+              It counts in no balance or report.
+              {!periodOpen && ' Its period is no longer open, so it can’t be restored.'}
+            </p>
+          </div>
+        )}
+
+        {transaction && transaction.status === 'REVERSED' && transaction.reversalTransaction && (
+          <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            This entry has been reversed. To edit or void it, void its reversal first.
           </div>
         )}
 
@@ -310,6 +424,22 @@ export function CashbookTransactionDetailPanel({
           onClose={() => setChoiceOpen(false)}
         />
 
+        <VoidEntryModal
+          isOpen={voidOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          isPending={voidEntry.isPending}
+          onConfirm={handleVoid}
+          onClose={() => setVoidOpen(false)}
+        />
+        <RestoreEntryModal
+          isOpen={restoreOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          note="A reversal comes back as it was."
+          isPending={restoreEntry.isPending}
+          onConfirm={handleRestoreAsIs}
+          onClose={() => setRestoreOpen(false)}
+        />
+
         <RejectDraftModal
           isOpen={rejectOpen}
           subject={transaction?.transactionNumber ?? 'This entry'}
@@ -325,12 +455,17 @@ export function CashbookTransactionDetailPanel({
             ? (redoType(redoTarget) ?? undefined)
             : undefined
         }
-        draft={redoTarget ? { kind: 'cashbook', transaction: redoTarget } : null}
+        draft={
+          redoTarget && formTarget
+            ? { kind: 'cashbook', transaction: redoTarget, mode: formTarget.mode }
+            : null
+        }
         onClose={() => setRedoTarget(null)}
       />
       <NewTransferPanel
         isOpen={redoTarget?.transactionType === 'TRANSFER'}
         draft={redoTarget}
+        mode={formTarget?.mode}
         onClose={() => setRedoTarget(null)}
       />
     </>

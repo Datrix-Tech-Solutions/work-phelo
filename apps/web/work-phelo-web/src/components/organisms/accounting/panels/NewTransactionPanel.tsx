@@ -61,6 +61,8 @@ import {
   useCreateReceivableInvoice,
   useDeleteCashbookDraft,
   useDeleteTradeDraft,
+  useEditPostedCashbook,
+  useEditPostedTradeEntry,
   useEntityTypes,
   useGLAccountOptions,
   useGLAccounts,
@@ -68,6 +70,8 @@ import {
   usePayableBills,
   usePostCashbookTransaction,
   useReceivableInvoices,
+  useRestoreCashbook,
+  useRestoreTradeEntry,
   useSourceLedger,
   useSubledgers,
   useTaxTypes,
@@ -163,8 +167,13 @@ const DEFAULTS: FormValues = {
 /** A saved draft the form is opened on to be redone: the form starts with its values, and once
  *  the redone entry is saved the old draft is deleted, so only one of them is left. */
 export type DraftToRedo =
-  | { kind: 'cashbook'; transaction: CashbookTransaction }
-  | { kind: 'document'; document: AccountingTradeDocument };
+  | { kind: 'cashbook'; transaction: CashbookTransaction; mode?: EntryChangeMode }
+  | { kind: 'document'; document: AccountingTradeDocument; mode?: EntryChangeMode };
+
+/** How the form is opened on a saved entry. 'redo' (the default) is for a draft: a new one is
+ *  saved and the old one deleted. 'edit' changes a posted entry in place and 'restore' brings a
+ *  voided one back; both keep the entry's number, and only work while its period is open. */
+export type EntryChangeMode = 'redo' | 'edit' | 'restore';
 
 const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
 const plainNumber = (value: string | null | undefined) =>
@@ -300,12 +309,25 @@ export function NewTransactionPanel({
   const deleteCashbookDraft = useDeleteCashbookDraft();
   const deleteReceivableDraft = useDeleteTradeDraft('RECEIVABLE');
   const deletePayableDraft = useDeleteTradeDraft('PAYABLE');
+  const editPostedCashbook = useEditPostedCashbook();
+  const restoreCashbook = useRestoreCashbook();
+  const editPostedEntry = useEditPostedTradeEntry(isPayable ? 'PAYABLE' : 'RECEIVABLE');
+  const restoreEntry = useRestoreTradeEntry(isPayable ? 'PAYABLE' : 'RECEIVABLE');
+  // Editing a posted entry, or restoring a voided one, changes that entry in place.
+  const changeMode = draft?.mode === 'edit' || draft?.mode === 'restore' ? draft.mode : null;
   const postCashbookTransaction = usePostCashbookTransaction();
-  const isSaving = isCashbookType
-    ? createCashbookEntry.isPending ||
-      makeSourceLedgerPayment.isPending ||
-      postCashbookTransaction.isPending
-    : createDocument.isPending || createCreditNote.isPending || createDebitNote.isPending;
+  const isChanging =
+    editPostedCashbook.isPending ||
+    restoreCashbook.isPending ||
+    editPostedEntry.isPending ||
+    restoreEntry.isPending;
+  const isSaving =
+    isChanging ||
+    (isCashbookType
+      ? createCashbookEntry.isPending ||
+        makeSourceLedgerPayment.isPending ||
+        postCashbookTransaction.isPending
+      : createDocument.isPending || createCreditNote.isPending || createDebitNote.isPending);
   const [pendingAction, setPendingAction] = useState<'draft' | 'post' | null>(null);
 
   // A type linked to a Source shows a dropdown of that source's still-unpaid open items —
@@ -745,6 +767,53 @@ export function NewTransactionPanel({
         toast.error('Select a settlement method');
         return;
       }
+      if (changeMode && draft?.kind === 'cashbook') {
+        // Changing a posted or voided entry rewrites it in place - same number, same type.
+        try {
+          const change = changeMode === 'restore' ? restoreCashbook : editPostedCashbook;
+          await change.mutateAsync({
+            id: draft.transaction.id,
+            transactionDate: values.entryDate || today(),
+            cashAccountId: values.cashAccountId,
+            settlementMethod: values.settlementMethod,
+            reference: values.reference || undefined,
+            description: values.description || transactionType.name,
+            counterpartyType:
+              values.businessEntity && values.businessRole ? values.businessRole : null,
+            counterpartyId:
+              values.businessEntity && values.businessRole ? values.businessEntity : null,
+            lines: usesLines
+              ? values.cashLines.map((line) => ({
+                  kind: line.kind,
+                  glAccountId: line.glAccountId,
+                  amount: cashLineAmount(line),
+                  ...(line.kind !== 'ITEM' || !line.useQtyPrice
+                    ? {}
+                    : { quantity: Number(line.quantity), unitPrice: Number(line.unitPrice) }),
+                  description: line.description || undefined,
+                }))
+              : [
+                  {
+                    kind: 'ITEM',
+                    glAccountId: values.offsetGlAccountId,
+                    amount: resolveAmount(values),
+                    ...(isDirectAmount
+                      ? {}
+                      : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
+                  },
+                ],
+          });
+          toast.success(
+            changeMode === 'restore'
+              ? `${draft.transaction.transactionNumber ?? 'Transaction'} restored.`
+              : `${draft.transaction.transactionNumber ?? 'Transaction'} updated.`,
+          );
+          close();
+        } catch (error) {
+          toast.error(extractError(error, 'Failed to save the changes'));
+        }
+        return;
+      }
       const willPost = !!values.sourceLedgerEntryId || post;
       setPendingAction(willPost ? 'post' : 'draft');
       try {
@@ -907,6 +976,36 @@ export function NewTransactionPanel({
       return;
     }
 
+    if (changeMode && draft?.kind === 'document') {
+      // The invoice/bill keeps its number; the form's values replace everything else on it.
+      try {
+        const change = changeMode === 'restore' ? restoreEntry : editPostedEntry;
+        await change.mutateAsync({
+          id: draft.document.id,
+          kind: 'document',
+          [isPayable ? 'bill' : 'invoice']: {
+            [isPayable ? 'vendorId' : 'customerId']: values.businessEntity,
+            documentDate: values.entryDate || today(),
+            dueDate: values.dueDate || undefined,
+            currency: values.currency,
+            ...lineFields,
+            transactionTypeId: transactionType.id,
+            ...adjustmentFields,
+            description: values.description || undefined,
+          },
+        });
+        toast.success(
+          changeMode === 'restore'
+            ? `${draft.document.documentNumber} restored.`
+            : `${draft.document.documentNumber} updated.`,
+        );
+        close();
+      } catch (error) {
+        toast.error(extractError(error, 'Failed to save the changes'));
+      }
+      return;
+    }
+
     const payload = {
       partyId: values.businessEntity,
       documentDate: values.entryDate || today(),
@@ -959,6 +1058,7 @@ export function NewTransactionPanel({
             value={field.value}
             onChange={field.onChange}
             error={errors.currency?.message}
+            disabled={!!changeMode}
           />
         )}
       />
@@ -1014,6 +1114,7 @@ export function NewTransactionPanel({
               value={field.value}
               onChange={field.onChange}
               error={errors.currency?.message}
+              disabled={!!changeMode}
             />
           )}
         />
@@ -1027,16 +1128,26 @@ export function NewTransactionPanel({
         isOpen={isOpen}
         onClose={close}
         {...entry.panelProps}
-        title="New Transaction"
+        title={
+          changeMode === 'restore'
+            ? 'Restore Transaction'
+            : changeMode === 'edit'
+              ? 'Edit Transaction'
+              : 'New Transaction'
+        }
         description={
-          transactionType ? `Recording a ${transactionType.name.toLowerCase()}.` : undefined
+          changeMode
+            ? 'It keeps its number. Change anything and submit.'
+            : transactionType
+              ? `Recording a ${transactionType.name.toLowerCase()}.`
+              : undefined
         }
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={close} disabled={isSaving}>
               Cancel
             </Button>
-            {canUse && isCashbookType && !sourceLedgerEntryId && (
+            {canUse && isCashbookType && !sourceLedgerEntryId && !changeMode && (
               <Button
                 variant="outline"
                 isLoading={pendingAction === 'draft'}
@@ -1057,11 +1168,15 @@ export function NewTransactionPanel({
                 disabled={isSaving}
                 onClick={handleSubmit((values) => submit(values, true))}
               >
-                {!isCashbookType
-                  ? 'Submit for Review'
-                  : isCashbookReceipt
-                    ? 'Receive Payment'
-                    : 'Make Payment'}
+                {changeMode === 'restore'
+                  ? 'Restore'
+                  : changeMode === 'edit'
+                    ? 'Save Changes'
+                    : !isCashbookType
+                      ? 'Submit for Review'
+                      : isCashbookReceipt
+                        ? 'Receive Payment'
+                        : 'Make Payment'}
               </Button>
             )}
           </div>
@@ -1211,6 +1326,7 @@ export function NewTransactionPanel({
                       value={field.value}
                       onChange={field.onChange}
                       error={errors.currency?.message}
+                      disabled={!!changeMode}
                     />
                   )}
                 />
@@ -1381,6 +1497,7 @@ export function NewTransactionPanel({
                     value={field.value}
                     onChange={field.onChange}
                     error={errors.currency?.message}
+                    disabled={!!changeMode}
                   />
                 )}
               />

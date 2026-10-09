@@ -9,7 +9,12 @@ import { Input } from '@/components/atoms/Input';
 import { EditInvoiceDraftModal } from '@/components/organisms/accounting/panels/EditInvoiceDraftModal';
 import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
 import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
-import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
+import {
+  NewTransactionPanel,
+  type EntryChangeMode,
+} from '@/components/organisms/accounting/panels/NewTransactionPanel';
+import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
+import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
 import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import {
@@ -24,6 +29,9 @@ import {
   useGLAccounts,
   useInvoicePaymentRequests,
   usePayableBillBalance,
+  usePeriodOpenCheck,
+  useRestoreTradeEntry,
+  useVoidTradeEntry,
   usePostPayableBill,
   usePostPayableCreditNote,
   usePostReceivableCreditNote,
@@ -61,6 +69,7 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   POSTED: 'success',
   REVERSED: 'danger',
   REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 const REQUEST_STATUS_LABEL: Record<PaymentRequestStatus, string> = {
@@ -75,6 +84,7 @@ const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
   POSTED: 'POSTED',
   REVERSED: 'REVERSED',
   REJECTED: 'REJECTED',
+  VOIDED: 'Voided',
 };
 
 const PAYMENT_STATE_VARIANT: Record<
@@ -129,8 +139,17 @@ export function TradeDocumentDetailPanel({
   const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [choiceOpen, setChoiceOpen] = useState(false);
-  // The draft being redone: its form opens once this panel closes.
-  const [redoTarget, setRedoTarget] = useState<AccountingTradeDocument | null>(null);
+  // The entry whose form is opening (a draft to redo, a posted one to edit, a voided one to
+  // restore): its form opens once this panel closes.
+  const [formTarget, setFormTarget] = useState<{
+    document: AccountingTradeDocument;
+    mode: EntryChangeMode;
+  } | null>(null);
+  const redoTarget = formTarget?.document ?? null;
+  const setRedoTarget = (doc: AccountingTradeDocument | null) =>
+    setFormTarget(doc ? { document: doc, mode: 'redo' } : null);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState('');
   const [receiveRequest, setReceiveRequest] = useState<PaymentRequest | null>(null);
@@ -203,6 +222,20 @@ export function TradeDocumentDetailPanel({
   const deleteReceivableDraft = useDeleteTradeDraft('RECEIVABLE');
   const deletePayableDraft = useDeleteTradeDraft('PAYABLE');
   const deleteDraft = isReceivable ? deleteReceivableDraft : deletePayableDraft;
+  // A posted invoice, bill, credit or debit note entered here can be edited or voided while its
+  // period is open - once nothing has been paid or credited against it. A voided one can be
+  // restored. Another module's documents change in that module.
+  const isPeriodOpen = usePeriodOpenCheck();
+  const entrySide = isReceivable ? 'RECEIVABLE' : 'PAYABLE';
+  const voidEntry = useVoidTradeEntry(entrySide);
+  const restoreEntry = useRestoreTradeEntry(entrySide);
+  const periodOpen = isPeriodOpen(document?.documentDate);
+  const untouched = isCreditNote || (!!balance && balance.paymentState === 'OPEN' && credited <= 0);
+  const canChangePosted = document?.status === 'POSTED' && !isExternal && periodOpen;
+  const canVoidPosted = canChangePosted && untouched;
+  const canEditPosted = canVoidPosted && !isCreditNote && !!redoType(document ?? null);
+  const canRestore = document?.status === 'VOIDED' && !isExternal && periodOpen;
+  const restoresInForm = canRestore && !isCreditNote && !!redoType(document ?? null);
   const sourceLabel = document?.sourceModule
     ? (SOURCE_MODULE_LABELS[document.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
       document.sourceModule)
@@ -242,6 +275,37 @@ export function TradeDocumentDetailPanel({
     setReverseOpen(false);
     setReason('');
     onClose();
+  };
+
+  const handleVoid = async (voidReason: string) => {
+    if (!document) return;
+    try {
+      await voidEntry.mutateAsync({
+        id: document.id,
+        kind: isCreditNote ? 'note' : 'document',
+        reason: voidReason,
+      });
+      toast.success(`${document.documentNumber} voided. It is in the archive now.`);
+      setVoidOpen(false);
+      handleClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to void'));
+    }
+  };
+
+  const handleRestoreAsIs = async () => {
+    if (!document) return;
+    try {
+      await restoreEntry.mutateAsync({
+        id: document.id,
+        kind: isCreditNote ? 'note' : 'document',
+      });
+      toast.success(`${document.documentNumber} restored.`);
+      setRestoreOpen(false);
+      handleClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to restore'));
+    }
   };
 
   const handlePost = async () => {
@@ -396,6 +460,42 @@ export function TradeDocumentDetailPanel({
                   Reject
                 </Button>
               )}
+              {(canEditPosted || canVoidPosted) && (
+                <div className="flex items-center gap-2">
+                  {canEditPosted && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setFormTarget({ document, mode: 'edit' });
+                        handleClose();
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  )}
+                  {canVoidPosted && (
+                    <Button size="sm" variant="danger" onClick={() => setVoidOpen(true)}>
+                      Void
+                    </Button>
+                  )}
+                </div>
+              )}
+              {canRestore && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (!restoresInForm) {
+                      setRestoreOpen(true);
+                      return;
+                    }
+                    setFormTarget({ document, mode: 'restore' });
+                    handleClose();
+                  }}
+                >
+                  Restore
+                </Button>
+              )}
               {canReviewDraft && (
                 <div className="flex items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
@@ -414,6 +514,31 @@ export function TradeDocumentDetailPanel({
                 it with a reason.
               </div>
             )}
+
+            {document.status === 'VOIDED' && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <p className="font-semibold">
+                  Voided{document.voidedAt ? ` on ${fmtDate(document.voidedAt)}` : ''}
+                </p>
+                {document.voidReason && <p className="mt-1">{document.voidReason}</p>}
+                <p className="mt-1 text-xs text-gray-500">
+                  It counts in no balance or report.
+                  {!periodOpen && ' Its period is no longer open, so it can’t be restored.'}
+                </p>
+              </div>
+            )}
+
+            {document.status === 'POSTED' &&
+              !isExternal &&
+              periodOpen &&
+              !untouched &&
+              !!balance && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                  To edit or void this {isReceivable ? 'invoice' : 'bill'}, first void the{' '}
+                  {isReceivable ? 'receipts' : 'payments'} and {isReceivable ? 'credit' : 'debit'}{' '}
+                  notes applied to it.
+                </div>
+              )}
 
             {document.status === 'REJECTED' && (
               <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-900">
@@ -664,9 +789,29 @@ export function TradeDocumentDetailPanel({
         onClose={() => setChoiceOpen(false)}
       />
 
+      <VoidEntryModal
+        isOpen={voidOpen}
+        subject={document?.documentNumber ?? 'This document'}
+        isPending={voidEntry.isPending}
+        onConfirm={handleVoid}
+        onClose={() => setVoidOpen(false)}
+      />
+      <RestoreEntryModal
+        isOpen={restoreOpen}
+        subject={document?.documentNumber ?? 'This document'}
+        note={isCreditNote ? 'It is applied to its invoice again.' : undefined}
+        isPending={restoreEntry.isPending}
+        onConfirm={handleRestoreAsIs}
+        onClose={() => setRestoreOpen(false)}
+      />
+
       <NewTransactionPanel
         transactionType={redoTarget ? (redoType(redoTarget) ?? undefined) : undefined}
-        draft={redoTarget ? { kind: 'document', document: redoTarget } : null}
+        draft={
+          redoTarget && formTarget
+            ? { kind: 'document', document: redoTarget, mode: formTarget.mode }
+            : null
+        }
         onClose={() => setRedoTarget(null)}
       />
 

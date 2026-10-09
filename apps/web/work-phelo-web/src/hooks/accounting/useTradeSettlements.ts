@@ -69,6 +69,8 @@ function mapSettlement(raw: RawSettlement, side: AccountingTradeSide): Accountin
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,
     reversedAt: raw.reversedAt ?? null,
+    voidedAt: raw.voidedAt ?? null,
+    voidReason: raw.voidReason ?? null,
     reversalOfSettlementId: raw.reversalOfReceiptId ?? raw.reversalOfPaymentId ?? null,
     party: raw[config.partyKey],
     cashbookTransaction: raw.cashbookTransaction,

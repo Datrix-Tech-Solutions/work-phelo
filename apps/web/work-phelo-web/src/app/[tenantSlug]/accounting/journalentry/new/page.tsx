@@ -25,7 +25,9 @@ import {
   useCreateJournal,
   useCreateRecurringJournal,
   useDeleteDraftJournal,
+  useEditPostedJournal,
   useJournal,
+  useRestoreJournal,
   useReverseJournal,
 } from '@/hooks';
 import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
@@ -64,12 +66,22 @@ export default function NewJournalEntryPage() {
   const redoId = searchParams.get('redo') ?? undefined;
   const { data: redoCandidate } = useJournal(redoId);
   const redoing = redoCandidate?.status === 'DRAFT' ? redoCandidate : undefined;
+  // "Edit" on a posted journal (?edit=<id>) and "Restore" on a voided one (?restore=<id>) land here
+  // too. They change that entry in place - it keeps its number - while its period is open.
+  const editId = searchParams.get('edit') ?? undefined;
+  const restoreId = searchParams.get('restore') ?? undefined;
+  const { data: editCandidate } = useJournal(editId);
+  const { data: restoreCandidate } = useJournal(restoreId);
+  const editing = editCandidate?.status === 'POSTED' ? editCandidate : undefined;
+  const restoring = restoreCandidate?.status === 'VOIDED' ? restoreCandidate : undefined;
+  const changing = editing ?? restoring;
   const { data: correctingJournal } = useJournal(correctId);
-  const correcting = correctingJournal ?? redoing;
+  const correcting = correctingJournal ?? redoing ?? changing;
   const { data: glAccounts = [] } = useGLAccounts();
   const [chosenType, setEntryType] = useState<JournalEntryType | null>(null);
   const correctingType = correcting?.entryType.toLowerCase() as JournalEntryType | undefined;
   const entryType: JournalEntryType =
+    (changing ? correctingType : undefined) ??
     chosenType ??
     typeParam ??
     (correctingType && correctingType !== 'reversing' ? correctingType : 'standard');
@@ -101,9 +113,12 @@ export default function NewJournalEntryPage() {
   const { mutateAsync: createJournal, isPending: isCreating } = useCreateJournal();
   const { mutateAsync: reverseJournal, isPending: isReversing } = useReverseJournal();
   const { mutateAsync: deleteDraftJournal } = useDeleteDraftJournal();
+  const { mutateAsync: editPostedJournal, isPending: isEditingPosted } = useEditPostedJournal();
+  const { mutateAsync: restoreJournal, isPending: isRestoring } = useRestoreJournal();
   const { mutateAsync: createRecurring, isPending: isCreatingRecurring } =
     useCreateRecurringJournal();
-  const isPending = isCreating || isReversing || isCreatingRecurring;
+  const isPending =
+    isCreating || isReversing || isCreatingRecurring || isEditingPosted || isRestoring;
 
   const onSubmit = async (data: JournalEntryFormValues) => {
     if (entryType === 'reversing') {
@@ -163,6 +178,36 @@ export default function NewJournalEntryPage() {
       return;
     }
 
+    if (changing) {
+      try {
+        const payload = {
+          id: changing.id,
+          transactionDate: data.transactionDate,
+          fiscalPeriodId: data.fiscalPeriodId,
+          transactionCurrency: data.currency,
+          exchangeRate: data.exchangeRate || undefined,
+          description: data.description,
+          lines: lines.map((l) => ({
+            glAccountId: l.targetAccount,
+            description: l.description || undefined,
+            debit: Number(l.debit) || 0,
+            credit: Number(l.credit) || 0,
+          })),
+        };
+        if (restoring) {
+          await restoreJournal(payload);
+          toast.success(`Journal ${formatJournalNumber(restoring.journalNumber)} restored`);
+        } else {
+          await editPostedJournal(payload);
+          toast.success(`Journal ${formatJournalNumber(changing.journalNumber)} updated`);
+        }
+        router.push(base);
+      } catch (err) {
+        toast.error(extractError(err, 'Failed to save the journal entry'));
+      }
+      return;
+    }
+
     try {
       const journal = await createJournal({
         entryType: entryType.toUpperCase() as JournalEntryTypeCode,
@@ -205,13 +250,27 @@ export default function NewJournalEntryPage() {
           Journal Entries
         </Link>
         <Icons.ChevronRight className="w-5 h-5" />
-        <span className="text-gray-700 font-medium">New Journal Entry</span>
+        <span className="text-gray-700 font-medium">
+          {restoring
+            ? 'Restore Journal Entry'
+            : editing
+              ? 'Edit Journal Entry'
+              : 'New Journal Entry'}
+        </span>
       </nav>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">New Journal Entry</h1>
-          <p className="text-sm text-gray-500">Record a manual journal entry</p>
+          <h1 className="text-xl font-bold text-gray-900">
+            {restoring
+              ? 'Restore Journal Entry'
+              : editing
+                ? 'Edit Journal Entry'
+                : 'New Journal Entry'}
+          </h1>
+          <p className="text-sm text-gray-500">
+            {changing ? 'Change anything, then submit' : 'Record a manual journal entry'}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="w-48">
@@ -222,6 +281,7 @@ export default function NewJournalEntryPage() {
               value={entryType}
               onChange={(v) => setEntryType(v as JournalEntryType)}
               clearable={false}
+              disabled={Boolean(changing)}
             />
           </div>
         </div>
@@ -231,6 +291,12 @@ export default function NewJournalEntryPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           Redoing draft {formatJournalNumber(redoing.journalNumber)}. Change anything below and
           submit; the old draft is deleted once the new one is saved.
+        </div>
+      )}
+      {changing && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {restoring ? 'Restoring' : 'Editing'} {formatJournalNumber(changing.journalNumber)}. It
+          keeps its number; change anything below and submit.
         </div>
       )}
       {correctingJournal && (
@@ -275,7 +341,11 @@ export default function NewJournalEntryPage() {
             ? 'Post Reversal'
             : entryType === 'recurring'
               ? 'Save Recurring Entry'
-              : 'Submit for Review'}
+              : restoring
+                ? 'Restore Entry'
+                : editing
+                  ? 'Save Changes'
+                  : 'Submit for Review'}
         </Button>
       </div>
 

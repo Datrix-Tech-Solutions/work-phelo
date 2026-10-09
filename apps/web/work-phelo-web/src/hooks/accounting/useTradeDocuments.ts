@@ -105,6 +105,8 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     reversedAt: raw.reversedAt ?? null,
     rejectedAt: raw.rejectedAt ?? null,
     rejectionReason: raw.rejectionReason ?? null,
+    voidedAt: raw.voidedAt ?? null,
+    voidReason: raw.voidReason ?? null,
     postedJournalEntryId: raw.postedJournalEntryId ?? null,
     reversalJournalEntryId: raw.reversalJournalEntryId ?? null,
     reversalOfDocumentId: raw.reversalOfDocumentId ?? null,

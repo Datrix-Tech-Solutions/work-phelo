@@ -13,10 +13,13 @@ import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import {
   useCashAccounts,
   useCreateCashbookTransfer,
+  useEditPostedCashbook,
+  useRestoreCashbook,
   useDeleteCashbookDraft,
   useGLAccountOptions,
 } from '@/hooks';
 import type { CashbookTransaction } from '@/types/accounting';
+import type { EntryChangeMode } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -62,14 +65,21 @@ export function NewTransferPanel({
   isOpen,
   onClose,
   draft,
+  mode = 'redo',
 }: {
   isOpen: boolean;
   onClose: () => void;
-  /** Opens the form on a saved draft transfer to redo it; the draft is deleted once the new one is saved. */
+  /** Opens the form on a saved transfer. For a draft ('redo') the draft is deleted once the new one
+   *  is saved; a posted one ('edit') or voided one ('restore') is changed in place, keeping its number. */
   draft?: CashbookTransaction | null;
+  mode?: EntryChangeMode;
 }) {
   const toast = useToast();
   const createTransfer = useCreateCashbookTransfer();
+  const editPosted = useEditPostedCashbook();
+  const restoreVoided = useRestoreCashbook();
+  const changeMode = draft && (mode === 'edit' || mode === 'restore') ? mode : null;
+  const isBusy = createTransfer.isPending || editPosted.isPending || restoreVoided.isPending;
   const deleteDraft = useDeleteCashbookDraft();
   const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
     isActive: true,
@@ -175,6 +185,33 @@ export function NewTransferPanel({
       return;
     }
 
+    if (changeMode && draft) {
+      try {
+        const change = changeMode === 'restore' ? restoreVoided : editPosted;
+        await change.mutateAsync({
+          id: draft.id,
+          cashAccountId: sourceAccount.id,
+          destinationCashAccountId: destinationAccount.id,
+          amount: Number(values.amount),
+          transactionDate: values.transactionDate || today(),
+          exchangeRate: isCrossCurrency ? Number(values.exchangeRate) : undefined,
+          reference: values.reference || undefined,
+          description: values.description || `Transfer to ${destinationAccount.name}`,
+          chargeAmount: values.hasCharge ? Number(values.chargeAmount) : null,
+          chargeGlAccountId: values.hasCharge ? values.chargeGlAccountId : null,
+        });
+        toast.success(
+          changeMode === 'restore'
+            ? `${draft.transactionNumber ?? 'Transfer'} restored.`
+            : `${draft.transactionNumber ?? 'Transfer'} updated.`,
+        );
+        close();
+      } catch (error) {
+        toast.error(extractError(error, 'Failed to save the changes'));
+      }
+      return;
+    }
+
     try {
       await createTransfer.mutateAsync({
         cashAccountId: sourceAccount.id,
@@ -212,21 +249,35 @@ export function NewTransferPanel({
       <SidePanel
         isOpen={isOpen}
         onClose={close}
-        title="New Contra Transaction"
-        description="Move funds between two of your cash/bank accounts."
+        title={
+          changeMode === 'restore'
+            ? 'Restore Contra Transaction'
+            : changeMode === 'edit'
+              ? 'Edit Contra Transaction'
+              : 'New Contra Transaction'
+        }
+        description={
+          changeMode
+            ? 'It keeps its number. Change anything and submit.'
+            : 'Move funds between two of your cash/bank accounts.'
+        }
         footer={
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={close} disabled={createTransfer.isPending}>
+            <Button variant="outline" onClick={close} disabled={isBusy}>
               Cancel
             </Button>
             <Button
               variant="secondary"
-              isLoading={createTransfer.isPending}
-              loadingText="Submitting…"
-              disabled={createTransfer.isPending}
+              isLoading={isBusy}
+              loadingText={changeMode ? 'Saving…' : 'Submitting…'}
+              disabled={isBusy}
               onClick={handleSubmit(submit)}
             >
-              Submit for Review
+              {changeMode === 'restore'
+                ? 'Restore'
+                : changeMode === 'edit'
+                  ? 'Save Changes'
+                  : 'Submit for Review'}
             </Button>
           </div>
         }

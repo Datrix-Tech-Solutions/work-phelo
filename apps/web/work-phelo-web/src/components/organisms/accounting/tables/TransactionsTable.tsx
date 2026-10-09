@@ -56,6 +56,7 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   POSTED: 'success',
   REVERSED: 'danger',
   REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
@@ -63,6 +64,7 @@ const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
   POSTED: 'POSTED',
   REVERSED: 'REVERSED',
   REJECTED: 'REJECTED',
+  VOIDED: 'Voided',
 };
 
 const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {

@@ -523,3 +523,109 @@ export class ReverseAllocationDto {
   @MaxLength(500)
   reason!: string;
 }
+
+/** A posted invoice edited while its period is open: the whole form again, plus an optional reason. */
+export class EditReceivableInvoiceDto {
+  @ApiProperty({ type: CreateReceivableInvoiceDto })
+  @ValidateNested()
+  @Type(() => CreateReceivableInvoiceDto)
+  invoice!: CreateReceivableInvoiceDto;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** Restoring a voided invoice: send the form to correct it, or nothing to bring it back as it was. */
+export class RestoreReceivableInvoiceDto {
+  @ApiPropertyOptional({ type: CreateReceivableInvoiceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateReceivableInvoiceDto)
+  invoice?: CreateReceivableInvoiceDto;
+}
+
+/** What can change on a posted credit note - its amount stays, since it is applied against an invoice. */
+export class EditReceivableNoteDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  documentDate?: string;
+
+  @ApiPropertyOptional({ example: 1.25, minimum: 0.00000001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  exchangeRate?: number;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  externalReference?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** What can change on a posted receipt. Its amount stays - void it and record it again to change that. */
+export class EditReceivableReceiptDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  receiptDate?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  cashAccountId?: string;
+
+  @ApiPropertyOptional({ enum: AccountingSettlementMethod })
+  @IsOptional()
+  @IsEnum(AccountingSettlementMethod)
+  settlementMethod?: AccountingSettlementMethod;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  reference?: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  externalReference?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}

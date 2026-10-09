@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -24,8 +25,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
+import { VoidEntryDto } from './dto/accounting.dto';
 import {
   CreatePayableBillDto,
+  EditPayableBillDto,
+  EditPayableNoteDto,
+  EditPayablePaymentDto,
+  RestorePayableBillDto,
   CreatePayableCreditNoteDto,
   CreatePayablePaymentDto,
   CreatePaymentAllocationDto,
@@ -373,5 +379,122 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.vendorBalance(request.user.tenantId, vendorId);
+  }
+
+  @Patch('bills/:billId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted bill while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  editPostedBill(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Body() dto: EditPayableBillDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedBill(request.user, billId, dto);
+  }
+
+  @Post('bills/:billId/void')
+  @ApiOperation({
+    summary: 'Void a posted bill while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  voidBill(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidBill(request.user, billId, dto);
+  }
+
+  @Post('bills/:billId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided bill, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  restoreBill(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Body() dto: RestorePayableBillDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreBill(request.user, billId, dto);
+  }
+
+  @Patch('credit-notes/:creditNoteId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted debit note while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  editPostedCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: EditPayableNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Post('credit-notes/:creditNoteId/void')
+  @ApiOperation({
+    summary: 'Void a posted debit note while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  voidCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Post('credit-notes/:creditNoteId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided debit note, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  restoreCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: EditPayableNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Patch('payments/:paymentId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted payment while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  editPostedPayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: EditPayablePaymentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedPayment(request.user, paymentId, dto);
+  }
+
+  @Post('payments/:paymentId/void')
+  @ApiOperation({
+    summary: 'Void a posted payment while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  voidPayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidPayment(request.user, paymentId, dto);
+  }
+
+  @Post('payments/:paymentId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided payment, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  restorePayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: EditPayablePaymentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restorePayment(request.user, paymentId, dto);
   }
 }
