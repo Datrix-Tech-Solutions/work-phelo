@@ -87,6 +87,71 @@ describe('SasuSyncSmsProvider', () => {
     });
   });
 
+  it('submits sender identities for provider review', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        sender_name: 'TENANTSMS',
+        review_status: 'pending',
+        message: 'Submitted',
+      }),
+    );
+
+    await expect(
+      new SasuSyncSmsProvider().submitSenderIdentity({
+        senderId: 'TENANTSMS',
+        purpose: 'Marketing SMS campaign messages',
+      }),
+    ).resolves.toMatchObject({
+      provider: 'sasusync',
+      providerStatus: 'PENDING',
+      providerReferenceId: 'TENANTSMS',
+      rawProviderStatus: 'pending',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://sms.sasusync.test/sender/id/register');
+    expect(init?.headers).toMatchObject({ 'X-API-Key': 'sasusync-key' });
+  });
+
+  it('refreshes sender identity status and maps approval', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        sender_name: 'TENANTSMS',
+        review_status: 'approved',
+      }),
+    );
+
+    await expect(
+      new SasuSyncSmsProvider().getSenderIdentityStatus({
+        senderId: 'TENANTSMS',
+      }),
+    ).resolves.toMatchObject({
+      providerStatus: 'APPROVED',
+      rawProviderStatus: 'approved',
+    });
+  });
+
+  it('maps not_found sender status to not submitted', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        sender_name: 'TENANTSMS',
+        review_status: 'not_found',
+      }),
+    );
+
+    await expect(
+      new SasuSyncSmsProvider().getSenderIdentityStatus({
+        senderId: 'TENANTSMS',
+      }),
+    ).resolves.toMatchObject({
+      providerStatus: 'NOT_SUBMITTED',
+      rawProviderStatus: 'not_found',
+    });
+  });
+
   it('treats queued responses as accepted', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({

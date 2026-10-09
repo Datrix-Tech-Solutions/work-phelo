@@ -34,6 +34,7 @@ import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto
 import {
   CreateSmsSenderIdentityDto,
   QuerySmsSenderIdentitiesDto,
+  ReconcileSmsSenderProviderStatusDto,
   RejectSmsSenderIdentityDto,
   UpdateSmsSenderIdentityDto,
 } from './dto/sms-sender-identity.dto';
@@ -159,6 +160,35 @@ export class SmsSenderIdentitiesController {
     @Req() request: AuthedRequest,
   ) {
     return this.service.reject(request.user, id, dto);
+  }
+
+  @Post(':id/refresh-provider-status')
+  @HttpCode(HttpStatus.OK)
+  @RequireAnyPermission(SMS_SENDER_IDENTITIES_EDIT)
+  @ApiOperation({
+    summary: 'Refresh provider sender identity status when supported',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  refreshProviderStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.refreshProviderStatus(request.user, id);
+  }
+
+  @Post(':id/provider-status')
+  @HttpCode(HttpStatus.OK)
+  @RequireAnyPermission(SMS_SENDER_IDENTITIES_APPROVE)
+  @ApiOperation({
+    summary: 'Record an externally confirmed provider status',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  reconcileProviderStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReconcileSmsSenderProviderStatusDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.reconcileProviderStatus(request.user, id, dto);
   }
 
   @Post(':id/default')

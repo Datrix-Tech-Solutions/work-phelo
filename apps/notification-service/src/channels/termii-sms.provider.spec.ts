@@ -40,6 +40,83 @@ describe('TermiiSmsProvider', () => {
     expect(body.from).toBe('TENANTSMS');
   });
 
+  it('requests sender identity review without mapping it to approved', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ message: 'Sender ID request submitted' }),
+    );
+
+    await expect(
+      new TermiiSmsProvider().submitSenderIdentity({
+        senderId: 'TENANTSMS',
+        purpose: 'Marketing SMS campaign messages',
+        tenantDomain: 'example.com',
+      }),
+    ).resolves.toMatchObject({
+      provider: 'termii',
+      providerStatus: 'SUBMITTED',
+      providerReferenceId: 'TENANTSMS',
+    });
+
+    const [url] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.ng.termii.com/api/sender-id/request');
+    expect(requestBody()).toMatchObject({
+      api_key: 'termii-key',
+      sender_id: 'TENANTSMS',
+      usecase: 'Marketing SMS campaign messages',
+      company: 'example.com',
+    });
+  });
+
+  it('refreshes sender status from the sender-id list', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: [{ sender_id: 'TENANTSMS', status: 'unblock' }],
+      }),
+    );
+
+    await expect(
+      new TermiiSmsProvider().getSenderIdentityStatus({
+        senderId: 'TENANTSMS',
+      }),
+    ).resolves.toMatchObject({
+      providerStatus: 'APPROVED',
+      providerReferenceId: 'TENANTSMS',
+      rawProviderStatus: 'unblock',
+    });
+  });
+
+  it('maps blocked and pending sender statuses explicitly', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ sender_id: 'TENANTSMS', status: 'blocked' }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ sender_id: 'TENANTSMS', status: 'pending' }],
+        }),
+      );
+
+    await expect(
+      new TermiiSmsProvider().getSenderIdentityStatus({
+        senderId: 'TENANTSMS',
+      }),
+    ).resolves.toMatchObject({
+      providerStatus: 'SUSPENDED',
+      rawProviderStatus: 'blocked',
+    });
+
+    await expect(
+      new TermiiSmsProvider().getSenderIdentityStatus({
+        senderId: 'TENANTSMS',
+      }),
+    ).resolves.toMatchObject({
+      providerStatus: 'PENDING',
+      rawProviderStatus: 'pending',
+    });
+  });
+
   function jsonResponse(body: unknown): Response {
     return {
       ok: true,

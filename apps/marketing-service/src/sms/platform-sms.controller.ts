@@ -33,6 +33,7 @@ import {
   GrantSmsCreditsDto,
   QuerySmsLedgerDto,
   QuerySmsSenderIdentitiesDto,
+  ReconcileSmsSenderProviderStatusDto,
   UpdateSmsSenderIdentityDto,
 } from './dto/sms-sender-identity.dto';
 import { SmsSenderIdentitiesService } from './sms-sender-identities.service';
@@ -135,6 +136,43 @@ export class PlatformSmsController {
     @Req() request: AuthedRequest,
   ) {
     return this.senders.setDefault(actingIn(request.user, tenantId), id);
+  }
+
+  @Post('sender-identities/:id/refresh-provider-status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Refresh a tenant sender identity provider status when supported',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  refreshProviderStatus(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.senders.refreshProviderStatus(
+      actingIn(request.user, tenantId),
+      id,
+    );
+  }
+
+  @Post('sender-identities/:id/provider-status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Record externally confirmed provider status for a tenant sender identity',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  reconcileProviderStatus(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReconcileSmsSenderProviderStatusDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.senders.reconcileProviderStatus(
+      actingIn(request.user, tenantId),
+      id,
+      dto,
+    );
   }
 
   @Get('wallet')

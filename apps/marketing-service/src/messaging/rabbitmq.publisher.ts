@@ -12,6 +12,9 @@ import {
   InAppNotificationCreateEvent,
   PermissionRecipient,
   ResolvePermissionRecipientsCommand,
+  SmsSenderIdentityProviderResult,
+  SmsSenderIdentityStatusCommand,
+  SmsSenderIdentitySubmissionCommand,
   WithMeta,
 } from '@work-phelo/types';
 
@@ -108,6 +111,44 @@ export class MarketingRabbitPublisher implements OnModuleDestroy {
         .emit(EventPatterns.NOTIFY_CAMPAIGN_DISPATCH, this.envelope(data))
         .pipe(timeout(this.timeoutMs)),
       { defaultValue: undefined },
+    );
+  }
+
+  async submitSmsSenderIdentity(
+    data: SmsSenderIdentitySubmissionCommand,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    const client = this.client('notification_queue');
+    if (!client) {
+      throw new Error(
+        'RABBITMQ_URL is required for sender identity submission',
+      );
+    }
+    return firstValueFrom(
+      client
+        .send<
+          SmsSenderIdentityProviderResult,
+          WithMeta<SmsSenderIdentitySubmissionCommand>
+        >(EventPatterns.NOTIFICATION_SMS_SENDER_SUBMIT, this.envelope(data))
+        .pipe(timeout(this.timeoutMs)),
+    );
+  }
+
+  async refreshSmsSenderIdentityStatus(
+    data: SmsSenderIdentityStatusCommand,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    const client = this.client('notification_queue');
+    if (!client) {
+      throw new Error(
+        'RABBITMQ_URL is required for sender identity status refresh',
+      );
+    }
+    return firstValueFrom(
+      client
+        .send<
+          SmsSenderIdentityProviderResult,
+          WithMeta<SmsSenderIdentityStatusCommand>
+        >(EventPatterns.NOTIFICATION_SMS_SENDER_STATUS, this.envelope(data))
+        .pipe(timeout(this.timeoutMs)),
     );
   }
 

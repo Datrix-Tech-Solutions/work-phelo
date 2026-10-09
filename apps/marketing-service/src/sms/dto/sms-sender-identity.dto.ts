@@ -21,6 +21,16 @@ export const SMS_SENDER_IDENTITY_STATUSES = [
   'ARCHIVED',
 ] as const;
 
+export const SMS_PROVIDER_VERIFICATION_STATUSES = [
+  'NOT_SUBMITTED',
+  'SUBMITTED',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'SUSPENDED',
+  'UNKNOWN',
+] as const;
+
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
@@ -51,6 +61,16 @@ export class CreateSmsSenderIdentityDto {
   @IsString()
   @MaxLength(100)
   displayName?: string;
+
+  @ApiPropertyOptional({
+    example: 'Marketing updates and campaign messages for customers',
+    maxLength: 300,
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  purpose?: string;
 
   @ApiPropertyOptional({ example: 'hubtel', maxLength: 80 })
   @IsOptional()
@@ -83,6 +103,16 @@ export class UpdateSmsSenderIdentityDto {
   @MaxLength(100)
   displayName?: string;
 
+  @ApiPropertyOptional({
+    example: 'Marketing updates and campaign messages for customers',
+    maxLength: 300,
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  purpose?: string;
+
   @ApiPropertyOptional({ example: 'hubtel', maxLength: 80 })
   @IsOptional()
   @Transform(trim)
@@ -105,6 +135,26 @@ export class RejectSmsSenderIdentityDto {
   @IsString()
   @MaxLength(300)
   reason?: string;
+}
+
+export class ReconcileSmsSenderProviderStatusDto {
+  @ApiProperty({ enum: ['APPROVED', 'REJECTED', 'SUSPENDED'] })
+  @IsEnum(['APPROVED', 'REJECTED', 'SUSPENDED'])
+  providerStatus!: 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+
+  @ApiPropertyOptional({ maxLength: 150 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(150)
+  providerReferenceId?: string;
+
+  @ApiPropertyOptional({ maxLength: 300 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  note?: string;
 }
 
 export class GrantSmsCreditsDto {

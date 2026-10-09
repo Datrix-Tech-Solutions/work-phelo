@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   SmsProvider,
+  SmsSenderIdentityProviderResult,
+  SmsSenderIdentityStatusInput,
+  SmsSenderIdentitySubmissionInput,
   SmsSendOptions,
   SmsSendResult,
 } from './sms-provider.interface';
@@ -22,11 +25,19 @@ type SasuSyncResponse = {
     status?: string | number;
     recipients_count?: string | number;
   };
+  sender_name?: string;
+  review_status?: string;
+  delivery_status?: string;
+  reason?: string;
 };
 
 @Injectable()
 export class SasuSyncSmsProvider implements SmsProvider {
   readonly provider = 'sasusync' as const;
+  readonly senderIdentityCapabilities = {
+    submitSenderIdentity: true,
+    refreshSenderIdentityStatus: true,
+  };
   private readonly logger = new Logger(SasuSyncSmsProvider.name);
   private readonly apiKey = process.env.SASUSYNC_API_KEY;
   private readonly senderId = process.env.SASUSYNC_SENDER_ID || 'WorkPhelo';
@@ -113,6 +124,58 @@ export class SasuSyncSmsProvider implements SmsProvider {
     }
   }
 
+  async submitSenderIdentity(
+    input: SmsSenderIdentitySubmissionInput,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    if (!this.apiKey) throw new Error('SASUSYNC_API_KEY is required');
+    const purpose = input.purpose.trim();
+    if (purpose.length < 10) {
+      throw new Error('Sender purpose must be at least 10 characters');
+    }
+
+    const response = await fetch(
+      `${this.baseUrl.replace(/\/+$/, '')}/sender/id/register`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey,
+        },
+        body: JSON.stringify({
+          sender_name: input.senderId,
+          purpose,
+        }),
+      },
+    );
+    const data = await this.safeJson(response);
+    if (!response.ok || data?.success === false) {
+      throw new Error(
+        this.providerDetail(data) ||
+          `SasuSync sender registration failed with HTTP ${response.status}`,
+      );
+    }
+    return this.senderResult(data, 'PENDING');
+  }
+
+  async getSenderIdentityStatus(
+    input: SmsSenderIdentityStatusInput,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    if (!this.apiKey) throw new Error('SASUSYNC_API_KEY is required');
+    const url = new URL(`${this.baseUrl.replace(/\/+$/, '')}/sender/id/status`);
+    url.searchParams.set('sender_name', input.senderId);
+    const response = await fetch(url, {
+      headers: { 'X-API-Key': this.apiKey },
+    });
+    const data = await this.safeJson(response);
+    if (!response.ok || data?.success === false) {
+      throw new Error(
+        this.providerDetail(data) ||
+          `SasuSync sender status lookup failed with HTTP ${response.status}`,
+      );
+    }
+    return this.senderResult(data);
+  }
+
   private get sendUrl(): string {
     const path = this.sandbox ? '/smssandbox/v1/send' : '/api/v1/send';
     return `${this.baseUrl.replace(/\/+$/, '')}${path}`;
@@ -174,6 +237,56 @@ export class SasuSyncSmsProvider implements SmsProvider {
       data?.data?.messageId ??
       data?.data?.id;
     return id === undefined ? undefined : String(id);
+  }
+
+  private senderResult(
+    data: SasuSyncResponse | null,
+    fallbackStatus: SmsSenderIdentityProviderResult['providerStatus'] = 'UNKNOWN',
+  ): SmsSenderIdentityProviderResult {
+    const raw =
+      data?.review_status ??
+      data?.data?.status ??
+      data?.status ??
+      data?.delivery_status ??
+      null;
+    return {
+      provider: this.provider,
+      providerStatus: this.toSenderProviderStatus(raw, fallbackStatus),
+      providerReferenceId: data?.sender_name ?? null,
+      providerStatusReason:
+        data?.reason ?? data?.detail ?? data?.message ?? data?.error ?? null,
+      rawProviderStatus: this.scalar(raw),
+      providerPayload: data ? { ...data } : null,
+    };
+  }
+
+  private toSenderProviderStatus(
+    status: unknown,
+    fallback: SmsSenderIdentityProviderResult['providerStatus'],
+  ): SmsSenderIdentityProviderResult['providerStatus'] {
+    const value = this.scalar(status)?.toLowerCase() ?? '';
+    if (['pending', 'pending_review', 'review', 'in_review'].includes(value)) {
+      return 'PENDING';
+    }
+    if (['approved', 'active', 'verified'].includes(value)) {
+      return 'APPROVED';
+    }
+    if (value === 'not_found') {
+      return 'NOT_SUBMITTED';
+    }
+    if (['rejected', 'declined'].includes(value)) {
+      return 'REJECTED';
+    }
+    if (['suspended', 'disabled', 'blocked'].includes(value)) {
+      return 'SUSPENDED';
+    }
+    return fallback;
+  }
+
+  private scalar(value: unknown): string | null {
+    return typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : null;
   }
 
   private parseBoolean(

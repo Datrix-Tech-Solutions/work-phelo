@@ -24,6 +24,8 @@ describe('SMS foundation controller authorization contracts', () => {
     ['submit', P.SMS_SENDER_IDENTITIES_SUBMIT],
     ['approve', P.SMS_SENDER_IDENTITIES_APPROVE],
     ['reject', P.SMS_SENDER_IDENTITIES_APPROVE],
+    ['refreshProviderStatus', P.SMS_SENDER_IDENTITIES_EDIT],
+    ['reconcileProviderStatus', P.SMS_SENDER_IDENTITIES_APPROVE],
     ['setDefault', P.SMS_SENDER_IDENTITIES_EDIT],
   ] as const)('gates sender %s behind %s', (method, permission) => {
     expect(

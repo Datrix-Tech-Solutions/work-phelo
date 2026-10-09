@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   SmsProvider,
+  SmsSenderIdentityProviderResult,
+  SmsSenderIdentitySubmissionInput,
   SmsSendOptions,
   SmsSendResult,
 } from './sms-provider.interface';
@@ -8,11 +10,18 @@ import type {
 type PiloSmsResponse = {
   status?: string | number;
   detail?: string;
+  sender_id?: string | number;
+  sender_name?: string;
+  sender_status?: string;
 };
 
 @Injectable()
 export class PiloSmsProvider implements SmsProvider {
   readonly provider = 'pilosms' as const;
+  readonly senderIdentityCapabilities = {
+    submitSenderIdentity: true,
+    refreshSenderIdentityStatus: false,
+  };
   private readonly logger = new Logger(PiloSmsProvider.name);
   private readonly apiKey = process.env.PILOSMS_API_KEY;
   private readonly senderId = process.env.PILOSMS_SENDER_ID || 'WorkPhelo';
@@ -99,6 +108,53 @@ export class PiloSmsProvider implements SmsProvider {
     }
   }
 
+  async submitSenderIdentity(
+    input: SmsSenderIdentitySubmissionInput,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    if (!this.apiKey) {
+      throw new Error('PILOSMS_API_KEY is required');
+    }
+    const purpose = input.purpose.trim();
+    if (purpose.length < 10) {
+      throw new Error('Sender purpose must be at least 10 characters');
+    }
+
+    const body = new URLSearchParams({
+      sender_name: input.senderId,
+      sender_purpose: purpose,
+    });
+
+    const response = await fetch(
+      `${this.baseUrl}/register-sender?apikey=${encodeURIComponent(
+        this.apiKey,
+      )}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
+      },
+    );
+    const data = await this.safeJson(response);
+    const status = data?.status === undefined ? undefined : String(data.status);
+    const detail = data?.detail;
+
+    if (!response.ok || status !== '1001') {
+      throw new Error(detail || `PiloSMS sender registration failed`);
+    }
+
+    return {
+      provider: this.provider,
+      providerStatus: 'PENDING',
+      providerReferenceId:
+        data?.sender_id === undefined ? null : String(data.sender_id),
+      providerStatusReason: detail ?? data?.sender_status ?? null,
+      rawProviderStatus: data?.sender_status ?? status ?? null,
+      providerPayload: this.safePayload(data),
+    };
+  }
+
   private toPiloRecipient(phone: string): string | null {
     const normalized = phone.trim().replace(/[\s\-()]/g, '');
     if (!normalized.startsWith('+')) {
@@ -128,5 +184,12 @@ export class PiloSmsProvider implements SmsProvider {
     } catch {
       return null;
     }
+  }
+
+  private safePayload(
+    data: PiloSmsResponse | null,
+  ): Record<string, unknown> | null {
+    if (!data) return null;
+    return { ...data };
   }
 }

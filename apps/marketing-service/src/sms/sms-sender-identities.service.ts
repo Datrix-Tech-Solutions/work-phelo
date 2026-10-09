@@ -4,17 +4,26 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { RequestUser } from '@work-phelo/types';
 import {
+  RequestUser,
+  SmsProviderName,
+  SmsSenderIdentityProviderResult,
+} from '@work-phelo/types';
+import {
+  MarketingInternalReviewStatus,
   MarketingCampaignStatus,
   MarketingSmsSenderIdentity,
+  MarketingProviderVerificationStatus,
   Prisma,
 } from '../../prisma/generated/client';
+import { MarketingRabbitPublisher } from '../messaging/rabbitmq.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSmsSenderIdentityDto,
   QuerySmsSenderIdentitiesDto,
+  ReconcileSmsSenderProviderStatusDto,
   RejectSmsSenderIdentityDto,
   UpdateSmsSenderIdentityDto,
 } from './dto/sms-sender-identity.dto';
@@ -26,6 +35,10 @@ const NOT_APPROVED_MESSAGE = 'Only approved SMS sender identities can be used';
 const IN_USE_MESSAGE = 'SMS sender identity is used by an active campaign';
 const PLATFORM_APPROVAL_MESSAGE =
   'Only platform administrators can approve SMS sender identities';
+const PROVIDER_UNSUPPORTED_MESSAGE =
+  'The selected SMS provider does not support tenant sender identity automation';
+const REFRESH_UNSUPPORTED_MESSAGE =
+  'The selected SMS provider does not support automated status refresh';
 const MUTABLE_STATUSES = ['DRAFT', 'REJECTED'] as const;
 const ACTIVE_CAMPAIGN_STATUSES: MarketingCampaignStatus[] = [
   'PENDING_DISPATCH',
@@ -39,13 +52,19 @@ export function normalizeSenderId(senderId: string) {
 
 @Injectable()
 export class SmsSenderIdentitiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rabbit?: MarketingRabbitPublisher,
+  ) {}
 
   async list(tenantId: string, query: QuerySmsSenderIdentitiesDto = {}) {
     const where: Prisma.MarketingSmsSenderIdentityWhereInput = {
       tenantId,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.includeArchived ? {} : { status: { not: 'ARCHIVED' } }),
+      ...(query.status
+        ? { status: query.status }
+        : query.includeArchived
+          ? {}
+          : { status: { not: 'ARCHIVED' } }),
     };
     const items = await this.prisma.marketingSmsSenderIdentity.findMany({
       where,
@@ -96,6 +115,7 @@ export class SmsSenderIdentitiesService {
         senderId: dto.senderId,
         normalizedSenderId: normalizeSenderId(dto.senderId),
         displayName: dto.displayName || null,
+        purpose: dto.purpose || null,
         provider: dto.provider || null,
         providerReference: dto.providerReference || null,
         createdBy: actorId,
@@ -139,6 +159,7 @@ export class SmsSenderIdentitiesService {
         ...(dto.displayName !== undefined
           ? { displayName: dto.displayName || null }
           : {}),
+        ...(dto.purpose !== undefined ? { purpose: dto.purpose || null } : {}),
         ...(dto.provider !== undefined
           ? { provider: dto.provider || null }
           : {}),
@@ -202,12 +223,20 @@ export class SmsSenderIdentitiesService {
         'Only pending sender identities can be approved',
       );
     }
+    const provider = this.providerFor(existing);
+    this.assertProviderSupportsSubmit(provider);
+    const submission = await this.submitToProvider(existing, provider);
+    const legacyStatus = this.legacyStatusFor(
+      'APPROVED',
+      submission.providerStatus,
+      existing.status,
+    );
     const approved = await this.prisma.marketingSmsSenderIdentity.update({
       where: { id },
       data: {
-        status: 'APPROVED',
+        status: legacyStatus,
         internalReviewStatus: 'APPROVED',
-        providerStatus: 'UNKNOWN',
+        ...this.providerUpdateData(submission, true),
         approvedBy: user.id,
         approvedAt: new Date(),
         rejectedBy: null,
@@ -216,6 +245,60 @@ export class SmsSenderIdentitiesService {
       },
     });
     return this.toResponse(approved);
+  }
+
+  async refreshProviderStatus(user: RequestUser, id: string) {
+    const existing = await this.findOwned(user.tenantId, id);
+    const provider = this.providerFor(existing);
+    this.assertProviderSupportsRefresh(provider);
+    const result = await this.refreshFromProvider(existing, provider);
+    const updated = await this.prisma.marketingSmsSenderIdentity.update({
+      where: { id },
+      data: {
+        status: this.legacyStatusFor(
+          existing.internalReviewStatus,
+          result.providerStatus,
+          existing.status,
+        ),
+        ...this.providerUpdateData(result),
+      },
+    });
+    return this.toResponse(updated);
+  }
+
+  async reconcileProviderStatus(
+    user: RequestUser,
+    id: string,
+    dto: ReconcileSmsSenderProviderStatusDto,
+  ) {
+    this.assertPlatformAdmin(user);
+    const existing = await this.findOwned(user.tenantId, id);
+    const status = dto.providerStatus;
+    const updated = await this.prisma.marketingSmsSenderIdentity.update({
+      where: { id },
+      data: {
+        status: this.legacyStatusFor(
+          existing.internalReviewStatus,
+          status,
+          existing.status,
+        ),
+        providerStatus: status,
+        providerReferenceId:
+          dto.providerReferenceId ?? existing.providerReferenceId,
+        providerLastSyncedAt: new Date(),
+        providerStatusReason: dto.note ?? null,
+        providerPayload: {
+          manualReconciliation: {
+            actorId: user.id,
+            providerStatus: status,
+            providerReferenceId: dto.providerReferenceId ?? null,
+            note: dto.note ?? null,
+            recordedAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+    return this.toResponse(updated);
   }
 
   async reject(user: RequestUser, id: string, dto: RejectSmsSenderIdentityDto) {
@@ -280,6 +363,125 @@ export class SmsSenderIdentitiesService {
     if (user.role !== 'SUPER_ADMIN') {
       throw new ForbiddenException(PLATFORM_APPROVAL_MESSAGE);
     }
+  }
+
+  private providerFor(sender: MarketingSmsSenderIdentity): SmsProviderName {
+    const provider = (
+      sender.provider ||
+      process.env.SMS_PROVIDER ||
+      'termii'
+    ).toLowerCase();
+    if (
+      provider === 'termii' ||
+      provider === 'pilosms' ||
+      provider === 'sasusync' ||
+      provider === 'agoosms'
+    ) {
+      return provider;
+    }
+    throw new BadRequestException(`Unsupported SMS provider "${provider}"`);
+  }
+
+  private assertProviderSupportsSubmit(provider: SmsProviderName) {
+    if (provider === 'agoosms') {
+      throw new BadRequestException(PROVIDER_UNSUPPORTED_MESSAGE);
+    }
+  }
+
+  private assertProviderSupportsRefresh(provider: SmsProviderName) {
+    if (provider === 'agoosms' || provider === 'pilosms') {
+      throw new BadRequestException(REFRESH_UNSUPPORTED_MESSAGE);
+    }
+  }
+
+  private async submitToProvider(
+    sender: MarketingSmsSenderIdentity,
+    provider: SmsProviderName,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    if (!this.rabbit) {
+      throw new ServiceUnavailableException(
+        'Provider submission is not configured',
+      );
+    }
+    try {
+      return await this.rabbit.submitSmsSenderIdentity({
+        tenantId: sender.tenantId,
+        senderIdentityId: sender.id,
+        provider,
+        senderId: sender.senderId,
+        purpose:
+          sender.purpose ||
+          sender.displayName ||
+          `Marketing SMS campaigns for ${sender.senderId}`,
+      });
+    } catch (error) {
+      throw new ServiceUnavailableException(this.safeProviderError(error));
+    }
+  }
+
+  private async refreshFromProvider(
+    sender: MarketingSmsSenderIdentity,
+    provider: SmsProviderName,
+  ): Promise<SmsSenderIdentityProviderResult> {
+    if (!this.rabbit) {
+      throw new ServiceUnavailableException(
+        'Provider status refresh is not configured',
+      );
+    }
+    try {
+      return await this.rabbit.refreshSmsSenderIdentityStatus({
+        tenantId: sender.tenantId,
+        senderIdentityId: sender.id,
+        provider,
+        senderId: sender.senderId,
+        providerReferenceId: sender.providerReferenceId,
+      });
+    } catch (error) {
+      throw new ServiceUnavailableException(this.safeProviderError(error));
+    }
+  }
+
+  private providerUpdateData(
+    result: SmsSenderIdentityProviderResult,
+    submitted = false,
+  ): Prisma.MarketingSmsSenderIdentityUpdateInput {
+    return {
+      provider: result.provider,
+      providerStatus:
+        result.providerStatus as MarketingProviderVerificationStatus,
+      providerReferenceId: result.providerReferenceId ?? undefined,
+      providerSubmittedAt: submitted ? new Date() : undefined,
+      providerLastSyncedAt: new Date(),
+      providerStatusReason: result.providerStatusReason ?? null,
+      providerPayload: result.providerPayload
+        ? (result.providerPayload as Prisma.InputJsonValue)
+        : undefined,
+    };
+  }
+
+  private legacyStatusFor(
+    internalReviewStatus: MarketingInternalReviewStatus,
+    providerStatus: MarketingProviderVerificationStatus,
+    fallback: MarketingSmsSenderIdentity['status'],
+  ): MarketingSmsSenderIdentity['status'] {
+    if (providerStatus === 'REJECTED') return 'REJECTED';
+    if (providerStatus === 'SUSPENDED') return 'SUSPENDED';
+    if (internalReviewStatus === 'APPROVED' && providerStatus === 'APPROVED') {
+      return 'APPROVED';
+    }
+    return fallback === 'APPROVED' && providerStatus !== 'APPROVED'
+      ? 'PENDING_PROVIDER_APPROVAL'
+      : fallback;
+  }
+
+  private safeProviderError(error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'Provider operation failed';
+    return message || 'Provider operation failed';
   }
 
   private async assertUnique(

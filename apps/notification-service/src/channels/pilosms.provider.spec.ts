@@ -55,6 +55,36 @@ describe('PiloSmsProvider', () => {
     expect(body.get('sender')).toBe('TENANTSMS');
   });
 
+  it('registers sender identities and maps provider pending state', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        status: 1001,
+        detail: 'Sender registration requested; awaiting approval',
+        sender_id: 'pilo-123',
+        sender_name: 'TENANTSMS',
+        sender_status: 'Pending',
+      }),
+    );
+
+    await expect(
+      new PiloSmsProvider().submitSenderIdentity({
+        senderId: 'TENANTSMS',
+        purpose: 'Marketing SMS campaign messages',
+      }),
+    ).resolves.toMatchObject({
+      provider: 'pilosms',
+      providerStatus: 'PENDING',
+      providerReferenceId: 'pilo-123',
+      rawProviderStatus: 'Pending',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toEqual(expect.stringContaining('/register-sender?apikey='));
+    const body = init?.body as URLSearchParams;
+    expect(body.get('sender_name')).toBe('TENANTSMS');
+    expect(body.get('sender_purpose')).toBe('Marketing SMS campaign messages');
+  });
+
   it('maps insufficient balance to failed', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({

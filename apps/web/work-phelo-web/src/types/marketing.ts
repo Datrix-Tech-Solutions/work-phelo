@@ -1130,6 +1130,7 @@ export interface SmsSenderIdentityListResponse {
 export interface CreateSmsSenderIdentityPayload {
   senderId: string;
   displayName?: string;
+  purpose?: string;
   provider?: string;
   providerReference?: string;
 }
