@@ -65,6 +65,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'manage_campaigns', label: 'Manage Campaigns' },
       { key: 'view_campaigns', label: 'View Campaigns' },
       { key: 'manage_sms_sender_identities', label: 'Manage SMS Sender IDs' },
+      { key: 'manage_business_domains', label: 'Manage Business Domains' },
       { key: 'view_sms_wallet', label: 'View SMS Wallet' },
     ],
   },
@@ -179,6 +180,7 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
     'EDIT',
     'DELETE',
   ]),
+  manage_business_domains: pairs('marketing.domains', ['VIEW', 'CREATE', 'VERIFY', 'DELETE']),
   view_sms_wallet: pairs('marketing.sms-wallet', ['VIEW']),
 
   // CRM Configuration
@@ -198,6 +200,7 @@ const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_campaigns: [
     ...pairs('marketing.campaigns', ['VIEW', 'CREATE', 'RUN', 'CANCEL']),
     ...pairs('marketing.sms-sender-identities', ['VIEW', 'CREATE', 'EDIT', 'DELETE']),
+    ...pairs('marketing.domains', ['VIEW', 'CREATE', 'VERIFY', 'DELETE']),
     ...pairs('marketing.sms-wallet', ['VIEW']),
   ],
 };

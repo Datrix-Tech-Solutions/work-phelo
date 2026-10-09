@@ -115,6 +115,9 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
   'marketing.sms-sender-identities': {
     moduleKey: 'marketing',
   },
+  'marketing.domains': {
+    moduleKey: 'marketing',
+  },
   'marketing.sms-wallet': {
     moduleKey: 'marketing',
   },

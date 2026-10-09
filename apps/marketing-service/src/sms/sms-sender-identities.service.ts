@@ -69,6 +69,8 @@ export class SmsSenderIdentitiesService {
   ) {
     return this.createWithStatus(tenantId, actorId, dto, {
       status: 'APPROVED',
+      internalReviewStatus: 'APPROVED',
+      providerStatus: 'UNKNOWN',
       approvedBy: actorId,
       approvedAt: new Date(),
     });
@@ -80,7 +82,11 @@ export class SmsSenderIdentitiesService {
     dto: CreateSmsSenderIdentityDto,
     extra: Pick<
       Prisma.MarketingSmsSenderIdentityUncheckedCreateInput,
-      'status' | 'approvedBy' | 'approvedAt'
+      | 'status'
+      | 'internalReviewStatus'
+      | 'providerStatus'
+      | 'approvedBy'
+      | 'approvedAt'
     > = {},
   ) {
     await this.assertUnique(tenantId, dto.senderId);
@@ -173,6 +179,8 @@ export class SmsSenderIdentitiesService {
       where: { id },
       data: {
         status: 'PENDING_PROVIDER_APPROVAL',
+        internalReviewStatus: 'PENDING',
+        providerStatus: 'NOT_SUBMITTED',
         requestedBy: user.id,
         requestedAt: new Date(),
         approvedBy: null,
@@ -198,6 +206,8 @@ export class SmsSenderIdentitiesService {
       where: { id },
       data: {
         status: 'APPROVED',
+        internalReviewStatus: 'APPROVED',
+        providerStatus: 'UNKNOWN',
         approvedBy: user.id,
         approvedAt: new Date(),
         rejectedBy: null,
@@ -220,6 +230,8 @@ export class SmsSenderIdentitiesService {
       where: { id },
       data: {
         status: 'REJECTED',
+        internalReviewStatus: 'REJECTED',
+        providerStatus: 'NOT_SUBMITTED',
         rejectedBy: user.id,
         rejectedAt: new Date(),
         rejectionReason: dto.reason || null,
@@ -291,9 +303,18 @@ export class SmsSenderIdentitiesService {
       id: item.id,
       senderId: item.senderId,
       displayName: item.displayName,
+      tenantDomainId: item.tenantDomainId,
+      purpose: item.purpose,
       provider: item.provider,
       providerReference: item.providerReference,
+      providerReferenceId: item.providerReferenceId,
       status: item.status,
+      ownershipStatus: item.ownershipStatus,
+      internalReviewStatus: item.internalReviewStatus,
+      providerStatus: item.providerStatus,
+      providerSubmittedAt: item.providerSubmittedAt?.toISOString() ?? null,
+      providerLastSyncedAt: item.providerLastSyncedAt?.toISOString() ?? null,
+      providerStatusReason: item.providerStatusReason,
       isDefault: item.isDefault,
       requestedBy: item.requestedBy,
       requestedAt: item.requestedAt?.toISOString() ?? null,

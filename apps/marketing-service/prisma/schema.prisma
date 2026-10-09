@@ -100,6 +100,35 @@ enum MarketingSmsSenderIdentityStatus {
   @@schema("marketing")
 }
 
+enum MarketingOwnershipStatus {
+  UNVERIFIED
+  VERIFIED
+  REJECTED
+
+  @@schema("marketing")
+}
+
+enum MarketingInternalReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@schema("marketing")
+}
+
+enum MarketingProviderVerificationStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+  UNKNOWN
+
+  @@schema("marketing")
+}
+
 enum MarketingSmsCreditLedgerEntryType {
   INITIAL_ALLOCATION
   PLAN_ALLOCATION
@@ -752,12 +781,22 @@ model MarketingCampaignRecipient {
 model MarketingSmsSenderIdentity {
   id                 String                           @id @default(uuid())
   tenantId           String
+  tenantDomainId     String?
   senderId           String
   normalizedSenderId String
   displayName        String?
+  purpose            String?
   provider           String?
   providerReference  String?
   status             MarketingSmsSenderIdentityStatus @default(DRAFT)
+  ownershipStatus    MarketingOwnershipStatus         @default(UNVERIFIED)
+  internalReviewStatus MarketingInternalReviewStatus   @default(NOT_REQUIRED)
+  providerStatus     MarketingProviderVerificationStatus @default(NOT_SUBMITTED)
+  providerReferenceId String?
+  providerSubmittedAt DateTime?
+  providerLastSyncedAt DateTime?
+  providerStatusReason String?
+  providerPayload    Json?
   isDefault          Boolean                          @default(false)
   requestedBy        String?
   requestedAt        DateTime?
@@ -772,10 +811,35 @@ model MarketingSmsSenderIdentity {
 
   campaigns  MarketingCampaign[]
   recipients MarketingCampaignRecipient[]
+  tenantDomain TenantDomain? @relation(fields: [tenantDomainId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, normalizedSenderId])
   @@index([tenantId, status])
+  @@index([tenantId, ownershipStatus])
+  @@index([tenantId, internalReviewStatus])
+  @@index([tenantId, providerStatus])
+  @@index([tenantId, tenantDomainId])
   @@index([tenantId, isDefault])
+  @@schema("marketing")
+}
+
+model TenantDomain {
+  id                String                   @id @default(uuid())
+  tenantId          String
+  domain            String
+  normalizedDomain  String                   @unique
+  ownershipStatus   MarketingOwnershipStatus @default(UNVERIFIED)
+  verificationToken String
+  verifiedAt        DateTime?
+  lastCheckedAt     DateTime?
+  createdBy         String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  smsSenderIdentities MarketingSmsSenderIdentity[]
+
+  @@index([tenantId, ownershipStatus])
+  @@index([tenantId, createdAt])
   @@schema("marketing")
 }
 

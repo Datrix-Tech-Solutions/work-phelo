@@ -1083,13 +1083,37 @@ export type SmsSenderIdentityStatus =
   | 'SUSPENDED'
   | 'ARCHIVED';
 
+export type CommunicationOwnershipStatus = 'UNVERIFIED' | 'VERIFIED' | 'REJECTED';
+export type CommunicationInternalReviewStatus =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED';
+export type CommunicationProviderStatus =
+  | 'NOT_SUBMITTED'
+  | 'SUBMITTED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SUSPENDED'
+  | 'UNKNOWN';
+
 export interface SmsSenderIdentity {
   id: string;
   senderId: string;
   displayName: string | null;
+  tenantDomainId: string | null;
+  purpose: string | null;
   provider: string | null;
   providerReference: string | null;
+  providerReferenceId: string | null;
   status: SmsSenderIdentityStatus;
+  ownershipStatus: CommunicationOwnershipStatus;
+  internalReviewStatus: CommunicationInternalReviewStatus;
+  providerStatus: CommunicationProviderStatus;
+  providerSubmittedAt: string | null;
+  providerLastSyncedAt: string | null;
+  providerStatusReason: string | null;
   isDefault: boolean;
   requestedAt: string | null;
   approvedAt: string | null;
@@ -1112,6 +1136,37 @@ export interface CreateSmsSenderIdentityPayload {
 
 export interface UpdateSmsSenderIdentityPayload extends Partial<CreateSmsSenderIdentityPayload> {
   id: string;
+}
+
+export interface TenantDomainDnsRecord {
+  type: 'TXT';
+  host: string;
+  value: string;
+}
+
+export interface TenantDomain {
+  id: string;
+  domain: string;
+  normalizedDomain: string;
+  ownershipStatus: CommunicationOwnershipStatus;
+  verificationRecord: TenantDomainDnsRecord;
+  verifiedAt: string | null;
+  lastCheckedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TenantDomainListResponse {
+  items: TenantDomain[];
+}
+
+export interface TenantDomainVerificationResponse extends TenantDomain {
+  verified: boolean;
+  reason?: string;
+}
+
+export interface CreateTenantDomainPayload {
+  domain: string;
 }
 
 export interface SmsWalletBalance {
