@@ -13,7 +13,18 @@ import {
   JournalEntryRecord,
   JournalRecordStatus,
 } from '@/types/accounting';
-import { useFiscalPeriods, usePostJournal, useReverseJournal } from '@/hooks';
+import {
+  useDeleteDraftJournal,
+  useFiscalPeriods,
+  usePeriodOpenCheck,
+  usePostJournal,
+  useRestoreJournal,
+  useReverseJournal,
+  useVoidJournal,
+} from '@/hooks';
+import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
+import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
+import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
@@ -30,6 +41,7 @@ const STATUS_VARIANT: Record<JournalRecordStatus, 'success' | 'neutral' | 'dange
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtAmount(amount: number, currency: string) {
@@ -64,7 +76,29 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
     fiscalPeriods.find((p) => p.id === journal?.fiscalPeriodId)?.name ?? journal?.fiscalPeriodId;
 
   const postJournal = usePostJournal();
+  const deleteDraft = useDeleteDraftJournal();
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  // A draft entered by hand can be redone or deleted; one made by the system (a recurring entry,
+  // a source event) belongs to that record.
+  const isOwnDraft =
+    journal?.status === 'DRAFT' && (journal.source?.category ?? 'MANUAL') === 'MANUAL';
   const reverseJournal = useReverseJournal();
+
+  // A posted journal entered by hand can be edited or voided while its period is open - unless a
+  // reversal of it is still live, which has to be voided first.
+  const isPeriodOpen = usePeriodOpenCheck();
+  const voidJournal = useVoidJournal();
+  const restoreJournal = useRestoreJournal();
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const isManual = (journal?.source?.category ?? 'MANUAL') === 'MANUAL';
+  const periodOpen = isPeriodOpen(journal?.transactionDate);
+  const hasLiveReversal = Boolean(journal?.reversalJournal);
+  const canChangePosted = journal?.status === 'POSTED' && isManual && periodOpen;
+  const canEditPosted = canChangePosted && !hasLiveReversal && !journal?.reversalOfJournalId;
+  const canVoidPosted = canChangePosted && !hasLiveReversal;
+  const canRestore = journal?.status === 'VOIDED' && isManual && periodOpen;
+  const restoresAsIs = Boolean(journal?.voidedReversalOfJournalId);
 
   // Debit and credit always match on a saved journal, so one total covers both sides.
   const debitTotal =
@@ -92,6 +126,42 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
       toast.success('Journal posted.');
     } catch (err) {
       toast.error(extractError(err, 'Failed to post journal'));
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!journal) return;
+    try {
+      await deleteDraft.mutateAsync(journal.id);
+      toast.success('Draft deleted.');
+      setChoiceOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to delete the draft'));
+    }
+  };
+
+  const handleVoid = async (voidReason: string) => {
+    if (!journal) return;
+    try {
+      await voidJournal.mutateAsync({ id: journal.id, reason: voidReason });
+      toast.success('Journal voided. It is in the archive now.');
+      setVoidOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to void the journal'));
+    }
+  };
+
+  const handleRestoreAsIs = async () => {
+    if (!journal) return;
+    try {
+      await restoreJournal.mutateAsync({ id: journal.id });
+      toast.success('Journal restored.');
+      setRestoreOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to restore the journal'));
     }
   };
 
@@ -131,6 +201,11 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {isOwnDraft && (
+                <Button variant="danger" onClick={() => setChoiceOpen(true)}>
+                  Reject
+                </Button>
+              )}
               <Button isLoading={postJournal.isPending} loadingText="Posting…" onClick={handlePost}>
                 Post
               </Button>
@@ -140,6 +215,23 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {canEditPosted && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const editId = journal.id;
+                    handleClose();
+                    router.push(`/${tenantSlug}/accounting/journalentry/new?edit=${editId}`);
+                  }}
+                >
+                  Edit
+                </Button>
+              )}
+              {canVoidPosted && (
+                <Button variant="outline" onClick={() => setVoidOpen(true)}>
+                  Void
+                </Button>
+              )}
               <Button variant="outline" onClick={() => openReverse('correct')}>
                 Reverse &amp; correct
               </Button>
@@ -152,6 +244,27 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {canVoidPosted && (
+                <Button variant="outline" onClick={() => setVoidOpen(true)}>
+                  Void
+                </Button>
+              )}
+              {canRestore && (
+                <Button
+                  onClick={() => {
+                    if (!journal) return;
+                    if (restoresAsIs) {
+                      setRestoreOpen(true);
+                      return;
+                    }
+                    const restoreId = journal.id;
+                    handleClose();
+                    router.push(`/${tenantSlug}/accounting/journalentry/new?restore=${restoreId}`);
+                  }}
+                >
+                  Restore
+                </Button>
+              )}
             </div>
           )
         }
@@ -244,6 +357,19 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               </div>
             </div>
 
+            {journal.status === 'VOIDED' && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                Voided{journal.voidedAt ? ` on ${fmtDate(journal.voidedAt)}` : ''}
+                {journal.voidReason ? `: ${journal.voidReason}` : '.'} It counts in no balance or
+                report.
+                {!periodOpen && ' Its period is no longer open, so it can’t be restored.'}
+              </div>
+            )}
+            {hasLiveReversal && journal.status === 'POSTED' && isManual && periodOpen && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                To edit or void this journal, void its reversal first.
+              </div>
+            )}
             {journal.reversalOfJournal && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 This journal reverses {formatJournalNumber(journal.reversalOfJournal.journalNumber)}
@@ -302,6 +428,35 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
           />
         </div>
       </Modal>
+      <VoidEntryModal
+        isOpen={voidOpen}
+        subject={journal ? formatJournalNumber(journal.journalNumber) : 'This journal'}
+        isPending={voidJournal.isPending}
+        onConfirm={handleVoid}
+        onClose={() => setVoidOpen(false)}
+      />
+      <RestoreEntryModal
+        isOpen={restoreOpen}
+        subject={journal ? formatJournalNumber(journal.journalNumber) : 'This journal'}
+        note="A reversal comes back as it was."
+        isPending={restoreJournal.isPending}
+        onConfirm={handleRestoreAsIs}
+        onClose={() => setRestoreOpen(false)}
+      />
+      <DraftChoiceModal
+        isOpen={choiceOpen}
+        subject={journal ? formatJournalNumber(journal.journalNumber) : 'This draft'}
+        canRedo
+        isDeleting={deleteDraft.isPending}
+        onRedo={() => {
+          if (!journal) return;
+          const redoId = journal.id;
+          handleClose();
+          router.push(`/${tenantSlug}/accounting/journalentry/new?redo=${redoId}`);
+        }}
+        onDelete={handleDelete}
+        onClose={() => setChoiceOpen(false)}
+      />
     </>
   );
 }

@@ -6,6 +6,8 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingSettingsController } from './accounting-settings.controller';
 import { AccountsController } from './accounts.controller';
+import { ArchiveController } from './archive.controller';
+import { ArchiveService } from './archive.service';
 import { CashbookController } from './cashbook.controller';
 import { CashbookService } from './cashbook.service';
 import { BankReconciliationsController } from './bank-reconciliations.controller';
@@ -50,6 +52,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
   controllers: [
     AccountingSettingsController,
     AccountsController,
+    ArchiveController,
     CashbookController,
     BankReconciliationsController,
     BudgetsController,
@@ -72,6 +75,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
   providers: [
     AccountingHrClient,
     AccountingMasterDataService,
+    ArchiveService,
     CashbookService,
     BankReconciliationsService,
     BudgetsService,

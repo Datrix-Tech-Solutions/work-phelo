@@ -523,3 +523,109 @@ export class ReversePayableAllocationDto {
   @MaxLength(500)
   reason!: string;
 }
+
+/** A posted bill edited while its period is open: the whole form again, plus an optional reason. */
+export class EditPayableBillDto {
+  @ApiProperty({ type: CreatePayableBillDto })
+  @ValidateNested()
+  @Type(() => CreatePayableBillDto)
+  bill!: CreatePayableBillDto;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** Restoring a voided bill: send the form to correct it, or nothing to bring it back as it was. */
+export class RestorePayableBillDto {
+  @ApiPropertyOptional({ type: CreatePayableBillDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreatePayableBillDto)
+  bill?: CreatePayableBillDto;
+}
+
+/** What can change on a posted debit note - its amount stays, since it is applied against a bill. */
+export class EditPayableNoteDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  documentDate?: string;
+
+  @ApiPropertyOptional({ example: 1.25, minimum: 0.00000001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  exchangeRate?: number;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  externalReference?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** What can change on a posted payment. Its amount stays - void it and record it again to change that. */
+export class EditPayablePaymentDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  cashAccountId?: string;
+
+  @ApiPropertyOptional({ enum: AccountingSettlementMethod })
+  @IsOptional()
+  @IsEnum(AccountingSettlementMethod)
+  settlementMethod?: AccountingSettlementMethod;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  reference?: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  externalReference?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}

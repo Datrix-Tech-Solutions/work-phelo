@@ -261,6 +261,17 @@ export function useRejectCashbookTransaction() {
   });
 }
 
+/** Deletes a draft direct receipt, payment or transfer for good. Posted entries are never deletable. */
+export function useDeleteCashbookDraft() {
+  const invalidate = useInvalidateCashbook();
+  return useMutation({
+    mutationFn: async (transactionId: string) => {
+      await api.delete(`${BASE}/${transactionId}`);
+    },
+    onSuccess: invalidate,
+  });
+}
+
 export function useReverseCashbookTransaction() {
   const invalidate = useInvalidateCashbook();
   return useMutation({

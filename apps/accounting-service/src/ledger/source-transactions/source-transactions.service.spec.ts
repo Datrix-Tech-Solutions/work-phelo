@@ -866,6 +866,7 @@ describe('SourceTransactionsService', () => {
           where: {
             tenantId: 'tenant-1',
             offsetSubledgerAccountId: 'entity-1',
+            status: { not: 'VOIDED' },
             receivableReceipt: { is: null },
           },
         }),
@@ -882,6 +883,7 @@ describe('SourceTransactionsService', () => {
       const where = {
         tenantId: 'tenant-1',
         customerId: 'entity-1',
+        status: { not: 'VOIDED' },
         allocations: { none: { reversedAt: null } },
       };
       expect(prisma.accountingReceivableReceipt.findMany).toHaveBeenCalledWith(

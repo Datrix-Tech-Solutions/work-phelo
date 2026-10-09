@@ -22,7 +22,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { agingBucket, partyAging } from './aging.util';
 import { CashbookService } from './cashbook.service';
-import { CreateJournalDto } from './dto/accounting.dto';
+import { CreateJournalDto, VoidEntryDto } from './dto/accounting.dto';
 import { CreateCashbookReceiptDto } from './dto/cashbook.dto';
 import {
   RejectDraftDto,
@@ -31,6 +31,10 @@ import {
 import {
   CreateCreditNoteAllocationDto,
   CreateReceivableCreditNoteDto,
+  EditReceivableInvoiceDto,
+  EditReceivableNoteDto,
+  EditReceivableReceiptDto,
+  RestoreReceivableInvoiceDto,
   CreateReceivableInvoiceDto,
   CreateReceivableReceiptDto,
   CreateReceiptAllocationDto,
@@ -57,6 +61,9 @@ import {
 } from './source-transactions/source-events.notifier';
 
 const zero = new Prisma.Decimal(0);
+/** Marks an allocation released because its receipt or credit note was voided, so a restore can re-apply it. */
+const RELEASED_BY_VOID = 'VOIDED_WITH_SOURCE';
+const RESTORED_AFTER_VOID = 'VOIDED_WITH_SOURCE_RESTORED';
 // SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
 // payment-terms field the way the old AccountingCustomer master record did — fall back to
 // the same 30-day default that record always used unless the invoice sets an explicit due date.
@@ -321,7 +328,15 @@ export class ReceivablesService {
     return date;
   }
 
-  async createInvoice(user: RequestUser, dto: CreateReceivableInvoiceDto) {
+  /**
+   * Everything an invoice form decides - the customer, items, taxes and accounts - worked out and
+   * checked, without writing anything. Creating an invoice and editing a posted one share it, so
+   * both hold an invoice to exactly the same rules.
+   */
+  private async prepareInvoice(
+    user: RequestUser,
+    dto: CreateReceivableInvoiceDto,
+  ) {
     const [customer] = await Promise.all([
       this.resolveCustomer(user.tenantId, dto.customerId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
@@ -361,51 +376,60 @@ export class ReceivablesService {
         'The deductions leave nothing owed — the total must be above zero',
       );
     }
+    return {
+      transactionTypeCode,
+      lineWrites: this.documentLineWrites(itemLines, lineAccounts),
+      totalAmount,
+      fields: {
+        customerId: customer.id,
+        documentDate: new Date(dto.documentDate),
+        dueDate: new Date(
+          dto.dueDate ??
+            this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
+        ),
+        currency: dto.currency,
+        exchangeRate: dto.exchangeRate,
+        subtotalAmount,
+        // A single item keeps its quantity × price on the document; with several, each line
+        // carries its own.
+        quantity: itemLines.length === 1 ? itemLines[0].quantity : undefined,
+        unitPrice: itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
+        taxAmount,
+        totalAmount,
+        description: this.optional(dto.description),
+        externalReference: this.optional(dto.externalReference),
+        offsetGlAccountId: lineAccounts[0],
+        costCentreId:
+          itemLines.length === 1
+            ? this.optional(itemLines[0].costCentreId)
+            : null,
+        arAccountId,
+        transactionTypeId: dto.transactionTypeId,
+        taxBreakdown,
+      },
+    };
+  }
 
+  async createInvoice(user: RequestUser, dto: CreateReceivableInvoiceDto) {
+    const prepared = await this.prepareInvoice(user, dto);
     const document = await this.withDocumentNumberLock(
       user.tenantId,
-      `invoice:${transactionTypeCode}`,
+      `invoice:${prepared.transactionTypeCode}`,
       async (tx) => {
         const documentNumber = await this.nextRuleDocumentNumber(
           tx,
           user.tenantId,
-          transactionTypeCode,
+          prepared.transactionTypeCode,
         );
         return tx.accountingReceivableDocument.create({
           data: {
             tenantId: user.tenantId,
-            customerId: customer.id,
             documentType: AccountingReceivableDocumentType.INVOICE,
             documentNumber,
-            documentDate: new Date(dto.documentDate),
-            dueDate: new Date(
-              dto.dueDate ??
-                this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
-            ),
-            currency: dto.currency,
-            exchangeRate: dto.exchangeRate,
-            subtotalAmount,
-            // A single item keeps its quantity × price on the document; with several, each line
-            // carries its own.
-            quantity:
-              itemLines.length === 1 ? itemLines[0].quantity : undefined,
-            unitPrice:
-              itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
-            taxAmount,
-            totalAmount,
-            description: this.optional(dto.description),
-            externalReference: this.optional(dto.externalReference),
+            ...prepared.fields,
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId: lineAccounts[0],
-            costCentreId:
-              itemLines.length === 1
-                ? this.optional(itemLines[0].costCentreId)
-                : null,
-            lines: { create: this.documentLineWrites(itemLines, lineAccounts) },
-            arAccountId,
-            transactionTypeId: dto.transactionTypeId,
-            taxBreakdown,
+            lines: { create: prepared.lineWrites },
             createdByUserId: user.id,
             updatedByUserId: user.id,
           },
@@ -418,7 +442,10 @@ export class ReceivablesService {
       'RECEIVABLE_INVOICE_CREATED',
       'AccountingReceivableDocument',
       document.id,
-      { documentNumber: document.documentNumber, totalAmount },
+      {
+        documentNumber: document.documentNumber,
+        totalAmount: prepared.totalAmount,
+      },
     );
     return document;
   }
@@ -1034,7 +1061,8 @@ export class ReceivablesService {
     const where: Prisma.AccountingReceivableReceiptWhereInput = {
       tenantId,
       ...(query.customerId ? { customerId: query.customerId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      // Voided entries live in the archive; they only show when asked for by status.
+      status: query.status ?? { not: AccountingReceivableStatus.VOIDED },
       ...(query.currency ? { currency: query.currency } : {}),
       ...(query.cashAccountId
         ? { cashbookTransaction: { cashAccountId: query.cashAccountId } }
@@ -1575,6 +1603,689 @@ export class ReceivablesService {
     });
   }
 
+  // ---- Changing posted documents and receipts (while their period is open) ----
+
+  /** Loads a posted or voided document for a void, edit or restore. Another module's documents change there. */
+  private async loadChangeableDocument(
+    tx: TransactionClient,
+    tenantId: string,
+    documentId: string,
+    documentType: AccountingReceivableDocumentType,
+  ) {
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "accounting"."AccountingReceivableDocument"
+      WHERE "tenantId" = ${tenantId} AND "id" = ${documentId}
+      FOR UPDATE
+    `;
+    const document = await tx.accountingReceivableDocument.findFirst({
+      where: { id: documentId, tenantId, documentType },
+      include: receivableDocumentInclude,
+    });
+    if (!document) throw new NotFoundException('Receivable document not found');
+    if (document.sourceModule && document.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        'This document was raised by another module and changes there.',
+      );
+    }
+    if (!document.postedJournalEntryId) {
+      throw new ConflictException(
+        'This document has no posted journal to change',
+      );
+    }
+    return document;
+  }
+
+  /** An invoice with payments or credit notes against it must have those voided first. */
+  private async assertInvoiceUntouched(
+    tx: TransactionClient,
+    tenantId: string,
+    invoiceId: string,
+  ) {
+    const [applied, creditNotes] = await Promise.all([
+      tx.accountingReceivableAllocation.count({
+        where: { tenantId, invoiceId, reversedAt: null },
+      }),
+      tx.accountingReceivableDocument.count({
+        where: {
+          tenantId,
+          originalInvoiceId: invoiceId,
+          status: AccountingReceivableStatus.POSTED,
+        },
+      }),
+    ]);
+    if (applied > 0 || creditNotes > 0) {
+      throw new ConflictException(
+        'This invoice has payments or credit notes against it. Void those first.',
+      );
+    }
+  }
+
+  private async releaseAllocations(
+    tx: TransactionClient,
+    user: RequestUser,
+    where: { receiptId?: string; creditNoteId?: string },
+  ) {
+    await tx.accountingReceivableAllocation.updateMany({
+      where: { tenantId: user.tenantId, reversedAt: null, ...where },
+      data: {
+        reversedAt: new Date(),
+        reversedByUserId: user.id,
+        reversalReason: RELEASED_BY_VOID,
+      },
+    });
+  }
+
+  /** Rewrites the document's journal from its current fields, keeping the journal's number. */
+  private async rewriteDocumentJournal(
+    tx: TransactionClient,
+    user: RequestUser,
+    documentId: string,
+  ) {
+    const fresh = await tx.accountingReceivableDocument.findUniqueOrThrow({
+      where: { id_tenantId: { id: documentId, tenantId: user.tenantId } },
+      include: receivableDocumentInclude,
+    });
+    const period = await this.resolveOpenPeriod(
+      tx,
+      user.tenantId,
+      fresh.documentDate,
+    );
+    await this.journals.rewriteSystemJournalInTransaction(
+      tx,
+      user,
+      fresh.postedJournalEntryId as string,
+      this.documentJournalDto(fresh, period.id),
+    );
+  }
+
+  private documentSnapshot(document: ReceivableDocument) {
+    return {
+      documentNumber: document.documentNumber,
+      customerId: document.customerId,
+      documentDate: document.documentDate.toISOString(),
+      currency: document.currency,
+      totalAmount: document.totalAmount.toString(),
+      description: document.description,
+    };
+  }
+
+  /** Rewrites an invoice from the whole form again, keeping its number (and so its type). */
+  private async replaceInvoiceInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: ReceivableDocument,
+    dto: CreateReceivableInvoiceDto,
+  ) {
+    if (dto.transactionTypeId !== document.transactionTypeId) {
+      throw new BadRequestException(
+        'The transaction type cannot change. Void this invoice and raise a new one instead.',
+      );
+    }
+    const prepared = await this.prepareInvoice(user, dto);
+    await tx.accountingReceivableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        ...prepared.fields,
+        quantity: prepared.fields.quantity ?? null,
+        unitPrice: prepared.fields.unitPrice ?? null,
+        exchangeRate: prepared.fields.exchangeRate ?? null,
+        updatedByUserId: user.id,
+        lines: { deleteMany: {}, create: prepared.lineWrites },
+      },
+    });
+    await this.rewriteDocumentJournal(tx, user, document.id);
+  }
+
+  private async updateNoteInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: ReceivableDocument,
+    dto: EditReceivableNoteDto,
+  ) {
+    const { reason: _reason, ...changes } = dto;
+    void _reason;
+    if (Object.keys(changes).length === 0) return;
+    await tx.accountingReceivableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        updatedByUserId: user.id,
+        ...(changes.documentDate !== undefined
+          ? { documentDate: new Date(changes.documentDate) }
+          : {}),
+        ...(changes.exchangeRate !== undefined
+          ? { exchangeRate: changes.exchangeRate }
+          : {}),
+        ...(changes.description !== undefined
+          ? { description: this.optional(changes.description) }
+          : {}),
+        ...(changes.externalReference !== undefined
+          ? { externalReference: this.optional(changes.externalReference) }
+          : {}),
+      },
+    });
+    await this.rewriteDocumentJournal(tx, user, document.id);
+  }
+
+  private findDocumentFresh(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingReceivableDocumentType,
+  ) {
+    return documentType === AccountingReceivableDocumentType.INVOICE
+      ? this.getInvoice(user, documentId)
+      : this.getCreditNote(user, documentId);
+  }
+
+  /**
+   * Takes a posted invoice or credit note out of the books with its journal. An invoice with
+   * payments or credit notes against it must wait until those are voided; a credit note lets go
+   * of what it was applied to.
+   */
+  private async voidDocument(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingReceivableDocumentType,
+    dto: VoidEntryDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        documentId,
+        documentType,
+      );
+      if (document.status === AccountingReceivableStatus.REVERSED) {
+        throw new ConflictException(
+          'This document has been reversed and cannot be voided.',
+        );
+      }
+      if (document.status !== AccountingReceivableStatus.POSTED) {
+        throw new ConflictException('Only posted documents can be voided');
+      }
+      if (documentType === AccountingReceivableDocumentType.INVOICE) {
+        await this.assertInvoiceUntouched(tx, user.tenantId, document.id);
+      } else {
+        await this.releaseAllocations(tx, user, { creditNoteId: document.id });
+      }
+      await this.journals.voidSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+        dto.reason,
+      );
+      await tx.accountingReceivableDocument.update({
+        where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingReceivableStatus.VOIDED,
+          voidedAt: new Date(),
+          voidedByUserId: user.id,
+          voidReason: dto.reason,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'RECEIVABLE_DOCUMENT_VOIDED',
+          entityType: 'AccountingReceivableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason,
+            documentNumber: document.documentNumber,
+          },
+        },
+      });
+    });
+    return this.findDocumentFresh(user, documentId, documentType);
+  }
+
+  voidInvoice(user: RequestUser, invoiceId: string, dto: VoidEntryDto) {
+    return this.voidDocument(
+      user,
+      invoiceId,
+      AccountingReceivableDocumentType.INVOICE,
+      dto,
+    );
+  }
+
+  voidCreditNote(user: RequestUser, creditNoteId: string, dto: VoidEntryDto) {
+    return this.voidDocument(
+      user,
+      creditNoteId,
+      AccountingReceivableDocumentType.CREDIT_NOTE,
+      dto,
+    );
+  }
+
+  /** Edits a posted invoice in place: the whole form again, same number. */
+  async editPostedInvoice(
+    user: RequestUser,
+    invoiceId: string,
+    dto: EditReceivableInvoiceDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        invoiceId,
+        AccountingReceivableDocumentType.INVOICE,
+      );
+      if (document.status !== AccountingReceivableStatus.POSTED) {
+        throw new ConflictException(
+          document.status === AccountingReceivableStatus.REVERSED
+            ? 'This invoice has been reversed and cannot be edited.'
+            : 'Only posted invoices can be edited',
+        );
+      }
+      await this.assertInvoiceUntouched(tx, user.tenantId, document.id);
+      await this.replaceInvoiceInTransaction(tx, user, document, dto.invoice);
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'RECEIVABLE_INVOICE_POSTED_EDITED',
+          entityType: 'AccountingReceivableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: this.documentSnapshot(document),
+          },
+        },
+      });
+    });
+    return this.getInvoice(user, invoiceId);
+  }
+
+  /** Edits what a posted credit note allows (its amount stays, as it is applied against an invoice). */
+  async editPostedCreditNote(
+    user: RequestUser,
+    creditNoteId: string,
+    dto: EditReceivableNoteDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        creditNoteId,
+        AccountingReceivableDocumentType.CREDIT_NOTE,
+      );
+      if (document.status !== AccountingReceivableStatus.POSTED) {
+        throw new ConflictException('Only posted credit notes can be edited');
+      }
+      await this.updateNoteInTransaction(tx, user, document, dto);
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'RECEIVABLE_CREDIT_NOTE_POSTED_EDITED',
+          entityType: 'AccountingReceivableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: this.documentSnapshot(document),
+          },
+        },
+      });
+    });
+    return this.getCreditNote(user, creditNoteId);
+  }
+
+  /** Brings a voided invoice back under its own number, with corrections if the form was changed. */
+  async restoreInvoice(
+    user: RequestUser,
+    invoiceId: string,
+    dto: RestoreReceivableInvoiceDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        invoiceId,
+        AccountingReceivableDocumentType.INVOICE,
+      );
+      if (document.status !== AccountingReceivableStatus.VOIDED) {
+        throw new ConflictException('Only voided invoices can be restored');
+      }
+      if (dto.invoice) {
+        await this.replaceInvoiceInTransaction(tx, user, document, dto.invoice);
+      }
+      await this.journals.reinstateSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+      );
+      await this.markDocumentRestored(tx, user, document);
+    });
+    return this.getInvoice(user, invoiceId);
+  }
+
+  /** Brings a voided credit note back, applying it to its invoice again when it was raised against one. */
+  async restoreCreditNote(
+    user: RequestUser,
+    creditNoteId: string,
+    dto: EditReceivableNoteDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        creditNoteId,
+        AccountingReceivableDocumentType.CREDIT_NOTE,
+      );
+      if (document.status !== AccountingReceivableStatus.VOIDED) {
+        throw new ConflictException('Only voided credit notes can be restored');
+      }
+      if (document.originalInvoiceId) {
+        const invoice = await tx.accountingReceivableDocument.findFirst({
+          where: { id: document.originalInvoiceId, tenantId: user.tenantId },
+          select: { status: true, documentNumber: true },
+        });
+        if (invoice?.status !== AccountingReceivableStatus.POSTED) {
+          throw new ConflictException(
+            `Restore invoice ${invoice?.documentNumber ?? ''} before this credit note`.trim(),
+          );
+        }
+      }
+      await this.updateNoteInTransaction(tx, user, document, dto);
+      await this.journals.reinstateSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+      );
+      await this.markDocumentRestored(tx, user, document);
+      await this.reapplyReleasedAllocations(tx, user, {
+        creditNoteId: document.id,
+        sourceType: AccountingReceivableAllocationSource.CREDIT_NOTE,
+        expectedArAccountId: document.arAccountId,
+      });
+    });
+    return this.getCreditNote(user, creditNoteId);
+  }
+
+  /** Applies a restored receipt or credit note to the invoices it was released from by the void. */
+  private async reapplyReleasedAllocations(
+    tx: TransactionClient,
+    user: RequestUser,
+    input: {
+      receiptId?: string;
+      creditNoteId?: string;
+      sourceType: AccountingReceivableAllocationSource;
+      expectedArAccountId: string;
+    },
+  ) {
+    const released = await tx.accountingReceivableAllocation.findMany({
+      where: {
+        tenantId: user.tenantId,
+        reversalReason: RELEASED_BY_VOID,
+        ...(input.receiptId ? { receiptId: input.receiptId } : {}),
+        ...(input.creditNoteId ? { creditNoteId: input.creditNoteId } : {}),
+      },
+    });
+    for (const allocation of released) {
+      try {
+        await this.createAllocation(tx, user, {
+          customerId: allocation.customerId,
+          invoiceId: allocation.invoiceId,
+          receiptId: input.receiptId,
+          creditNoteId: input.creditNoteId,
+          sourceType: input.sourceType,
+          amount: allocation.amount,
+          currency: allocation.currency,
+          expectedArAccountId: input.expectedArAccountId,
+        });
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          throw new ConflictException(
+            'The invoice this was applied to is voided. Restore the invoice first.',
+          );
+        }
+        throw error;
+      }
+      await tx.accountingReceivableAllocation.update({
+        where: { id_tenantId: { id: allocation.id, tenantId: user.tenantId } },
+        data: { reversalReason: RESTORED_AFTER_VOID },
+      });
+    }
+  }
+
+  private async markDocumentRestored(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: ReceivableDocument,
+  ) {
+    await tx.accountingReceivableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        status: AccountingReceivableStatus.POSTED,
+        voidedAt: null,
+        voidedByUserId: null,
+        voidReason: null,
+        updatedByUserId: user.id,
+      },
+    });
+    await tx.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: 'RECEIVABLE_DOCUMENT_RESTORED',
+        entityType: 'AccountingReceivableDocument',
+        entityId: document.id,
+        changedFields: { before: this.documentSnapshot(document) },
+      },
+    });
+  }
+
+  private receiptCashbookEdit(dto: EditReceivableReceiptDto) {
+    return {
+      ...(dto.receiptDate !== undefined
+        ? { transactionDate: dto.receiptDate }
+        : {}),
+      ...(dto.cashAccountId !== undefined
+        ? { cashAccountId: dto.cashAccountId }
+        : {}),
+      ...(dto.settlementMethod !== undefined
+        ? { settlementMethod: dto.settlementMethod }
+        : {}),
+      ...(dto.reference !== undefined ? { reference: dto.reference } : {}),
+      ...(dto.externalReference !== undefined
+        ? { externalReference: dto.externalReference }
+        : {}),
+      ...(dto.description !== undefined
+        ? { description: dto.description }
+        : {}),
+      ...(dto.reason !== undefined ? { reason: dto.reason } : {}),
+    };
+  }
+
+  private receiptFieldEdit(dto: EditReceivableReceiptDto) {
+    return {
+      ...(dto.receiptDate !== undefined
+        ? { receiptDate: new Date(dto.receiptDate) }
+        : {}),
+      ...(dto.reference !== undefined
+        ? { reference: this.optional(dto.reference) }
+        : {}),
+      ...(dto.description !== undefined
+        ? { description: this.optional(dto.description) }
+        : {}),
+      ...(dto.externalReference !== undefined
+        ? { externalReference: this.optional(dto.externalReference) }
+        : {}),
+    };
+  }
+
+  private async loadChangeableReceipt(
+    tx: TransactionClient,
+    tenantId: string,
+    receiptId: string,
+  ) {
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "accounting"."AccountingReceivableReceipt"
+      WHERE "tenantId" = ${tenantId} AND "id" = ${receiptId}
+      FOR UPDATE
+    `;
+    const receipt = await tx.accountingReceivableReceipt.findFirst({
+      where: { id: receiptId, tenantId },
+    });
+    if (!receipt) throw new NotFoundException('Receipt not found');
+    if (receipt.sourceModule && receipt.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        'This receipt was raised by another module and changes there.',
+      );
+    }
+    return receipt;
+  }
+
+  /** Voids a posted receipt with its cashbook entry and lets go of the invoices it was applied to. */
+  async voidReceipt(user: RequestUser, receiptId: string, dto: VoidEntryDto) {
+    await this.prisma.$transaction(async (tx) => {
+      const receipt = await this.loadChangeableReceipt(
+        tx,
+        user.tenantId,
+        receiptId,
+      );
+      if (receipt.status === AccountingReceivableStatus.REVERSED) {
+        throw new ConflictException(
+          'This receipt has been reversed and cannot be voided.',
+        );
+      }
+      if (receipt.status !== AccountingReceivableStatus.POSTED) {
+        throw new ConflictException('Only posted receipts can be voided');
+      }
+      await this.releaseAllocations(tx, user, { receiptId: receipt.id });
+      await this.cashbook.voidInTransaction(
+        tx,
+        user,
+        receipt.cashbookTransactionId,
+        dto,
+        true,
+      );
+      await tx.accountingReceivableReceipt.update({
+        where: { id_tenantId: { id: receipt.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingReceivableStatus.VOIDED,
+          voidedAt: new Date(),
+          voidedByUserId: user.id,
+          voidReason: dto.reason,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'RECEIVABLE_RECEIPT_VOIDED',
+          entityType: 'AccountingReceivableReceipt',
+          entityId: receipt.id,
+          changedFields: {
+            reason: dto.reason,
+            receiptNumber: receipt.receiptNumber,
+          },
+        },
+      });
+    });
+    return this.getReceipt(user, receiptId);
+  }
+
+  async editPostedReceipt(
+    user: RequestUser,
+    receiptId: string,
+    dto: EditReceivableReceiptDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const receipt = await this.loadChangeableReceipt(
+        tx,
+        user.tenantId,
+        receiptId,
+      );
+      if (receipt.status !== AccountingReceivableStatus.POSTED) {
+        throw new ConflictException('Only posted receipts can be edited');
+      }
+      await this.cashbook.editInTransaction(
+        tx,
+        user,
+        receipt.cashbookTransactionId,
+        this.receiptCashbookEdit(dto),
+        true,
+      );
+      await tx.accountingReceivableReceipt.update({
+        where: { id_tenantId: { id: receipt.id, tenantId: user.tenantId } },
+        data: { ...this.receiptFieldEdit(dto), updatedByUserId: user.id },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'RECEIVABLE_RECEIPT_POSTED_EDITED',
+          entityType: 'AccountingReceivableReceipt',
+          entityId: receipt.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: {
+              receiptDate: receipt.receiptDate.toISOString(),
+              reference: receipt.reference,
+              description: receipt.description,
+            },
+          },
+        },
+      });
+    });
+    return this.getReceipt(user, receiptId);
+  }
+
+  /** Brings a voided receipt back and applies it to the invoices it was applied to before. */
+  async restoreReceipt(
+    user: RequestUser,
+    receiptId: string,
+    dto: EditReceivableReceiptDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const receipt = await this.loadChangeableReceipt(
+        tx,
+        user.tenantId,
+        receiptId,
+      );
+      if (receipt.status !== AccountingReceivableStatus.VOIDED) {
+        throw new ConflictException('Only voided receipts can be restored');
+      }
+      await this.cashbook.restoreInTransaction(
+        tx,
+        user,
+        receipt.cashbookTransactionId,
+        this.receiptCashbookEdit(dto),
+        true,
+      );
+      await tx.accountingReceivableReceipt.update({
+        where: { id_tenantId: { id: receipt.id, tenantId: user.tenantId } },
+        data: {
+          ...this.receiptFieldEdit(dto),
+          status: AccountingReceivableStatus.POSTED,
+          voidedAt: null,
+          voidedByUserId: null,
+          voidReason: null,
+          updatedByUserId: user.id,
+        },
+      });
+      await this.reapplyReleasedAllocations(tx, user, {
+        receiptId: receipt.id,
+        sourceType: AccountingReceivableAllocationSource.RECEIPT,
+        expectedArAccountId: receipt.arAccountId,
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'RECEIVABLE_RECEIPT_RESTORED',
+          entityType: 'AccountingReceivableReceipt',
+          entityId: receipt.id,
+          changedFields: { receiptNumber: receipt.receiptNumber },
+        },
+      });
+    });
+    return this.getReceipt(user, receiptId);
+  }
+
   private async createAllocation(
     tx: TransactionClient,
     user: RequestUser,
@@ -1796,7 +2507,8 @@ export class ReceivablesService {
       tenantId,
       documentType,
       ...(query.customerId ? { customerId: query.customerId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      // Voided entries live in the archive; they only show when asked for by status.
+      status: query.status ?? { not: AccountingReceivableStatus.VOIDED },
       ...(query.currency ? { currency: query.currency } : {}),
       ...(query.fromDate || query.toDate
         ? {
@@ -2487,6 +3199,7 @@ export class ReceivablesService {
     outstanding: Prisma.Decimal,
     paidApplied?: Prisma.Decimal,
   ) {
+    if (document.status === AccountingReceivableStatus.VOIDED) return 'VOIDED';
     if (document.status === AccountingReceivableStatus.REVERSED)
       return 'REVERSED';
     if (document.status === AccountingReceivableStatus.REJECTED)
@@ -2627,6 +3340,80 @@ export class ReceivablesService {
     const date = new Date(value);
     date.setHours(23, 59, 59, 999);
     return date;
+  }
+
+  /** Throws a draft invoice or credit note away. Posted ones are immutable and stay. */
+  private async deleteDraftDocument(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingReceivableDocumentType,
+    label: string,
+  ) {
+    const document = await this.prisma.accountingReceivableDocument.findFirst({
+      where: { id: documentId, tenantId: user.tenantId, documentType },
+      select: {
+        id: true,
+        status: true,
+        sourceModule: true,
+        documentNumber: true,
+      },
+    });
+    if (!document) throw new NotFoundException(`${label} not found`);
+    if (document.status !== AccountingReceivableStatus.DRAFT) {
+      throw new ConflictException(`Only draft ${label}s can be deleted`);
+    }
+    if (document.sourceModule && document.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        `This ${label} was raised by another module - reject it instead`,
+      );
+    }
+    try {
+      const removed = await this.prisma.accountingReceivableDocument.deleteMany(
+        {
+          where: {
+            id: document.id,
+            tenantId: user.tenantId,
+            status: AccountingReceivableStatus.DRAFT,
+          },
+        },
+      );
+      if (removed.count !== 1) {
+        throw new ConflictException(
+          `The ${label} was changed by another request`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      throw new ConflictException(
+        `This ${label} is referenced elsewhere and cannot be deleted`,
+      );
+    }
+    await this.recordAudit(
+      user,
+      'RECEIVABLE_DRAFT_DELETED',
+      'AccountingReceivableDocument',
+      document.id,
+      { documentNumber: document.documentNumber },
+    );
+    return { id: document.id, deleted: true };
+  }
+
+  deleteDraftInvoice(user: RequestUser, id: string) {
+    return this.deleteDraftDocument(
+      user,
+      id,
+      AccountingReceivableDocumentType.INVOICE,
+      'invoice',
+    );
+  }
+
+  deleteDraftCreditNote(user: RequestUser, id: string) {
+    return this.deleteDraftDocument(
+      user,
+      id,
+      AccountingReceivableDocumentType.CREDIT_NOTE,
+      'credit note',
+    );
   }
 
   private async recordAudit(

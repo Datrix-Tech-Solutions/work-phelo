@@ -105,6 +105,8 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     reversedAt: raw.reversedAt ?? null,
     rejectedAt: raw.rejectedAt ?? null,
     rejectionReason: raw.rejectionReason ?? null,
+    voidedAt: raw.voidedAt ?? null,
+    voidReason: raw.voidReason ?? null,
     postedJournalEntryId: raw.postedJournalEntryId ?? null,
     reversalJournalEntryId: raw.reversalJournalEntryId ?? null,
     reversalOfDocumentId: raw.reversalOfDocumentId ?? null,
@@ -364,6 +366,22 @@ export function useRejectReceivableInvoice() {
       queryClient.invalidateQueries({
         queryKey: documentsKey('RECEIVABLE', config.invoiceSegment),
       }),
+  });
+}
+
+/** Deletes a draft invoice/bill or credit/debit note for good. Posted ones are never deletable. */
+export function useDeleteTradeDraft(side: AccountingTradeSide) {
+  const queryClient = useQueryClient();
+  const config = SIDE_CONFIG[side];
+  return useMutation({
+    mutationFn: async ({ id, isCreditNote }: { id: string; isCreditNote: boolean }) => {
+      const segment = isCreditNote ? CREDIT_NOTE_SEGMENT : config.invoiceSegment;
+      await api.delete(`${config.base}/${segment}/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
+      queryClient.invalidateQueries({ queryKey: documentsKey(side, CREDIT_NOTE_SEGMENT) });
+    },
   });
 }
 

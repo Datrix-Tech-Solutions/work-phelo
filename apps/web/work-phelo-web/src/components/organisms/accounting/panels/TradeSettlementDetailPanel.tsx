@@ -13,11 +13,14 @@ import {
   AccountingTradeSettlement,
   AccountingTradeSide,
 } from '@/types/accounting';
+import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
+import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
 import {
   useAllocatePayablePayment,
   useAllocateReceivableReceipt,
   usePayableBills,
   usePayablePaymentAllocations,
+  usePeriodOpenCheck,
   usePostPayablePayment,
   usePostReceivableReceipt,
   useReceivableInvoices,
@@ -26,6 +29,8 @@ import {
   useReversePayablePayment,
   useReverseReceivableAllocation,
   useReverseReceivableReceipt,
+  useRestoreTradeEntry,
+  useVoidTradeEntry,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -41,6 +46,7 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   POSTED: 'success',
   REVERSED: 'danger',
   REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtAmount(amount: string, currency: string) {
@@ -99,6 +105,42 @@ export function TradeSettlementDetailPanel({
   const reverseReceivableAllocation = useReverseReceivableAllocation();
   const reversePayableAllocation = useReversePayableAllocation();
   const reverseAllocation = isReceivable ? reverseReceivableAllocation : reversePayableAllocation;
+
+  // A posted receipt or payment can be voided while its period is open (the invoices or bills it
+  // was applied to are freed); a voided one can be restored and is applied to them again.
+  const isPeriodOpen = usePeriodOpenCheck();
+  const voidEntry = useVoidTradeEntry(side);
+  const restoreEntry = useRestoreTradeEntry(side);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const isExternal = !!settlement?.sourceModule && settlement.sourceModule !== 'ACCOUNTING';
+  const periodOpen = isPeriodOpen(settlement?.settlementDate);
+  const canVoid = settlement?.status === 'POSTED' && !isExternal && periodOpen;
+  const canRestore = settlement?.status === 'VOIDED' && !isExternal && periodOpen;
+
+  const handleVoid = async (voidReason: string) => {
+    if (!settlement) return;
+    try {
+      await voidEntry.mutateAsync({ id: settlement.id, kind: 'settlement', reason: voidReason });
+      toast.success(`${documentLabel} voided. It is in the archive now.`);
+      setVoidOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, `Failed to void ${documentLabel.toLowerCase()}`));
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!settlement) return;
+    try {
+      await restoreEntry.mutateAsync({ id: settlement.id, kind: 'settlement' });
+      toast.success(`${documentLabel} restored.`);
+      setRestoreOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, `Failed to restore ${documentLabel.toLowerCase()}`));
+    }
+  };
 
   const handleClose = () => {
     setReverseOpen(false);
@@ -168,6 +210,11 @@ export function TradeSettlementDetailPanel({
               <Button variant="secondary" onClick={() => setAllocateOpen(true)}>
                 Allocate
               </Button>
+              {canVoid && (
+                <Button variant="outline" onClick={() => setVoidOpen(true)}>
+                  Void
+                </Button>
+              )}
               <Button variant="danger" onClick={() => setReverseOpen(true)}>
                 Reverse
               </Button>
@@ -177,6 +224,7 @@ export function TradeSettlementDetailPanel({
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {canRestore && <Button onClick={() => setRestoreOpen(true)}>Restore</Button>}
             </div>
           )
         }
@@ -204,6 +252,19 @@ export function TradeSettlementDetailPanel({
                 <Field label="External Reference" value={settlement.externalReference} />
               )}
             </div>
+
+            {settlement.status === 'VOIDED' && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <p className="font-semibold">
+                  Voided{settlement.voidedAt ? ` on ${fmtDate(settlement.voidedAt)}` : ''}
+                </p>
+                {settlement.voidReason && <p className="mt-1">{settlement.voidReason}</p>}
+                <p className="mt-1 text-xs text-gray-500">
+                  It counts in no balance or report.
+                  {!periodOpen && ' Its period is no longer open, so it can’t be restored.'}
+                </p>
+              </div>
+            )}
 
             {settlement.cashbookTransaction?.postedJournalEntryId && (
               <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-sm text-green-900">
@@ -294,6 +355,22 @@ export function TradeSettlementDetailPanel({
           />
         </div>
       </Modal>
+
+      <VoidEntryModal
+        isOpen={voidOpen}
+        subject={settlement?.settlementNumber ?? documentLabel}
+        isPending={voidEntry.isPending}
+        onConfirm={handleVoid}
+        onClose={() => setVoidOpen(false)}
+      />
+      <RestoreEntryModal
+        isOpen={restoreOpen}
+        subject={settlement?.settlementNumber ?? documentLabel}
+        note={`It is applied to its ${isReceivable ? 'invoices' : 'bills'} again.`}
+        isPending={restoreEntry.isPending}
+        onConfirm={handleRestore}
+        onClose={() => setRestoreOpen(false)}
+      />
 
       {settlement && (
         <AllocateModal

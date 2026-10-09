@@ -17,10 +17,12 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateJournalDto,
+  EditPostedJournalDto,
   JournalLineDto,
   QueryJournalsDto,
   ReverseJournalDto,
   UpdateDraftJournalDto,
+  VoidEntryDto,
 } from './dto/accounting.dto';
 import { JournalPolicy } from './journal.policy';
 
@@ -334,7 +336,8 @@ export class JournalsService {
     const journals = await this.prisma.journalEntry.findMany({
       where: {
         tenantId,
-        ...(query.status ? { status: query.status } : {}),
+        // Voided entries live in the archive; they only show when asked for by status.
+        status: query.status ?? { not: JournalStatus.VOIDED },
         ...(query.from || query.to
           ? {
               transactionDate: {
@@ -450,6 +453,55 @@ export class JournalsService {
         },
         include: journalInclude,
       });
+    });
+  }
+
+  /** Throws a draft journal away. Posted and reversed journals are immutable and stay. */
+  async deleteDraft(user: RequestUser, journalId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockJournal(tx, user.tenantId, journalId);
+      const journal = await tx.journalEntry.findFirst({
+        where: { id: journalId, tenantId: user.tenantId },
+        select: {
+          id: true,
+          status: true,
+          journalNumber: true,
+          sourceRecordId: true,
+        },
+      });
+      if (!journal) throw new NotFoundException('Journal entry not found');
+      if (journal.status !== JournalStatus.DRAFT) {
+        throw new ConflictException('Only draft journals can be deleted');
+      }
+      if (journal.sourceRecordId) {
+        throw new ConflictException(
+          'This journal belongs to another record and cannot be deleted here',
+        );
+      }
+      try {
+        await tx.journalEntry.deleteMany({
+          where: {
+            id: journal.id,
+            tenantId: user.tenantId,
+            status: JournalStatus.DRAFT,
+          },
+        });
+      } catch {
+        throw new ConflictException(
+          'This journal is referenced elsewhere and cannot be deleted',
+        );
+      }
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'JOURNAL_DRAFT_DELETED',
+          entityType: 'JournalEntry',
+          entityId: journal.id,
+          changedFields: { journalNumber: journal.journalNumber },
+        },
+      });
+      return { id: journal.id, deleted: true };
     });
   }
 
@@ -673,6 +725,478 @@ export class JournalsService {
         },
         include: journalInclude,
       });
+    });
+  }
+
+  /**
+   * Loads a journal for a void, edit or restore and applies the rules they share. Only entries
+   * made on the journal screen can be changed here - anything another record (a cashbook
+   * transaction, invoice, bill or another module) posted is changed through that record.
+   */
+  private async loadChangeable(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    journalId: string,
+  ) {
+    await this.lockJournal(tx, tenantId, journalId);
+    const journal = await tx.journalEntry.findFirst({
+      where: { id: journalId, tenantId },
+      include: {
+        ...journalListInclude,
+        reversalJournal: {
+          select: {
+            id: true,
+            journalNumber: true,
+            transactionDate: true,
+            status: true,
+          },
+        },
+      },
+    });
+    if (!journal) throw new NotFoundException('Journal entry not found');
+    const { source } = this.withSource(journal);
+    if (
+      source.category !== 'MANUAL' ||
+      journal.sourceModule ||
+      journal.sourceRecordId
+    ) {
+      throw new ConflictException(
+        'This journal was posted by another record. Change that record instead.',
+      );
+    }
+    return journal;
+  }
+
+  /** The entry's period must still be open - the one rule that decides if a posted entry can change. */
+  private async assertPeriodStillOpen(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    fiscalPeriodId: string,
+    action: string,
+  ) {
+    await this.lockFiscalPeriod(tx, tenantId, fiscalPeriodId);
+    const period = await tx.fiscalPeriod.findFirst({
+      where: { id: fiscalPeriodId, tenantId },
+    });
+    if (!period) throw new NotFoundException('Fiscal period not found');
+    if (period.status !== FiscalPeriodStatus.OPEN) {
+      throw new ConflictException(
+        `The ${period.name} period is ${period.status.toLowerCase().replace('_', ' ')}, so this entry can no longer be ${action}. Use a reversal or an adjusting entry instead.`,
+      );
+    }
+  }
+
+  private async audit(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    action: string,
+    journalId: string,
+    changedFields: Prisma.InputJsonValue,
+  ) {
+    await tx.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action,
+        entityType: 'JournalEntry',
+        entityId: journalId,
+        changedFields,
+      },
+    });
+  }
+
+  /** A before-image of the entry, kept in its history so an edit never loses what was there. */
+  private snapshot(journal: JournalWithSource): Prisma.InputJsonValue {
+    return {
+      journalNumber: journal.journalNumber,
+      transactionDate: journal.transactionDate.toISOString(),
+      transactionCurrency: journal.transactionCurrency,
+      exchangeRate: journal.exchangeRate.toString(),
+      reference: journal.reference,
+      description: journal.description,
+      lines: journal.lines.map((line) => ({
+        glAccountId: line.glAccountId,
+        subledgerAccountId: line.subledgerAccountId,
+        costCentreId: line.costCentreId,
+        description: line.description,
+        debit: line.transactionDebit.toString(),
+        credit: line.transactionCredit.toString(),
+      })),
+    };
+  }
+
+  /** Rewrites a manual journal's header and lines from an edit, re-checking everything a new entry is. */
+  private async applyEdit(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    current: JournalWithSource,
+    dto: UpdateDraftJournalDto,
+    extra: Prisma.JournalEntryUpdateInput,
+  ) {
+    const shouldReuseExchangeRate =
+      dto.exchangeRate === undefined &&
+      dto.transactionDate === undefined &&
+      dto.transactionCurrency === undefined;
+    const draft = await this.resolveDraft(tx, user.tenantId, {
+      entryType: current.entryType,
+      adjustmentCategory: current.adjustmentCategory ?? undefined,
+      transactionDate:
+        dto.transactionDate ?? current.transactionDate.toISOString(),
+      fiscalPeriodId: dto.fiscalPeriodId ?? current.fiscalPeriodId,
+      transactionCurrency:
+        dto.transactionCurrency ?? current.transactionCurrency,
+      exchangeRate:
+        dto.exchangeRate ??
+        (shouldReuseExchangeRate
+          ? Number(current.exchangeRate.toString())
+          : undefined),
+      reference:
+        dto.reference !== undefined
+          ? dto.reference
+          : (current.reference ?? undefined),
+      description: dto.description ?? current.description,
+      lines:
+        dto.lines ??
+        current.lines.map((line) => ({
+          glAccountId: line.glAccountId,
+          subledgerAccountId: line.subledgerAccountId ?? undefined,
+          costCentreId: line.costCentreId ?? undefined,
+          description: line.description ?? undefined,
+          debit: Number(line.transactionDebit.toString()),
+          credit: Number(line.transactionCredit.toString()),
+        })),
+    });
+    // The new date may sit in a different period; that one has to be open as well.
+    await this.lockFiscalPeriod(tx, user.tenantId, draft.fiscalPeriodId);
+    return tx.journalEntry.update({
+      where: { id_tenantId: { id: current.id, tenantId: user.tenantId } },
+      data: {
+        transactionDate: draft.transactionDate,
+        fiscalPeriod: {
+          connect: {
+            id_tenantId: { id: draft.fiscalPeriodId, tenantId: user.tenantId },
+          },
+        },
+        transactionCurrency: draft.transactionCurrency,
+        baseCurrency: draft.baseCurrency,
+        exchangeRate: draft.exchangeRate,
+        ...(dto.reference !== undefined
+          ? { reference: this.optional(dto.reference) }
+          : {}),
+        ...(dto.description !== undefined
+          ? { description: dto.description }
+          : {}),
+        updatedByUserId: user.id,
+        lines: {
+          deleteMany: {},
+          create: this.lineCreateData(
+            user.tenantId,
+            draft.lines,
+            draft.exchangeRate,
+            draft.decimalPlaces,
+          ),
+        },
+        ...extra,
+      },
+      include: journalInclude,
+    });
+  }
+
+  /**
+   * Edits a posted journal in place while its period is open. The number stays; what was there
+   * before is kept in the entry's history. A journal that has been reversed, or is itself a
+   * reversal, cannot be edited - the reversal mirrors the original line for line.
+   */
+  async editPosted(
+    user: RequestUser,
+    journalId: string,
+    dto: EditPostedJournalDto,
+  ) {
+    const { reason, ...changes } = dto;
+    return this.prisma.$transaction(async (tx) => {
+      const journal = await this.loadChangeable(tx, user.tenantId, journalId);
+      if (journal.status !== JournalStatus.POSTED) {
+        throw new ConflictException('Only posted journals can be edited');
+      }
+      if (journal.reversalOfJournalId) {
+        throw new ConflictException(
+          'A reversal cannot be edited. Void it, or void the original after voiding the reversal.',
+        );
+      }
+      if (
+        journal.reversalJournal &&
+        journal.reversalJournal.status !== JournalStatus.VOIDED
+      ) {
+        throw new ConflictException(
+          `This journal has been reversed by ${journal.reversalJournal.journalNumber}. Void the reversal first.`,
+        );
+      }
+      await this.assertPeriodStillOpen(
+        tx,
+        user.tenantId,
+        journal.fiscalPeriodId,
+        'edited',
+      );
+      const updated = await this.applyEdit(tx, user, journal, changes, {});
+      await this.audit(tx, user, 'JOURNAL_POSTED_EDITED', journal.id, {
+        reason: reason ?? null,
+        before: this.snapshot(journal),
+      });
+      return updated;
+    });
+  }
+
+  /**
+   * Takes a posted journal out of the books. It stays on record with its reason but counts in no
+   * balance, report or statement. A journal that has been reversed must have the reversal voided
+   * first, so the two are always undone in order.
+   */
+  async voidPosted(user: RequestUser, journalId: string, dto: VoidEntryDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const journal = await this.loadChangeable(tx, user.tenantId, journalId);
+      if (journal.status !== JournalStatus.POSTED) {
+        throw new ConflictException('Only posted journals can be voided');
+      }
+      if (
+        journal.reversalJournal &&
+        journal.reversalJournal.status !== JournalStatus.VOIDED
+      ) {
+        throw new ConflictException(
+          `This journal has been reversed by ${journal.reversalJournal.journalNumber}. Void the reversal first.`,
+        );
+      }
+      await this.assertPeriodStillOpen(
+        tx,
+        user.tenantId,
+        journal.fiscalPeriodId,
+        'voided',
+      );
+      const now = new Date();
+      await tx.journalEntry.update({
+        where: { id_tenantId: { id: journal.id, tenantId: user.tenantId } },
+        data: {
+          status: JournalStatus.VOIDED,
+          voidedAt: now,
+          voidedByUserId: user.id,
+          voidReason: dto.reason,
+          updatedByUserId: user.id,
+          // Give the original its reversal slot back; the link is kept for a restore.
+          ...(journal.reversalOfJournalId
+            ? {
+                reversalOfJournalId: null,
+                voidedReversalOfJournalId: journal.reversalOfJournalId,
+              }
+            : {}),
+        },
+      });
+      await this.audit(tx, user, 'JOURNAL_VOIDED', journal.id, {
+        reason: dto.reason,
+        journalNumber: journal.journalNumber,
+      });
+      return tx.journalEntry.findUniqueOrThrow({
+        where: { id_tenantId: { id: journal.id, tenantId: user.tenantId } },
+        include: journalInclude,
+      });
+    });
+  }
+
+  /**
+   * Puts a voided journal back in the books under its own number. Any corrections come with the
+   * request (the form the user re-submits); an empty body restores it as it was. A voided reversal
+   * is restored only while its original is still posted and unreversed.
+   */
+  async restoreVoided(
+    user: RequestUser,
+    journalId: string,
+    dto: UpdateDraftJournalDto,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const journal = await this.loadChangeable(tx, user.tenantId, journalId);
+      if (journal.status !== JournalStatus.VOIDED) {
+        throw new ConflictException('Only voided journals can be restored');
+      }
+      await this.assertPeriodStillOpen(
+        tx,
+        user.tenantId,
+        journal.fiscalPeriodId,
+        'restored',
+      );
+      const originalId = journal.voidedReversalOfJournalId;
+      if (originalId) {
+        await this.lockJournal(tx, user.tenantId, originalId);
+        const original = await tx.journalEntry.findFirst({
+          where: { id: originalId, tenantId: user.tenantId },
+          select: {
+            status: true,
+            journalNumber: true,
+            reversalJournal: { select: { id: true } },
+          },
+        });
+        if (!original || original.status !== JournalStatus.POSTED) {
+          throw new ConflictException(
+            'Restore the original journal before its reversal',
+          );
+        }
+        if (original.reversalJournal) {
+          throw new ConflictException(
+            `${original.journalNumber} already has another reversal`,
+          );
+        }
+        if (dto.lines || dto.transactionDate || dto.transactionCurrency) {
+          throw new ConflictException(
+            'A reversal is restored as it was; it cannot be edited',
+          );
+        }
+      }
+      const restored = await this.applyEdit(tx, user, journal, dto, {
+        status: JournalStatus.POSTED,
+        voidedAt: null,
+        voidedByUserId: null,
+        voidReason: null,
+        voidedReversalOfJournalId: null,
+        ...(originalId
+          ? {
+              reversalOfJournal: {
+                connect: {
+                  id_tenantId: { id: originalId, tenantId: user.tenantId },
+                },
+              },
+            }
+          : {}),
+      });
+      await this.audit(tx, user, 'JOURNAL_RESTORED', journal.id, {
+        journalNumber: journal.journalNumber,
+        before: this.snapshot(journal),
+      });
+      return restored;
+    });
+  }
+
+  /**
+   * The helpers below change the journal a cashbook transaction, invoice or bill posted. Those
+   * records own their journal, so the record decides when it changes and these only carry it out
+   * - inside the record's own database transaction, and only while the journal's period is open.
+   */
+  async rewriteSystemJournalInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    journalId: string,
+    dto: CreateJournalDto,
+  ) {
+    await this.lockJournal(tx, user.tenantId, journalId);
+    const current = await tx.journalEntry.findFirst({
+      where: { id: journalId, tenantId: user.tenantId },
+      include: journalListInclude,
+    });
+    if (!current) throw new NotFoundException('Journal entry not found');
+    if (
+      current.status !== JournalStatus.POSTED &&
+      current.status !== JournalStatus.VOIDED
+    ) {
+      throw new ConflictException('Only posted journals can be rewritten');
+    }
+    await this.assertPeriodStillOpen(
+      tx,
+      user.tenantId,
+      current.fiscalPeriodId,
+      'changed',
+    );
+    return this.applyEdit(tx, user, current, dto, {});
+  }
+
+  async voidSystemJournalInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    journalId: string,
+    reason: string,
+  ) {
+    await this.lockJournal(tx, user.tenantId, journalId);
+    const journal = await tx.journalEntry.findFirst({
+      where: { id: journalId, tenantId: user.tenantId },
+      select: { status: true, fiscalPeriodId: true },
+    });
+    if (!journal) throw new NotFoundException('Journal entry not found');
+    if (journal.status !== JournalStatus.POSTED) {
+      throw new ConflictException('Only posted journals can be voided');
+    }
+    await this.assertPeriodStillOpen(
+      tx,
+      user.tenantId,
+      journal.fiscalPeriodId,
+      'voided',
+    );
+    await tx.journalEntry.update({
+      where: { id_tenantId: { id: journalId, tenantId: user.tenantId } },
+      data: {
+        status: JournalStatus.VOIDED,
+        voidedAt: new Date(),
+        voidedByUserId: user.id,
+        voidReason: reason,
+        updatedByUserId: user.id,
+      },
+    });
+  }
+
+  /** Puts a voided system journal back in the books (as posted, or as reversed when its record is). */
+  async reinstateSystemJournalInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    journalId: string,
+    status: 'POSTED' | 'REVERSED' = 'POSTED',
+  ) {
+    await this.lockJournal(tx, user.tenantId, journalId);
+    const journal = await tx.journalEntry.findFirst({
+      where: { id: journalId, tenantId: user.tenantId },
+      select: { status: true, fiscalPeriodId: true },
+    });
+    if (!journal) throw new NotFoundException('Journal entry not found');
+    if (journal.status !== JournalStatus.VOIDED) {
+      throw new ConflictException('Only voided journals can be restored');
+    }
+    await this.assertPeriodStillOpen(
+      tx,
+      user.tenantId,
+      journal.fiscalPeriodId,
+      'restored',
+    );
+    await tx.journalEntry.update({
+      where: { id_tenantId: { id: journalId, tenantId: user.tenantId } },
+      data: {
+        status,
+        voidedAt: null,
+        voidedByUserId: null,
+        voidReason: null,
+        updatedByUserId: user.id,
+      },
+    });
+  }
+
+  /** Moves a posted journal to reversed, or back, as its record's reversal is made or voided. */
+  async setReversedInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    journalId: string,
+    reversed: boolean,
+  ) {
+    await tx.journalEntry.updateMany({
+      where: {
+        id: journalId,
+        tenantId: user.tenantId,
+        status: reversed ? JournalStatus.POSTED : JournalStatus.REVERSED,
+      },
+      data: reversed
+        ? {
+            status: JournalStatus.REVERSED,
+            reversedAt: new Date(),
+            reversedByUserId: user.id,
+            updatedByUserId: user.id,
+          }
+        : {
+            status: JournalStatus.POSTED,
+            reversedAt: null,
+            reversedByUserId: null,
+            updatedByUserId: user.id,
+          },
     });
   }
 

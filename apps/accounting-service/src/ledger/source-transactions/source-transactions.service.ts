@@ -300,12 +300,21 @@ export class SourceTransactionsService {
       entryCount,
     ] = await Promise.all([
       this.prisma.accountingReceivableDocument.findMany({
-        where: { tenantId, customerId: entityId },
+        where: {
+          tenantId,
+          customerId: entityId,
+          status: { not: AccountingReceivableStatus.VOIDED },
+        },
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         take,
       }),
       this.prisma.accountingReceivableReceipt.findMany({
-        where: { tenantId, customerId: entityId, ...unallocated },
+        where: {
+          tenantId,
+          customerId: entityId,
+          status: { not: AccountingReceivableStatus.VOIDED },
+          ...unallocated,
+        },
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         take,
       }),
@@ -313,6 +322,7 @@ export class SourceTransactionsService {
         where: {
           tenantId,
           offsetSubledgerAccountId: entityId,
+          status: { not: CashbookTransactionStatus.VOIDED },
           // A customer receipt already shows as a receipt - not twice.
           receivableReceipt: { is: null },
         },
@@ -320,15 +330,25 @@ export class SourceTransactionsService {
         take,
       }),
       this.prisma.accountingReceivableDocument.count({
-        where: { tenantId, customerId: entityId },
+        where: {
+          tenantId,
+          customerId: entityId,
+          status: { not: AccountingReceivableStatus.VOIDED },
+        },
       }),
       this.prisma.accountingReceivableReceipt.count({
-        where: { tenantId, customerId: entityId, ...unallocated },
+        where: {
+          tenantId,
+          customerId: entityId,
+          status: { not: AccountingReceivableStatus.VOIDED },
+          ...unallocated,
+        },
       }),
       this.prisma.cashbookTransaction.count({
         where: {
           tenantId,
           offsetSubledgerAccountId: entityId,
+          status: { not: CashbookTransactionStatus.VOIDED },
           receivableReceipt: { is: null },
         },
       }),

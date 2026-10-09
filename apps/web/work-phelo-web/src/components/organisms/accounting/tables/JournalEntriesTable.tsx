@@ -26,6 +26,7 @@ const STATUS_VARIANT: Record<JournalRecordStatus, 'success' | 'neutral' | 'dange
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtDate(iso: string) {

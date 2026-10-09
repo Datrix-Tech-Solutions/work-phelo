@@ -35,13 +35,16 @@ import {
   DocumentAdjustmentButtons,
   DocumentAdjustmentRows,
   DocumentAdjustmentSummary,
+  newDocAdjustmentRow,
   summarizeDocAdjustments,
 } from '@/components/organisms/accounting/panels/DocumentAdjustments';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import {
   AccountingCashbookSettlementMethod,
+  AccountingTradeDocument,
   CashbookLineKind,
+  CashbookTransaction,
   TransactionTypeDefinition,
 } from '@/types/accounting';
 import {
@@ -56,6 +59,10 @@ import {
   useCreatePayableCreditNote,
   useCreateReceivableCreditNote,
   useCreateReceivableInvoice,
+  useDeleteCashbookDraft,
+  useDeleteTradeDraft,
+  useEditPostedCashbook,
+  useEditPostedTradeEntry,
   useEntityTypes,
   useGLAccountOptions,
   useGLAccounts,
@@ -63,6 +70,8 @@ import {
   usePayableBills,
   usePostCashbookTransaction,
   useReceivableInvoices,
+  useRestoreCashbook,
+  useRestoreTradeEntry,
   useSourceLedger,
   useSubledgers,
   useTaxTypes,
@@ -155,12 +164,122 @@ const DEFAULTS: FormValues = {
   cashLines: [EMPTY_CASH_LINE],
 };
 
+/** A saved draft the form is opened on to be redone: the form starts with its values, and once
+ *  the redone entry is saved the old draft is deleted, so only one of them is left. */
+export type DraftToRedo =
+  | { kind: 'cashbook'; transaction: CashbookTransaction; mode?: EntryChangeMode }
+  | { kind: 'document'; document: AccountingTradeDocument; mode?: EntryChangeMode };
+
+/** How the form is opened on a saved entry. 'redo' (the default) is for a draft: a new one is
+ *  saved and the old one deleted. 'edit' changes a posted entry in place and 'restore' brings a
+ *  voided one back; both keep the entry's number, and only work while its period is open. */
+export type EntryChangeMode = 'redo' | 'edit' | 'restore';
+
+const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
+const plainNumber = (value: string | null | undefined) =>
+  value === null || value === undefined ? '' : String(Number(value));
+
+function cashbookDraftValues(tx: CashbookTransaction, typeName: string) {
+  const lines: CashLineValues[] =
+    tx.lines.length > 0
+      ? tx.lines.map((line) => ({
+          kind: line.kind,
+          useQtyPrice: line.kind === 'ITEM' && line.quantity !== null && line.unitPrice !== null,
+          glAccountId: line.glAccountId,
+          quantity: plainNumber(line.quantity),
+          unitPrice: plainNumber(line.unitPrice),
+          amount: plainNumber(line.amount),
+          description: line.description ?? '',
+        }))
+      : [
+          {
+            ...EMPTY_CASH_LINE,
+            useQtyPrice: tx.quantity !== null && tx.unitPrice !== null,
+            glAccountId: tx.offsetGlAccountId ?? '',
+            quantity: plainNumber(tx.quantity),
+            unitPrice: plainNumber(tx.unitPrice),
+            amount: plainNumber(tx.amount),
+          },
+        ];
+  return {
+    currency: tx.currency,
+    entryDate: dateOnly(tx.transactionDate),
+    cashAccountId: tx.cashAccountId,
+    settlementMethod: tx.settlementMethod,
+    reference: tx.reference ?? '',
+    // The description defaults to the type's name when none was typed.
+    description: tx.description === typeName ? '' : tx.description,
+    businessRole: tx.counterpartyType ?? '',
+    businessEntity: tx.counterpartyId ?? '',
+    offsetGlAccountId: tx.offsetGlAccountId ?? '',
+    cashLines: lines,
+  };
+}
+
+function documentDraftValues(doc: AccountingTradeDocument) {
+  const lines: DocLineRow[] = (
+    doc.lines.length > 0
+      ? doc.lines.map((line) => ({
+          glAccountId: line.glAccountId,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          amount: line.amount,
+          description: line.description,
+          costCentreId: line.costCentreId,
+        }))
+      : [
+          {
+            glAccountId: doc.offsetGlAccountId,
+            quantity: doc.quantity,
+            unitPrice: doc.unitPrice,
+            amount: doc.subtotalAmount,
+            description: null,
+            costCentreId: doc.costCentreId,
+          },
+        ]
+  ).map((line) => ({
+    ...newDocLineRow({
+      glAccountId: line.glAccountId,
+      useQtyPrice: line.quantity !== null && line.unitPrice !== null,
+    }),
+    quantity: plainNumber(line.quantity),
+    unitPrice: plainNumber(line.unitPrice),
+    amount: plainNumber(line.amount),
+    description: line.description ?? '',
+    costCentreId: line.costCentreId ?? '',
+  }));
+  const adjustments: DocAdjustmentRow[] = (doc.taxBreakdown ?? []).map((entry) => ({
+    ...newDocAdjustmentRow(entry.kind ?? 'TAX'),
+    taxTypeId: entry.taxTypeId ?? '',
+    glAccountId: entry.glAccountId,
+    mode: 'FLAT' as const,
+    flat: plainNumber(entry.amount),
+    description: entry.description ?? '',
+  }));
+  return {
+    values: {
+      businessRole: doc.party.type ?? '',
+      businessEntity: doc.party.id,
+      originalDocumentId: doc.originalDocumentId ?? '',
+      description: doc.description ?? '',
+      currency: doc.currency,
+      entryDate: dateOnly(doc.documentDate),
+      dueDate: dateOnly(doc.dueDate),
+    },
+    lines,
+    adjustments,
+  };
+}
+
 export function NewTransactionPanel({
   transactionType,
   onClose,
+  draft,
 }: {
   transactionType: TransactionTypeDefinition | null | undefined;
   onClose: () => void;
+  /** Opens the form on a saved draft to redo it; the draft is deleted once the new one is saved. */
+  draft?: DraftToRedo | null;
 }) {
   const isOpen = transactionType !== null && transactionType !== undefined;
   const isReceivable = transactionType?.category === 'RECEIVABLE';
@@ -187,12 +306,28 @@ export function NewTransactionPanel({
   const createCashbookPayment = useCreateCashbookPayment();
   const createCashbookEntry = isCashbookReceipt ? createCashbookReceipt : createCashbookPayment;
   const makeSourceLedgerPayment = useMakeSourceLedgerPayment();
+  const deleteCashbookDraft = useDeleteCashbookDraft();
+  const deleteReceivableDraft = useDeleteTradeDraft('RECEIVABLE');
+  const deletePayableDraft = useDeleteTradeDraft('PAYABLE');
+  const editPostedCashbook = useEditPostedCashbook();
+  const restoreCashbook = useRestoreCashbook();
+  const editPostedEntry = useEditPostedTradeEntry(isPayable ? 'PAYABLE' : 'RECEIVABLE');
+  const restoreEntry = useRestoreTradeEntry(isPayable ? 'PAYABLE' : 'RECEIVABLE');
+  // Editing a posted entry, or restoring a voided one, changes that entry in place.
+  const changeMode = draft?.mode === 'edit' || draft?.mode === 'restore' ? draft.mode : null;
   const postCashbookTransaction = usePostCashbookTransaction();
-  const isSaving = isCashbookType
-    ? createCashbookEntry.isPending ||
-      makeSourceLedgerPayment.isPending ||
-      postCashbookTransaction.isPending
-    : createDocument.isPending || createCreditNote.isPending || createDebitNote.isPending;
+  const isChanging =
+    editPostedCashbook.isPending ||
+    restoreCashbook.isPending ||
+    editPostedEntry.isPending ||
+    restoreEntry.isPending;
+  const isSaving =
+    isChanging ||
+    (isCashbookType
+      ? createCashbookEntry.isPending ||
+        makeSourceLedgerPayment.isPending ||
+        postCashbookTransaction.isPending
+      : createDocument.isPending || createCreditNote.isPending || createDebitNote.isPending);
   const [pendingAction, setPendingAction] = useState<'draft' | 'post' | null>(null);
 
   // A type linked to a Source shows a dropdown of that source's still-unpaid open items —
@@ -381,7 +516,7 @@ export function NewTransactionPanel({
 
   // A blank form with the transaction type's defaults — used on every fresh open, and
   // between entries while the panel is locked for multiple entries.
-  function resetForNextEntry() {
+  function resetForNextEntry(fromDraft = false) {
     const configuredRoles = transactionType?.businessRoles ?? [];
     reset({
       ...DEFAULTS,
@@ -405,14 +540,31 @@ export function NewTransactionPanel({
         useQtyPrice: defaultUseQtyPrice,
       }),
     ]);
+    if (fromDraft && draft?.kind === 'cashbook') {
+      reset({
+        ...DEFAULTS,
+        ...cashbookDraftValues(draft.transaction, transactionType?.name ?? ''),
+      });
+    } else if (fromDraft && draft?.kind === 'document') {
+      const redo = documentDraftValues(draft.document);
+      reset({ ...DEFAULTS, ...redo.values });
+      setDocLines(redo.lines);
+      setDocAdjustments(redo.adjustments);
+    }
   }
 
   // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
-  const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
+  const openKey = isOpen
+    ? `${transactionType?.id ?? 'unknown'}:${draft?.kind === 'cashbook' ? draft.transaction.id : (draft?.document.id ?? '')}`
+    : null;
   const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
+  // Once the redone entry is saved the old draft is gone; a further entry (multi-entry) must not
+  // try to delete it again.
+  const [draftReplaced, setDraftReplaced] = useState(false);
   if (openKey !== null && openKey !== lastOpenKey) {
     setLastOpenKey(openKey);
-    resetForNextEntry();
+    setDraftReplaced(false);
+    resetForNextEntry(true);
   }
 
   const { data: entities = [], isLoading: isLoadingEntities } = useSubledgers(
@@ -530,8 +682,30 @@ export function NewTransactionPanel({
   const entry = useMultiEntryPanel({
     isOpen,
     onStop: close,
-    onContinue: resetForNextEntry,
+    onContinue: () => resetForNextEntry(),
   });
+
+  // After a redone entry is saved, the draft it replaces is deleted so only the new one is left.
+  const discardOldDraft = async () => {
+    if (!draft || draftReplaced) return;
+    try {
+      if (draft.kind === 'cashbook') {
+        await deleteCashbookDraft.mutateAsync(draft.transaction.id);
+      } else {
+        await (
+          draft.document.side === 'PAYABLE' ? deletePayableDraft : deleteReceivableDraft
+        ).mutateAsync({
+          id: draft.document.id,
+          isCreditNote: draft.document.documentType === 'CREDIT_NOTE',
+        });
+      }
+      setDraftReplaced(true);
+    } catch (error) {
+      toast.error(
+        extractError(error, 'Saved, but the old draft could not be deleted — delete it yourself'),
+      );
+    }
+  };
 
   // Success feedback for a saved entry. Unlocked: close and show the usual modal. Locked:
   // the panel stays open and its Continue / Stop prompt takes the modal's place.
@@ -593,6 +767,53 @@ export function NewTransactionPanel({
         toast.error('Select a settlement method');
         return;
       }
+      if (changeMode && draft?.kind === 'cashbook') {
+        // Changing a posted or voided entry rewrites it in place - same number, same type.
+        try {
+          const change = changeMode === 'restore' ? restoreCashbook : editPostedCashbook;
+          await change.mutateAsync({
+            id: draft.transaction.id,
+            transactionDate: values.entryDate || today(),
+            cashAccountId: values.cashAccountId,
+            settlementMethod: values.settlementMethod,
+            reference: values.reference || undefined,
+            description: values.description || transactionType.name,
+            counterpartyType:
+              values.businessEntity && values.businessRole ? values.businessRole : null,
+            counterpartyId:
+              values.businessEntity && values.businessRole ? values.businessEntity : null,
+            lines: usesLines
+              ? values.cashLines.map((line) => ({
+                  kind: line.kind,
+                  glAccountId: line.glAccountId,
+                  amount: cashLineAmount(line),
+                  ...(line.kind !== 'ITEM' || !line.useQtyPrice
+                    ? {}
+                    : { quantity: Number(line.quantity), unitPrice: Number(line.unitPrice) }),
+                  description: line.description || undefined,
+                }))
+              : [
+                  {
+                    kind: 'ITEM',
+                    glAccountId: values.offsetGlAccountId,
+                    amount: resolveAmount(values),
+                    ...(isDirectAmount
+                      ? {}
+                      : { quantity: Number(values.quantity), unitPrice: Number(values.unitPrice) }),
+                  },
+                ],
+          });
+          toast.success(
+            changeMode === 'restore'
+              ? `${draft.transaction.transactionNumber ?? 'Transaction'} restored.`
+              : `${draft.transaction.transactionNumber ?? 'Transaction'} updated.`,
+          );
+          close();
+        } catch (error) {
+          toast.error(extractError(error, 'Failed to save the changes'));
+        }
+        return;
+      }
       const willPost = !!values.sourceLedgerEntryId || post;
       setPendingAction(willPost ? 'post' : 'draft');
       try {
@@ -646,6 +867,7 @@ export function NewTransactionPanel({
           if (post) {
             await postCashbookTransaction.mutateAsync(created.id);
           }
+          await discardOldDraft();
         }
         finishSave(willPost);
       } catch (error) {
@@ -746,9 +968,40 @@ export function NewTransactionPanel({
           ...adjustmentFields,
           description: values.description || undefined,
         });
+        await discardOldDraft();
         finishSave(false);
       } catch (error) {
         toast.error(extractError(error, 'Failed to save transaction'));
+      }
+      return;
+    }
+
+    if (changeMode && draft?.kind === 'document') {
+      // The invoice/bill keeps its number; the form's values replace everything else on it.
+      try {
+        const change = changeMode === 'restore' ? restoreEntry : editPostedEntry;
+        await change.mutateAsync({
+          id: draft.document.id,
+          kind: 'document',
+          [isPayable ? 'bill' : 'invoice']: {
+            [isPayable ? 'vendorId' : 'customerId']: values.businessEntity,
+            documentDate: values.entryDate || today(),
+            dueDate: values.dueDate || undefined,
+            currency: values.currency,
+            ...lineFields,
+            transactionTypeId: transactionType.id,
+            ...adjustmentFields,
+            description: values.description || undefined,
+          },
+        });
+        toast.success(
+          changeMode === 'restore'
+            ? `${draft.document.documentNumber} restored.`
+            : `${draft.document.documentNumber} updated.`,
+        );
+        close();
+      } catch (error) {
+        toast.error(extractError(error, 'Failed to save the changes'));
       }
       return;
     }
@@ -768,6 +1021,7 @@ export function NewTransactionPanel({
 
     try {
       await createDocument.mutateAsync(payload);
+      await discardOldDraft();
       finishSave(false);
     } catch (error) {
       toast.error(extractError(error, 'Failed to save transaction'));
@@ -804,6 +1058,7 @@ export function NewTransactionPanel({
             value={field.value}
             onChange={field.onChange}
             error={errors.currency?.message}
+            disabled={!!changeMode}
           />
         )}
       />
@@ -859,6 +1114,7 @@ export function NewTransactionPanel({
               value={field.value}
               onChange={field.onChange}
               error={errors.currency?.message}
+              disabled={!!changeMode}
             />
           )}
         />
@@ -872,16 +1128,26 @@ export function NewTransactionPanel({
         isOpen={isOpen}
         onClose={close}
         {...entry.panelProps}
-        title="New Transaction"
+        title={
+          changeMode === 'restore'
+            ? 'Restore Transaction'
+            : changeMode === 'edit'
+              ? 'Edit Transaction'
+              : 'New Transaction'
+        }
         description={
-          transactionType ? `Recording a ${transactionType.name.toLowerCase()}.` : undefined
+          changeMode
+            ? 'It keeps its number. Change anything and submit.'
+            : transactionType
+              ? `Recording a ${transactionType.name.toLowerCase()}.`
+              : undefined
         }
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={close} disabled={isSaving}>
               Cancel
             </Button>
-            {canUse && isCashbookType && !sourceLedgerEntryId && (
+            {canUse && isCashbookType && !sourceLedgerEntryId && !changeMode && (
               <Button
                 variant="outline"
                 isLoading={pendingAction === 'draft'}
@@ -902,11 +1168,15 @@ export function NewTransactionPanel({
                 disabled={isSaving}
                 onClick={handleSubmit((values) => submit(values, true))}
               >
-                {!isCashbookType
-                  ? 'Submit for Review'
-                  : isCashbookReceipt
-                    ? 'Receive Payment'
-                    : 'Make Payment'}
+                {changeMode === 'restore'
+                  ? 'Restore'
+                  : changeMode === 'edit'
+                    ? 'Save Changes'
+                    : !isCashbookType
+                      ? 'Submit for Review'
+                      : isCashbookReceipt
+                        ? 'Receive Payment'
+                        : 'Make Payment'}
               </Button>
             )}
           </div>
@@ -1056,6 +1326,7 @@ export function NewTransactionPanel({
                       value={field.value}
                       onChange={field.onChange}
                       error={errors.currency?.message}
+                      disabled={!!changeMode}
                     />
                   )}
                 />
@@ -1226,6 +1497,7 @@ export function NewTransactionPanel({
                     value={field.value}
                     onChange={field.onChange}
                     error={errors.currency?.message}
+                    disabled={!!changeMode}
                   />
                 )}
               />
