@@ -1157,6 +1157,42 @@ describe('SourceTransactionsService', () => {
       });
     });
 
+    it('counts only receipts dated within from and to, inclusive of both days', async () => {
+      prisma.cashbookTransaction.groupBy.mockResolvedValue([]);
+      prisma.accountingReceivableDocument.findMany.mockResolvedValue([
+        { id: 'inv-1' },
+      ]);
+      prisma.cashbookTransaction.findMany.mockResolvedValue([]);
+      prisma.accountingReceivableAllocation.groupBy.mockResolvedValue([]);
+      const range = {
+        gte: new Date('2026-01-01T00:00:00.000Z'),
+        lte: new Date('2026-03-31T23:59:59.999Z'),
+      };
+
+      await service.receiptsSummary(
+        dto({
+          from: '2026-01-01',
+          to: '2026-03-31',
+          transactionIds: ['inv-1'],
+        }),
+      );
+
+      expect(prisma.cashbookTransaction.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ transactionDate: range }),
+        }),
+      );
+      expect(
+        prisma.accountingReceivableAllocation.groupBy,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            receipt: { receiptDate: range },
+          }),
+        }),
+      );
+    });
+
     it('reports what was received against each asked-about transaction', async () => {
       prisma.accountingReceivableDocument.findMany.mockResolvedValue([
         { id: 'inv-1' },

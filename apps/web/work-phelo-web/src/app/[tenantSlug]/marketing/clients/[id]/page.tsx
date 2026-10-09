@@ -1,10 +1,14 @@
 'use client';
 
+import type { ClientDetailProduct } from '@/types/marketing';
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ClientBreadcrumb } from '@/components/molecules/marketing/ClientBreadcrumb';
-import { ClientProductCard } from '@/components/molecules/marketing/ClientProductCard';
+import {
+  ClientProductCard,
+  commissionOn,
+} from '@/components/molecules/marketing/ClientProductCard';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
 import { ProspectInteractionTimeline } from '@/components/molecules/marketing/ProspectInteractionTimeline';
@@ -116,6 +120,23 @@ export default function ClientDetailPage() {
   const achievedByProduct = new Map(
     (billingSummary?.products ?? []).map((p) => [p.productId, p.achievedRevenue]),
   );
+  // Only the rate is stored on a product; commission is derived from it.
+  const sumCommission = (amountFor: (p: ClientDetailProduct) => string | null | undefined) => {
+    let total = 0;
+    let any = false;
+    for (const p of client.products) {
+      const commission = commissionOn(
+        p.commissionRate != null ? Number(p.commissionRate) : null,
+        amountFor(p),
+      );
+      if (commission != null) {
+        total += commission;
+        any = true;
+      }
+    }
+    return any ? total : null;
+  };
+  const totalAchievedCommission = sumCommission((p) => achievedByProduct.get(p.product.id));
   // A transaction can be tagged to any product the client has, except one it isn't interested in.
   const billingProductOptions = client.products
     .filter((p) => p.status !== 'UNINTERESTED')
@@ -183,6 +204,7 @@ export default function ClientDetailPage() {
             label="Achieved Revenue"
             value={formatMoney(billingSummary?.achievedRevenue)}
           />
+          <DetailField label="Achieved Commission" value={formatMoney(totalAchievedCommission)} />
           <DetailField
             label="Products"
             value={

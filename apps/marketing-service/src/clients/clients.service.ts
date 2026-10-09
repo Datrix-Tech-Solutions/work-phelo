@@ -28,6 +28,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 const INVALID_REFERENCE_MESSAGE = 'Invalid client reference';
 const DUPLICATE_PRODUCT_MESSAGE =
   'A product or service can only be listed once per client';
+const PRODUCTS_AND_IDS_MESSAGE = 'Send either products or productIds, not both';
 const PRODUCT_EXISTS_MESSAGE =
   'This client already has that product or service';
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
@@ -194,7 +195,13 @@ export class ClientsService {
       if (existing) return this.findClientDetail(user, existing.id, true);
     }
 
-    const productIds = dto.productIds ?? [];
+    if (dto.products?.length && dto.productIds?.length) {
+      throw new BadRequestException(PRODUCTS_AND_IDS_MESSAGE);
+    }
+    const productInputs: AddClientProductDto[] =
+      dto.products ??
+      (dto.productIds ?? []).map((productId) => ({ productId }));
+    const productIds = productInputs.map((p) => p.productId);
     if (new Set(productIds).size !== productIds.length) {
       throw new BadRequestException(DUPLICATE_PRODUCT_MESSAGE);
     }
@@ -262,9 +269,10 @@ export class ClientsService {
           },
         },
         products: {
-          create: productIds.map((productId) => ({
+          create: productInputs.map((product) => ({
             tenantId: user.tenantId,
-            productId,
+            productId: product.productId,
+            ...this.newProductTerms(product),
           })),
         },
       },
@@ -488,15 +496,7 @@ export class ClientsService {
           tenantId: user.tenantId,
           clientId: client.id,
           productId: dto.productId,
-          expectedValue: dto.expectedValue ?? null,
-          commissionRate: dto.commissionRate ?? null,
-          commissionAmount:
-            dto.expectedValue !== undefined && dto.commissionRate !== undefined
-              ? new Prisma.Decimal(dto.expectedValue)
-                  .mul(dto.commissionRate)
-                  .div(100)
-                  .toDecimalPlaces(2)
-              : null,
+          ...this.newProductTerms(dto),
         },
       });
       const settings = await this.findSettingsByIds(user.tenantId, [
@@ -867,6 +867,25 @@ export class ClientsService {
       convertedAt: client.convertedAt,
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
+    };
+  }
+
+  /** Terms typed in for a product: commission is the rate's share of the expected value. */
+  private newProductTerms(product: AddClientProductDto) {
+    return {
+      expectedValue: product.expectedValue ?? null,
+      commissionRate: product.commissionRate ?? null,
+      commissionAmount:
+        product.expectedValue !== undefined &&
+        product.commissionRate !== undefined
+          ? new Prisma.Decimal(product.expectedValue)
+              .mul(product.commissionRate)
+              .div(100)
+              .toDecimalPlaces(2)
+          : null,
+      expectedCloseDate: product.expectedCloseDate
+        ? new Date(product.expectedCloseDate)
+        : null,
     };
   }
 

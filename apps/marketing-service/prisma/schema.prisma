@@ -437,17 +437,18 @@ model MarketingClientContact {
 }
 
 model MarketingClientProduct {
-  id               String                       @id @default(uuid())
-  tenantId         String
-  clientId         String
-  productId        String
-  status           MarketingClientProductStatus @default(PENDING)
+  id                String                       @id @default(uuid())
+  tenantId          String
+  clientId          String
+  productId         String
+  status            MarketingClientProductStatus @default(PENDING)
   /// Carried over from the prospect product at conversion; null for products added directly.
-  expectedValue    Decimal?                     @db.Decimal(18, 2)
-  commissionRate   Decimal?                     @db.Decimal(7, 4)
-  commissionAmount Decimal?                     @db.Decimal(18, 2)
-  createdAt        DateTime                     @default(now())
-  updatedAt        DateTime                     @updatedAt
+  expectedValue     Decimal?                     @db.Decimal(18, 2)
+  commissionRate    Decimal?                     @db.Decimal(7, 4)
+  commissionAmount  Decimal?                     @db.Decimal(18, 2)
+  expectedCloseDate DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
 
   client MarketingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -638,27 +639,27 @@ enum MarketingSegmentRecipientType {
 
 /// A saved audience, shared across the tenant. It stores rules, so the people in it follow the data.
 model MarketingCampaignSegment {
-  id                 String                            @id @default(uuid())
+  id                 String                        @id @default(uuid())
   tenantId           String
   name               String
   normalizedName     String
-  recipientType      MarketingSegmentRecipientType     @default(PROSPECT)
+  recipientType      MarketingSegmentRecipientType @default(PROSPECT)
   businessTypeIds    String[]
   pipelineStageIds   String[]
   /// People who have any of these products or services (a client's uninterested products don't count).
-  productIds         String[]                          @default([])
+  productIds         String[]                      @default([])
   /// Prospects always in the segment, even when the rules above don't match them.
   includeProspectIds String[]
   /// Prospects never in the segment, even when the rules above match them.
   excludeProspectIds String[]
   /// For a CLIENT segment: clients always in the segment, even when the filters don't match them.
-  includeClientIds   String[]                          @default([])
+  includeClientIds   String[]                      @default([])
   /// For a CLIENT segment: clients never in the segment, even when the filters match them.
-  excludeClientIds   String[]                          @default([])
+  excludeClientIds   String[]                      @default([])
   createdByUserId    String?
   updatedByUserId    String?
-  createdAt          DateTime                          @default(now())
-  updatedAt          DateTime                          @updatedAt
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
 
   @@unique([tenantId, normalizedName])
   @@index([tenantId, createdAt])
@@ -706,38 +707,38 @@ model MarketingCampaign {
 /// One row per prospect or client primary contact per channel, fixed when the campaign is created.
 /// Exactly one of prospectId and clientId is set.
 model MarketingCampaignRecipient {
-  id               String                           @id @default(uuid())
-  tenantId         String
-  campaignId       String
-  prospectId       String?
-  clientId         String?
-  contactId        String
-  companyName      String
-  contactName      String
-  channel          MarketingCampaignChannel
+  id                String                           @id @default(uuid())
+  tenantId          String
+  campaignId        String
+  prospectId        String?
+  clientId          String?
+  contactId         String
+  companyName       String
+  contactName       String
+  channel           MarketingCampaignChannel
   /// Phone or email at creation time; null when the contact has none (row is SKIPPED).
-  address          String?
-  status           MarketingCampaignRecipientStatus @default(PENDING)
-  segmentCount     Int?
-  estimatedCredits Int?
-  senderIdSnapshot String?
-  senderIdentityId String?
-  smsReservationId String?
-  provider         String?
+  address           String?
+  status            MarketingCampaignRecipientStatus @default(PENDING)
+  segmentCount      Int?
+  estimatedCredits  Int?
+  senderIdSnapshot  String?
+  senderIdentityId  String?
+  smsReservationId  String?
+  provider          String?
   providerMessageId String?
-  attemptCount     Int                              @default(0)
-  lastAttemptAt    DateTime?
-  acceptedAt       DateTime?
-  deliveredAt      DateTime?
-  failedAt         DateTime?
-  failureCode      String?
-  failureReason    String?
-  creditConsumedAt DateTime?
-  creditReleasedAt DateTime?
-  providerDetail   String?
-  sentAt           DateTime?
-  createdAt        DateTime                         @default(now())
-  updatedAt        DateTime                         @updatedAt
+  attemptCount      Int                              @default(0)
+  lastAttemptAt     DateTime?
+  acceptedAt        DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  failureCode       String?
+  failureReason     String?
+  creditConsumedAt  DateTime?
+  creditReleasedAt  DateTime?
+  providerDetail    String?
+  sentAt            DateTime?
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
 
   campaign MarketingCampaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   sender   MarketingSmsSenderIdentity? @relation(fields: [senderIdentityId], references: [id], onDelete: Restrict)
@@ -888,5 +889,27 @@ model MarketingTransportRequestStop {
 
   @@unique([requestId, kind, refId])
   @@index([tenantId, refId])
+  @@schema("marketing")
+}
+
+/// What a sales rep is expected to bring in over a period. Achieved revenue is never stored: it is
+/// read from Accounting (money received) for the rep's billable clients, within the dates. A null
+/// productId is the rep's total across everything; a set productId counts only that product.
+model MarketingSalesTarget {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String
+  productId       String?
+  startDate       DateTime @db.Date
+  endDate         DateTime @db.Date
+  amount          Decimal  @db.Decimal(18, 2)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId, userId, startDate])
+  @@index([tenantId, startDate, endDate])
+  @@index([tenantId, productId])
   @@schema("marketing")
 }

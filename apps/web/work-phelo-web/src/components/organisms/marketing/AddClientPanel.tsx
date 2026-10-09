@@ -8,6 +8,12 @@ import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { EmailField } from '@/components/atoms/EmailField';
 import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSelect';
+import {
+  ClientProductDetail,
+  ClientProductDetails,
+  ClientProductTotals,
+  EMPTY_PRODUCT_DETAIL,
+} from '@/components/organisms/marketing/ClientProductDetails';
 import { BillingSection } from '@/components/organisms/marketing/BillingSection';
 import {
   ClientBillingErrors,
@@ -90,6 +96,9 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
   // Generated up front, so if saving fails after Accounting took the transaction, trying again
   // reuses the same client (and the same Accounting entity) instead of creating another.
   const [clientId, setClientId] = useState(() => crypto.randomUUID());
+  // Revenue and commission per selected product, keyed by product id.
+  const [productDetails, setProductDetails] = useState<Record<string, ClientProductDetail>>({});
+  const [productsExpanded, setProductsExpanded] = useState(true);
   const { data: billingOptions } = useBillingOptions();
 
   const { data: businessTypes = [] } = useProspectingSettings('business-types');
@@ -115,6 +124,8 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     setErrors({});
     setBilling(EMPTY_BILLING);
     setBillingErrors({});
+    setProductDetails({});
+    setProductsExpanded(true);
     setClientId(crypto.randomUUID());
     onClose();
   }
@@ -158,7 +169,17 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
         ...(values.email.trim() ? { email: values.email.trim() } : {}),
         ...(values.roleJobTitle ? { decisionMakerTypeId: values.roleJobTitle } : {}),
       },
-      productIds: values.productIds,
+      products: values.productIds.map((productId) => {
+        const detail = productDetails[productId] ?? EMPTY_PRODUCT_DETAIL;
+        const expected = parseFloat(detail.expectedRevenue);
+        const rate = parseFloat(detail.commissionRate);
+        return {
+          productId,
+          ...(Number.isFinite(expected) ? { expectedValue: expected } : {}),
+          ...(Number.isFinite(rate) ? { commissionRate: rate } : {}),
+          ...(detail.expectedCloseDate ? { expectedCloseDate: detail.expectedCloseDate } : {}),
+        };
+      }),
       location: {
         label: values.location.location,
         latitude: values.location.lat as number,
@@ -211,68 +232,66 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
         </div>
 
-        <SearchSelect
-          label="Type of Business"
-          placeholder="Select or type to add new"
-          options={businessTypeOptions}
-          value={values.businessType}
-          onChange={(v) => set('businessType', v)}
-          error={errors.businessType}
-          emptyState={buildCreateOptionEmptyState(
-            'business type',
-            createBusinessType,
-            (id) => set('businessType', id),
-            toast,
-          )}
-        />
+        <div className="grid grid-cols-2 gap-4">
+          <SearchSelect
+            label="Type of Business"
+            placeholder="Select or type to add new"
+            options={businessTypeOptions}
+            value={values.businessType}
+            onChange={(v) => set('businessType', v)}
+            error={errors.businessType}
+            emptyState={buildCreateOptionEmptyState(
+              'business type',
+              createBusinessType,
+              (id) => set('businessType', id),
+              toast,
+            )}
+          />
 
-        <SearchSelect
-          label="Source Type"
-          placeholder="Select or type to add new"
-          options={sourceTypeOptions}
-          value={values.sourceType}
-          onChange={(v) => set('sourceType', v)}
-          emptyState={buildCreateOptionEmptyState(
-            'source type',
-            createSourceType,
-            (id) => set('sourceType', id),
-            toast,
-          )}
-        />
-
-        <AssignedToSelect
-          record="client"
-          value={values.assignedUserId}
-          onChange={(id) => set('assignedUserId', id)}
-        />
+          <SearchSelect
+            label="Source Type"
+            placeholder="Select or type to add new"
+            options={sourceTypeOptions}
+            value={values.sourceType}
+            onChange={(v) => set('sourceType', v)}
+            emptyState={buildCreateOptionEmptyState(
+              'source type',
+              createSourceType,
+              (id) => set('sourceType', id),
+              toast,
+            )}
+          />
+        </div>
 
         <SectionTitle>Contact Person</SectionTitle>
 
-        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">Name</label>
-          <input
-            type="text"
-            placeholder="Contact person's full name"
-            value={values.contactName}
-            onChange={(e) => set('contactName', e.target.value)}
-            className={inputClass(errors.contactName)}
-          />
-          {errors.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
-        </div>
+        <div className="grid grid-cols-[3fr_2fr] gap-4">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+            <label className="text-sm font-bold text-gray-900">Name</label>
+            <input
+              type="text"
+              placeholder="Contact person's full name"
+              value={values.contactName}
+              onChange={(e) => set('contactName', e.target.value)}
+              className={inputClass(errors.contactName)}
+            />
+            {errors.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
+          </div>
 
-        <SearchSelect
-          label="Role / Job Title"
-          placeholder="Select or type to add new"
-          options={roleOptions}
-          value={values.roleJobTitle}
-          onChange={(v) => set('roleJobTitle', v)}
-          emptyState={buildCreateOptionEmptyState(
-            'role',
-            createDecisionMaker,
-            (id) => set('roleJobTitle', id),
-            toast,
-          )}
-        />
+          <SearchSelect
+            label="Role / Job Title"
+            placeholder="Select or type to add new"
+            options={roleOptions}
+            value={values.roleJobTitle}
+            onChange={(v) => set('roleJobTitle', v)}
+            emptyState={buildCreateOptionEmptyState(
+              'role',
+              createDecisionMaker,
+              (id) => set('roleJobTitle', id),
+              toast,
+            )}
+          />
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <PhoneInput label="Phone" value={values.phone} onChange={(v) => set('phone', v)} />
@@ -286,19 +305,44 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
 
         <SectionTitle>Products &amp; Services</SectionTitle>
 
-        <MultiSelect
-          label="Products / Services"
-          placeholder="Select products or services"
-          options={productOptions}
-          value={values.productIds}
-          onChange={(v) => {
-            set('productIds', v);
-            // A billing transaction can only be tagged to a product the client has.
-            if (billing.productId && !v.includes(billing.productId)) {
-              setBilling((prev) => ({ ...prev, productId: '' }));
-            }
-          }}
-        />
+        <div className="grid grid-cols-[3fr_2fr] gap-4">
+          <MultiSelect
+            label="Products / Services"
+            placeholder="Select products or services"
+            options={productOptions}
+            value={values.productIds}
+            onChange={(v) => {
+              set('productIds', v);
+              // A billing transaction can only be tagged to a product the client has.
+              if (billing.productId && !v.includes(billing.productId)) {
+                setBilling((prev) => ({ ...prev, productId: '' }));
+              }
+            }}
+          />
+          <AssignedToSelect
+            record="client"
+            value={values.assignedUserId}
+            onChange={(id) => set('assignedUserId', id)}
+          />
+        </div>
+
+        {(productsExpanded || values.productIds.length < 2) &&
+          values.productIds.map((id) => (
+            <ClientProductDetails
+              key={id}
+              name={productOptions.find((o) => o.value === id)?.label ?? 'Product'}
+              value={productDetails[id] ?? EMPTY_PRODUCT_DETAIL}
+              onChange={(detail) => setProductDetails((prev) => ({ ...prev, [id]: detail }))}
+            />
+          ))}
+
+        {values.productIds.length > 1 && (
+          <ClientProductTotals
+            details={values.productIds.map((id) => productDetails[id] ?? EMPTY_PRODUCT_DETAIL)}
+            expanded={productsExpanded}
+            onToggle={() => setProductsExpanded((v) => !v)}
+          />
+        )}
 
         <SectionTitle>Billing</SectionTitle>
 
@@ -313,7 +357,11 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
 
         <SectionTitle>Location</SectionTitle>
 
-        <CompanyLocationForm values={values.location} onChange={(v) => set('location', v)} />
+        <CompanyLocationForm
+          values={values.location}
+          onChange={(v) => set('location', v)}
+          collapsibleMap
+        />
         {errors.location && <p className="text-xs text-red-500">{errors.location}</p>}
       </div>
     </SidePanel>

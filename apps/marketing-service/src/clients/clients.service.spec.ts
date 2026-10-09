@@ -355,12 +355,61 @@ describe('ClientsService', () => {
         {
           tenantId: 'tenant-1',
           productId: '55555555-5555-4555-8555-555555555555',
+          expectedValue: null,
+          commissionRate: null,
+          commissionAmount: null,
+          expectedCloseDate: null,
         },
         {
           tenantId: 'tenant-1',
           productId: '66666666-6666-4666-8666-666666666666',
+          expectedValue: null,
+          commissionRate: null,
+          commissionAmount: null,
+          expectedCloseDate: null,
         },
       ]);
+    });
+
+    it("stores each product's expected revenue, rate, derived commission and close date", async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue(clientRecord);
+
+      await service.create(user, {
+        ...makeDto(),
+        productIds: undefined,
+        products: [
+          {
+            productId: '55555555-5555-4555-8555-555555555555',
+            expectedValue: 10000,
+            commissionRate: 10,
+            expectedCloseDate: '2026-10-31',
+          },
+        ],
+      });
+
+      const arg = prisma.marketingClient.create.mock.calls[0][0];
+      const [created] = arg.data.products.create;
+      expect(created).toMatchObject({
+        productId: '55555555-5555-4555-8555-555555555555',
+        expectedValue: 10000,
+        commissionRate: 10,
+        expectedCloseDate: new Date('2026-10-31'),
+      });
+      expect(
+        (
+          created as { commissionAmount: Prisma.Decimal }
+        ).commissionAmount.toFixed(2),
+      ).toBe('1000.00');
+    });
+
+    it('rejects products together with productIds', async () => {
+      await expect(
+        service.create(user, {
+          ...makeDto(),
+          productIds: ['55555555-5555-4555-8555-555555555555'],
+          products: [{ productId: '66666666-6666-4666-8666-666666666666' }],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
@@ -757,6 +806,7 @@ describe('ClientsService', () => {
           expectedValue: null,
           commissionRate: null,
           commissionAmount: null,
+          expectedCloseDate: null,
         },
       });
       expect(result).toMatchObject({

@@ -70,6 +70,14 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
     moduleKey: 'marketing',
     featurePath: ['marketing', 'leads'],
   },
+  'marketing.targets': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.targets.all': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
   'marketing.prospects.interactions': {
     moduleKey: 'marketing',
     featurePath: ['marketing', 'leads'],

@@ -37,6 +37,15 @@ function detail(
   };
 }
 
+/** The rate's share of an amount, rounded to 2 decimals; null when either is missing. */
+export function commissionOn(
+  rate: number | null,
+  amount: string | number | null | undefined,
+): number | null {
+  if (rate == null || amount == null || amount === '') return null;
+  return Math.round(((Number(amount) * rate) / 100 + Number.EPSILON) * 100) / 100;
+}
+
 export function ClientProductCard({
   product,
   achievedRevenue,
@@ -46,23 +55,25 @@ export function ClientProductCard({
   achievedRevenue?: string | null;
 }) {
   const status = STATUS[product.status];
+  // Only the rate is stored; both commission figures are derived from it.
+  const rate = product.commissionRate != null ? Number(product.commissionRate) : null;
+  const expectedCommission = commissionOn(rate, product.expectedValue);
+  const hasAchieved = achievedRevenue != null && Number(achievedRevenue) > 0;
+  const achievedCommission = commissionOn(rate, achievedRevenue);
 
   const details: DataCardDetail[] = [
     detail(Target, 'Expected Revenue', formatMoney(product.expectedValue), 'text-blue-500'),
     detail(Banknote, 'Achieved Revenue', formatMoney(achievedRevenue), 'text-emerald-500'),
-    ...(product.commissionRate != null
-      ? [
-          detail(
-            Percent,
-            'Commission Rate',
-            `${Number(product.commissionRate)}%`,
-            'text-violet-500',
-          ),
-        ]
-      : []),
-    ...(product.commissionAmount != null
-      ? [detail(Banknote, 'Commission', formatMoney(product.commissionAmount), 'text-amber-500')]
-      : []),
+    detail(
+      Percent,
+      'Commission Rate',
+      product.commissionRate != null ? `${Number(product.commissionRate)}%` : '—',
+      'text-violet-500',
+    ),
+    // Once any revenue has been achieved, the commission on it replaces the expected one.
+    hasAchieved
+      ? detail(Banknote, 'Achieved Commission', formatMoney(achievedCommission), 'text-teal-500')
+      : detail(Banknote, 'Expected Commission', formatMoney(expectedCommission), 'text-amber-500'),
     detail(CalendarDays, 'Added', formatDate(product.createdAt), 'text-rose-500'),
   ];
 

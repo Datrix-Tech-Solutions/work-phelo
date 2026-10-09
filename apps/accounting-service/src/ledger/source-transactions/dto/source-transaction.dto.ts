@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsEnum,
+  Matches,
   IsInt,
   IsNumber,
   IsOptional,
@@ -143,4 +144,22 @@ export class ReceiptsSummaryDto extends SourceTransactionsQueryDto {
   @ArrayMaxSize(500)
   @IsUUID('all', { each: true })
   transactionIds?: string[];
+
+  @ApiPropertyOptional({
+    example: '2026-01-01',
+    description:
+      'First day (YYYY-MM-DD, inclusive) of receipts to count. Leave out to count from the start.',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  from?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-03-31',
+    description:
+      'Last day (YYYY-MM-DD, inclusive) of receipts to count. Leave out to count to the end.',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  to?: string;
 }

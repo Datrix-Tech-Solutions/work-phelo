@@ -345,6 +345,7 @@ export class SourceTransactionsService {
     const received = await this.receivedByInvoice(
       tenantId,
       documents.map((d) => d.id),
+      null,
     );
     const invoices = await this.invoiceDetails(
       tenantId,
@@ -436,6 +437,7 @@ export class SourceTransactionsService {
     this.registration(dto.sourceModule);
     const config = await this.masterData.getConfig(dto.tenantId);
     const currency = config.baseCurrency ?? '';
+    const range = this.dateRange(dto.from, dto.to);
 
     const totals = await this.prisma.cashbookTransaction.groupBy({
       by: ['offsetSubledgerAccountId'],
@@ -445,6 +447,7 @@ export class SourceTransactionsService {
         transactionType: CashbookTransactionType.RECEIPT,
         status: CashbookTransactionStatus.POSTED,
         ...(currency ? { currency } : {}),
+        ...(range ? { transactionDate: range } : {}),
       },
       _sum: { amount: true },
     });
@@ -457,7 +460,7 @@ export class SourceTransactionsService {
 
     const transactionIds = dto.transactionIds ?? [];
     const transactions = transactionIds.length
-      ? await this.receivedForTransactions(dto.tenantId, transactionIds)
+      ? await this.receivedForTransactions(dto.tenantId, transactionIds, range)
       : [];
 
     return {
@@ -472,7 +475,20 @@ export class SourceTransactionsService {
     };
   }
 
-  private async receivedForTransactions(tenantId: string, ids: string[]) {
+  /** Whole days, inclusive at both ends; null when neither end is given. */
+  private dateRange(from?: string, to?: string) {
+    if (!from && !to) return null;
+    return {
+      ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
+      ...(to ? { lte: new Date(`${to}T23:59:59.999Z`) } : {}),
+    };
+  }
+
+  private async receivedForTransactions(
+    tenantId: string,
+    ids: string[],
+    range: { gte?: Date; lte?: Date } | null,
+  ) {
     const [invoices, entries] = await Promise.all([
       this.prisma.accountingReceivableDocument.findMany({
         where: { tenantId, id: { in: ids } },
@@ -484,6 +500,7 @@ export class SourceTransactionsService {
           id: { in: ids },
           transactionType: CashbookTransactionType.RECEIPT,
           status: CashbookTransactionStatus.POSTED,
+          ...(range ? { transactionDate: range } : {}),
         },
         select: { id: true, amount: true },
       }),
@@ -491,6 +508,7 @@ export class SourceTransactionsService {
     const receivedByInvoice = await this.receivedByInvoice(
       tenantId,
       invoices.map((i) => i.id),
+      range,
     );
     const entryAmount = new Map(entries.map((e) => [e.id, e.amount]));
 
@@ -505,7 +523,11 @@ export class SourceTransactionsService {
   }
 
   /** What posted receipts have been allocated to each invoice (reversed allocations don't count). */
-  private async receivedByInvoice(tenantId: string, invoiceIds: string[]) {
+  private async receivedByInvoice(
+    tenantId: string,
+    invoiceIds: string[],
+    range: { gte?: Date; lte?: Date } | null,
+  ) {
     if (invoiceIds.length === 0) return new Map<string, Prisma.Decimal>();
     const rows = await this.prisma.accountingReceivableAllocation.groupBy({
       by: ['invoiceId'],
@@ -514,6 +536,7 @@ export class SourceTransactionsService {
         invoiceId: { in: invoiceIds },
         sourceType: 'RECEIPT',
         reversedAt: null,
+        ...(range ? { receipt: { receiptDate: range } } : {}),
       },
       _sum: { amount: true },
     });
