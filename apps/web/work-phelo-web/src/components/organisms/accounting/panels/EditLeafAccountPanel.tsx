@@ -124,43 +124,27 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
-        <FormField
-          label="Account Code"
-          type="number"
-          registration={register('accountCode', { required: 'Account code is required' })}
-          error={errors.accountCode}
-          placeholder="e.g. 1101"
-        />
-
-        <FormField
-          label="Account Name"
-          registration={register('accountName', { required: 'Account name is required' })}
-          error={errors.accountName}
-          placeholder="e.g. Ecobank"
-        />
-
-        <Controller
-          name="accountType"
-          control={control}
-          rules={{ required: 'Account type is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Account Type"
-              placeholder="Select account type…"
-              options={TYPE_OPTIONS}
-              value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
-                setValue('classificationId', '');
-                setValue('accountGroupId', '');
-              }}
-              error={errors.accountType?.message}
-            />
-          )}
-        />
-
-        {accountType && (
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Controller
+            name="accountType"
+            control={control}
+            rules={{ required: 'Account type is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Account Type"
+                placeholder="Select account type…"
+                options={TYPE_OPTIONS}
+                value={field.value}
+                onChange={(value) => {
+                  field.onChange(value);
+                  setValue('classificationId', '');
+                  setValue('accountGroupId', '');
+                }}
+                error={errors.accountType?.message}
+              />
+            )}
+          />
           <Controller
             name="classificationId"
             control={control}
@@ -168,20 +152,24 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
             render={({ field }) => (
               <SearchSelect
                 label="Classification"
-                placeholder={isLoadingClassifications ? 'Loading…' : 'Select classification…'}
+                placeholder={
+                  !accountType
+                    ? 'Select a type first…'
+                    : isLoadingClassifications
+                      ? 'Loading…'
+                      : 'Select classification…'
+                }
                 options={classificationOptions}
                 value={field.value}
                 onChange={(value) => {
                   field.onChange(value);
                   setValue('accountGroupId', '');
                 }}
+                disabled={!accountType}
                 error={errors.classificationId?.message}
               />
             )}
           />
-        )}
-
-        {classificationId && (
           <Controller
             name="accountGroupId"
             control={control}
@@ -189,25 +177,37 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
               <SearchSelect
                 label="Parent Account (optional)"
                 placeholder={
-                  isLoadingGroups ? 'Loading…' : 'None — post directly under classification'
+                  !classificationId
+                    ? 'Select a classification first…'
+                    : isLoadingGroups
+                      ? 'Loading…'
+                      : 'None — post directly under classification'
                 }
                 options={groupOptions}
                 value={field.value}
                 onChange={field.onChange}
+                disabled={!classificationId}
                 error={errors.accountGroupId?.message}
               />
             )}
           />
-        )}
+        </div>
 
-        <FormField
-          label="Description"
-          type="textarea"
-          rows={4}
-          registration={register('description')}
-          error={errors.description}
-          placeholder="Provide a brief description of this account…"
-        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)]">
+          <FormField
+            label="Account Code"
+            type="number"
+            registration={register('accountCode', { required: 'Account code is required' })}
+            error={errors.accountCode}
+            placeholder="e.g. 1101"
+          />
+          <FormField
+            label="Account Name"
+            registration={register('accountName', { required: 'Account name is required' })}
+            error={errors.accountName}
+            placeholder="e.g. Ecobank"
+          />
+        </div>
 
         <Controller
           name="cashFlowCategory"
@@ -221,6 +221,15 @@ export function EditLeafAccountPanel({ isOpen, onClose, account }: EditLeafAccou
               onChange={field.onChange}
             />
           )}
+        />
+
+        <FormField
+          label="Description (optional)"
+          type="textarea"
+          rows={2}
+          registration={register('description')}
+          error={errors.description}
+          placeholder="Optional description"
         />
 
         <label className="flex items-center gap-2 text-sm text-gray-700">

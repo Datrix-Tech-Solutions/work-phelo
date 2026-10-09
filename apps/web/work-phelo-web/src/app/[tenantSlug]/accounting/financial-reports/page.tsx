@@ -22,11 +22,6 @@ export default function FinancialReportsPage() {
           iconClassName="bg-blue-600 text-blue-100"
           title="Profit & Loss Statement"
           description="Income and expenditure over a period."
-          stats={[
-            { label: 'Revenue', value: 'GHS 0.00' },
-            { label: 'Expenses', value: 'GHS 0.00' },
-            { label: 'Net Profit', value: 'GHS 0.00' },
-          ]}
           onClick={() => router.push(`${base}/profit-and-loss`)}
         />
 
@@ -35,11 +30,6 @@ export default function FinancialReportsPage() {
           iconClassName="bg-purple-600 text-purple-100"
           title="Balance Sheet"
           description="Financial position at a point in time."
-          stats={[
-            { label: 'Assets', value: 'GHS 0.00' },
-            { label: 'Liabilities', value: 'GHS 0.00' },
-            { label: 'Equity', value: 'GHS 0.00' },
-          ]}
           onClick={() => router.push(`${base}/balance-sheet`)}
         />
 
@@ -48,11 +38,6 @@ export default function FinancialReportsPage() {
           iconClassName="bg-emerald-600 text-emerald-100"
           title="Cash Flow Statement"
           description="Shows the inflow and outflow of cash over a period."
-          stats={[
-            { label: 'Operating Cash Flow', value: 'GHS 0.00' },
-            { label: 'Investing Cash Flow', value: 'GHS 0.00' },
-            { label: 'Financing Cash Flow', value: 'GHS 0.00' },
-          ]}
           onClick={() => router.push(`${base}/cash-flow-statement`)}
         />
 
@@ -61,10 +46,6 @@ export default function FinancialReportsPage() {
           iconClassName="bg-amber-600 text-amber-100"
           title="Trial Balance"
           description="Lists all account balances to verify debits equal credits."
-          stats={[
-            { label: 'Total Debit', value: 'GHS 0.00' },
-            { label: 'Total Credit', value: 'GHS 0.00' },
-          ]}
           onClick={() => router.push(`${base}/trial-balance`)}
         />
 
@@ -73,11 +54,6 @@ export default function FinancialReportsPage() {
           iconClassName="bg-cyan-600 text-cyan-100"
           title="Aged Receivable"
           description="Tracks outstanding customer invoices by age."
-          stats={[
-            { label: 'Current', value: 'GHS 0.00' },
-            { label: '30–60 Days', value: 'GHS 0.00' },
-            { label: '60+ Days', value: 'GHS 0.00' },
-          ]}
           onClick={() => router.push(`${base}/aged-receivable`)}
         />
 
@@ -86,11 +62,6 @@ export default function FinancialReportsPage() {
           iconClassName="bg-rose-600 text-rose-100"
           title="Aged Payable"
           description="Tracks outstanding vendor invoices by age."
-          stats={[
-            { label: 'Current', value: 'GHS 0.00' },
-            { label: '30–60 Days', value: 'GHS 0.00' },
-            { label: '60+ Days', value: 'GHS 0.00' },
-          ]}
           onClick={() => router.push(`${base}/aged-payable`)}
         />
       </div>
