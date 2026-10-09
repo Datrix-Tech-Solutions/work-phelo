@@ -287,10 +287,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const bills = usePayableBills({ limit: 100, partyId });
   const receivableCreditNotes = useReceivableCreditNotes({ limit: 100, partyId });
   const payableCreditNotes = usePayableCreditNotes({ limit: 100, partyId });
-  // An entity's own page only ever shows its AP/AR documents — cashbook entries aren't
-  // resolved against a party the same way, so they're fetched but left out of that scoped
-  // view's merged list below.
-  const cashbookTransactions = useCashbookTransactions({ limit: 100 });
+  // On an entity's own page this is only the direct cashbook entries that name the entity. They
+  // are listed for reference and never count towards what the entity owes.
+  const cashbookTransactions = useCashbookTransactions({ limit: 100, counterpartyId: partyId });
   const paymentRequests = usePendingPaymentRequests();
   const rejectPaymentRequest = useRejectPaymentRequest();
   // The invoice behind a request, for its detail view and for recording the payment.
@@ -301,7 +300,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     bills.isLoading ||
     receivableCreditNotes.isLoading ||
     payableCreditNotes.isLoading ||
-    (!partyId && cashbookTransactions.isLoading);
+    cashbookTransactions.isLoading;
 
   const documentKeyByTypeId = useMemo(() => {
     const map = new Map<string, AccountingDocumentKey>();
@@ -318,11 +317,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       ...(bills.data?.items ?? []).map(toRow),
       ...(receivableCreditNotes.data?.items ?? []).map(toRow),
       ...(payableCreditNotes.data?.items ?? []).map(toRow),
-      ...(!partyId
-        ? (cashbookTransactions.data?.items ?? [])
-            .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
-            .map(toCashbookRow)
-        : []),
+      ...(cashbookTransactions.data?.items ?? [])
+        .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
+        .map(toCashbookRow),
       ...(paymentRequests.data ?? [])
         .filter((request) => !partyId || request.entity?.id === partyId)
         .map(toPaymentRequestRow),

@@ -1583,6 +1583,8 @@ export interface QueryCashbookParams {
   transactionType?: CashbookTransactionType;
   status?: CashbookTransactionStatus;
   currency?: string;
+  /** Only entries that name this entity. */
+  counterpartyId?: string;
   fromDate?: string;
   toDate?: string;
   page?: number;
