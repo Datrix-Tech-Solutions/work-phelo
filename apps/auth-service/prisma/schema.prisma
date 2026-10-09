@@ -70,6 +70,7 @@ enum PermissionAction {
   EXPORT
   ASSIGN
   CANCEL
+  VERIFY
 
   @@schema("w_auth")
 }

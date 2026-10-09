@@ -71,6 +71,7 @@ describe('permission entitlements', () => {
     'marketing.transport-officers',
     'marketing.campaigns',
     'marketing.sms-sender-identities',
+    'marketing.domains',
     'marketing.sms-wallet',
     'marketing.sms-credits',
   ])('scopes %s to the Marketing module only', (name) => {

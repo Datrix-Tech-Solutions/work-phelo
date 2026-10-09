@@ -26,9 +26,18 @@ const sender = (overrides: Record<string, unknown> = {}) => ({
   senderId: 'Work Phelo',
   normalizedSenderId: 'workphelo',
   displayName: null,
+  tenantDomainId: null,
+  purpose: null,
   provider: null,
   providerReference: null,
+  providerReferenceId: null,
   status: 'DRAFT',
+  ownershipStatus: 'UNVERIFIED',
+  internalReviewStatus: 'NOT_REQUIRED',
+  providerStatus: 'NOT_SUBMITTED',
+  providerSubmittedAt: null,
+  providerLastSyncedAt: null,
+  providerStatusReason: null,
   isDefault: false,
   requestedBy: null,
   requestedAt: null,
@@ -93,7 +102,12 @@ describe('SmsSenderIdentitiesService', () => {
   it('creates an approved sender identity for another tenant on a platform admin’s behalf', async () => {
     prisma.marketingSmsSenderIdentity.findFirst.mockResolvedValue(null);
     prisma.marketingSmsSenderIdentity.create.mockResolvedValue(
-      sender({ tenantId: 'tenant-2', status: 'APPROVED' }),
+      sender({
+        tenantId: 'tenant-2',
+        status: 'APPROVED',
+        internalReviewStatus: 'APPROVED',
+        providerStatus: 'UNKNOWN',
+      }),
     );
 
     const result = await service.createApproved('tenant-2', 'platform-1', {
@@ -109,11 +123,14 @@ describe('SmsSenderIdentitiesService', () => {
         tenantId: 'tenant-2',
         createdBy: 'platform-1',
         status: 'APPROVED',
+        internalReviewStatus: 'APPROVED',
+        providerStatus: 'UNKNOWN',
         approvedBy: 'platform-1',
         approvedAt: expect.any(Date) as Date,
       }),
     });
     expect(result.status).toBe('APPROVED');
+    expect(result.providerStatus).toBe('UNKNOWN');
   });
 
   it('rejects duplicate sender IDs within a tenant', async () => {
@@ -138,6 +155,8 @@ describe('SmsSenderIdentitiesService', () => {
       where: { id: 'sender-1' },
       data: like({
         status: 'PENDING_PROVIDER_APPROVAL',
+        internalReviewStatus: 'PENDING',
+        providerStatus: 'NOT_SUBMITTED',
         requestedBy: 'user-1',
       }),
     });
@@ -183,6 +202,8 @@ describe('SmsSenderIdentitiesService', () => {
       where: { id: 'sender-1' },
       data: like({
         status: 'APPROVED',
+        internalReviewStatus: 'APPROVED',
+        providerStatus: 'UNKNOWN',
         approvedBy: 'platform-1',
       }),
     });

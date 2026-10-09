@@ -3,6 +3,7 @@ import { MODULE_KEY } from '../auth/guards/module.guard';
 import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { SmsSenderIdentitiesController } from './sms-sender-identities.controller';
 import { SmsWalletController } from './sms-wallet.controller';
+import { TenantDomainsController } from './tenant-domains.controller';
 
 const anyPermissions = (handler: object) =>
   Reflect.getMetadata(ANY_PERMISSIONS_KEY, handler) as string[] | undefined;
@@ -42,6 +43,25 @@ describe('SMS foundation controller authorization contracts', () => {
     ['grant', P.SMS_CREDITS_ADJUST],
   ] as const)('gates wallet %s behind %s', (method, permission) => {
     expect(anyPermissions(SmsWalletController.prototype[method])).toEqual([
+      permission,
+    ]);
+  });
+
+  it('requires the marketing module for business domain endpoints', () => {
+    expect(Reflect.getMetadata(MODULE_KEY, TenantDomainsController)).toBe(
+      'marketing',
+    );
+  });
+
+  it.each([
+    ['list', P.DOMAINS_VIEW],
+    ['findOne', P.DOMAINS_VIEW],
+    ['create', P.DOMAINS_CREATE],
+    ['verify', P.DOMAINS_VERIFY],
+    ['regenerateVerification', P.DOMAINS_VERIFY],
+    ['archive', P.DOMAINS_DELETE],
+  ] as const)('gates domain %s behind %s', (method, permission) => {
+    expect(anyPermissions(TenantDomainsController.prototype[method])).toEqual([
       permission,
     ]);
   });

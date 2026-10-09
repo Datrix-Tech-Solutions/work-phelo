@@ -284,6 +284,7 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   'operations.reinsurance.claims.void-claim': ['RUN'],
   'marketing.campaigns': ['VIEW', 'CREATE', 'RUN', 'CANCEL'],
   'marketing.sms-sender-identities': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
+  'marketing.domains': ['VIEW', 'CREATE', 'VERIFY', 'DELETE'],
   'marketing.sms-wallet': ['VIEW'],
   'marketing.sms-credits': ['EDIT'],
 };

@@ -305,6 +305,12 @@ export const RESOURCES = [
     description: 'Tenant SMS sender identities used by Marketing campaigns',
   },
   {
+    name: 'marketing.domains',
+    module: 'MARKETING',
+    description:
+      'Tenant business domains used for communication identity verification',
+  },
+  {
     name: 'marketing.sms-wallet',
     module: 'MARKETING',
     description: 'Tenant SMS credit wallet balance and ledger visibility',
