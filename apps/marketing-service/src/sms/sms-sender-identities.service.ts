@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -20,6 +21,15 @@ import {
 } from '../../prisma/generated/client';
 import { MarketingRabbitPublisher } from '../messaging/rabbitmq.publisher';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  evaluateSmsSenderReadiness,
+  getSmsSenderReadinessConfig,
+  isSmsSenderProviderSyncDue,
+  resolveSmsSenderProvider,
+  smsProviderSupportsSenderRefresh,
+  SmsSenderReadinessConfig,
+  SmsSenderReadinessResult,
+} from './sms-sender-readiness';
 import {
   CreateSmsSenderIdentityDto,
   QuerySmsSenderIdentitiesDto,
@@ -52,6 +62,8 @@ export function normalizeSenderId(senderId: string) {
 
 @Injectable()
 export class SmsSenderIdentitiesService {
+  private readonly logger = new Logger(SmsSenderIdentitiesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbit?: MarketingRabbitPublisher,
@@ -65,6 +77,11 @@ export class SmsSenderIdentitiesService {
         : query.includeArchived
           ? {}
           : { status: { not: 'ARCHIVED' } }),
+      ...(query.providerStatus
+        ? { providerStatus: query.providerStatus }
+        : query.providerStatusNot
+          ? { providerStatus: { not: query.providerStatusNot } }
+          : {}),
     };
     const items = await this.prisma.marketingSmsSenderIdentity.findMany({
       where,
@@ -345,10 +362,66 @@ export class SmsSenderIdentitiesService {
   }
 
   async findApprovedForCampaign(tenantId: string, id?: string) {
-    if (!id) return null;
-    return this.prisma.marketingSmsSenderIdentity.findFirst({
-      where: { id, tenantId, status: 'APPROVED' },
+    const readiness = await this.evaluateForCampaign(tenantId, id);
+    return readiness.ready ? readiness.sender : null;
+  }
+
+  async evaluateForCampaign(
+    tenantId: string,
+    id?: string,
+    options: { refreshIfDue?: boolean; campaignId?: string } = {},
+  ): Promise<SmsSenderReadinessResult<MarketingSmsSenderIdentity>> {
+    const config = getSmsSenderReadinessConfig();
+    if (!id) {
+      const readiness = evaluateSmsSenderReadiness<MarketingSmsSenderIdentity>(
+        null,
+        config,
+      );
+      this.logReadinessIfNeeded(readiness, tenantId, options.campaignId);
+      return readiness;
+    }
+    const sender = await this.prisma.marketingSmsSenderIdentity.findFirst({
+      where: { id, tenantId },
     });
+    let readiness = evaluateSmsSenderReadiness(sender, config);
+    if (
+      options.refreshIfDue &&
+      sender &&
+      this.shouldRefreshProvider(sender, config)
+    ) {
+      this.logger.log(
+        `sms_sender.readiness_refresh_attempt tenantId=${tenantId} campaignId=${options.campaignId ?? 'n/a'} senderId=${sender.senderId} provider=${readiness.provider} mode=${readiness.mode} reasonCode=${readiness.reasonCode}`,
+      );
+      try {
+        const refreshed = await this.refreshFromProvider(
+          sender,
+          readiness.provider,
+        );
+        const updated = await this.prisma.marketingSmsSenderIdentity.update({
+          where: { id: sender.id },
+          data: {
+            status: this.legacyStatusFor(
+              sender.internalReviewStatus,
+              refreshed.providerStatus,
+              sender.status,
+            ),
+            ...this.providerUpdateData(refreshed),
+          },
+        });
+        const refreshedReadiness = evaluateSmsSenderReadiness(updated, config);
+        this.logger.log(
+          `sms_sender.readiness_refresh_success tenantId=${tenantId} campaignId=${options.campaignId ?? 'n/a'} senderId=${updated.senderId} provider=${refreshedReadiness.provider} mode=${refreshedReadiness.mode} reasonCode=${refreshedReadiness.reasonCode}`,
+        );
+        readiness = refreshedReadiness;
+      } catch (error) {
+        this.logger.error(
+          `sms_sender.readiness_refresh_failed tenantId=${tenantId} campaignId=${options.campaignId ?? 'n/a'} senderId=${sender.senderId} provider=${readiness.provider} mode=${readiness.mode} reasonCode=${readiness.reasonCode} error=${this.safeProviderError(error)}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+    }
+    this.logReadinessIfNeeded(readiness, tenantId, options.campaignId);
+    return readiness;
   }
 
   private async findOwned(tenantId: string, id: string) {
@@ -392,6 +465,17 @@ export class SmsSenderIdentitiesService {
     if (provider === 'agoosms' || provider === 'pilosms') {
       throw new BadRequestException(REFRESH_UNSUPPORTED_MESSAGE);
     }
+  }
+
+  private shouldRefreshProvider(
+    sender: MarketingSmsSenderIdentity,
+    config: SmsSenderReadinessConfig,
+  ) {
+    const provider = resolveSmsSenderProvider(sender.provider);
+    return (
+      smsProviderSupportsSenderRefresh(provider) &&
+      isSmsSenderProviderSyncDue(sender, config.maxProviderStatusAgeHours)
+    );
   }
 
   private async submitToProvider(
@@ -484,6 +568,21 @@ export class SmsSenderIdentitiesService {
     return message || 'Provider operation failed';
   }
 
+  private logReadinessIfNeeded(
+    readiness: SmsSenderReadinessResult<MarketingSmsSenderIdentity>,
+    tenantId: string,
+    campaignId?: string,
+  ) {
+    if (readiness.ready && readiness.effectiveReady) return;
+    const senderId = readiness.sender?.senderId ?? 'n/a';
+    const detail = `tenantId=${tenantId} campaignId=${campaignId ?? 'n/a'} senderId=${senderId} provider=${readiness.provider} mode=${readiness.mode} reasonCode=${readiness.reasonCode}`;
+    if (!readiness.ready) {
+      this.logger.warn(`sms_sender.readiness_block ${detail}`);
+    } else if (!readiness.effectiveReady) {
+      this.logger.warn(`sms_sender.readiness_warning ${detail}`);
+    }
+  }
+
   private async assertUnique(
     tenantId: string,
     senderId: string,
@@ -517,6 +616,7 @@ export class SmsSenderIdentitiesService {
       providerSubmittedAt: item.providerSubmittedAt?.toISOString() ?? null,
       providerLastSyncedAt: item.providerLastSyncedAt?.toISOString() ?? null,
       providerStatusReason: item.providerStatusReason,
+      readiness: this.toReadinessResponse(item),
       isDefault: item.isDefault,
       requestedBy: item.requestedBy,
       requestedAt: item.requestedAt?.toISOString() ?? null,
@@ -528,6 +628,20 @@ export class SmsSenderIdentitiesService {
       createdBy: item.createdBy,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
+    };
+  }
+
+  private toReadinessResponse(item: MarketingSmsSenderIdentity) {
+    const readiness = evaluateSmsSenderReadiness(item);
+    return {
+      ready: readiness.ready,
+      legacyReady: readiness.legacyReady,
+      effectiveReady: readiness.effectiveReady,
+      mode: readiness.mode,
+      reasonCode: readiness.reasonCode,
+      reasonMessage: readiness.reasonMessage,
+      provider: readiness.provider,
+      providerStatusStale: readiness.providerStatusStale,
     };
   }
 }

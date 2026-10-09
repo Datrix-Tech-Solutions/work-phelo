@@ -67,6 +67,29 @@ const baseDto: CreateCampaignDto = {
   senderIdentityId: SENDER,
 };
 
+const senderIdentity = {
+  id: SENDER,
+  senderId: 'WORKPHELO',
+  displayName: 'WorkPhelo',
+  isDefault: true,
+};
+
+const readySender = (
+  sender: typeof senderIdentity | null = senderIdentity,
+) => ({
+  ready: !!sender,
+  legacyReady: !!sender,
+  effectiveReady: !!sender,
+  mode: 'legacy',
+  reasonCode: sender ? 'READY' : 'SENDER_NOT_FOUND',
+  reasonMessage: sender
+    ? 'SMS sender identity is ready'
+    : 'SMS sender identity was not found',
+  provider: 'termii',
+  providerStatusStale: false,
+  sender,
+});
+
 /** Typed wrapper so nested matchers don't leak `any` into object literals. */
 const like = (fields: Record<string, unknown>): unknown =>
   expect.objectContaining(fields);
@@ -121,6 +144,7 @@ describe('CampaignsService', () => {
   };
   const dispatcher = { dispatch: jest.fn(), cancel: jest.fn() };
   const senderIdentities = {
+    evaluateForCampaign: jest.fn(),
     findApprovedForCampaign: jest.fn(),
   };
   const wallet = {
@@ -163,12 +187,8 @@ describe('CampaignsService', () => {
       ({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve(campaignRow(data)),
     );
-    senderIdentities.findApprovedForCampaign.mockResolvedValue({
-      id: SENDER,
-      senderId: 'WORKPHELO',
-      displayName: 'WorkPhelo',
-      isDefault: true,
-    });
+    senderIdentities.evaluateForCampaign.mockResolvedValue(readySender());
+    senderIdentities.findApprovedForCampaign.mockResolvedValue(senderIdentity);
     wallet.getBalance.mockResolvedValue({
       availableCredits: 100,
       reservedCredits: 0,
@@ -246,13 +266,13 @@ describe('CampaignsService', () => {
     });
 
     it('rejects SMS campaigns without an approved sender identity', async () => {
-      senderIdentities.findApprovedForCampaign.mockResolvedValue(null);
+      senderIdentities.evaluateForCampaign.mockResolvedValue(readySender(null));
       prisma.marketingProspect.findMany.mockResolvedValue([
         prospect('1', '0240000001', null),
       ]);
 
       await expect(service.create(user, baseDto)).rejects.toThrow(
-        'SMS campaigns require an approved sender identity',
+        'SMS sender identity was not found',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -268,7 +288,7 @@ describe('CampaignsService', () => {
         senderIdentityId: undefined,
       });
 
-      expect(senderIdentities.findApprovedForCampaign).not.toHaveBeenCalled();
+      expect(senderIdentities.evaluateForCampaign).not.toHaveBeenCalled();
       expect(tx.marketingCampaign.create).toHaveBeenCalledWith({
         data: like({
           senderIdentityId: null,
@@ -826,9 +846,10 @@ describe('CampaignsService', () => {
     it('reserves credits and dispatches pending SMS campaigns', async () => {
       const result = await service.send(user, 'camp-1');
 
-      expect(senderIdentities.findApprovedForCampaign).toHaveBeenCalledWith(
+      expect(senderIdentities.evaluateForCampaign).toHaveBeenCalledWith(
         TENANT,
         SENDER,
+        { refreshIfDue: true, campaignId: 'camp-1' },
       );
       expect(wallet.reserveCreditsInTransaction).toHaveBeenCalledWith(
         tx,
@@ -863,6 +884,20 @@ describe('CampaignsService', () => {
       await expect(service.send(user, 'camp-1')).rejects.toThrow(
         'Insufficient SMS credits',
       );
+      expect(dispatcher.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('blocks unready sender identities before reserving credits', async () => {
+      senderIdentities.evaluateForCampaign.mockResolvedValueOnce({
+        ...readySender(null),
+        reasonCode: 'PROVIDER_PENDING',
+        reasonMessage: 'Sender identity is awaiting provider approval',
+      });
+
+      await expect(service.send(user, 'camp-1')).rejects.toThrow(
+        'Sender identity is awaiting provider approval',
+      );
+      expect(wallet.reserveCreditsInTransaction).not.toHaveBeenCalled();
       expect(dispatcher.dispatch).not.toHaveBeenCalled();
     });
 

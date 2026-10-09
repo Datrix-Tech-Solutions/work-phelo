@@ -47,7 +47,7 @@ const NOT_SENDABLE_MESSAGE =
 const EMAIL_NOT_SUPPORTED_MESSAGE =
   'Email campaign delivery is not available in this phase';
 const SMS_SENDER_REQUIRED_MESSAGE =
-  'SMS campaigns require an approved sender identity';
+  'SMS campaigns require a ready sender identity';
 const CANCELLED_DETAIL = 'Campaign cancelled';
 const DISPATCH_FAILED_DETAIL = 'Campaign dispatch could not be queued';
 const DUPLICATE_DETAIL = 'Duplicate address in this campaign';
@@ -267,24 +267,25 @@ export class CampaignsService {
     );
     const estimatedCredits = smsPendingCount * smsEstimate.segmentCount;
     const balance = await this.wallet.getBalance(user.tenantId);
-    const sender = dto.channels.includes('SMS')
-      ? await this.senderIdentities.findApprovedForCampaign(
+    const senderReadiness = dto.channels.includes('SMS')
+      ? await this.senderIdentities.evaluateForCampaign(
           user.tenantId,
           dto.senderIdentityId,
         )
       : null;
+    const sender = senderReadiness?.ready ? senderReadiness.sender : null;
     const warnings: Array<{ code: string; message: string; count?: number }> =
       [];
 
     if (dto.channels.includes('SMS') && !dto.senderIdentityId) {
       warnings.push({
-        code: 'NO_APPROVED_SENDER_IDENTITY',
+        code: 'NO_READY_SENDER_IDENTITY',
         message: SMS_SENDER_REQUIRED_MESSAGE,
       });
-    } else if (dto.channels.includes('SMS') && !sender) {
+    } else if (dto.channels.includes('SMS') && !senderReadiness?.ready) {
       warnings.push({
-        code: 'INVALID_OR_UNAPPROVED_SENDER_IDENTITY',
-        message: SMS_SENDER_REQUIRED_MESSAGE,
+        code: senderReadiness?.reasonCode ?? 'SENDER_NOT_FOUND',
+        message: senderReadiness?.reasonMessage ?? SMS_SENDER_REQUIRED_MESSAGE,
       });
     }
     if (missingSmsCount > 0) {
@@ -423,14 +424,18 @@ export class CampaignsService {
       throw new BadRequestException(NO_REACHABLE_MESSAGE);
     }
     const usesSms = dto.channels.includes('SMS');
-    const sender = usesSms
-      ? await this.senderIdentities.findApprovedForCampaign(
+    const senderReadiness = usesSms
+      ? await this.senderIdentities.evaluateForCampaign(
           user.tenantId,
           dto.senderIdentityId,
         )
       : null;
-    if (usesSms && !sender)
-      throw new BadRequestException(SMS_SENDER_REQUIRED_MESSAGE);
+    if (usesSms && !senderReadiness?.ready) {
+      throw new BadRequestException(
+        senderReadiness?.reasonMessage ?? SMS_SENDER_REQUIRED_MESSAGE,
+      );
+    }
+    const sender = senderReadiness?.sender ?? null;
     const smsEstimate = usesSms
       ? estimateSmsSegments(campaignSmsText(dto.subject, dto.message))
       : null;
@@ -708,11 +713,17 @@ export class CampaignsService {
     ) {
       throw new BadRequestException(EMAIL_NOT_SUPPORTED_MESSAGE);
     }
-    const sender = await this.senderIdentities.findApprovedForCampaign(
+    const senderReadiness = await this.senderIdentities.evaluateForCampaign(
       tenantId,
       campaign.senderIdentityId ?? undefined,
+      { refreshIfDue: true, campaignId },
     );
-    if (!sender) throw new BadRequestException(SMS_SENDER_REQUIRED_MESSAGE);
+    if (!senderReadiness.ready || !senderReadiness.sender) {
+      throw new BadRequestException(
+        senderReadiness.reasonMessage || SMS_SENDER_REQUIRED_MESSAGE,
+      );
+    }
+    const sender = senderReadiness.sender;
 
     const pendingCredits =
       await this.prisma.marketingCampaignRecipient.aggregate({

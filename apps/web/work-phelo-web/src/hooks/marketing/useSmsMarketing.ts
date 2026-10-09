@@ -5,6 +5,7 @@ import type {
   CreateTenantDomainPayload,
   SmsSenderIdentity,
   SmsSenderIdentityListResponse,
+  CommunicationProviderStatus,
   SmsSenderIdentityStatus,
   SmsWalletBalance,
   TenantDomain,
@@ -19,7 +20,13 @@ const WALLET_ENDPOINT = '/marketing/sms-wallet';
 const SMS_KEY = ['marketing', 'sms'] as const;
 const DOMAINS_KEY = ['marketing', 'domains'] as const;
 
-export function useSmsSenderIdentities(query: { status?: SmsSenderIdentityStatus } = {}) {
+export function useSmsSenderIdentities(
+  query: {
+    status?: SmsSenderIdentityStatus;
+    providerStatus?: CommunicationProviderStatus;
+    providerStatusNot?: CommunicationProviderStatus;
+  } = {},
+) {
   return useQuery({
     queryKey: [...SMS_KEY, 'sender-identities', query] as const,
     queryFn: async () => {

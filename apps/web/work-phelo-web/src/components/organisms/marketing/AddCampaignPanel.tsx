@@ -105,9 +105,7 @@ export function AddCampaignPanel({
   const [segmentModal, setSegmentModal] = useState<{ segment: CampaignSegment | null } | null>(
     null,
   );
-  const { data: approvedSenders = [], isPending: sendersPending } = useSmsSenderIdentities({
-    status: 'APPROVED',
-  });
+  const { data: smsSenders = [], isPending: sendersPending } = useSmsSenderIdentities();
   const prefilled = useRef(false);
   /** Segments of the campaign being reused that no longer exist, so were left out. */
   const droppedSegments =
@@ -125,12 +123,14 @@ export function AddCampaignPanel({
   );
   const senderOptions = useMemo(
     () =>
-      approvedSenders.map((sender) => ({
+      smsSenders.map((sender) => ({
         value: sender.id,
         label: sender.displayName ? `${sender.senderId} · ${sender.displayName}` : sender.senderId,
+        disabled: !sender.readiness?.ready,
+        reason: sender.readiness?.reasonMessage ?? 'Sender identity is not ready',
         isDefault: sender.isDefault,
       })),
-    [approvedSenders],
+    [smsSenders],
   );
 
   const {
@@ -171,7 +171,7 @@ export function AddCampaignPanel({
   }, [isOpen, reset]);
 
   // Start from an earlier campaign once the segments and senders it refers to are known, keeping
-  // only the ones that still exist (a deleted segment or an unapproved sender can't be reused).
+  // only the ones that still exist and are ready for this environment's enforcement mode.
   useEffect(() => {
     if (!isOpen || !initial || prefilled.current || segmentsPending || sendersPending) return;
     prefilled.current = true;
@@ -182,11 +182,13 @@ export function AddCampaignPanel({
       ...DEFAULT_VALUES,
       ...initial,
       targetSegment,
-      senderIdentityId: approvedSenders.some((sender) => sender.id === initial.senderIdentityId)
+      senderIdentityId: senderOptions.some(
+        (sender) => sender.value === initial.senderIdentityId && !sender.disabled,
+      )
         ? initial.senderIdentityId
         : '',
     });
-  }, [isOpen, initial, segments, segmentsPending, approvedSenders, sendersPending, reset]);
+  }, [isOpen, initial, segments, segmentsPending, senderOptions, sendersPending, reset]);
 
   const preview = useCampaignPreview({
     segmentIds: segmentValue,
@@ -202,7 +204,10 @@ export function AddCampaignPanel({
 
   useEffect(() => {
     if (!usesSms || senderIdentityId || senderOptions.length === 0) return;
-    const defaultSender = senderOptions.find((sender) => sender.isDefault) ?? senderOptions[0];
+    const selectableSenders = senderOptions.filter((sender) => !sender.disabled);
+    const defaultSender =
+      selectableSenders.find((sender) => sender.isDefault) ?? selectableSenders[0];
+    if (!defaultSender) return;
     setValue('senderIdentityId', defaultSender.value, { shouldValidate: true });
   }, [senderIdentityId, senderOptions, setValue, usesSms]);
 
@@ -357,15 +362,19 @@ export function AddCampaignPanel({
             <label className="text-sm font-bold text-gray-900">Approved SMS Sender ID</label>
             <select
               {...register('senderIdentityId', {
-                validate: (v) => !usesSms || !!v || 'Select an approved SMS sender ID',
+                validate: (v) =>
+                  !usesSms ||
+                  senderOptions.some((sender) => sender.value === v && !sender.disabled) ||
+                  'Select a ready SMS sender ID',
               })}
               className="mt-2 w-full rounded-input border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20"
             >
               <option value="">Select sender ID</option>
               {senderOptions.map((sender) => (
-                <option key={sender.value} value={sender.value}>
+                <option key={sender.value} value={sender.value} disabled={sender.disabled}>
                   {sender.label}
                   {sender.isDefault ? ' (default)' : ''}
+                  {sender.disabled ? ` - ${sender.reason}` : ''}
                 </option>
               ))}
             </select>
@@ -374,8 +383,13 @@ export function AddCampaignPanel({
             )}
             {senderOptions.length === 0 && (
               <p className="mt-2 text-xs text-amber-700">
-                No approved SMS sender ID is available. Create and approve one in Marketing settings
-                before creating an SMS campaign.
+                No SMS sender ID is available. Create and approve one in Marketing settings before
+                creating an SMS campaign.
+              </p>
+            )}
+            {senderOptions.length > 0 && senderOptions.every((sender) => sender.disabled) && (
+              <p className="mt-2 text-xs text-amber-700">
+                No ready SMS sender ID is available for the current campaign enforcement mode.
               </p>
             )}
           </div>

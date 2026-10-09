@@ -1,3 +1,8 @@
+import {
+  parseSmsSenderProviderStatusMaxAgeHours,
+  parseSmsSenderReadinessMode,
+} from '../sms/sms-sender-readiness';
+
 export const marketingRequiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'] as const;
 
 export function assertMarketingRuntimeEnv(): void {
@@ -8,6 +13,9 @@ export function assertMarketingRuntimeEnv(): void {
       `Marketing service missing required environment variables: ${missing.join(', ')}`,
     );
   }
+
+  parseSmsSenderReadinessMode();
+  parseSmsSenderProviderStatusMaxAgeHours();
 }
 
 if (require.main === module) {

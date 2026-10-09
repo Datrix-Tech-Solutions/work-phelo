@@ -40,6 +40,19 @@ export class QuerySmsSenderIdentitiesDto {
   @IsEnum(SMS_SENDER_IDENTITY_STATUSES)
   status?: (typeof SMS_SENDER_IDENTITY_STATUSES)[number];
 
+  @ApiPropertyOptional({ enum: SMS_PROVIDER_VERIFICATION_STATUSES })
+  @IsOptional()
+  @IsEnum(SMS_PROVIDER_VERIFICATION_STATUSES)
+  providerStatus?: (typeof SMS_PROVIDER_VERIFICATION_STATUSES)[number];
+
+  @ApiPropertyOptional({
+    enum: SMS_PROVIDER_VERIFICATION_STATUSES,
+    description: 'Exclude this provider status, useful for rollout inventory.',
+  })
+  @IsOptional()
+  @IsEnum(SMS_PROVIDER_VERIFICATION_STATUSES)
+  providerStatusNot?: (typeof SMS_PROVIDER_VERIFICATION_STATUSES)[number];
+
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
