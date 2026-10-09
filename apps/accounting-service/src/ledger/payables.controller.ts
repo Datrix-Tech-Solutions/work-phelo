@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -114,6 +115,19 @@ export class PayablesController {
     return this.service.getBill(request.user, billId);
   }
 
+  @Delete('bills/:billId')
+  @ApiOperation({
+    summary: 'Delete a draft vendor bill',
+    description: 'Removes the draft for good. Posted bills are immutable.',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  deleteBillDraft(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftBill(request.user, billId);
+  }
+
   @Post('bills/:billId/post')
   @ApiOperation({
     summary: 'Post a draft vendor bill',
@@ -189,6 +203,16 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.getCreditNote(request.user, creditNoteId);
+  }
+
+  @Delete('credit-notes/:creditNoteId')
+  @ApiOperation({ summary: 'Delete a draft vendor credit note' })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  deleteCreditNoteDraft(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftCreditNote(request.user, creditNoteId);
   }
 
   @Post('credit-notes/:creditNoteId/post')

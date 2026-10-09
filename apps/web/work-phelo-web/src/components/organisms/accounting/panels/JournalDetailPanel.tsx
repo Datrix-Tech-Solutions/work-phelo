@@ -13,7 +13,13 @@ import {
   JournalEntryRecord,
   JournalRecordStatus,
 } from '@/types/accounting';
-import { useFiscalPeriods, usePostJournal, useReverseJournal } from '@/hooks';
+import {
+  useDeleteDraftJournal,
+  useFiscalPeriods,
+  usePostJournal,
+  useReverseJournal,
+} from '@/hooks';
+import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
@@ -64,6 +70,12 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
     fiscalPeriods.find((p) => p.id === journal?.fiscalPeriodId)?.name ?? journal?.fiscalPeriodId;
 
   const postJournal = usePostJournal();
+  const deleteDraft = useDeleteDraftJournal();
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  // A draft entered by hand can be redone or deleted; one made by the system (a recurring entry,
+  // a source event) belongs to that record.
+  const isOwnDraft =
+    journal?.status === 'DRAFT' && (journal.source?.category ?? 'MANUAL') === 'MANUAL';
   const reverseJournal = useReverseJournal();
 
   // Debit and credit always match on a saved journal, so one total covers both sides.
@@ -92,6 +104,18 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
       toast.success('Journal posted.');
     } catch (err) {
       toast.error(extractError(err, 'Failed to post journal'));
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!journal) return;
+    try {
+      await deleteDraft.mutateAsync(journal.id);
+      toast.success('Draft deleted.');
+      setChoiceOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to delete the draft'));
     }
   };
 
@@ -131,6 +155,11 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {isOwnDraft && (
+                <Button variant="danger" onClick={() => setChoiceOpen(true)}>
+                  Reject
+                </Button>
+              )}
               <Button isLoading={postJournal.isPending} loadingText="Posting…" onClick={handlePost}>
                 Post
               </Button>
@@ -302,6 +331,20 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
           />
         </div>
       </Modal>
+      <DraftChoiceModal
+        isOpen={choiceOpen}
+        subject={journal ? formatJournalNumber(journal.journalNumber) : 'This draft'}
+        canRedo
+        isDeleting={deleteDraft.isPending}
+        onRedo={() => {
+          if (!journal) return;
+          const redoId = journal.id;
+          handleClose();
+          router.push(`/${tenantSlug}/accounting/journalentry/new?redo=${redoId}`);
+        }}
+        onDelete={handleDelete}
+        onClose={() => setChoiceOpen(false)}
+      />
     </>
   );
 }

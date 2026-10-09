@@ -35,13 +35,16 @@ import {
   DocumentAdjustmentButtons,
   DocumentAdjustmentRows,
   DocumentAdjustmentSummary,
+  newDocAdjustmentRow,
   summarizeDocAdjustments,
 } from '@/components/organisms/accounting/panels/DocumentAdjustments';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import {
   AccountingCashbookSettlementMethod,
+  AccountingTradeDocument,
   CashbookLineKind,
+  CashbookTransaction,
   TransactionTypeDefinition,
 } from '@/types/accounting';
 import {
@@ -56,6 +59,8 @@ import {
   useCreatePayableCreditNote,
   useCreateReceivableCreditNote,
   useCreateReceivableInvoice,
+  useDeleteCashbookDraft,
+  useDeleteTradeDraft,
   useEntityTypes,
   useGLAccountOptions,
   useGLAccounts,
@@ -155,12 +160,117 @@ const DEFAULTS: FormValues = {
   cashLines: [EMPTY_CASH_LINE],
 };
 
+/** A saved draft the form is opened on to be redone: the form starts with its values, and once
+ *  the redone entry is saved the old draft is deleted, so only one of them is left. */
+export type DraftToRedo =
+  | { kind: 'cashbook'; transaction: CashbookTransaction }
+  | { kind: 'document'; document: AccountingTradeDocument };
+
+const dateOnly = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
+const plainNumber = (value: string | null | undefined) =>
+  value === null || value === undefined ? '' : String(Number(value));
+
+function cashbookDraftValues(tx: CashbookTransaction, typeName: string) {
+  const lines: CashLineValues[] =
+    tx.lines.length > 0
+      ? tx.lines.map((line) => ({
+          kind: line.kind,
+          useQtyPrice: line.kind === 'ITEM' && line.quantity !== null && line.unitPrice !== null,
+          glAccountId: line.glAccountId,
+          quantity: plainNumber(line.quantity),
+          unitPrice: plainNumber(line.unitPrice),
+          amount: plainNumber(line.amount),
+          description: line.description ?? '',
+        }))
+      : [
+          {
+            ...EMPTY_CASH_LINE,
+            useQtyPrice: tx.quantity !== null && tx.unitPrice !== null,
+            glAccountId: tx.offsetGlAccountId ?? '',
+            quantity: plainNumber(tx.quantity),
+            unitPrice: plainNumber(tx.unitPrice),
+            amount: plainNumber(tx.amount),
+          },
+        ];
+  return {
+    currency: tx.currency,
+    entryDate: dateOnly(tx.transactionDate),
+    cashAccountId: tx.cashAccountId,
+    settlementMethod: tx.settlementMethod,
+    reference: tx.reference ?? '',
+    // The description defaults to the type's name when none was typed.
+    description: tx.description === typeName ? '' : tx.description,
+    businessRole: tx.counterpartyType ?? '',
+    businessEntity: tx.counterpartyId ?? '',
+    offsetGlAccountId: tx.offsetGlAccountId ?? '',
+    cashLines: lines,
+  };
+}
+
+function documentDraftValues(doc: AccountingTradeDocument) {
+  const lines: DocLineRow[] = (
+    doc.lines.length > 0
+      ? doc.lines.map((line) => ({
+          glAccountId: line.glAccountId,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          amount: line.amount,
+          description: line.description,
+          costCentreId: line.costCentreId,
+        }))
+      : [
+          {
+            glAccountId: doc.offsetGlAccountId,
+            quantity: doc.quantity,
+            unitPrice: doc.unitPrice,
+            amount: doc.subtotalAmount,
+            description: null,
+            costCentreId: doc.costCentreId,
+          },
+        ]
+  ).map((line) => ({
+    ...newDocLineRow({
+      glAccountId: line.glAccountId,
+      useQtyPrice: line.quantity !== null && line.unitPrice !== null,
+    }),
+    quantity: plainNumber(line.quantity),
+    unitPrice: plainNumber(line.unitPrice),
+    amount: plainNumber(line.amount),
+    description: line.description ?? '',
+    costCentreId: line.costCentreId ?? '',
+  }));
+  const adjustments: DocAdjustmentRow[] = (doc.taxBreakdown ?? []).map((entry) => ({
+    ...newDocAdjustmentRow(entry.kind ?? 'TAX'),
+    taxTypeId: entry.taxTypeId ?? '',
+    glAccountId: entry.glAccountId,
+    mode: 'FLAT' as const,
+    flat: plainNumber(entry.amount),
+    description: entry.description ?? '',
+  }));
+  return {
+    values: {
+      businessRole: doc.party.type ?? '',
+      businessEntity: doc.party.id,
+      originalDocumentId: doc.originalDocumentId ?? '',
+      description: doc.description ?? '',
+      currency: doc.currency,
+      entryDate: dateOnly(doc.documentDate),
+      dueDate: dateOnly(doc.dueDate),
+    },
+    lines,
+    adjustments,
+  };
+}
+
 export function NewTransactionPanel({
   transactionType,
   onClose,
+  draft,
 }: {
   transactionType: TransactionTypeDefinition | null | undefined;
   onClose: () => void;
+  /** Opens the form on a saved draft to redo it; the draft is deleted once the new one is saved. */
+  draft?: DraftToRedo | null;
 }) {
   const isOpen = transactionType !== null && transactionType !== undefined;
   const isReceivable = transactionType?.category === 'RECEIVABLE';
@@ -187,6 +297,9 @@ export function NewTransactionPanel({
   const createCashbookPayment = useCreateCashbookPayment();
   const createCashbookEntry = isCashbookReceipt ? createCashbookReceipt : createCashbookPayment;
   const makeSourceLedgerPayment = useMakeSourceLedgerPayment();
+  const deleteCashbookDraft = useDeleteCashbookDraft();
+  const deleteReceivableDraft = useDeleteTradeDraft('RECEIVABLE');
+  const deletePayableDraft = useDeleteTradeDraft('PAYABLE');
   const postCashbookTransaction = usePostCashbookTransaction();
   const isSaving = isCashbookType
     ? createCashbookEntry.isPending ||
@@ -381,7 +494,7 @@ export function NewTransactionPanel({
 
   // A blank form with the transaction type's defaults — used on every fresh open, and
   // between entries while the panel is locked for multiple entries.
-  function resetForNextEntry() {
+  function resetForNextEntry(fromDraft = false) {
     const configuredRoles = transactionType?.businessRoles ?? [];
     reset({
       ...DEFAULTS,
@@ -405,14 +518,31 @@ export function NewTransactionPanel({
         useQtyPrice: defaultUseQtyPrice,
       }),
     ]);
+    if (fromDraft && draft?.kind === 'cashbook') {
+      reset({
+        ...DEFAULTS,
+        ...cashbookDraftValues(draft.transaction, transactionType?.name ?? ''),
+      });
+    } else if (fromDraft && draft?.kind === 'document') {
+      const redo = documentDraftValues(draft.document);
+      reset({ ...DEFAULTS, ...redo.values });
+      setDocLines(redo.lines);
+      setDocAdjustments(redo.adjustments);
+    }
   }
 
   // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
-  const openKey = isOpen ? (transactionType?.id ?? 'unknown') : null;
+  const openKey = isOpen
+    ? `${transactionType?.id ?? 'unknown'}:${draft?.kind === 'cashbook' ? draft.transaction.id : (draft?.document.id ?? '')}`
+    : null;
   const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
+  // Once the redone entry is saved the old draft is gone; a further entry (multi-entry) must not
+  // try to delete it again.
+  const [draftReplaced, setDraftReplaced] = useState(false);
   if (openKey !== null && openKey !== lastOpenKey) {
     setLastOpenKey(openKey);
-    resetForNextEntry();
+    setDraftReplaced(false);
+    resetForNextEntry(true);
   }
 
   const { data: entities = [], isLoading: isLoadingEntities } = useSubledgers(
@@ -530,8 +660,30 @@ export function NewTransactionPanel({
   const entry = useMultiEntryPanel({
     isOpen,
     onStop: close,
-    onContinue: resetForNextEntry,
+    onContinue: () => resetForNextEntry(),
   });
+
+  // After a redone entry is saved, the draft it replaces is deleted so only the new one is left.
+  const discardOldDraft = async () => {
+    if (!draft || draftReplaced) return;
+    try {
+      if (draft.kind === 'cashbook') {
+        await deleteCashbookDraft.mutateAsync(draft.transaction.id);
+      } else {
+        await (
+          draft.document.side === 'PAYABLE' ? deletePayableDraft : deleteReceivableDraft
+        ).mutateAsync({
+          id: draft.document.id,
+          isCreditNote: draft.document.documentType === 'CREDIT_NOTE',
+        });
+      }
+      setDraftReplaced(true);
+    } catch (error) {
+      toast.error(
+        extractError(error, 'Saved, but the old draft could not be deleted — delete it yourself'),
+      );
+    }
+  };
 
   // Success feedback for a saved entry. Unlocked: close and show the usual modal. Locked:
   // the panel stays open and its Continue / Stop prompt takes the modal's place.
@@ -646,6 +798,7 @@ export function NewTransactionPanel({
           if (post) {
             await postCashbookTransaction.mutateAsync(created.id);
           }
+          await discardOldDraft();
         }
         finishSave(willPost);
       } catch (error) {
@@ -746,6 +899,7 @@ export function NewTransactionPanel({
           ...adjustmentFields,
           description: values.description || undefined,
         });
+        await discardOldDraft();
         finishSave(false);
       } catch (error) {
         toast.error(extractError(error, 'Failed to save transaction'));
@@ -768,6 +922,7 @@ export function NewTransactionPanel({
 
     try {
       await createDocument.mutateAsync(payload);
+      await discardOldDraft();
       finishSave(false);
     } catch (error) {
       toast.error(extractError(error, 'Failed to save transaction'));

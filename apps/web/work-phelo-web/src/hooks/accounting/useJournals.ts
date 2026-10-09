@@ -97,6 +97,19 @@ export function useUpdateDraftJournal() {
   });
 }
 
+/** Deletes a draft journal for good. Posted and reversed journals are never deletable. */
+export function useDeleteDraftJournal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`${BASE}/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: JOURNALS_KEY });
+    },
+  });
+}
+
 export function usePostJournal() {
   const queryClient = useQueryClient();
   return useMutation({

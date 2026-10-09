@@ -367,6 +367,22 @@ export function useRejectReceivableInvoice() {
   });
 }
 
+/** Deletes a draft invoice/bill or credit/debit note for good. Posted ones are never deletable. */
+export function useDeleteTradeDraft(side: AccountingTradeSide) {
+  const queryClient = useQueryClient();
+  const config = SIDE_CONFIG[side];
+  return useMutation({
+    mutationFn: async ({ id, isCreditNote }: { id: string; isCreditNote: boolean }) => {
+      const segment = isCreditNote ? CREDIT_NOTE_SEGMENT : config.invoiceSegment;
+      await api.delete(`${config.base}/${segment}/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
+      queryClient.invalidateQueries({ queryKey: documentsKey(side, CREDIT_NOTE_SEGMENT) });
+    },
+  });
+}
+
 export function usePayableBills(
   params: QueryTradeDocumentsParams = {},
   options: { enabled?: boolean } = {},

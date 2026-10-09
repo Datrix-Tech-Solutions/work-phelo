@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -134,6 +135,20 @@ export class ReceivablesController {
     return this.service.updateInvoiceDraft(request.user, invoiceId, dto);
   }
 
+  @Delete('invoices/:invoiceId')
+  @ApiOperation({
+    summary: 'Delete a draft customer invoice',
+    description:
+      'Removes the draft for good. Posted invoices are immutable. A draft raised by another module is rejected instead.',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  deleteInvoiceDraft(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftInvoice(request.user, invoiceId);
+  }
+
   @Post('invoices/:invoiceId/reject')
   @ApiOperation({
     summary: 'Reject a draft customer invoice',
@@ -224,6 +239,16 @@ export class ReceivablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.getCreditNote(request.user, creditNoteId);
+  }
+
+  @Delete('credit-notes/:creditNoteId')
+  @ApiOperation({ summary: 'Delete a draft customer credit note' })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  deleteCreditNoteDraft(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftCreditNote(request.user, creditNoteId);
   }
 
   @Post('credit-notes/:creditNoteId/post')

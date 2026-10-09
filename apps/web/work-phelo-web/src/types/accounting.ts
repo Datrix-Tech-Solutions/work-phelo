@@ -1508,6 +1508,9 @@ export interface CashbookTransaction {
    *  (e.g. RCPT26-00001). Null for older rows and non-transaction cashbook entries. */
   transactionNumber: string | null;
   amount: string;
+  /** Set when a single-account entry was keyed as quantity × unit price. */
+  quantity: string | null;
+  unitPrice: string | null;
   currency: string;
   transactionDate: string;
   settlementMethod: AccountingCashbookSettlementMethod;

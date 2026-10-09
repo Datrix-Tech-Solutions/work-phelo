@@ -2,6 +2,8 @@
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { AccountingPermission } from './accounting.permissions';
 import { CashbookController } from './cashbook.controller';
+import { JournalsController } from './journals.controller';
+import { PayablesController } from './payables.controller';
 import { ReceivablesController } from './receivables.controller';
 
 const permissionsOf = (handler: object) =>
@@ -24,5 +26,26 @@ describe('draft invoice and cashbook routes authorization', () => {
     expect(
       permissionsOf(CashbookController.prototype.rejectTransaction),
     ).toEqual([AccountingPermission.CASHBOOK_POST]);
+  });
+
+  it('deleting a draft needs the post permission, like rejecting it', () => {
+    expect(
+      permissionsOf(ReceivablesController.prototype.deleteInvoiceDraft),
+    ).toEqual([AccountingPermission.RECEIVABLES_POST]);
+    expect(
+      permissionsOf(ReceivablesController.prototype.deleteCreditNoteDraft),
+    ).toEqual([AccountingPermission.RECEIVABLES_POST]);
+    expect(permissionsOf(PayablesController.prototype.deleteBillDraft)).toEqual(
+      [AccountingPermission.PAYABLES_POST],
+    );
+    expect(
+      permissionsOf(PayablesController.prototype.deleteCreditNoteDraft),
+    ).toEqual([AccountingPermission.PAYABLES_POST]);
+    expect(
+      permissionsOf(CashbookController.prototype.deleteDraftTransaction),
+    ).toEqual([AccountingPermission.CASHBOOK_POST]);
+    expect(permissionsOf(JournalsController.prototype.deleteDraft)).toEqual([
+      AccountingPermission.JOURNALS_POST,
+    ]);
   });
 });

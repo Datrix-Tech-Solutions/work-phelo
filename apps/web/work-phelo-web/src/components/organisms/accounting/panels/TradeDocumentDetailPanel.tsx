@@ -8,6 +8,8 @@ import { Badge } from '@/components/atoms/Badge';
 import { Input } from '@/components/atoms/Input';
 import { EditInvoiceDraftModal } from '@/components/organisms/accounting/panels/EditInvoiceDraftModal';
 import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
+import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
+import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import {
@@ -34,6 +36,8 @@ import {
   useReverseReceivableCreditNote,
   useReverseReceivableInvoice,
   useTaxTypes,
+  useDeleteTradeDraft,
+  useTransactionTypes,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -124,6 +128,9 @@ export function TradeDocumentDetailPanel({
   const [reverseOpen, setReverseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  // The draft being redone: its form opens once this panel closes.
+  const [redoTarget, setRedoTarget] = useState<AccountingTradeDocument | null>(null);
   const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState('');
   const [receiveRequest, setReceiveRequest] = useState<PaymentRequest | null>(null);
@@ -181,10 +188,21 @@ export function TradeDocumentDetailPanel({
 
   // A draft customer invoice can be completed or turned down, whoever raised it. Its amount, quantity
   // and unit price are fixed when it is raised.
-  const canReviewDraft = isReceivable && !isCreditNote && document?.status === 'DRAFT';
   // Raised by another module (not entered by an accountant): its payment is received separately,
   // so the "post and receive payment" shortcut doesn't apply.
   const isExternal = !!document?.sourceModule && document.sourceModule !== 'ACCOUNTING';
+  const canReviewDraft =
+    isReceivable && !isCreditNote && document?.status === 'DRAFT' && isExternal;
+  // A draft entered here (not raised by another module) can be redone in its form or deleted.
+  const isOwnDraft = document?.status === 'DRAFT' && !isExternal;
+  const { data: transactionTypes = [] } = useTransactionTypes();
+  const redoType = (doc: AccountingTradeDocument | null) =>
+    doc?.transactionTypeId
+      ? transactionTypes.find((t) => t.id === doc.transactionTypeId)
+      : undefined;
+  const deleteReceivableDraft = useDeleteTradeDraft('RECEIVABLE');
+  const deletePayableDraft = useDeleteTradeDraft('PAYABLE');
+  const deleteDraft = isReceivable ? deleteReceivableDraft : deletePayableDraft;
   const sourceLabel = document?.sourceModule
     ? (SOURCE_MODULE_LABELS[document.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
       document.sourceModule)
@@ -256,6 +274,18 @@ export function TradeDocumentDetailPanel({
       toast.error(extractError(err, 'Failed to post document'));
     } finally {
       setIsPostingForPayment(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!document) return;
+    try {
+      await deleteDraft.mutateAsync({ id: document.id, isCreditNote });
+      toast.success('Draft deleted.');
+      setChoiceOpen(false);
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to delete the draft'));
     }
   };
 
@@ -361,6 +391,11 @@ export function TradeDocumentDetailPanel({
                 )}
                 {balance && creditStatus && <Badge label={creditStatus} variant="info" />}
               </div>
+              {isOwnDraft && (
+                <Button size="sm" variant="danger" onClick={() => setChoiceOpen(true)}>
+                  Reject
+                </Button>
+              )}
               {canReviewDraft && (
                 <div className="flex items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
@@ -615,6 +650,25 @@ export function TradeDocumentDetailPanel({
           }}
         />
       )}
+
+      <DraftChoiceModal
+        isOpen={choiceOpen}
+        subject={document?.documentNumber ?? 'This draft'}
+        canRedo={!!redoType(document ?? null)}
+        isDeleting={deleteDraft.isPending}
+        onRedo={() => {
+          setRedoTarget(document ?? null);
+          handleClose();
+        }}
+        onDelete={handleDelete}
+        onClose={() => setChoiceOpen(false)}
+      />
+
+      <NewTransactionPanel
+        transactionType={redoTarget ? (redoType(redoTarget) ?? undefined) : undefined}
+        draft={redoTarget ? { kind: 'document', document: redoTarget } : null}
+        onClose={() => setRedoTarget(null)}
+      />
 
       <MakePaymentPanel
         document={receiveRequest ? document : null}

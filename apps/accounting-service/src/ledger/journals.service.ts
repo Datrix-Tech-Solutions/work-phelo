@@ -453,6 +453,55 @@ export class JournalsService {
     });
   }
 
+  /** Throws a draft journal away. Posted and reversed journals are immutable and stay. */
+  async deleteDraft(user: RequestUser, journalId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockJournal(tx, user.tenantId, journalId);
+      const journal = await tx.journalEntry.findFirst({
+        where: { id: journalId, tenantId: user.tenantId },
+        select: {
+          id: true,
+          status: true,
+          journalNumber: true,
+          sourceRecordId: true,
+        },
+      });
+      if (!journal) throw new NotFoundException('Journal entry not found');
+      if (journal.status !== JournalStatus.DRAFT) {
+        throw new ConflictException('Only draft journals can be deleted');
+      }
+      if (journal.sourceRecordId) {
+        throw new ConflictException(
+          'This journal belongs to another record and cannot be deleted here',
+        );
+      }
+      try {
+        await tx.journalEntry.deleteMany({
+          where: {
+            id: journal.id,
+            tenantId: user.tenantId,
+            status: JournalStatus.DRAFT,
+          },
+        });
+      } catch {
+        throw new ConflictException(
+          'This journal is referenced elsewhere and cannot be deleted',
+        );
+      }
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'JOURNAL_DRAFT_DELETED',
+          entityType: 'JournalEntry',
+          entityId: journal.id,
+          changedFields: { journalNumber: journal.journalNumber },
+        },
+      });
+      return { id: journal.id, deleted: true };
+    });
+  }
+
   async post(user: RequestUser, journalId: string) {
     return this.prisma.$transaction(async (tx) => {
       await this.lockJournal(tx, user.tenantId, journalId);

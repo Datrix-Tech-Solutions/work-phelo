@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -230,6 +231,21 @@ export class CashbookController {
       transactionId,
       dto,
     );
+  }
+
+  @Delete('cashbook/:transactionId')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Delete a draft direct receipt, payment or transfer',
+    description:
+      'Removes the draft for good. Posted entries are immutable. An entry raised by another module is rejected instead.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  deleteDraftTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftTransaction(request.user, transactionId);
   }
 
   @Post('cashbook/:transactionId/reject')

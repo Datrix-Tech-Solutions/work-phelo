@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -80,6 +81,20 @@ export class JournalsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.updateDraft(request.user, journalId, dto);
+  }
+
+  @Delete(':journalId')
+  @ApiOperation({
+    summary: 'Delete a draft journal entry',
+    description:
+      'Only drafts can be deleted. Posted and reversed journals are immutable.',
+  })
+  @RequirePermissions(AccountingPermission.JOURNALS_POST)
+  deleteDraft(
+    @Param('journalId', ParseUUIDPipe) journalId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraft(request.user, journalId);
   }
 
   @Post(':journalId/post')

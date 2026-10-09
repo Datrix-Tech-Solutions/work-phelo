@@ -2629,6 +2629,80 @@ export class ReceivablesService {
     return date;
   }
 
+  /** Throws a draft invoice or credit note away. Posted ones are immutable and stay. */
+  private async deleteDraftDocument(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingReceivableDocumentType,
+    label: string,
+  ) {
+    const document = await this.prisma.accountingReceivableDocument.findFirst({
+      where: { id: documentId, tenantId: user.tenantId, documentType },
+      select: {
+        id: true,
+        status: true,
+        sourceModule: true,
+        documentNumber: true,
+      },
+    });
+    if (!document) throw new NotFoundException(`${label} not found`);
+    if (document.status !== AccountingReceivableStatus.DRAFT) {
+      throw new ConflictException(`Only draft ${label}s can be deleted`);
+    }
+    if (document.sourceModule && document.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        `This ${label} was raised by another module - reject it instead`,
+      );
+    }
+    try {
+      const removed = await this.prisma.accountingReceivableDocument.deleteMany(
+        {
+          where: {
+            id: document.id,
+            tenantId: user.tenantId,
+            status: AccountingReceivableStatus.DRAFT,
+          },
+        },
+      );
+      if (removed.count !== 1) {
+        throw new ConflictException(
+          `The ${label} was changed by another request`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      throw new ConflictException(
+        `This ${label} is referenced elsewhere and cannot be deleted`,
+      );
+    }
+    await this.recordAudit(
+      user,
+      'RECEIVABLE_DRAFT_DELETED',
+      'AccountingReceivableDocument',
+      document.id,
+      { documentNumber: document.documentNumber },
+    );
+    return { id: document.id, deleted: true };
+  }
+
+  deleteDraftInvoice(user: RequestUser, id: string) {
+    return this.deleteDraftDocument(
+      user,
+      id,
+      AccountingReceivableDocumentType.INVOICE,
+      'invoice',
+    );
+  }
+
+  deleteDraftCreditNote(user: RequestUser, id: string) {
+    return this.deleteDraftDocument(
+      user,
+      id,
+      AccountingReceivableDocumentType.CREDIT_NOTE,
+      'credit note',
+    );
+  }
+
   private async recordAudit(
     user: RequestUser,
     action: string,

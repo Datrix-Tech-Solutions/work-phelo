@@ -10,7 +10,13 @@ import { NumberField } from '@/components/atoms/NumberField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
-import { useCashAccounts, useCreateCashbookTransfer, useGLAccountOptions } from '@/hooks';
+import {
+  useCashAccounts,
+  useCreateCashbookTransfer,
+  useDeleteCashbookDraft,
+  useGLAccountOptions,
+} from '@/hooks';
+import type { CashbookTransaction } from '@/types/accounting';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -52,9 +58,19 @@ const DEFAULTS: FormValues = {
   chargeGlAccountId: '',
 };
 
-export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function NewTransferPanel({
+  isOpen,
+  onClose,
+  draft,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  /** Opens the form on a saved draft transfer to redo it; the draft is deleted once the new one is saved. */
+  draft?: CashbookTransaction | null;
+}) {
   const toast = useToast();
   const createTransfer = useCreateCashbookTransfer();
+  const deleteDraft = useDeleteCashbookDraft();
   const { data: cashAccounts = [], isLoading: isLoadingCashAccounts } = useCashAccounts({
     isActive: true,
   });
@@ -75,7 +91,24 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
   // is still rendering trips React's "setState on a different component during
   // render" warning.
   useEffect(() => {
-    if (isOpen) reset({ ...DEFAULTS, transactionDate: today() });
+    if (!isOpen) return;
+    if (draft) {
+      reset({
+        ...DEFAULTS,
+        cashAccountId: draft.cashAccountId,
+        destinationCashAccountId: draft.destinationCashAccountId ?? '',
+        amount: String(Number(draft.amount)),
+        exchangeRate: draft.exchangeRate ? String(Number(draft.exchangeRate)) : '',
+        transactionDate: draft.transactionDate.slice(0, 10),
+        reference: draft.reference ?? '',
+        description: draft.description,
+        hasCharge: !!draft.chargeAmount,
+        chargeAmount: draft.chargeAmount ? String(Number(draft.chargeAmount)) : '',
+        chargeGlAccountId: draft.chargeAmount ? (draft.offsetGlAccountId ?? '') : '',
+      });
+    } else {
+      reset({ ...DEFAULTS, transactionDate: today() });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -155,6 +188,18 @@ export function NewTransferPanel({ isOpen, onClose }: { isOpen: boolean; onClose
         chargeAmount: values.hasCharge ? Number(values.chargeAmount) : undefined,
         chargeGlAccountId: values.hasCharge ? values.chargeGlAccountId : undefined,
       });
+      if (draft) {
+        try {
+          await deleteDraft.mutateAsync(draft.id);
+        } catch (error) {
+          toast.error(
+            extractError(
+              error,
+              'Saved, but the old draft could not be deleted — delete it yourself',
+            ),
+          );
+        }
+      }
       close();
       setSuccessOpen(true);
     } catch (error) {

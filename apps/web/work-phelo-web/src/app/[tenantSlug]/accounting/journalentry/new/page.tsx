@@ -24,6 +24,7 @@ import { cardClass } from '@/lib/utils';
 import {
   useCreateJournal,
   useCreateRecurringJournal,
+  useDeleteDraftJournal,
   useJournal,
   useReverseJournal,
 } from '@/hooks';
@@ -58,7 +59,13 @@ export default function NewJournalEntryPage() {
   const searchParams = useSearchParams();
   const correctId = searchParams.get('correct') ?? undefined;
   const typeParam = ENTRY_TYPE_OPTIONS.find((o) => o.value === searchParams.get('type'))?.value;
-  const { data: correcting } = useJournal(correctId);
+  // "Reject → Redo" on a draft lands here with ?redo=<draft id>: same pre-fill, and the draft is
+  // deleted once the redone entry is saved.
+  const redoId = searchParams.get('redo') ?? undefined;
+  const { data: redoCandidate } = useJournal(redoId);
+  const redoing = redoCandidate?.status === 'DRAFT' ? redoCandidate : undefined;
+  const { data: correctingJournal } = useJournal(correctId);
+  const correcting = correctingJournal ?? redoing;
   const { data: glAccounts = [] } = useGLAccounts();
   const [chosenType, setEntryType] = useState<JournalEntryType | null>(null);
   const correctingType = correcting?.entryType.toLowerCase() as JournalEntryType | undefined;
@@ -74,6 +81,9 @@ export default function NewJournalEntryPage() {
     const categoryById = new Map(glAccounts.map((a) => [a.id, a.category]));
     form.reset({
       ...JOURNAL_ENTRY_DEFAULTS,
+      adjustmentCategory: correcting.adjustmentCategory
+        ? (correcting.adjustmentCategory.toLowerCase() as JournalEntryFormValues['adjustmentCategory'])
+        : JOURNAL_ENTRY_DEFAULTS.adjustmentCategory,
       transactionDate: correcting.transactionDate.slice(0, 10),
       currency: correcting.transactionCurrency,
       exchangeRate: Number(correcting.exchangeRate) === 1 ? '' : Number(correcting.exchangeRate),
@@ -90,6 +100,7 @@ export default function NewJournalEntryPage() {
   const toast = useToast();
   const { mutateAsync: createJournal, isPending: isCreating } = useCreateJournal();
   const { mutateAsync: reverseJournal, isPending: isReversing } = useReverseJournal();
+  const { mutateAsync: deleteDraftJournal } = useDeleteDraftJournal();
   const { mutateAsync: createRecurring, isPending: isCreatingRecurring } =
     useCreateRecurringJournal();
   const isPending = isCreating || isReversing || isCreatingRecurring;
@@ -172,6 +183,15 @@ export default function NewJournalEntryPage() {
         })),
       });
       toast.success(`Journal entry ${journal.journalNumber} saved as draft`);
+      if (redoing) {
+        try {
+          await deleteDraftJournal(redoing.id);
+        } catch (err) {
+          toast.error(
+            extractError(err, 'Saved, but the old draft could not be deleted — delete it yourself'),
+          );
+        }
+      }
       router.push(base);
     } catch (err) {
       toast.error(extractError(err, 'Failed to save journal entry'));
@@ -207,10 +227,16 @@ export default function NewJournalEntryPage() {
         </div>
       </div>
 
-      {correcting && (
+      {redoing && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Correcting {formatJournalNumber(correcting.journalNumber)}, which has been reversed. The
-          original lines are loaded below — fix them and submit the corrected entry.
+          Redoing draft {formatJournalNumber(redoing.journalNumber)}. Change anything below and
+          submit; the old draft is deleted once the new one is saved.
+        </div>
+      )}
+      {correctingJournal && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Correcting {formatJournalNumber(correctingJournal.journalNumber)}, which has been
+          reversed. The original lines are loaded below — fix them and submit the corrected entry.
         </div>
       )}
 

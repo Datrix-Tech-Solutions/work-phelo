@@ -643,11 +643,81 @@ export class CashbookService {
     return this.getCashbookTransaction(user, transactionId);
   }
 
+  /**
+   * Throws a draft away. A direct receipt/payment raised by another module is rejected instead,
+   * so that module hears about it; a draft transfer has no such owner and can simply go.
+   */
+  async deleteDraftTransaction(user: RequestUser, transactionId: string) {
+    const transaction = await this.prisma.cashbookTransaction.findFirst({
+      where: { id: transactionId, tenantId: user.tenantId },
+      include: {
+        receivableReceipt: { select: { id: true } },
+        payablePayment: { select: { id: true } },
+      },
+    });
+    if (!transaction)
+      throw new NotFoundException('Cashbook transaction not found');
+    if (transaction.status !== CashbookTransactionStatus.DRAFT) {
+      throw new ConflictException(
+        'Only draft cashbook transactions can be deleted',
+      );
+    }
+    if (transaction.receivableReceipt || transaction.payablePayment) {
+      throw new ConflictException(
+        "This entry belongs to a receipt or payment document - it can't be deleted here",
+      );
+    }
+    if (
+      transaction.transactionType !== CashbookTransactionType.RECEIPT &&
+      transaction.transactionType !== CashbookTransactionType.PAYMENT &&
+      transaction.transactionType !== CashbookTransactionType.TRANSFER
+    ) {
+      throw new ConflictException(
+        'Only direct receipts, payments and transfers can be deleted',
+      );
+    }
+    if (transaction.sourceModule && transaction.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        'This entry was raised by another module - reject it instead',
+      );
+    }
+    try {
+      const removed = await this.prisma.cashbookTransaction.deleteMany({
+        where: {
+          id: transaction.id,
+          tenantId: user.tenantId,
+          status: CashbookTransactionStatus.DRAFT,
+        },
+      });
+      if (removed.count !== 1) {
+        throw new ConflictException(
+          'Cashbook transaction was changed by another request',
+        );
+      }
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      throw new ConflictException(
+        'This entry is referenced elsewhere and cannot be deleted',
+      );
+    }
+    await this.recordAudit(
+      user,
+      'CASHBOOK_DRAFT_DELETED',
+      'CashbookTransaction',
+      transaction.id,
+      {
+        transactionType: transaction.transactionType,
+        transactionNumber: transaction.transactionNumber,
+      },
+    );
+    return { id: transaction.id, deleted: true };
+  }
+
   /** A draft direct receipt/payment. Customer receipts and vendor payments are handled through their own documents. */
   private async findEditableDraft(
     tenantId: string,
     transactionId: string,
-    action: 'edited' | 'rejected',
+    action: 'edited' | 'rejected' | 'deleted',
   ) {
     const transaction = await this.prisma.cashbookTransaction.findFirst({
       where: { id: transactionId, tenantId },
