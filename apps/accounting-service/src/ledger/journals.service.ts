@@ -617,6 +617,11 @@ export class JournalsService {
       if (original.status !== JournalStatus.POSTED) {
         throw new ConflictException('Only posted journals can be reversed');
       }
+      if (original.sourceModule || original.sourceRecordId) {
+        throw new ConflictException(
+          'This journal was posted by another record. Reverse that record instead.',
+        );
+      }
       this.policy.validateBalanced(
         original.lines.map((line) => ({
           debit: line.transactionDebit,
@@ -767,10 +772,16 @@ export class JournalsService {
     });
     if (!journal) throw new NotFoundException('Journal entry not found');
     const { source } = this.withSource(journal);
+    // A reversal made on the journal screen copies its original's source record but is not owned
+    // by it (a record's own reversal never carries this link), so it is changed here.
+    const isJournalScreenReversal = Boolean(
+      journal.reversalOfJournalId || journal.voidedReversalOfJournalId,
+    );
     if (
-      source.category !== 'MANUAL' ||
-      journal.sourceModule ||
-      journal.sourceRecordId
+      !isJournalScreenReversal &&
+      (source.category !== 'MANUAL' ||
+        journal.sourceModule ||
+        journal.sourceRecordId)
     ) {
       throw new ConflictException(
         'This journal was posted by another record. Change that record instead.',
@@ -1125,11 +1136,24 @@ export class JournalsService {
     await this.lockJournal(tx, user.tenantId, journalId);
     const journal = await tx.journalEntry.findFirst({
       where: { id: journalId, tenantId: user.tenantId },
-      select: { status: true, fiscalPeriodId: true },
+      select: {
+        status: true,
+        fiscalPeriodId: true,
+        reversalJournal: { select: { journalNumber: true, status: true } },
+      },
     });
     if (!journal) throw new NotFoundException('Journal entry not found');
     if (journal.status !== JournalStatus.POSTED) {
       throw new ConflictException('Only posted journals can be voided');
+    }
+    // A reversal made on the journal screen leaves the original posted, so it has to be voided first.
+    if (
+      journal.reversalJournal &&
+      journal.reversalJournal.status !== JournalStatus.VOIDED
+    ) {
+      throw new ConflictException(
+        `This journal has been reversed by ${journal.reversalJournal.journalNumber}. Void the reversal first.`,
+      );
     }
     await this.assertPeriodStillOpen(
       tx,

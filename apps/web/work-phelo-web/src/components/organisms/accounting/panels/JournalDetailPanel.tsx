@@ -100,12 +100,15 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const [sourceTarget, setSourceTarget] = useState<SourceRecordTarget | null>(null);
   const sourceRecord = journal?.source?.record ?? null;
   const isManual = (journal?.source?.category ?? 'MANUAL') === 'MANUAL';
+  // A reversal made on this screen carries its original's source but is changed here, not there.
+  const isChangeableHere =
+    isManual || Boolean(journal?.reversalOfJournalId || journal?.voidedReversalOfJournalId);
   const periodOpen = isPeriodOpen(journal?.transactionDate);
   const hasLiveReversal = Boolean(journal?.reversalJournal);
-  const canChangePosted = journal?.status === 'POSTED' && isManual && periodOpen;
+  const canChangePosted = journal?.status === 'POSTED' && isChangeableHere && periodOpen;
   const canEditPosted = canChangePosted && !hasLiveReversal && !journal?.reversalOfJournalId;
   const canVoidPosted = canChangePosted && !hasLiveReversal;
-  const canRestore = journal?.status === 'VOIDED' && isManual && periodOpen;
+  const canRestore = journal?.status === 'VOIDED' && isChangeableHere && periodOpen;
   const restoresAsIs = Boolean(journal?.voidedReversalOfJournalId);
 
   // Debit and credit always match on a saved journal, so one total covers both sides.
@@ -218,7 +221,7 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                 Post
               </Button>
             </div>
-          ) : journal && canReverse(journal) ? (
+          ) : journal && canReverse(journal) && isManual ? (
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={handleClose}>
                 Close
@@ -255,6 +258,14 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               {canVoidPosted && (
                 <Button variant="outline" onClick={() => setVoidOpen(true)}>
                   Void
+                </Button>
+              )}
+              {sourceRecord && journal?.source && (
+                <Button
+                  variant="outline"
+                  onClick={() => setSourceTarget({ type: sourceRecord.type, id: sourceRecord.id })}
+                >
+                  Open {journal.source.kind.toLowerCase()}
                 </Button>
               )}
               {canRestore && (
@@ -374,19 +385,13 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
               </div>
             )}
             {sourceRecord && journal.source && (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 flex items-center justify-between gap-3">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
                 <span>
                   Posted by {describeJournalSource(journal.source)}.{' '}
                   {journal.status === 'VOIDED'
                     ? 'Restore it from there.'
                     : 'To void or change this entry, open it there.'}
                 </span>
-                <Button
-                  variant="outline"
-                  onClick={() => setSourceTarget({ type: sourceRecord.type, id: sourceRecord.id })}
-                >
-                  Open {journal.source.kind.toLowerCase()}
-                </Button>
               </div>
             )}
             {hasLiveReversal && journal.status === 'POSTED' && isManual && periodOpen && (
