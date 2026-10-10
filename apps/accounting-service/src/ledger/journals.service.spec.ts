@@ -609,6 +609,7 @@ describe('JournalsService', () => {
         category: 'MANUAL',
         kind: 'Journal entry',
         number: null,
+        record: null,
       });
     });
 
@@ -624,6 +625,7 @@ describe('JournalsService', () => {
         category: 'RECEIVABLE',
         kind: 'Invoice',
         number: 'INV26-00001',
+        record: { type: 'INVOICE', id: 'doc-1' },
       });
     });
 
@@ -656,6 +658,7 @@ describe('JournalsService', () => {
         category: 'RECEIVABLE',
         kind: 'Receipt',
         number: 'ARR-2026-000001',
+        record: { type: 'RECEIPT', id: 'r-1' },
       });
 
       const payment = await sourceOf({
@@ -670,6 +673,7 @@ describe('JournalsService', () => {
       expect(payment.source).toMatchObject({
         category: 'PAYABLE',
         kind: 'Payment',
+        record: { type: 'PAYMENT', id: 'p-1' },
       });
     });
 
@@ -687,6 +691,7 @@ describe('JournalsService', () => {
         category: 'CASH_AND_BANK',
         kind: 'Transfer',
         number: 'TRF-1',
+        record: { type: 'CASHBOOK', id: 'cb-3' },
       });
     });
 
@@ -701,6 +706,7 @@ describe('JournalsService', () => {
       expect(journal.source).toMatchObject({
         category: 'RECEIVABLE',
         kind: 'Credit note',
+        record: { type: 'CREDIT_NOTE', id: 'doc-3' },
       });
     });
 

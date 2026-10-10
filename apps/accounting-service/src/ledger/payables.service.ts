@@ -675,6 +675,18 @@ export class PayablesService {
     return document;
   }
 
+  /** The listed shape (with payment state) for specific documents, in the order of `ids`. */
+  async listDocumentsByIds(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    const items = await this.prisma.accountingPayableDocument.findMany({
+      where: { tenantId, id: { in: ids } },
+      include: payableDocumentInclude,
+    });
+    const withState = await this.attachPaymentStates(tenantId, items);
+    const byId = new Map(withState.map((item) => [item.id, item]));
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  }
+
   listBills(tenantId: string, query: QueryPayableDocumentsDto) {
     return this.listDocuments(
       tenantId,
@@ -2480,6 +2492,7 @@ export class PayablesService {
     const nameById = new Map(types.map((type) => [type.id, type.name]));
     return allocations.map((allocation) => ({
       allocationId: allocation.id,
+      creditNoteId: allocation.creditNoteId,
       documentNumber: allocation.creditNote?.documentNumber ?? null,
       transactionType: allocation.creditNote?.transactionTypeId
         ? (nameById.get(allocation.creditNote.transactionTypeId) ?? null)
@@ -2488,8 +2501,32 @@ export class PayablesService {
     }));
   }
 
+  /** The payments applied to a bill, so each can be opened (and voided) from the bill. */
+  private async appliedSettlementDetails(tenantId: string, billId: string) {
+    const allocations = await this.prisma.accountingPayableAllocation.findMany({
+      where: {
+        tenantId,
+        billId,
+        sourceType: AccountingPayableAllocationSource.PAYMENT,
+        reversedAt: null,
+      },
+      include: { payment: { select: { paymentNumber: true } } },
+      orderBy: { allocatedAt: 'asc' },
+    });
+    return allocations.map((allocation) => ({
+      allocationId: allocation.id,
+      settlementId: allocation.paymentId,
+      settlementNumber: allocation.payment?.paymentNumber ?? null,
+      amount: this.money(allocation.amount),
+    }));
+  }
+
   private async billBalanceFromDocument(document: PayableDocument) {
     const appliedNotes = await this.appliedCreditNoteDetails(
+      document.tenantId,
+      document.id,
+    );
+    const appliedSettlementDetails = await this.appliedSettlementDetails(
       document.tenantId,
       document.id,
     );
@@ -2514,6 +2551,7 @@ export class PayablesService {
       appliedPayments: this.money(paymentApplied),
       appliedCreditNotes: this.money(creditApplied),
       appliedNotes,
+      appliedSettlementDetails,
       outstandingAmount: this.money(outstanding),
       paymentState: this.paymentState(document, outstanding, paymentApplied),
     };

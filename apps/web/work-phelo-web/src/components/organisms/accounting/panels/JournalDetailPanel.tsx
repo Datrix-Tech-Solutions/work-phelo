@@ -25,6 +25,10 @@ import {
 import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import {
+  SourceRecordPanel,
+  SourceRecordTarget,
+} from '@/components/organisms/accounting/panels/SourceRecordPanel';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
@@ -91,6 +95,10 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const restoreJournal = useRestoreJournal();
   const [voidOpen, setVoidOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  // A journal posted by an invoice, receipt or the like is changed from that record, which is
+  // opened in its own panel from here. The type is kept after closing so a form it hosts survives.
+  const [sourceTarget, setSourceTarget] = useState<SourceRecordTarget | null>(null);
+  const sourceRecord = journal?.source?.record ?? null;
   const isManual = (journal?.source?.category ?? 'MANUAL') === 'MANUAL';
   const periodOpen = isPeriodOpen(journal?.transactionDate);
   const hasLiveReversal = Boolean(journal?.reversalJournal);
@@ -365,6 +373,22 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                 {!periodOpen && ' Its period is no longer open, so it can’t be restored.'}
               </div>
             )}
+            {sourceRecord && journal.source && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 flex items-center justify-between gap-3">
+                <span>
+                  Posted by {describeJournalSource(journal.source)}.{' '}
+                  {journal.status === 'VOIDED'
+                    ? 'Restore it from there.'
+                    : 'To void or change this entry, open it there.'}
+                </span>
+                <Button
+                  variant="outline"
+                  onClick={() => setSourceTarget({ type: sourceRecord.type, id: sourceRecord.id })}
+                >
+                  Open {journal.source.kind.toLowerCase()}
+                </Button>
+              </div>
+            )}
             {hasLiveReversal && journal.status === 'POSTED' && isManual && periodOpen && (
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
                 To edit or void this journal, void its reversal first.
@@ -428,6 +452,10 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
           />
         </div>
       </Modal>
+      <SourceRecordPanel
+        target={sourceTarget}
+        onClose={() => setSourceTarget((t) => (t ? { type: t.type } : null))}
+      />
       <VoidEntryModal
         isOpen={voidOpen}
         subject={journal ? formatJournalNumber(journal.journalNumber) : 'This journal'}

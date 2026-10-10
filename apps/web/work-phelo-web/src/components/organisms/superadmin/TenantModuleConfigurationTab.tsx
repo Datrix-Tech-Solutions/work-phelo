@@ -5,10 +5,15 @@ import { Icons, MODULE_COLORS, ModuleIcons, type ModuleKey } from '@/components/
 import { cardClass, cn } from '@/lib/utils';
 import { TenantSmsSenderIds } from './TenantSmsSenderIds';
 import { TenantSmsWallet } from './TenantSmsWallet';
+import { TenantProjectsLabel } from './TenantProjectsLabel';
 
 interface TenantModuleConfigurationTabProps {
   tenantId: string;
   marketingEnabled: boolean;
+  /** HR is on and its Projects feature is switched on. */
+  projectsEnabled: boolean;
+  /** The name saved for Projects; empty when none was set. */
+  projectsLabel: string;
 }
 
 interface ConfigOption {
@@ -26,33 +31,49 @@ interface ConfigModule {
 
 const ROOT_LABEL = 'Module Configuration';
 
-function configurableModules(marketingEnabled: boolean): ConfigModule[] {
-  return marketingEnabled
-    ? [
+function configurableModules(marketingEnabled: boolean, projectsEnabled: boolean): ConfigModule[] {
+  const modules: ConfigModule[] = [];
+  if (projectsEnabled) {
+    modules.push({
+      key: 'hr',
+      label: 'Human Resource',
+      description: 'Configure how this company uses the Human Resource module.',
+      options: [
         {
-          key: 'marketing',
-          label: 'Marketing',
-          description: 'Configure how this company uses the Marketing module.',
-          options: [
-            {
-              key: 'campaign',
-              label: 'Campaign Configuration',
-              description: 'SMS sender IDs and the SMS credit wallet used by campaigns.',
-            },
-          ],
+          key: 'projects',
+          label: 'Projects Name',
+          description: 'What this company calls a project, shown across the module.',
         },
-      ]
-    : [];
+      ],
+    });
+  }
+  if (marketingEnabled) {
+    modules.push({
+      key: 'marketing',
+      label: 'Marketing',
+      description: 'Configure how this company uses the Marketing module.',
+      options: [
+        {
+          key: 'campaign',
+          label: 'Campaign Configuration',
+          description: 'SMS sender IDs and the SMS credit wallet used by campaigns.',
+        },
+      ],
+    });
+  }
+  return modules;
 }
 
 export function TenantModuleConfigurationTab({
   tenantId,
   marketingEnabled,
+  projectsEnabled,
+  projectsLabel,
 }: TenantModuleConfigurationTabProps) {
   const [moduleKey, setModuleKey] = useState<string | null>(null);
   const [optionKey, setOptionKey] = useState<string | null>(null);
 
-  const modules = configurableModules(marketingEnabled);
+  const modules = configurableModules(marketingEnabled, projectsEnabled);
   // A selection that no longer exists (module switched off while open) falls back to nothing.
   const activeModule = modules.find((m) => m.key === moduleKey);
   const activeOption = activeModule?.options.find((o) => o.key === optionKey);
@@ -65,8 +86,8 @@ export function TenantModuleConfigurationTab({
   if (modules.length === 0) {
     return (
       <section className="rounded-card border border-gray-200 bg-white p-5 text-sm text-gray-500">
-        No module-specific configuration is available. Enable a module on the Information tab to
-        configure it here.
+        No module-specific configuration is available. Enable a module or feature on the Information
+        tab to configure it here.
       </section>
     );
   }
@@ -166,6 +187,8 @@ export function TenantModuleConfigurationTab({
               </button>
             ))}
           </div>
+        ) : activeOption.key === 'projects' ? (
+          <TenantProjectsLabel tenantId={tenantId} savedName={projectsLabel} />
         ) : (
           activeOption.key === 'campaign' && (
             <div className="flex flex-col gap-5">

@@ -17,6 +17,7 @@ export interface JwtPayload {
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;
   integrationConfig?: Record<string, boolean>;
+  labelConfig?: Record<string, string>;
   permissions?: string[];
   iat?: number;
   exp?: number;
@@ -36,5 +37,6 @@ export interface RequestUser {
   moduleConfig: Record<string, boolean>;
   featureConfig: Record<string, Record<string, boolean>>;
   integrationConfig?: Record<string, boolean>;
+  labelConfig?: Record<string, string>;
   permissions: string[];
 }

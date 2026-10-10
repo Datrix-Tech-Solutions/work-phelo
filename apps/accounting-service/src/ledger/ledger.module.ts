@@ -8,6 +8,8 @@ import { AccountingSettingsController } from './accounting-settings.controller';
 import { AccountsController } from './accounts.controller';
 import { ArchiveController } from './archive.controller';
 import { ArchiveService } from './archive.service';
+import { TransactionsController } from './transactions.controller';
+import { TransactionsService } from './transactions.service';
 import { CashbookController } from './cashbook.controller';
 import { CashbookService } from './cashbook.service';
 import { BankReconciliationsController } from './bank-reconciliations.controller';
@@ -53,6 +55,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     AccountingSettingsController,
     AccountsController,
     ArchiveController,
+    TransactionsController,
     CashbookController,
     BankReconciliationsController,
     BudgetsController,
@@ -76,6 +79,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     AccountingHrClient,
     AccountingMasterDataService,
     ArchiveService,
+    TransactionsService,
     CashbookService,
     BankReconciliationsService,
     BudgetsService,

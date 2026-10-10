@@ -9,6 +9,7 @@ import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import type { MyTask, TaskStatus } from '@/types/hr';
 import { cn } from '@/lib/utils';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 interface Props {
   isOpen: boolean;
@@ -87,6 +88,7 @@ function ProjectRow({
 }) {
   const [expanded, setExpanded] = useState(true);
   const router = useRouter();
+  const labels = useProjectLabels();
 
   const incompleteTasks = group.tasks.filter((t) => t.status !== 'DONE');
 
@@ -123,7 +125,7 @@ function ProjectRow({
             onClick={() => router.push(`/${tenantSlug}/hr/projects/${group.id}`)}
             className="mt-3 flex items-center gap-1 text-xs text-brand font-medium hover:underline"
           >
-            Go to Project <ArrowRight className="w-3.5 h-3.5" />
+            Go to {labels.singular} <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
@@ -133,6 +135,7 @@ function ProjectRow({
 
 export function MyProjectsPanel({ isOpen, onClose, tenantSlug }: Props) {
   const toast = useToastStore((s) => s.addToast);
+  const labels = useProjectLabels();
   const { data: myTasks = [], isLoading } = useMyTasks();
   const updateStatus = useUpdateTaskStatus();
 
@@ -165,8 +168,8 @@ export function MyProjectsPanel({ isOpen, onClose, tenantSlug }: Props) {
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title="My Projects"
-      description="Your active tasks across assigned projects."
+      title={`My ${labels.plural}`}
+      description={`Your active tasks across assigned ${labels.pluralLower}.`}
       width="sm:w-[480px]"
     >
       {isLoading ? (

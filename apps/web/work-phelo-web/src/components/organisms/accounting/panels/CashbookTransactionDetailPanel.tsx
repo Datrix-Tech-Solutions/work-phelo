@@ -11,6 +11,10 @@ import { NewTransactionPanel } from '@/components/organisms/accounting/panels/Ne
 import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTransferPanel';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import {
+  SourceRecordPanel,
+  SourceRecordTarget,
+} from '@/components/organisms/accounting/panels/SourceRecordPanel';
 import type { EntryChangeMode } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import {
   useDeleteCashbookDraft,
@@ -110,6 +114,13 @@ export function CashbookTransactionDetailPanel({
   const restoreEntry = useRestoreCashbook();
   const [voidOpen, setVoidOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  // A receipt or payment on an invoice or bill is voided from its own panel, opened from here.
+  const [settlementTarget, setSettlementTarget] = useState<SourceRecordTarget | null>(null);
+  const settlementRef = transaction?.receivableReceipt
+    ? ({ type: 'RECEIPT', id: transaction.receivableReceipt.id } as const)
+    : transaction?.payablePayment
+      ? ({ type: 'PAYMENT', id: transaction.payablePayment.id } as const)
+      : null;
   const isDirect =
     !!transaction &&
     !transaction.sourceModule &&
@@ -315,6 +326,21 @@ export function CashbookTransactionDetailPanel({
           </div>
         )}
 
+        {transaction && settlementRef && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            <span>
+              This is the {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'} on an{' '}
+              {settlementRef.type === 'RECEIPT' ? 'invoice' : 'bill'}.{' '}
+              {transaction.status === 'VOIDED'
+                ? 'Restore it from there.'
+                : 'To void it, open it there.'}
+            </span>
+            <Button variant="outline" onClick={() => setSettlementTarget(settlementRef)}>
+              Open {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'}
+            </Button>
+          </div>
+        )}
+
         {transaction && transaction.status === 'VOIDED' && (
           <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
             <p className="font-semibold">
@@ -422,6 +448,11 @@ export function CashbookTransactionDetailPanel({
           }}
           onDelete={handleDelete}
           onClose={() => setChoiceOpen(false)}
+        />
+
+        <SourceRecordPanel
+          target={settlementTarget}
+          onClose={() => setSettlementTarget((t) => (t ? { type: t.type } : null))}
         />
 
         <VoidEntryModal

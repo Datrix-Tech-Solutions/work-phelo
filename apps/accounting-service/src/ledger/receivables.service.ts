@@ -699,6 +699,18 @@ export class ReceivablesService {
     return document;
   }
 
+  /** The listed shape (with payment state) for specific documents, in the order of `ids`. */
+  async listDocumentsByIds(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    const items = await this.prisma.accountingReceivableDocument.findMany({
+      where: { tenantId, id: { in: ids } },
+      include: receivableDocumentInclude,
+    });
+    const withState = await this.attachPaymentStates(tenantId, items);
+    const byId = new Map(withState.map((item) => [item.id, item]));
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  }
+
   listInvoices(tenantId: string, query: QueryReceivableDocumentsDto) {
     return this.listDocuments(
       tenantId,
@@ -2728,6 +2740,7 @@ export class ReceivablesService {
     const nameById = new Map(types.map((type) => [type.id, type.name]));
     return allocations.map((allocation) => ({
       allocationId: allocation.id,
+      creditNoteId: allocation.creditNoteId,
       documentNumber: allocation.creditNote?.documentNumber ?? null,
       transactionType: allocation.creditNote?.transactionTypeId
         ? (nameById.get(allocation.creditNote.transactionTypeId) ?? null)
@@ -2736,8 +2749,33 @@ export class ReceivablesService {
     }));
   }
 
+  /** The receipts applied to an invoice, so each can be opened (and voided) from the invoice. */
+  private async appliedSettlementDetails(tenantId: string, invoiceId: string) {
+    const allocations =
+      await this.prisma.accountingReceivableAllocation.findMany({
+        where: {
+          tenantId,
+          invoiceId,
+          sourceType: AccountingReceivableAllocationSource.RECEIPT,
+          reversedAt: null,
+        },
+        include: { receipt: { select: { receiptNumber: true } } },
+        orderBy: { allocatedAt: 'asc' },
+      });
+    return allocations.map((allocation) => ({
+      allocationId: allocation.id,
+      settlementId: allocation.receiptId,
+      settlementNumber: allocation.receipt?.receiptNumber ?? null,
+      amount: this.money(allocation.amount),
+    }));
+  }
+
   private async invoiceBalanceFromDocument(document: ReceivableDocument) {
     const appliedNotes = await this.appliedCreditNoteDetails(
+      document.tenantId,
+      document.id,
+    );
+    const appliedSettlementDetails = await this.appliedSettlementDetails(
       document.tenantId,
       document.id,
     );
@@ -2762,6 +2800,7 @@ export class ReceivablesService {
       appliedReceipts: this.money(receiptApplied),
       appliedCreditNotes: this.money(creditApplied),
       appliedNotes,
+      appliedSettlementDetails,
       outstandingAmount: this.money(outstanding),
       paymentState: this.paymentState(document, outstanding, receiptApplied),
     };

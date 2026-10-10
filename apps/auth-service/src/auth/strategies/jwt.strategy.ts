@@ -83,6 +83,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         >) ?? {},
       integrationConfig:
         (user.tenant.integrationConfig as Record<string, boolean>) ?? {},
+      labelConfig: (user.tenant.labelConfig as Record<string, string>) ?? {},
       permissions,
     };
   }

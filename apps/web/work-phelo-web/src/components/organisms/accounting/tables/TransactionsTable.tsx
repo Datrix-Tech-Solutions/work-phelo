@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
@@ -20,17 +20,14 @@ import {
   CashbookTransaction,
   CashbookTransactionType,
   PaymentRequest,
+  TransactionsPageType,
   TransactionTypeDefinition,
 } from '@/types/accounting';
 import {
-  useCashbookTransactions,
-  usePayableBills,
   usePendingPaymentRequests,
   useReceivableInvoice,
   useRejectPaymentRequest,
-  usePayableCreditNotes,
-  useReceivableCreditNotes,
-  useReceivableInvoices,
+  useTransactionsPage,
   useTransactionTypes,
 } from '@/hooks';
 import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
@@ -90,7 +87,7 @@ const CREDIT_NOTE_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, strin
 const CASHBOOK_TYPE_LABEL: Record<CashbookTransactionType, string> = {
   RECEIPT: 'Receipt',
   PAYMENT: 'Payment',
-  TRANSFER: 'Transfer',
+  TRANSFER: 'Contra',
   CHARGE: 'Charge',
   ADJUSTMENT: 'Adjustment',
 };
@@ -122,6 +119,7 @@ const TYPE_FILTER_OPTIONS: SearchSelectOption[] = [
   { value: 'RECEIVABLE', label: 'Receivable' },
   { value: 'PAYABLE', label: 'Payable' },
   { value: 'CASHBOOK', label: 'Cashbook' },
+  { value: 'TRANSFER', label: 'Contra' },
 ];
 
 function fmtDate(iso: string | null) {
@@ -159,7 +157,7 @@ interface UnifiedTransactionRow {
   currency: string;
   typeLabel: string;
   typeColor: TypeChipColor;
-  filterSide: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK';
+  filterSide: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK' | 'TRANSFER';
   status: AccountingTradeDocumentStatus;
   paymentStateLabel: string | null;
   /** The printable document this row's Transaction Type allows, if any. */
@@ -219,7 +217,7 @@ function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
     currency: cb.currency,
     typeLabel: CASHBOOK_TYPE_LABEL[cb.transactionType],
     typeColor: CASHBOOK_TYPE_CHIP_COLOR[cb.transactionType],
-    filterSide: 'CASHBOOK',
+    filterSide: cb.transactionType === 'TRANSFER' ? 'TRANSFER' : 'CASHBOOK',
     status: cb.status,
     paymentStateLabel: null,
     documentKey: null,
@@ -285,24 +283,30 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     [transactionTypes],
   );
 
-  const invoices = useReceivableInvoices({ limit: 100, partyId });
-  const bills = usePayableBills({ limit: 100, partyId });
-  const receivableCreditNotes = useReceivableCreditNotes({ limit: 100, partyId });
-  const payableCreditNotes = usePayableCreditNotes({ limit: 100, partyId });
-  // On an entity's own page this is only the direct cashbook entries that name the entity. They
-  // are listed for reference and never count towards what the entity owes.
-  const cashbookTransactions = useCashbookTransactions({ limit: 100, counterpartyId: partyId });
+  // The search waits for a pause in typing before it goes to the server.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // The server filters, searches and pages. On an entity's own page this is only the direct
+  // cashbook entries that name the entity; they are listed for reference and never count
+  // towards what the entity owes.
+  const transactionsPage = useTransactionsPage({
+    type: (typeFilter || undefined) as TransactionsPageType | undefined,
+    status: statusFilter || undefined,
+    search: debouncedSearch || undefined,
+    partyId,
+    page,
+    limit: PAGE_SIZE,
+  });
   const paymentRequests = usePendingPaymentRequests();
   const rejectPaymentRequest = useRejectPaymentRequest();
   // The invoice behind a request, for its detail view and for recording the payment.
   const requestInvoice = useReceivableInvoice(requestInvoiceId);
 
-  const isLoading =
-    invoices.isLoading ||
-    bills.isLoading ||
-    receivableCreditNotes.isLoading ||
-    payableCreditNotes.isLoading ||
-    cashbookTransactions.isLoading;
+  const isLoading = transactionsPage.isLoading;
 
   const documentKeyByTypeId = useMemo(() => {
     const map = new Map<string, AccountingDocumentKey>();
@@ -312,56 +316,42 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     return map;
   }, [transactionTypes]);
 
-  const transactions = useMemo<UnifiedTransactionRow[]>(() => {
-    const toRow = (doc: AccountingTradeDocument) => toDocumentRow(doc, documentKeyByTypeId);
-    const all = [
-      ...(invoices.data?.items ?? []).map(toRow),
-      ...(bills.data?.items ?? []).map(toRow),
-      ...(receivableCreditNotes.data?.items ?? []).map(toRow),
-      ...(payableCreditNotes.data?.items ?? []).map(toRow),
-      ...(cashbookTransactions.data?.items ?? [])
-        .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
-        .map(toCashbookRow),
-      ...(paymentRequests.data ?? [])
-        .filter((request) => !partyId || request.entity?.id === partyId)
-        .map(toPaymentRequestRow),
-    ];
-    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [
-    invoices.data,
-    bills.data,
-    receivableCreditNotes.data,
-    payableCreditNotes.data,
-    cashbookTransactions.data,
-    paymentRequests.data,
-    partyId,
-    documentKeyByTypeId,
-  ]);
+  // Requests waiting for the accountant are few, so they are matched here and shown at the top of
+  // the first page; they are not part of the server's count.
+  const requestRows = useMemo<UnifiedTransactionRow[]>(() => {
+    if (page !== 1) return [];
+    if (typeFilter && typeFilter !== 'RECEIVABLE') return [];
+    if (statusFilter && statusFilter !== 'DRAFT') return [];
+    const q = debouncedSearch.toLowerCase();
+    return (paymentRequests.data ?? [])
+      .filter((request) => !partyId || request.entity?.id === partyId)
+      .filter(
+        (request) =>
+          !q ||
+          request.invoiceNumber.toLowerCase().includes(q) ||
+          (request.entity?.name ?? '').toLowerCase().includes(q),
+      )
+      .map(toPaymentRequestRow);
+  }, [paymentRequests.data, page, typeFilter, statusFilter, debouncedSearch, partyId]);
+
+  const paged = useMemo<UnifiedTransactionRow[]>(() => {
+    const rows = (transactionsPage.data?.items ?? []).map((item) =>
+      item.kind === 'document'
+        ? toDocumentRow(item.document, documentKeyByTypeId)
+        : toCashbookRow(item.transaction),
+    );
+    return [...requestRows, ...rows];
+  }, [transactionsPage.data, requestRows, documentKeyByTypeId]);
 
   // On an entity's page, "New Transaction" doesn't make sense — offer the payment
   // action for whichever side actually has documents here instead.
   const bulkPaymentSide = useMemo(() => {
-    const payableCount = transactions.filter((t) => t.filterSide === 'PAYABLE').length;
-    const receivableCount = transactions.filter((t) => t.filterSide === 'RECEIVABLE').length;
+    const payableCount = paged.filter((t) => t.filterSide === 'PAYABLE').length;
+    const receivableCount = paged.filter((t) => t.filterSide === 'RECEIVABLE').length;
     return payableCount > receivableCount ? 'PAYABLE' : 'RECEIVABLE';
-  }, [transactions]);
+  }, [paged]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return transactions.filter((r) => {
-      if (statusFilter && r.status !== statusFilter) return false;
-      if (typeFilter && r.filterSide !== typeFilter) return false;
-      if (!q) return true;
-      return (
-        r.transactionNumber.toLowerCase().includes(q) ||
-        r.entityLabel.toLowerCase().includes(q) ||
-        r.status.toLowerCase().includes(q)
-      );
-    });
-  }, [search, statusFilter, typeFilter, transactions]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = transactionsPage.data?.totalPages ?? 1;
 
   const columns = useMemo<Column<UnifiedTransactionRow>[]>(
     () => [

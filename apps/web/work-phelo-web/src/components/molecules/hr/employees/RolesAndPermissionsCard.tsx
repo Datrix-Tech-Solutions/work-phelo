@@ -8,6 +8,7 @@ import { TableButton } from '@/components/atoms/TableButton';
 import {
   PERMISSION_TAG_GROUPS,
   inferTagsFromResources,
+  useTagLabel,
 } from '@/components/molecules/roles/PermissionTagSelector';
 
 interface RolesAndPermissionsCardProps {
@@ -33,6 +34,7 @@ export function RolesAndPermissionsCard({
   onManagePermissions,
   directPermissions = [],
 }: RolesAndPermissionsCardProps) {
+  const tagLabel = useTagLabel();
   const [tab, setTab] = useState<SubTab>(roles.length > 0 ? 'roles' : 'permissions');
 
   const activeTagsByGroup = useMemo(() => {
@@ -135,7 +137,7 @@ export function RolesAndPermissionsCard({
                         key={tag.key}
                         className="px-2.5 py-1 rounded-full text-xs font-medium bg-brand/10 text-brand border border-brand/20"
                       >
-                        {tag.label}
+                        {tagLabel(tag)}
                       </span>
                     ))}
                   </div>

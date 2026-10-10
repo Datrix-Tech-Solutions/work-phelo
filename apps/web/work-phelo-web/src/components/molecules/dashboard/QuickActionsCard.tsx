@@ -15,6 +15,7 @@ import { waterIconStyle } from '@/lib/utils';
 import { QuickActionsPanel } from '@/components/atoms/QuickActionsPanel';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
 import { useTabUsage } from '@/hooks/useTabUsage';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 export interface QuickActionModule {
   key: string;
@@ -59,6 +60,7 @@ export function QuickActionsCard({
   modules = [],
   onModule,
 }: QuickActionsCardProps) {
+  const labels = useProjectLabels();
   const [expanded, setExpanded] = useState(false);
 
   /* Personal shortcuts + accessible modules, one flat list. Colors are distinct
@@ -97,7 +99,7 @@ export function QuickActionsCard({
       },
       {
         key: 'my-projects',
-        label: 'My Projects',
+        label: `My ${labels.plural}`,
         icon: KanbanSquare,
         color: '#7c3aed',
         onClick: onProjects,
@@ -123,6 +125,7 @@ export function QuickActionsCard({
     onProjects,
     leaveBadge,
     projectsBadge,
+    labels.plural,
     modules,
     onModule,
   ]);

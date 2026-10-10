@@ -2,11 +2,13 @@
 
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 import { MARKETING_ADMIN_PERMISSIONS } from '@/components/molecules/marketing/MarketingPermissionSections';
 import type { PermissionAction, PermissionSetResourceDto } from '@/types/roles';
 
-interface PermissionTag {
+export interface PermissionTag {
   key: string;
+  /** May contain {Project} / {Projects}, filled in with the company's own name for projects. */
   label: string;
   /** Only shown when the tenant's moduleConfig has this key enabled. Omit for always-visible tags. */
   moduleKey?: string;
@@ -15,6 +17,13 @@ interface PermissionTag {
 interface PermissionTagGroup {
   group: string;
   tags: PermissionTag[];
+}
+
+/** Returns a function that turns a tag into the text shown to the user. */
+export function useTagLabel(): (tag: PermissionTag) => string {
+  const projects = useProjectLabels();
+  return (tag) =>
+    tag.label.replace('{Projects}', projects.plural).replace('{Project}', projects.singular);
 }
 
 export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
@@ -45,8 +54,8 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
       { key: 'view_all_attendance', label: 'View All Attendance' },
       { key: 'approve_time_correction', label: 'Approve Time Correction' },
       { key: 'manage_schedule', label: 'Manage Schedule' },
-      { key: 'view_all_projects', label: 'View All Projects' },
-      { key: 'manage_projects', label: 'Manage Projects' },
+      { key: 'view_all_projects', label: 'View All {Projects}' },
+      { key: 'manage_projects', label: 'Manage {Projects}' },
     ],
   },
   {
@@ -307,6 +316,7 @@ interface PermissionTagSelectorProps {
 }
 
 export function PermissionTagSelector({ value, onChange }: PermissionTagSelectorProps) {
+  const tagLabel = useTagLabel();
   const moduleConfig = useAuthStore((s) => s.user?.moduleConfig ?? EMPTY_MODULE_CONFIG);
   const visibleGroups = PERMISSION_TAG_GROUPS.map((group) => ({
     ...group,
@@ -359,7 +369,7 @@ export function PermissionTagSelector({ value, onChange }: PermissionTagSelector
                       : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700',
                   )}
                 >
-                  {tag.label}
+                  {tagLabel(tag)}
                 </button>
               );
             })}

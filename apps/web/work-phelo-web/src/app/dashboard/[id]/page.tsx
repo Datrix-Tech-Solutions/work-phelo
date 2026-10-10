@@ -208,6 +208,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
           <TenantModuleConfigurationTab
             tenantId={tenant.id}
             marketingEnabled={moduleConfig.marketing ?? false}
+            projectsEnabled={Boolean(moduleConfig.hr && featureConfig.hr?.projects)}
+            projectsLabel={tenant.labelConfig?.projects ?? ''}
           />
         </div>
       )}
