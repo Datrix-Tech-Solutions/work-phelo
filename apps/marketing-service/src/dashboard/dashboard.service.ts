@@ -1,20 +1,28 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   MarketingClientBillingState,
   MarketingClientProductStatus,
+  MarketingCrmSettingCategory,
   Prisma,
 } from '../../prisma/generated/client';
+import { AccountingClient } from '../accounting/accounting.client';
+import { callAccounting } from '../accounting/call-accounting';
 import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesTargetsService } from '../sales-targets/sales-targets.service';
 import {
+  DashboardGrowthPoint,
+  DashboardRevenueByProduct,
   DashboardStage,
   DashboardSummary,
+  QueryDashboardGrowthDto,
+  QueryDashboardRevenueDto,
   QueryDashboardSummaryDto,
 } from './dto/dashboard-summary.dto';
 
 const DAY_MS = 86_400_000;
+const TRANSACTIONS_PER_CALL = 500;
 const ZERO = new Prisma.Decimal(0);
 
 /** Half-open [from, to): `to` is the day after the last day shown. */
@@ -28,6 +36,12 @@ const toRange = (from: string, to: string): Range => ({
 });
 const inRange = (at: Date, range: Range) => at >= range.from && at < range.to;
 const money = (value: Prisma.Decimal) => value.toFixed(2);
+const chunks = <T>(items: T[], size: number) => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size)
+    out.push(items.slice(i, i + size));
+  return out;
+};
 
 /**
  * Figures for the Marketing dashboard. Everything is scoped like the lists it summarises: a
@@ -40,6 +54,7 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly targets: SalesTargetsService,
+    private readonly accounting: AccountingClient,
   ) {}
 
   async summary(
@@ -75,7 +90,7 @@ export class DashboardService {
       this.funnel(user.tenantId, prospectScope, previous),
       this.wonDeals(user.tenantId, clientScope),
       this.expectedClosing(user.tenantId, prospectScope, clientScope, current),
-      this.pipeline(user.tenantId, prospectScope),
+      this.pipeline(user.tenantId, prospectScope, current),
       this.clientCounts(user.tenantId, clientScope, current),
       this.achievedRevenue(user, clientScope, days, prevDays),
       this.targetProgress(user, days),
@@ -112,6 +127,133 @@ export class DashboardService {
       targets,
       clients,
     };
+  }
+
+  /** Prospects and clients created in each range, scoped like the lists they come from. */
+  async growth(
+    user: RequestUser,
+    query: QueryDashboardGrowthDto,
+  ): Promise<DashboardGrowthPoint[]> {
+    const ranges = query.ranges.split(',').map((pair) => {
+      const [from, to] = pair.split(':');
+      if (to < from) {
+        throw new BadRequestException(`Range ${pair} ends before it starts`);
+      }
+      return { from, to };
+    });
+    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
+      ? {}
+      : { assignedUserId: user.id };
+    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
+      ? {}
+      : { assignedUserId: user.id };
+
+    return Promise.all(
+      ranges.map(async ({ from, to }) => {
+        const window = toRange(from, to);
+        const createdAt = { gte: window.from, lt: window.to };
+        const [newProspects, newClients] = await Promise.all([
+          this.prisma.marketingProspect.count({
+            where: { tenantId: user.tenantId, ...prospectScope, createdAt },
+          }),
+          this.prisma.marketingClient.count({
+            where: { tenantId: user.tenantId, ...clientScope, createdAt },
+          }),
+        ]);
+        return { fromDate: from, toDate: to, newProspects, newClients };
+      }),
+    );
+  }
+
+  /**
+   * Money Accounting received in the range against posted client transactions, per product.
+   * A transaction carries the product it was raised for, so received money is attributed
+   * through that link. Fails (502) when Accounting cannot be reached.
+   */
+  async revenueByProduct(
+    user: RequestUser,
+    query: QueryDashboardRevenueDto,
+  ): Promise<DashboardRevenueByProduct> {
+    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
+      ? {}
+      : { assignedUserId: user.id };
+    const billings = await this.prisma.marketingClientBilling.findMany({
+      where: {
+        tenantId: user.tenantId,
+        state: MarketingClientBillingState.POSTED,
+        client: { ...clientScope, accountingEntityId: { not: null } },
+      },
+      select: {
+        productId: true,
+        accountingTransactionId: true,
+        client: { select: { accountingEntityId: true } },
+      },
+    });
+    // Accounting needs an entity with every call; the per-transaction answer does not depend on it.
+    const entityId = billings[0]?.client.accountingEntityId;
+    if (!entityId) return { currency: null, total: money(ZERO), products: [] };
+
+    const productByTransaction = new Map(
+      billings.map((b) => [b.accountingTransactionId, b.productId]),
+    );
+    const byProduct = new Map<string | null, Prisma.Decimal>();
+    let currency = '';
+    for (const batch of chunks(
+      [...productByTransaction.keys()],
+      TRANSACTIONS_PER_CALL,
+    )) {
+      const summary = await callAccounting(this.logger, () =>
+        this.accounting.receiptsSummary(
+          {
+            tenantId: user.tenantId,
+            entityIds: [entityId],
+            transactionIds: batch,
+            from: query.fromDate,
+            to: query.toDate,
+          },
+          user.id,
+        ),
+      );
+      currency = summary.currency || currency;
+      for (const transaction of summary.transactions) {
+        const received = new Prisma.Decimal(transaction.receivedAmount);
+        if (received.isZero()) continue;
+        const product =
+          productByTransaction.get(transaction.transactionId) ?? null;
+        byProduct.set(product, (byProduct.get(product) ?? ZERO).plus(received));
+      }
+    }
+
+    const productIds = [...byProduct.keys()].filter(
+      (id): id is string => id !== null,
+    );
+    const names = new Map(
+      (productIds.length
+        ? await this.prisma.marketingCrmSettingOption.findMany({
+            where: {
+              tenantId: user.tenantId,
+              id: { in: productIds },
+              category: MarketingCrmSettingCategory.PRODUCT,
+            },
+            select: { id: true, name: true },
+          })
+        : []
+      ).map((option) => [option.id, option.name]),
+    );
+
+    const products = [...byProduct.entries()]
+      .sort(([, a], [, b]) => b.comparedTo(a))
+      .map(([productId, amount]) => ({
+        productId,
+        name:
+          productId === null
+            ? 'No product'
+            : (names.get(productId) ?? 'Unknown product'),
+        amount: money(amount),
+      }));
+    const total = [...byProduct.values()].reduce((sum, v) => sum.plus(v), ZERO);
+
+    return { currency: currency || null, total: money(total), products };
   }
 
   private canViewAll(user: RequestUser, permission: string) {
@@ -229,15 +371,20 @@ export class DashboardService {
     );
   }
 
-  /** Open prospects (not yet clients) by pipeline stage, now. Weighted by the stage's probability. */
+  /**
+   * Open prospects (not yet clients) created in the range, by pipeline stage: how many there
+   * are, what they are expected to bring in, and the average per prospect.
+   */
   private async pipeline(
     tenantId: string,
     prospectScope: { assignedUserId?: string },
+    range: Range,
   ) {
     const open: Prisma.MarketingProspectWhereInput = {
       tenantId,
       ...prospectScope,
       client: { is: null },
+      createdAt: { gte: range.from, lt: range.to },
     };
     const [stages, counts, products] = await Promise.all([
       this.prisma.marketingPipelineStage.findMany({
@@ -272,21 +419,18 @@ export class DashboardService {
 
     let totalProspects = 0;
     let totalExpected = ZERO;
-    let totalWeighted = ZERO;
     const rows: DashboardStage[] = stages.map((stage) => {
       const prospects = countByStage.get(stage.id) ?? 0;
       const expected = expectedByStage.get(stage.id) ?? ZERO;
-      const weighted = expected.times(stage.probability).div(100);
       totalProspects += prospects;
       totalExpected = totalExpected.plus(expected);
-      totalWeighted = totalWeighted.plus(weighted);
       return {
         stageId: stage.id,
         name: stage.name,
         probability: stage.probability,
         prospects,
         expected: money(expected),
-        weighted: money(weighted),
+        average: money(prospects > 0 ? expected.div(prospects) : ZERO),
       };
     });
 
@@ -294,7 +438,6 @@ export class DashboardService {
       stages: rows,
       prospects: totalProspects,
       expected: money(totalExpected),
-      weighted: money(totalWeighted),
     };
   }
 

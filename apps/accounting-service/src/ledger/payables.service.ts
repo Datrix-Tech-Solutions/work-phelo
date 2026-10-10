@@ -38,6 +38,7 @@ import {
   ReversePayableAllocationDto,
   ReversePayableDto,
 } from './dto/payables.dto';
+import { QueryTradeSummaryDto } from './dto/trade-summary.dto';
 import { JournalsService } from './journals.service';
 import { normalizeDocumentLines } from './document-lines';
 import { settlementEntryLines } from './cashbook-lines.util';
@@ -125,7 +126,8 @@ export class PayablesService {
     private readonly journals: JournalsService,
   ) {}
 
-  async summary(tenantId: string) {
+  async summary(tenantId: string, window: QueryTradeSummaryDto = {}) {
+    const raisedWindow = this.summaryWindow(window);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today);
@@ -138,7 +140,13 @@ export class PayablesService {
           documentType: AccountingPayableDocumentType.BILL,
           status: AccountingPayableStatus.POSTED,
         },
-        select: { id: true, totalAmount: true, currency: true, dueDate: true },
+        select: {
+          id: true,
+          totalAmount: true,
+          currency: true,
+          dueDate: true,
+          documentDate: true,
+        },
       }),
       this.prisma.accountingPayableAllocation.findMany({
         where: { tenantId, reversedAt: null },
@@ -160,6 +168,7 @@ export class PayablesService {
         (applied.get(allocation.billId) ?? zero).plus(allocation.amount),
       );
     const outstanding = new Map<string, Prisma.Decimal>();
+    const raised = new Map<string, Prisma.Decimal>();
     let overdueInvoices = 0;
     let dueThisWeek = 0;
     for (const bill of bills) {
@@ -169,6 +178,16 @@ export class PayablesService {
         bill.currency,
         (outstanding.get(bill.currency) ?? zero).plus(balance),
       );
+      if (
+        raisedWindow &&
+        bill.documentDate >= raisedWindow.from &&
+        bill.documentDate < raisedWindow.to
+      ) {
+        raised.set(
+          bill.currency,
+          (raised.get(bill.currency) ?? zero).plus(balance),
+        );
+      }
       if (bill.dueDate && bill.dueDate < today) overdueInvoices += 1;
       if (bill.dueDate && bill.dueDate >= today && bill.dueDate <= weekEnd)
         dueThisWeek += 1;
@@ -188,11 +207,20 @@ export class PayablesService {
     });
     return {
       outstandingByCurrency: this.summaryTotals(outstanding),
+      raisedInPeriodByCurrency: this.summaryTotals(raised),
       overdueInvoices,
       dueThisWeek,
       pendingApproval,
       paidMtdByCurrency: this.summaryTotals(paid),
     };
+  }
+
+  /** [from, to) from the inclusive first and last day, or null when either is missing. */
+  private summaryWindow(window: QueryTradeSummaryDto) {
+    if (!window.fromDate || !window.toDate) return null;
+    const from = new Date(window.fromDate);
+    const to = new Date(new Date(window.toDate).getTime() + 86_400_000);
+    return { from, to };
   }
 
   private summaryTotals(totals: Map<string, Prisma.Decimal>) {

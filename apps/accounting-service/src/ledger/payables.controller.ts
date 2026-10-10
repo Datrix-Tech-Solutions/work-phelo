@@ -18,6 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { QueryTradeSummaryDto } from './dto/trade-summary.dto';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -107,8 +108,11 @@ export class PayablesController {
   @Get('summary')
   @ApiOperation({ summary: 'Get tenant Accounts Payable dashboard summary' })
   @RequirePermissions(AccountingPermission.PAYABLES_VIEW)
-  summary(@Req() request: Request & { user: RequestUser }) {
-    return this.service.summary(request.user.tenantId);
+  summary(
+    @Query() query: QueryTradeSummaryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.summary(request.user.tenantId, query);
   }
 
   @Get('bills/:billId')

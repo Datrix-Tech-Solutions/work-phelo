@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { RevenueExpenseChart } from '@/components/molecules/accounting/RevenueExpenseChart';
 import { AccountingDashboardKpis } from '@/components/organisms/accounting/AccountingDashboardKpis';
 import { DashboardShell } from '@/components/organisms/shared/DashboardShell';
 import { useAccountingCurrencies } from '@/hooks';
@@ -25,6 +26,9 @@ export default function AccountingDashboardPage() {
         year={filters.year}
         currency={filters.fieldValues.currency ?? ''}
       />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <RevenueExpenseChart period={filters.period} />
+      </div>
     </DashboardShell>
   );
 }

@@ -15,6 +15,7 @@ import {
   BalanceSheetReportQueryDto,
   CashFlowReportQueryDto,
   GeneralLedgerReportQueryDto,
+  IncomeSeriesReportQueryDto,
   IncomeStatementReportQueryDto,
   TrialBalanceReportQueryDto,
 } from './dto/accounting-reports.dto';
@@ -283,6 +284,69 @@ export class ReportsService {
       totalExpenses: this.money(totalExpenses),
       netProfitOrLoss: this.money(totalRevenue.minus(totalExpenses)),
     };
+  }
+
+  /**
+   * Revenue and expense totals for each requested range, summed in the database. Follows the
+   * Income Statement's rules (posted and reversed journals, base currency, revenue as credit less
+   * debit, expenses as debit less credit) so the two always agree.
+   */
+  async incomeSeries(tenantId: string, query: IncomeSeriesReportQueryDto) {
+    const ranges = query.ranges.split(',').map((pair) => {
+      const [fromDate, toDate] = pair.split(':');
+      if (toDate < fromDate) {
+        throw new BadRequestException(`Range ${pair} ends before it starts`);
+      }
+      return { fromDate, toDate };
+    });
+    const categories = [GLAccountCategory.REVENUE, GLAccountCategory.EXPENSE];
+
+    const accounts = await this.prisma.gLAccount.findMany({
+      where: { tenantId, category: { in: categories } },
+      select: { id: true, category: true },
+    });
+    const categoryById = new Map(
+      accounts.map((account) => [account.id, account.category]),
+    );
+
+    return Promise.all(
+      ranges.map(async ({ fromDate, toDate }) => {
+        const rows = await this.prisma.journalLine.groupBy({
+          by: ['glAccountId'],
+          where: {
+            tenantId,
+            glAccount: { category: { in: categories } },
+            journalEntry: {
+              tenantId,
+              status: { in: reportJournalStatuses },
+              transactionDate: {
+                gte: this.startOfDay(fromDate),
+                lte: this.endOfDay(toDate),
+              },
+            },
+          },
+          _sum: { baseDebit: true, baseCredit: true },
+        });
+
+        let totalRevenue = zero;
+        let totalExpenses = zero;
+        for (const row of rows) {
+          const debit = row._sum.baseDebit ?? zero;
+          const credit = row._sum.baseCredit ?? zero;
+          if (categoryById.get(row.glAccountId) === GLAccountCategory.REVENUE) {
+            totalRevenue = totalRevenue.plus(credit.minus(debit));
+          } else {
+            totalExpenses = totalExpenses.plus(debit.minus(credit));
+          }
+        }
+        return {
+          fromDate,
+          toDate,
+          totalRevenue: this.money(totalRevenue),
+          totalExpenses: this.money(totalExpenses),
+        };
+      }),
+    );
   }
 
   async balanceSheet(tenantId: string, query: BalanceSheetReportQueryDto) {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Period } from '@/components/atoms/PeriodToggle';
-import { dashboardRanges, percentChange } from '@/lib/dashboardPeriod';
+import { dashboardRanges, trendBetween } from '@/lib/dashboardPeriod';
 import { useAccountingConfig } from './useAccountingConfig';
 import { useCashAndBankStats } from './useCashbook';
 import {
@@ -20,7 +20,8 @@ const toTotals = (rows: AccountingCurrencyTotal[] | undefined): Record<string, n
  * Everything the accounting dashboard's KPI cards show. Cash, receivables and payables are
  * per-currency balances. Profit, revenue, expenses, net cash change and net worth come from the
  * financial statements, so they are in the base currency and ignore the currency filter.
- * Trends compare with the previous period (see `dashboardRanges`).
+ * Trends compare with the previous period (see `dashboardRanges`). Receivables and payables are
+ * what is owed today; `raised` is the part of that billed within the selected period.
  */
 export function useAccountingDashboardStats(period: Period, year: number) {
   const ranges = useMemo(() => dashboardRanges(period, year), [period, year]);
@@ -28,8 +29,8 @@ export function useAccountingDashboardStats(period: Period, year: number) {
 
   const { data: config } = useAccountingConfig();
   const cash = useCashAndBankStats();
-  const receivables = useAccountsReceivableSummary();
-  const payables = useAccountsPayableSummary();
+  const receivables = useAccountsReceivableSummary({ fromDate, toDate });
+  const payables = useAccountsPayableSummary({ fromDate, toDate });
 
   const income = useIncomeStatementReport({ fromDate, toDate }, true);
   const prevIncome = useIncomeStatementReport({ fromDate: prevFromDate, toDate: prevToDate }, true);
@@ -63,33 +64,40 @@ export function useAccountingDashboardStats(period: Period, year: number) {
       ? prevAssets - prevLiabilities
       : undefined;
 
-  const trend = (current?: number, previous?: number) =>
-    current !== undefined && previous !== undefined ? percentChange(current, previous) : undefined;
+  const trend = trendBetween;
 
   return {
+    ranges,
     baseCurrency: config?.baseCurrency ?? '',
     cashPosition: { totals: cash.data?.netCashPosition, isLoading: cash.isLoading },
     receivables: {
-      totals: toTotals(receivables.data?.outstandingByCurrency),
+      // undefined (not an empty set) when the request failed, so the card shows a dash, not zero
+      totals: receivables.data ? toTotals(receivables.data.outstandingByCurrency) : undefined,
+      raised: receivables.data ? toTotals(receivables.data.raisedInPeriodByCurrency) : undefined,
       isLoading: receivables.isLoading,
     },
     payables: {
-      totals: toTotals(payables.data?.outstandingByCurrency),
+      // undefined (not an empty set) when the request failed, so the card shows a dash, not zero
+      totals: payables.data ? toTotals(payables.data.outstandingByCurrency) : undefined,
+      raised: payables.data ? toTotals(payables.data.raisedInPeriodByCurrency) : undefined,
       isLoading: payables.isLoading,
     },
     netProfit: {
       value: profit,
+      previous: prevProfit,
       trend: trend(profit, prevProfit),
       isLoading: income.isLoading || prevIncome.isLoading,
     },
     revenueAndExpenses: {
       revenue,
       expenses,
+      previousRevenue: prevRevenue,
       revenueTrend: trend(revenue, prevRevenue),
       isLoading: income.isLoading || prevIncome.isLoading,
     },
     netCash: {
       change: netCashChange,
+      previous: prevNetCashChange,
       operating: num(cashFlow.data?.operatingActivities.total),
       investing: num(cashFlow.data?.investingActivities.total),
       financing: num(cashFlow.data?.financingActivities.total),
@@ -98,6 +106,7 @@ export function useAccountingDashboardStats(period: Period, year: number) {
     },
     netWorth: {
       value: netWorth,
+      previous: prevNetWorth,
       assets,
       liabilities,
       trend: trend(netWorth, prevNetWorth),

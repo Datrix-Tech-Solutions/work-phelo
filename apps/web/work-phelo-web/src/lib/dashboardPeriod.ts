@@ -49,3 +49,25 @@ export function percentChange(current: number, previous: number): number | undef
   if (previous === 0) return undefined;
   return ((current - previous) / Math.abs(previous)) * 100;
 }
+
+/** "9 Oct 2026" from a YYYY-MM-DD day. */
+export function formatDay(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/**
+ * The trend a badge shows. Undefined when either figure is unavailable (no badge). When both are
+ * known but there is no percentage to give (the previous figure is zero), 0, which shows as a
+ * neutral badge so the previous figure is still reachable from its tooltip.
+ */
+export function trendBetween(
+  current: number | undefined,
+  previous: number | undefined,
+): number | undefined {
+  if (current === undefined || previous === undefined) return undefined;
+  return percentChange(current, previous) ?? 0;
+}

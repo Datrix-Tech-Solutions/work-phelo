@@ -262,6 +262,97 @@ const setup = () => {
 };
 
 describe('PayablesService', () => {
+  describe('summary', () => {
+    const posted = (overrides: Record<string, unknown>) =>
+      bill({ status: AccountingPayableStatus.POSTED, ...overrides });
+
+    it('reports what was raised in the window and is still unpaid, alongside the full balance', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableDocument.findMany.mockResolvedValue([
+        posted({
+          id: 'jan',
+          documentDate: new Date('2026-01-15'),
+          totalAmount: new Prisma.Decimal(1000),
+        }),
+        posted({
+          id: 'mar',
+          documentDate: new Date('2026-03-20'),
+          totalAmount: new Prisma.Decimal(1500),
+        }),
+        posted({
+          id: 'apr',
+          documentDate: new Date('2026-04-30'),
+          totalAmount: new Prisma.Decimal(800),
+        }),
+      ]);
+      // 500 of the March invoice has been paid
+      prisma.accountingPayableAllocation.findMany.mockResolvedValue([
+        { billId: 'mar', amount: new Prisma.Decimal(500) },
+      ]);
+
+      const april = await service.summary(actor.tenantId, {
+        fromDate: '2026-04-01',
+        toDate: '2026-04-30',
+      });
+      const wholeYear = await service.summary(actor.tenantId, {
+        fromDate: '2026-01-01',
+        toDate: '2026-04-30',
+      });
+
+      expect(april.outstandingByCurrency).toEqual([
+        { currency: 'GHS', amount: '2800.0000' },
+      ]);
+      expect(april.raisedInPeriodByCurrency).toEqual([
+        { currency: 'GHS', amount: '800.0000' },
+      ]);
+      expect(wholeYear.raisedInPeriodByCurrency).toEqual([
+        { currency: 'GHS', amount: '2800.0000' },
+      ]);
+    });
+
+    it('leaves out bills that are fully paid and ones raised outside the window', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableDocument.findMany.mockResolvedValue([
+        posted({
+          id: 'paid',
+          documentDate: new Date('2026-04-10'),
+          totalAmount: new Prisma.Decimal(300),
+        }),
+        posted({
+          id: 'next-month',
+          documentDate: new Date('2026-05-01'),
+          totalAmount: new Prisma.Decimal(700),
+        }),
+      ]);
+      prisma.accountingPayableAllocation.findMany.mockResolvedValue([
+        { billId: 'paid', amount: new Prisma.Decimal(300) },
+      ]);
+
+      const result = await service.summary(actor.tenantId, {
+        fromDate: '2026-04-01',
+        toDate: '2026-04-30',
+      });
+
+      expect(result.raisedInPeriodByCurrency).toEqual([]);
+      expect(result.outstandingByCurrency).toEqual([
+        { currency: 'GHS', amount: '700.0000' },
+      ]);
+    });
+
+    it('reports nothing raised when no window is given', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableDocument.findMany.mockResolvedValue([
+        posted({ id: 'a', totalAmount: new Prisma.Decimal(100) }),
+      ]);
+
+      const result = await service.summary(actor.tenantId);
+
+      expect(result.raisedInPeriodByCurrency).toEqual([]);
+      expect(result.outstandingByCurrency).toEqual([
+        { currency: 'GHS', amount: '100.0000' },
+      ]);
+    });
+  });
   describe('taxes, deductions and charges added on the form', () => {
     const input = {
       vendorId: vendor.id,
