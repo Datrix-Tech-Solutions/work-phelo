@@ -11,6 +11,7 @@ import {
   useLeaveRequests,
 } from '@/hooks';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 // import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { ModuleOverviewCard } from '@/components/molecules/executive/ModuleOverviewCard';
 import { BentoTile, TileLabel, TileValue } from '@/components/molecules/executive/BentoTile';
@@ -39,6 +40,7 @@ export function HrOverviewCard() {
   const { data: departments } = useDepartments();
   const { data: branches } = useBranches();
   const { data: projects } = useProjects();
+  const labels = useProjectLabels();
   const onLeaveToday = useOnLeaveToday();
 
   const employeeCount = employees?.filter(
@@ -69,7 +71,7 @@ export function HrOverviewCard() {
             <TileValue color={color} value={onLeaveToday} />
           </BentoTile>
           <BentoTile color={color}>
-            <TileLabel color={color}>Active projects</TileLabel>
+            <TileLabel color={color}>Active {labels.pluralLower}</TileLabel>
             <TileValue color={color} value={activeProjects} total={projects?.length} />
           </BentoTile>
         </div>

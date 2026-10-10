@@ -8,6 +8,20 @@ import { PrismaService } from '../prisma/prisma.service';
 export const REINSURANCE_ACCOUNTING_INTEGRATION =
   'operations.reinsurance->accounting';
 
+/**
+ * Features a super admin can rename for a company, mapped to the module feature that must be
+ * switched on first. Values are stored singular; the plural is derived by the UI.
+ */
+export const LABELLED_FEATURES: Record<
+  string,
+  { module: string; feature: string }
+> = {
+  projects: { module: 'hr', feature: 'projects' },
+};
+
+const LABEL_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} &'-]*$/u;
+export const LABEL_MAX_LENGTH = 30;
+
 @Injectable()
 export class TenantConfigService {
   constructor(private readonly prisma: PrismaService) {}
@@ -68,6 +82,88 @@ export class TenantConfigService {
 
     return {
       moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {},
+    };
+  }
+
+  /** Sets display names for module features. A blank value clears the name (falls back to default). */
+  async updateLabels(
+    tenantId: string,
+    labels: Record<string, string>,
+    actorId: string,
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { moduleConfig: true, featureConfig: true, labelConfig: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const moduleConfig = (tenant.moduleConfig as Record<string, boolean>) ?? {};
+    const featureConfig =
+      (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {};
+    const current = (tenant.labelConfig as Record<string, string>) ?? {};
+    const next: Record<string, string> = { ...current };
+    const changes: string[] = [];
+
+    for (const [key, raw] of Object.entries(labels)) {
+      const target = LABELLED_FEATURES[key];
+      if (!target) {
+        throw new BadRequestException(`"${key}" cannot be renamed.`);
+      }
+      if (
+        !moduleConfig[target.module] ||
+        !featureConfig[target.module]?.[target.feature]
+      ) {
+        throw new BadRequestException(
+          `Enable ${key} for this company before naming it.`,
+        );
+      }
+
+      const value =
+        typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : '';
+      if (value.length > LABEL_MAX_LENGTH) {
+        throw new BadRequestException(
+          `The name must be ${LABEL_MAX_LENGTH} characters or fewer.`,
+        );
+      }
+      if (value && !LABEL_PATTERN.test(value)) {
+        throw new BadRequestException(
+          'The name can only contain letters, numbers, spaces, &, apostrophes and hyphens.',
+        );
+      }
+
+      if (value) next[key] = value;
+      else delete next[key];
+
+      if ((current[key] ?? '') !== value) {
+        changes.push(`${key}: "${current[key] ?? ''}" → "${value}"`);
+      }
+    }
+
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { labelConfig: next },
+    });
+
+    if (changes.length > 0) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actorId,
+          tenantId,
+          action: 'UPDATE',
+          resource: 'Tenant',
+          resourceId: tenantId,
+          changes: {
+            type: 'LABEL_CONFIG_UPDATED',
+            changes,
+            updatedConfig: next,
+          },
+        },
+      });
+    }
+
+    return {
+      message: 'Names updated successfully',
+      labelConfig: updated.labelConfig,
     };
   }
 

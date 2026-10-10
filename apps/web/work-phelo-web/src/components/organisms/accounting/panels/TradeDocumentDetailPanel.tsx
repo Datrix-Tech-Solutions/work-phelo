@@ -15,6 +15,10 @@ import {
 } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import {
+  SourceRecordPanel,
+  SourceRecordTarget,
+} from '@/components/organisms/accounting/panels/SourceRecordPanel';
 import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import {
@@ -225,6 +229,10 @@ export function TradeDocumentDetailPanel({
   // A posted invoice, bill, credit or debit note entered here can be edited or voided while its
   // period is open - once nothing has been paid or credited against it. A voided one can be
   // restored. Another module's documents change in that module.
+  // The receipts/payments and credit/debit notes applied to this document, opened in their own
+  // panel so they can be voided before the document is. The type is kept after closing so a form
+  // they host survives.
+  const [appliedTarget, setAppliedTarget] = useState<SourceRecordTarget | null>(null);
   const isPeriodOpen = usePeriodOpenCheck();
   const entrySide = isReceivable ? 'RECEIVABLE' : 'PAYABLE';
   const voidEntry = useVoidTradeEntry(entrySide);
@@ -536,7 +544,7 @@ export function TradeDocumentDetailPanel({
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
                   To edit or void this {isReceivable ? 'invoice' : 'bill'}, first void the{' '}
                   {isReceivable ? 'receipts' : 'payments'} and {isReceivable ? 'credit' : 'debit'}{' '}
-                  notes applied to it.
+                  notes applied to it. Open each from the list below and void it there.
                 </div>
               )}
 
@@ -689,6 +697,60 @@ export function TradeDocumentDetailPanel({
                 </div>
               </div>
             )}
+
+            {balance &&
+              document.status === 'POSTED' &&
+              (balance.appliedSettlementDetails.length > 0 || balance.appliedNotes.length > 0) && (
+                <div className="rounded-xl border border-gray-200 p-3 flex flex-col gap-2">
+                  <span className="text-xs font-semibold text-gray-500">
+                    Applied to this {isReceivable ? 'invoice' : 'bill'}
+                  </span>
+                  {balance.appliedSettlementDetails.map((item) => (
+                    <button
+                      key={item.allocationId}
+                      type="button"
+                      disabled={!item.settlementId}
+                      onClick={() =>
+                        item.settlementId &&
+                        setAppliedTarget({
+                          type: isReceivable ? 'RECEIPT' : 'PAYMENT',
+                          id: item.settlementId,
+                        })
+                      }
+                      className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm text-left hover:bg-gray-50"
+                    >
+                      <span className="text-gray-900">
+                        {isReceivable ? 'Receipt' : 'Payment'} {item.settlementNumber ?? ''}
+                      </span>
+                      <span className="text-gray-600">
+                        {fmtAmount(item.amount, balance.currency)}
+                      </span>
+                    </button>
+                  ))}
+                  {balance.appliedNotes.map((item) => (
+                    <button
+                      key={item.allocationId}
+                      type="button"
+                      disabled={!item.creditNoteId}
+                      onClick={() =>
+                        item.creditNoteId &&
+                        setAppliedTarget({
+                          type: isReceivable ? 'CREDIT_NOTE' : 'DEBIT_NOTE',
+                          id: item.creditNoteId,
+                        })
+                      }
+                      className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm text-left hover:bg-gray-50"
+                    >
+                      <span className="text-gray-900">
+                        {isReceivable ? 'Credit note' : 'Debit note'} {item.documentNumber ?? ''}
+                      </span>
+                      <span className="text-gray-600">
+                        {fmtAmount(item.amount, balance.currency)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
             {paymentRequests.length > 0 && document.status === 'POSTED' && (
               <div className="rounded-xl border border-gray-200 p-3 flex flex-col gap-3">
@@ -845,6 +907,11 @@ export function TradeDocumentDetailPanel({
           }
         }}
         onClose={() => setRejectRequest(null)}
+      />
+
+      <SourceRecordPanel
+        target={appliedTarget}
+        onClose={() => setAppliedTarget((t) => (t ? { type: t.type } : null))}
       />
 
       <RejectDraftModal

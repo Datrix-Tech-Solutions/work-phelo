@@ -110,7 +110,19 @@ export interface JournalSource {
   kind: string;
   /** The originating transaction's own number, when it has one. */
   number: string | null;
+  /** Which record posted it, and its id, so the ledger can open it. Null for manual and
+   *  integration journals. */
+  record: { type: JournalSourceRecordType; id: string } | null;
 }
+
+export type JournalSourceRecordType =
+  | 'INVOICE'
+  | 'CREDIT_NOTE'
+  | 'RECEIPT'
+  | 'BILL'
+  | 'DEBIT_NOTE'
+  | 'PAYMENT'
+  | 'CASHBOOK';
 
 const DOCUMENT_KIND: Record<string, string> = {
   INVOICE: 'Invoice',
@@ -1613,6 +1625,13 @@ export class JournalsService {
         category: 'RECEIVABLE',
         kind: DOCUMENT_KIND[receivableDocument.documentType] ?? 'Document',
         number: receivableDocument.documentNumber,
+        record: {
+          type:
+            receivableDocument.documentType === 'CREDIT_NOTE'
+              ? 'CREDIT_NOTE'
+              : 'INVOICE',
+          id: receivableDocument.id,
+        },
       };
     }
     if (payableDocument) {
@@ -1620,6 +1639,13 @@ export class JournalsService {
         category: 'PAYABLE',
         kind: DOCUMENT_KIND[payableDocument.documentType] ?? 'Document',
         number: payableDocument.documentNumber,
+        record: {
+          type:
+            payableDocument.documentType === 'CREDIT_NOTE'
+              ? 'DEBIT_NOTE'
+              : 'BILL',
+          id: payableDocument.id,
+        },
       };
     }
     if (cashbookTransaction) {
@@ -1630,6 +1656,10 @@ export class JournalsService {
           category: 'RECEIVABLE',
           kind: 'Receipt',
           number: cashbookTransaction.receivableReceipt.receiptNumber,
+          record: {
+            type: 'RECEIPT',
+            id: cashbookTransaction.receivableReceipt.id,
+          },
         };
       }
       if (cashbookTransaction.payablePayment) {
@@ -1637,6 +1667,10 @@ export class JournalsService {
           category: 'PAYABLE',
           kind: 'Payment',
           number: cashbookTransaction.payablePayment.paymentNumber,
+          record: {
+            type: 'PAYMENT',
+            id: cashbookTransaction.payablePayment.id,
+          },
         };
       }
       return {
@@ -1646,6 +1680,7 @@ export class JournalsService {
         number:
           cashbookTransaction.transactionNumber ??
           cashbookTransaction.reference,
+        record: { type: 'CASHBOOK', id: cashbookTransaction.id },
       };
     }
     if (links.sourceEvent) {
@@ -1653,9 +1688,15 @@ export class JournalsService {
         category: 'INTEGRATION',
         kind: links.sourceEvent.sourceEventType,
         number: null,
+        record: null,
       };
     }
-    return { category: 'MANUAL', kind: 'Journal entry', number: null };
+    return {
+      category: 'MANUAL',
+      kind: 'Journal entry',
+      number: null,
+      record: null,
+    };
   }
 
   /**

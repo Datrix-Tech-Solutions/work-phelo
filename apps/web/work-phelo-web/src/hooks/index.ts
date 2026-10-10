@@ -68,6 +68,7 @@ export * from './accounting/useTaxTypes';
 export * from './accounting/useCashAccounts';
 export * from './accounting/useCashbook';
 export * from './accounting/useTradeDocuments';
+export * from './accounting/useTransactionsPage';
 export * from './accounting/usePaymentRequests';
 export * from './accounting/useAgingReports';
 export * from './accounting/useTradeSummaries';

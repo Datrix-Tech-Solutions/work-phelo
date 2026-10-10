@@ -5,6 +5,7 @@ import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { TableButton } from '@/components/atoms/TableButton';
 import { ProjectCard } from '@/components/molecules/hr/employees/ProjectCard';
 import { useEmployeeProjects } from '@/hooks/hr/useProjects';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 export function EmployeeProjectsSection({
   employeeId,
@@ -16,12 +17,13 @@ export function EmployeeProjectsSection({
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const router = useRouter();
   const { data: projects = [], isLoading } = useEmployeeProjects(employeeId);
+  const labels = useProjectLabels();
 
   if (isLoading) return null;
 
   return (
     <SectionCard
-      title="Projects"
+      title={labels.plural}
       scrollX
       headerAction={
         canOpenProjects ? (
@@ -33,7 +35,7 @@ export function EmployeeProjectsSection({
     >
       {projects.length === 0 ? (
         <p className="w-60 shrink-0 self-center text-sm text-gray-400">
-          Not assigned to any projects.
+          Not assigned to any {labels.pluralLower}.
         </p>
       ) : (
         projects.map((project) => (

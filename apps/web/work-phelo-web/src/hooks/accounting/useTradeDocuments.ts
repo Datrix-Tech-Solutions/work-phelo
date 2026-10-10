@@ -70,7 +70,10 @@ const CREDIT_NOTE_SEGMENT = 'credit-notes';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RawTradeDocument = Record<string, any>;
 
-function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): AccountingTradeDocument {
+export function mapDocument(
+  raw: RawTradeDocument,
+  side: AccountingTradeSide,
+): AccountingTradeDocument {
   const config = SIDE_CONFIG[side];
   const original = raw[config.originalKey] ?? null;
   return {
@@ -153,6 +156,7 @@ function mapBalance(
     appliedSettlements: raw[config.appliedSettlementsField],
     appliedCreditNotes: raw.appliedCreditNotes,
     appliedNotes: raw.appliedNotes ?? [],
+    appliedSettlementDetails: raw.appliedSettlementDetails ?? [],
     outstandingAmount: raw.outstandingAmount,
     paymentState: raw.paymentState,
   };

@@ -105,6 +105,9 @@ const cashbookInclude = {
     select: { id: true, reference: true, status: true },
   },
   reversalTransaction: { select: { id: true, reference: true, status: true } },
+  // The receipt or payment this entry settles, so the entry can lead to it.
+  receivableReceipt: { select: { id: true } },
+  payablePayment: { select: { id: true } },
 } satisfies Prisma.CashbookTransactionInclude;
 
 type TransactionClient = Prisma.TransactionClient;
@@ -398,6 +401,17 @@ export class CashbookService {
       { amount: dto.amount, currency: dto.currency },
     );
     return transaction;
+  }
+
+  /** The listed shape for specific transactions, in the order of `ids`. */
+  async listTransactionsByIds(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    const items = await this.prisma.cashbookTransaction.findMany({
+      where: { tenantId, id: { in: ids } },
+      include: cashbookInclude,
+    });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
   }
 
   async listCashbook(tenantId: string, query: QueryCashbookDto) {

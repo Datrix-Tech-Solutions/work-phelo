@@ -79,6 +79,7 @@ export class AuthService {
       moduleConfig: unknown;
       featureConfig: unknown;
       integrationConfig: unknown;
+      labelConfig?: unknown;
     },
   ) {
     const payload = {
@@ -290,6 +291,7 @@ export class AuthService {
           {},
         integrationConfig:
           (tenant.integrationConfig as Record<string, boolean>) ?? {},
+        labelConfig: (tenant.labelConfig as Record<string, string>) ?? {},
       },
     };
   }

@@ -510,6 +510,29 @@ export class TenantsController {
     );
   }
 
+  @Patch(':id/labels')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Set display names for module features (e.g. Projects → Cases) — SuperAdmin only',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant ID' })
+  @ApiBody({ schema: { example: { projects: 'Case' } } })
+  @ApiResponse({ status: 200, description: 'Names updated' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid name or feature not enabled',
+  })
+  updateLabels(
+    @Param('id') id: string,
+    @Body() dto: Record<string, string>,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.config.updateLabels(id, dto, req.user.id);
+  }
+
   @Patch(':id/features')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')

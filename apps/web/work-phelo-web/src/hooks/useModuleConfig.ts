@@ -25,6 +25,18 @@ export function useUpdateFeatures(tenantId: string) {
   });
 }
 
+export function useUpdateLabels(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (labels: Record<string, string>) =>
+      api.patch(`/auth/tenants/${tenantId}/labels`, labels).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tenants'] });
+      qc.invalidateQueries({ queryKey: ['tenant', tenantId] });
+    },
+  });
+}
+
 export function useFeatureHistory(tenantId: string) {
   return useQuery({
     queryKey: ['feature-history', tenantId],

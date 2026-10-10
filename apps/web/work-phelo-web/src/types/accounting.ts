@@ -834,7 +834,18 @@ export interface JournalSource {
   kind: string;
   /** The originating transaction's own number, when it has one. */
   number: string | null;
+  /** The record that posted it, so it can be opened. Null for manual and integration journals. */
+  record: { type: JournalSourceRecordType; id: string } | null;
 }
+
+export type JournalSourceRecordType =
+  | 'INVOICE'
+  | 'CREDIT_NOTE'
+  | 'RECEIPT'
+  | 'BILL'
+  | 'DEBIT_NOTE'
+  | 'PAYMENT'
+  | 'CASHBOOK';
 
 export interface JournalEntryRecord {
   id: string;
@@ -1253,8 +1264,16 @@ export interface AccountingTradeDocumentBalance {
   /** Each credit/debit note applied, with the transaction type it was raised under. */
   appliedNotes: {
     allocationId: string;
+    creditNoteId: string | null;
     documentNumber: string | null;
     transactionType: string | null;
+    amount: string;
+  }[];
+  /** Each receipt/payment applied, so it can be opened from the invoice or bill. */
+  appliedSettlementDetails: {
+    allocationId: string;
+    settlementId: string | null;
+    settlementNumber: string | null;
     amount: string;
   }[];
   outstandingAmount: string;
@@ -1559,6 +1578,9 @@ export interface CashbookTransaction {
   postedJournalEntryId: string | null;
   reversalJournalEntryId: string | null;
   reversalOfTransactionId: string | null;
+  /** The customer receipt or vendor payment this entry settles, when it does. */
+  receivableReceipt?: { id: string } | null;
+  payablePayment?: { id: string } | null;
   cashAccount: CashbookAccountRef;
   destinationCashAccount: CashbookAccountRef | null;
   offsetGlAccount: CashbookGLAccountRef | null;
@@ -2180,3 +2202,19 @@ export interface QueryArchiveParams {
   limit?: number;
   offset?: number;
 }
+
+export type TransactionsPageType = 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK' | 'TRANSFER';
+
+export interface QueryTransactionsParams {
+  type?: TransactionsPageType;
+  status?: string;
+  search?: string;
+  /** Only this customer/vendor/entity. */
+  partyId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export type TransactionsPageItem =
+  | { kind: 'document'; document: AccountingTradeDocument }
+  | { kind: 'cashbook'; transaction: CashbookTransaction };
