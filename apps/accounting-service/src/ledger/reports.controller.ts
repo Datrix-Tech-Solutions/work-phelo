@@ -17,6 +17,7 @@ import {
   BalanceSheetReportQueryDto,
   CashFlowReportQueryDto,
   GeneralLedgerReportQueryDto,
+  IncomeSeriesReportQueryDto,
   IncomeStatementReportQueryDto,
   TrialBalanceReportQueryDto,
 } from './dto/accounting-reports.dto';
@@ -71,6 +72,20 @@ export class ReportsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.incomeStatement(request.user.tenantId, query);
+  }
+
+  @Get('income-series')
+  @ApiOperation({
+    summary: 'Revenue and expenses for several date ranges at once',
+    description:
+      'Totals only, using the same rules as the Income Statement, for charting revenue against expenses over consecutive periods in one request.',
+  })
+  @RequirePermissions(AccountingPermission.LEDGER_VIEW)
+  incomeSeries(
+    @Query() query: IncomeSeriesReportQueryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.incomeSeries(request.user.tenantId, query);
   }
 
   @Get('balance-sheet')

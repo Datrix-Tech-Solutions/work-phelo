@@ -44,6 +44,7 @@ import {
   ReverseAllocationDto,
   ReverseReceivableDto,
 } from './dto/receivables.dto';
+import { QueryTradeSummaryDto } from './dto/trade-summary.dto';
 import { JournalsService } from './journals.service';
 import { normalizeDocumentLines } from './document-lines';
 import { settlementEntryLines } from './cashbook-lines.util';
@@ -137,7 +138,8 @@ export class ReceivablesService {
     @Optional() private readonly sourceEvents?: SourceEventsNotifier,
   ) {}
 
-  async summary(tenantId: string) {
+  async summary(tenantId: string, window: QueryTradeSummaryDto = {}) {
+    const raisedWindow = this.summaryWindow(window);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today);
@@ -150,7 +152,13 @@ export class ReceivablesService {
           documentType: AccountingReceivableDocumentType.INVOICE,
           status: AccountingReceivableStatus.POSTED,
         },
-        select: { id: true, totalAmount: true, currency: true, dueDate: true },
+        select: {
+          id: true,
+          totalAmount: true,
+          currency: true,
+          dueDate: true,
+          documentDate: true,
+        },
       }),
       this.prisma.accountingReceivableAllocation.findMany({
         where: { tenantId, reversedAt: null },
@@ -172,6 +180,7 @@ export class ReceivablesService {
         (applied.get(allocation.invoiceId) ?? zero).plus(allocation.amount),
       );
     const outstanding = new Map<string, Prisma.Decimal>();
+    const raised = new Map<string, Prisma.Decimal>();
     let overdueInvoices = 0;
     let dueThisWeek = 0;
     for (const invoice of invoices) {
@@ -183,6 +192,16 @@ export class ReceivablesService {
         invoice.currency,
         (outstanding.get(invoice.currency) ?? zero).plus(balance),
       );
+      if (
+        raisedWindow &&
+        invoice.documentDate >= raisedWindow.from &&
+        invoice.documentDate < raisedWindow.to
+      ) {
+        raised.set(
+          invoice.currency,
+          (raised.get(invoice.currency) ?? zero).plus(balance),
+        );
+      }
       if (invoice.dueDate && invoice.dueDate < today) overdueInvoices += 1;
       if (
         invoice.dueDate &&
@@ -199,10 +218,19 @@ export class ReceivablesService {
       );
     return {
       outstandingByCurrency: this.summaryTotals(outstanding),
+      raisedInPeriodByCurrency: this.summaryTotals(raised),
       overdueInvoices,
       dueThisWeek,
       collectedMtdByCurrency: this.summaryTotals(collected),
     };
+  }
+
+  /** [from, to) from the inclusive first and last day, or null when either is missing. */
+  private summaryWindow(window: QueryTradeSummaryDto) {
+    if (!window.fromDate || !window.toDate) return null;
+    const from = new Date(window.fromDate);
+    const to = new Date(new Date(window.toDate).getTime() + 86_400_000);
+    return { from, to };
   }
 
   private summaryTotals(totals: Map<string, Prisma.Decimal>) {

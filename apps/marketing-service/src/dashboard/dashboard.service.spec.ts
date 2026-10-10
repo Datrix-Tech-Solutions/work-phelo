@@ -39,7 +39,9 @@ describe('DashboardService', () => {
     marketingClientBilling: { findMany: jest.Mock };
     marketingClientProduct: { findMany: jest.Mock; aggregate: jest.Mock };
     marketingPipelineStage: { findMany: jest.Mock };
+    marketingCrmSettingOption: { findMany: jest.Mock };
   };
+  let accounting: { receiptsSummary: jest.Mock };
   let targets: { receivedByEntities: jest.Mock; listOverlapping: jest.Mock };
   let service: DashboardService;
 
@@ -67,14 +69,20 @@ describe('DashboardService', () => {
           .mockResolvedValue({ _sum: { expectedValue: null } }),
       },
       marketingPipelineStage: { findMany: jest.fn().mockResolvedValue([]) },
+      marketingCrmSettingOption: { findMany: jest.fn().mockResolvedValue([]) },
     };
+    accounting = { receiptsSummary: jest.fn() };
     targets = {
       receivedByEntities: jest
         .fn()
         .mockResolvedValue({ amount: '0.00', currency: 'GHS' }),
       listOverlapping: jest.fn().mockResolvedValue([]),
     };
-    service = new DashboardService(prisma as never, targets as never);
+    service = new DashboardService(
+      prisma as never,
+      targets as never,
+      accounting as never,
+    );
   });
 
   it('dates a won deal by its first posted transaction and values it at the expected value', async () => {
@@ -115,10 +123,11 @@ describe('DashboardService', () => {
     expect(result.sales.expected).toBe('350.50');
   });
 
-  it('weights each stage by its probability', async () => {
+  it('reports each stage’s prospects, expected revenue and average per prospect', async () => {
     prisma.marketingPipelineStage.findMany.mockResolvedValue([
       { id: 's-1', name: 'Lead', probability: 10 },
       { id: 's-2', name: 'Proposal', probability: 50 },
+      { id: 's-3', name: 'Negotiation', probability: 80 },
     ]);
     prisma.marketingProspect.groupBy.mockResolvedValue([
       { pipelineStageId: 's-1', _count: { _all: 3 } },
@@ -137,21 +146,44 @@ describe('DashboardService', () => {
         name: 'Lead',
         prospects: 3,
         expected: '1500.00',
-        weighted: '150.00',
+        average: '500.00',
       }),
       expect.objectContaining({
         name: 'Proposal',
         prospects: 1,
         expected: '2000.00',
-        weighted: '1000.00',
+        average: '2000.00',
+      }),
+      // a stage with no prospects has nothing to average
+      expect.objectContaining({
+        name: 'Negotiation',
+        prospects: 0,
+        expected: '0.00',
+        average: '0.00',
       }),
     ]);
     expect(pipeline).toEqual(
-      expect.objectContaining({
-        prospects: 4,
-        expected: '3500.00',
-        weighted: '1150.00',
-      }),
+      expect.objectContaining({ prospects: 4, expected: '3500.00' }),
+    );
+  });
+
+  it('only counts open prospects created in the period toward the pipeline', async () => {
+    await service.summary(manager, query);
+
+    const [grouped] = prisma.marketingProspect.groupBy.mock.calls[0] as [
+      {
+        where: {
+          client: unknown;
+          createdAt: { gte: Date; lt: Date };
+        };
+      },
+    ];
+    expect(grouped.where.client).toEqual({ is: null });
+    expect(grouped.where.createdAt.gte.toISOString()).toBe(
+      '2026-10-01T00:00:00.000Z',
+    );
+    expect(grouped.where.createdAt.lt.toISOString()).toBe(
+      '2026-10-10T00:00:00.000Z',
     );
   });
 
@@ -295,5 +327,166 @@ describe('DashboardService', () => {
     const { clients } = await service.summary(manager, query);
 
     expect(clients).toEqual({ total: 10, new: 2, billable: 4, nonBillable: 6 });
+  });
+
+  describe('growth', () => {
+    it('counts prospects and clients created in each range', async () => {
+      prisma.marketingProspect.count
+        .mockResolvedValueOnce(5)
+        .mockResolvedValueOnce(2);
+      prisma.marketingClient.count
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(0);
+
+      const result = await service.growth(manager, {
+        ranges: '2026-09-01:2026-09-30,2026-10-01:2026-10-31',
+      });
+
+      expect(result).toEqual([
+        {
+          fromDate: '2026-09-01',
+          toDate: '2026-09-30',
+          newProspects: 5,
+          newClients: 1,
+        },
+        {
+          fromDate: '2026-10-01',
+          toDate: '2026-10-31',
+          newProspects: 2,
+          newClients: 0,
+        },
+      ]);
+    });
+
+    it('includes the last day of the range', async () => {
+      await service.growth(manager, { ranges: '2026-10-01:2026-10-31' });
+
+      const [args] = prisma.marketingProspect.count.mock.calls[0] as [
+        { where: { createdAt: { gte: Date; lt: Date } } },
+      ];
+      expect(args.where.createdAt.gte.toISOString()).toBe(
+        '2026-10-01T00:00:00.000Z',
+      );
+      expect(args.where.createdAt.lt.toISOString()).toBe(
+        '2026-11-01T00:00:00.000Z',
+      );
+    });
+
+    it('limits a user without view-all to their own prospects and clients', async () => {
+      await service.growth(rep, { ranges: '2026-10-01:2026-10-31' });
+
+      for (const mock of [
+        prisma.marketingProspect.count,
+        prisma.marketingClient.count,
+      ]) {
+        const [args] = mock.mock.calls[0] as [
+          { where: Record<string, unknown> },
+        ];
+        expect(args.where.assignedUserId).toBe('rep-1');
+      }
+    });
+
+    it('rejects a range that ends before it starts', async () => {
+      await expect(
+        service.growth(manager, { ranges: '2026-10-31:2026-10-01' }),
+      ).rejects.toThrow('ends before it starts');
+    });
+  });
+
+  describe('revenueByProduct', () => {
+    const range = { fromDate: '2026-10-01', toDate: '2026-10-10' };
+    const billing = (
+      productId: string | null,
+      accountingTransactionId: string,
+    ) => ({
+      productId,
+      accountingTransactionId,
+      client: { accountingEntityId: 'e-1' },
+    });
+
+    it('attributes received money to the product each transaction was raised for', async () => {
+      prisma.marketingClientBilling.findMany.mockResolvedValue([
+        billing('p-1', 't-1'),
+        billing('p-1', 't-2'),
+        billing('p-2', 't-3'),
+        billing(null, 't-4'),
+      ]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        { id: 'p-1', name: 'Loans' },
+        { id: 'p-2', name: 'Savings' },
+      ]);
+      accounting.receiptsSummary.mockResolvedValue({
+        currency: 'GHS',
+        entities: [],
+        transactions: [
+          { transactionId: 't-1', receivedAmount: '300.00' },
+          { transactionId: 't-2', receivedAmount: '200.00' },
+          { transactionId: 't-3', receivedAmount: '900.00' },
+          { transactionId: 't-4', receivedAmount: '50.00' },
+        ],
+      });
+
+      const result = await service.revenueByProduct(manager, range);
+
+      expect(result).toEqual({
+        currency: 'GHS',
+        total: '1450.00',
+        products: [
+          { productId: 'p-2', name: 'Savings', amount: '900.00' },
+          { productId: 'p-1', name: 'Loans', amount: '500.00' },
+          { productId: null, name: 'No product', amount: '50.00' },
+        ],
+      });
+    });
+
+    it('asks Accounting only about the period and drops products with nothing received', async () => {
+      prisma.marketingClientBilling.findMany.mockResolvedValue([
+        billing('p-1', 't-1'),
+        billing('p-2', 't-2'),
+      ]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        { id: 'p-1', name: 'Loans' },
+      ]);
+      accounting.receiptsSummary.mockResolvedValue({
+        currency: 'GHS',
+        entities: [],
+        transactions: [
+          { transactionId: 't-1', receivedAmount: '120.00' },
+          { transactionId: 't-2', receivedAmount: '0.00' },
+        ],
+      });
+
+      const result = await service.revenueByProduct(manager, range);
+
+      expect(accounting.receiptsSummary).toHaveBeenCalledWith(
+        {
+          tenantId: 'tenant-1',
+          entityIds: ['e-1'],
+          transactionIds: ['t-1', 't-2'],
+          from: '2026-10-01',
+          to: '2026-10-10',
+        },
+        'mgr-1',
+      );
+      expect(result.products).toEqual([
+        { productId: 'p-1', name: 'Loans', amount: '120.00' },
+      ]);
+    });
+
+    it('returns nothing without calling Accounting when no client has been billed', async () => {
+      const result = await service.revenueByProduct(manager, range);
+
+      expect(result).toEqual({ currency: null, total: '0.00', products: [] });
+      expect(accounting.receiptsSummary).not.toHaveBeenCalled();
+    });
+
+    it('limits a user without view-all to their own clients', async () => {
+      await service.revenueByProduct(rep, range);
+
+      const [args] = prisma.marketingClientBilling.findMany.mock.calls[0] as [
+        { where: { client: Record<string, unknown> } },
+      ];
+      expect(args.where.client.assignedUserId).toBe('rep-1');
+    });
   });
 });

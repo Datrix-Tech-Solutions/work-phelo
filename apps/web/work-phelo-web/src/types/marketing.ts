@@ -1440,7 +1440,8 @@ export interface MarketingDashboardStage {
   probability: number;
   prospects: number;
   expected: string;
-  weighted: string;
+  /** Expected revenue per prospect in the stage; 0.00 when it has none. */
+  average: string;
 }
 
 /** Marketing dashboard figures for a period. Money is a 2dp string; null means it could not be read. */
@@ -1456,12 +1457,11 @@ export interface MarketingDashboardSummary {
   };
   sales: { won: string; previousWon: string; wonDeals: number; expected: string };
   achievedRevenue: { current: string | null; previous: string | null };
-  /** A snapshot of open prospects; ignores the period. */
+  /** Open prospects created in the period, by pipeline stage. */
   pipeline: {
     stages: MarketingDashboardStage[];
     prospects: number;
     expected: string;
-    weighted: string;
   };
   targets: {
     count: number;
@@ -1471,4 +1471,26 @@ export interface MarketingDashboardSummary {
     percent: number | null;
   };
   clients: { total: number; new: number; billable: number; nonBillable: number };
+}
+
+/** Prospects and clients created within one range. */
+export interface MarketingGrowthPoint {
+  fromDate: string;
+  toDate: string;
+  newProspects: number;
+  newClients: number;
+}
+
+export interface MarketingRevenueProduct {
+  /** Null for money received on transactions raised without a product. */
+  productId: string | null;
+  name: string;
+  amount: string;
+}
+
+/** Money Accounting received in the period, split by the product it was raised for. */
+export interface MarketingRevenueByProduct {
+  currency: string | null;
+  total: string;
+  products: MarketingRevenueProduct[];
 }

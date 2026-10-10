@@ -35,7 +35,7 @@ export function DashboardShell({
   children,
 }: DashboardShellProps) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto py-6 pr-6 pl-(--page-pl) space-y-6">
+    <div className="flex-1 min-h-0 overflow-y-auto py-6 pr-6 pl-(--page-pl) space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
           {fields.map((field) => (

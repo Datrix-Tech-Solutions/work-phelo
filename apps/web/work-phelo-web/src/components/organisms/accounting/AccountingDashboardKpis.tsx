@@ -5,6 +5,7 @@ import type { Period } from '@/components/atoms/PeriodToggle';
 import { DetailKpiCard } from '@/components/molecules/shared/DetailKpiCard';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { useAccountingDashboardStats } from '@/hooks';
+import { formatDay } from '@/lib/dashboardPeriod';
 
 const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
@@ -15,7 +16,6 @@ const PERIOD_LABELS: Record<Period, string> = {
 };
 
 const MODULE_COLOR = 'var(--module-accounting, #2a78d6)';
-const TREND_TOOLTIP = 'Compared with the same number of days in the previous period';
 
 const fmt = (value: number) =>
   value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -53,10 +53,18 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
   const stats = useAccountingDashboardStats(period, year);
   const base = stats.baseCurrency;
   const periodLabel = PERIOD_LABELS[period];
+  const { prevFromDate, prevToDate } = stats.ranges;
+
+  // What a trend badge was calculated against, so the percentage can be checked by hand.
+  const previousRange = `${formatDay(prevFromDate)} – ${formatDay(prevToDate)}`;
+  const comparedWith = (previous: number | undefined) =>
+    `Previous (${previousRange}): ${money(base, previous)}`;
+  const comparedAt = (previous: number | undefined) =>
+    `Previous (at ${formatDay(prevToDate)}): ${money(base, previous)}`;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
           label="Cash Position"
           value={currencyTotals(stats.cashPosition.totals, currency, base)}
@@ -70,13 +78,20 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
           icon={TrendingUp}
           iconColor="#1baf7a"
           trend={stats.netProfit.trend}
-          trendTooltip={TREND_TOOLTIP}
+          trendTooltip={comparedWith(stats.netProfit.previous)}
           periodLabel={periodLabel}
           isLoading={stats.netProfit.isLoading}
         />
         <KpiCard
           label="Receivables"
           value={currencyTotals(stats.receivables.totals, currency, base)}
+          subPlacement="below"
+          sub={[
+            {
+              label: `Raised this ${periodLabel}`,
+              value: currencyTotals(stats.receivables.raised, currency, base),
+            },
+          ]}
           icon={Receipt}
           iconColor="#2a78d6"
           isLoading={stats.receivables.isLoading}
@@ -84,20 +99,27 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         <KpiCard
           label="Payables"
           value={currencyTotals(stats.payables.totals, currency, base)}
+          subPlacement="below"
+          sub={[
+            {
+              label: `Raised this ${periodLabel}`,
+              value: currencyTotals(stats.payables.raised, currency, base),
+            },
+          ]}
           icon={HandCoins}
           iconColor="#eb6834"
           isLoading={stats.payables.isLoading}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <DetailKpiCard
           label="Total Revenue"
           value={money(base, stats.revenueAndExpenses.revenue)}
           icon={ArrowLeftRight}
           iconColor="#1baf7a"
           trend={stats.revenueAndExpenses.revenueTrend}
-          trendTooltip={TREND_TOOLTIP}
+          trendTooltip={comparedWith(stats.revenueAndExpenses.previousRevenue)}
           periodLabel={periodLabel}
           details={[
             { label: 'Total expenses', value: money(base, stats.revenueAndExpenses.expenses) },
@@ -110,7 +132,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
           icon={Wallet}
           iconColor={MODULE_COLOR}
           trend={stats.netCash.trend}
-          trendTooltip={TREND_TOOLTIP}
+          trendTooltip={comparedWith(stats.netCash.previous)}
           periodLabel={periodLabel}
           details={[
             { label: 'Operating', value: money(base, stats.netCash.operating) },
@@ -125,7 +147,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
           icon={Scale}
           iconColor="#a855f7"
           trend={stats.netWorth.trend}
-          trendTooltip="Compared with the end of the previous period"
+          trendTooltip={comparedAt(stats.netWorth.previous)}
           periodLabel={periodLabel}
           details={[
             { label: 'Total assets', value: money(base, stats.netWorth.assets) },

@@ -1287,6 +1287,8 @@ export interface AccountingCurrencyTotal {
 
 export interface AccountsReceivableSummary {
   outstandingByCurrency: AccountingCurrencyTotal[];
+  /** Still unpaid from invoices raised in the requested window; empty without a window. */
+  raisedInPeriodByCurrency: AccountingCurrencyTotal[];
   overdueInvoices: number;
   dueThisWeek: number;
   collectedMtdByCurrency: AccountingCurrencyTotal[];
@@ -1294,6 +1296,8 @@ export interface AccountsReceivableSummary {
 
 export interface AccountsPayableSummary {
   outstandingByCurrency: AccountingCurrencyTotal[];
+  /** Still unpaid from bills raised in the requested window; empty without a window. */
+  raisedInPeriodByCurrency: AccountingCurrencyTotal[];
   overdueInvoices: number;
   dueThisWeek: number;
   pendingApproval: number;

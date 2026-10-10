@@ -18,7 +18,11 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import { DashboardService } from './dashboard.service';
-import { QueryDashboardSummaryDto } from './dto/dashboard-summary.dto';
+import {
+  QueryDashboardGrowthDto,
+  QueryDashboardRevenueDto,
+  QueryDashboardSummaryDto,
+} from './dto/dashboard-summary.dto';
 
 type AuthedRequest = Request & { user: RequestUser };
 
@@ -46,7 +50,7 @@ export class DashboardController {
   @ApiOperation({
     summary: 'Marketing dashboard figures for a period',
     description:
-      'Sales won, expected, achieved revenue, conversion, pipeline by stage, target progress and client counts. The pipeline is a snapshot of open prospects and ignores the period.',
+      'Sales won, expected, achieved revenue, conversion, pipeline by stage, target progress and client counts. The pipeline covers open prospects created in the period.',
   })
   @ApiOkResponse({ description: 'Dashboard figures.' })
   summary(
@@ -54,5 +58,33 @@ export class DashboardController {
     @Req() request: AuthedRequest,
   ) {
     return this.service.summary(request.user, query);
+  }
+
+  @Get('growth')
+  @ApiOperation({
+    summary: 'New prospects and new clients for several date ranges at once',
+    description:
+      'Counts of prospects and clients created in each range, for charting growth over consecutive periods in one request.',
+  })
+  @ApiOkResponse({ description: 'One entry per requested range, in order.' })
+  growth(
+    @Query() query: QueryDashboardGrowthDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.growth(request.user, query);
+  }
+
+  @Get('revenue-by-product')
+  @ApiOperation({
+    summary: 'Revenue achieved in a period, split by product',
+    description:
+      'Money Accounting has received in the period against the transactions raised for clients, grouped by the product each was raised for. Transactions raised without a product are grouped together.',
+  })
+  @ApiOkResponse({ description: 'Received amount per product, largest first.' })
+  revenueByProduct(
+    @Query() query: QueryDashboardRevenueDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.revenueByProduct(request.user, query);
   }
 }
