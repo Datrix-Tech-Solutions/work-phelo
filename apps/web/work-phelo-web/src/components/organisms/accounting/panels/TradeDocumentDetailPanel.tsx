@@ -163,7 +163,7 @@ export function TradeDocumentDetailPanel({
   const isReceivable = side === 'RECEIVABLE';
   const isCreditNote = documentKind === 'creditNote';
   const partyLabel = isReceivable ? 'Customer' : 'Vendor';
-  const settlementLabel = isReceivable ? 'Applied Receipts' : 'Applied Payments';
+  const settlementLabel = isReceivable ? 'Payments Received' : 'Payments Made';
 
   const receivableBalance = useReceivableInvoiceBalance(
     isReceivable && !isCreditNote ? document?.id : undefined,
