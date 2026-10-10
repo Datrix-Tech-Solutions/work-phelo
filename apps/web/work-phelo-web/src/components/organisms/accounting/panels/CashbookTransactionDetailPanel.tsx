@@ -9,6 +9,7 @@ import { RejectDraftModal } from '@/components/organisms/accounting/panels/Rejec
 import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTransferPanel';
+import { ReverseEntryModal } from '@/components/organisms/accounting/panels/ReverseEntryModal';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
 import {
@@ -22,6 +23,7 @@ import {
   usePostCashbookTransaction,
   useRejectCashbookTransaction,
   useRestoreCashbook,
+  useReverseCashbookTransaction,
   useTransactionTypes,
   useVoidCashbook,
 } from '@/hooks';
@@ -112,6 +114,8 @@ export function CashbookTransactionDetailPanel({
   const isPeriodOpen = usePeriodOpenCheck();
   const voidEntry = useVoidCashbook();
   const restoreEntry = useRestoreCashbook();
+  const reverseEntry = useReverseCashbookTransaction();
+  const [reverseOpen, setReverseOpen] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
   // A receipt or payment on an invoice or bill is voided from its own panel, opened from here.
@@ -129,6 +133,13 @@ export function CashbookTransactionDetailPanel({
   const isReversalEntry = !!transaction?.reversalOfTransactionId;
   const canChangePosted = isDirect && transaction?.status === 'POSTED' && periodOpen;
   const canVoidPosted = canChangePosted;
+  // A posted direct receipt or payment is reversed here (never from its journal), which keeps the
+  // entry and its journal in step. A reversal itself is undone by voiding it.
+  const canReversePosted =
+    isDirect &&
+    transaction?.status === 'POSTED' &&
+    !isReversalEntry &&
+    transaction.transactionType !== 'TRANSFER';
   const canRestore = isDirect && transaction?.status === 'VOIDED' && periodOpen;
   const restoresAsIs = !!transaction?.voidedReversalOfTransactionId;
 
@@ -165,6 +176,16 @@ export function CashbookTransactionDetailPanel({
       transaction.sourceModule)
     : null;
 
+  const hasActions =
+    isOwnDraft ||
+    canReviewDraft ||
+    canEditPosted ||
+    canReversePosted ||
+    canVoidPosted ||
+    canRestore ||
+    !!settlementRef ||
+    transaction?.status === 'DRAFT';
+
   const handleReject = async (reason: string) => {
     if (!transaction) return;
     try {
@@ -198,6 +219,18 @@ export function CashbookTransactionDetailPanel({
       onClose();
     } catch (error) {
       toast.error(extractError(error, 'Failed to void the entry'));
+    }
+  };
+
+  const handleReverse = async (input: { reversalDate: string; reason: string }) => {
+    if (!transaction) return;
+    try {
+      await reverseEntry.mutateAsync({ transactionId: transaction.id, ...input });
+      toast.success('Entry reversed.');
+      setReverseOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to reverse the entry'));
     }
   };
 
@@ -241,81 +274,91 @@ export function CashbookTransactionDetailPanel({
         description={transaction ? (transaction.reference ?? undefined) : undefined}
         footer={
           transaction &&
-          transaction.status === 'DRAFT' && (
-            <Button
-              className="w-full"
-              onClick={handlePost}
-              isLoading={postTransaction.isPending}
-              loadingText={
-                isExternal
-                  ? 'Posting…'
-                  : transaction.direction === 'INFLOW'
-                    ? 'Receiving…'
-                    : 'Paying…'
-              }
-            >
-              {isExternal ? 'Post' : actionLabel(transaction.direction)}
-            </Button>
+          hasActions && (
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={onClose}>
+                Close
+              </Button>
+              {isOwnDraft && (
+                <Button variant="danger" onClick={() => setChoiceOpen(true)}>
+                  Reject
+                </Button>
+              )}
+              {canReviewDraft && (
+                <>
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    Edit
+                  </Button>
+                  <Button variant="danger" onClick={() => setRejectOpen(true)}>
+                    Reject
+                  </Button>
+                </>
+              )}
+              {canEditPosted && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFormTarget({ transaction, mode: 'edit' });
+                    onClose();
+                  }}
+                >
+                  Edit
+                </Button>
+              )}
+              {canReversePosted && (
+                <Button variant="outline" onClick={() => setReverseOpen(true)}>
+                  Reverse
+                </Button>
+              )}
+              {canVoidPosted && (
+                <Button variant="danger" onClick={() => setVoidOpen(true)}>
+                  Void
+                </Button>
+              )}
+              {canRestore && (
+                <Button
+                  onClick={() => {
+                    if (restoresAsIs) {
+                      setRestoreOpen(true);
+                      return;
+                    }
+                    setFormTarget({ transaction, mode: 'restore' });
+                    onClose();
+                  }}
+                >
+                  Restore
+                </Button>
+              )}
+              {settlementRef && (
+                <Button variant="outline" onClick={() => setSettlementTarget(settlementRef)}>
+                  Open {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'}
+                </Button>
+              )}
+              {transaction.status === 'DRAFT' && (
+                <Button
+                  onClick={handlePost}
+                  isLoading={postTransaction.isPending}
+                  loadingText={
+                    isExternal
+                      ? 'Posting…'
+                      : transaction.direction === 'INFLOW'
+                        ? 'Receiving…'
+                        : 'Paying…'
+                  }
+                >
+                  {isExternal ? 'Post' : actionLabel(transaction.direction)}
+                </Button>
+              )}
+            </div>
           )
         }
       >
         {transaction && (
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3">
             <Badge
               label={STATUS_LABEL[transaction.status]}
               variant={STATUS_VARIANT[transaction.status]}
             />
-            {isOwnDraft && (
-              <Button size="sm" variant="danger" onClick={() => setChoiceOpen(true)}>
-                Reject
-              </Button>
-            )}
-            {(canEditPosted || canVoidPosted) && (
-              <div className="flex items-center gap-2">
-                {canEditPosted && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setFormTarget({ transaction, mode: 'edit' });
-                      onClose();
-                    }}
-                  >
-                    Edit
-                  </Button>
-                )}
-                {canVoidPosted && (
-                  <Button size="sm" variant="danger" onClick={() => setVoidOpen(true)}>
-                    Void
-                  </Button>
-                )}
-              </div>
-            )}
-            {canRestore && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  if (restoresAsIs) {
-                    setRestoreOpen(true);
-                    return;
-                  }
-                  setFormTarget({ transaction, mode: 'restore' });
-                  onClose();
-                }}
-              >
-                Restore
-              </Button>
-            )}
-            {canReviewDraft && (
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-                  Edit
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => setRejectOpen(true)}>
-                  Reject
-                </Button>
-              </div>
-            )}
           </div>
         )}
 
@@ -327,7 +370,7 @@ export function CashbookTransactionDetailPanel({
         )}
 
         {transaction && settlementRef && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+          <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
             <span>
               This is the {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'} on an{' '}
               {settlementRef.type === 'RECEIPT' ? 'invoice' : 'bill'}.{' '}
@@ -335,9 +378,6 @@ export function CashbookTransactionDetailPanel({
                 ? 'Restore it from there.'
                 : 'To void it, open it there.'}
             </span>
-            <Button variant="outline" onClick={() => setSettlementTarget(settlementRef)}>
-              Open {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'}
-            </Button>
           </div>
         )}
 
@@ -461,6 +501,13 @@ export function CashbookTransactionDetailPanel({
           isPending={voidEntry.isPending}
           onConfirm={handleVoid}
           onClose={() => setVoidOpen(false)}
+        />
+        <ReverseEntryModal
+          isOpen={reverseOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          isPending={reverseEntry.isPending}
+          onConfirm={handleReverse}
+          onClose={() => setReverseOpen(false)}
         />
         <RestoreEntryModal
           isOpen={restoreOpen}
