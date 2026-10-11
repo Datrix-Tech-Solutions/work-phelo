@@ -1,10 +1,25 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
-import { Prisma } from '../../prisma/generated/client';
+import {
+  MarketingClientBillingState,
+  Prisma,
+} from '../../prisma/generated/client';
 import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { SalesTargetsService } from './sales-targets.service';
 
 const D = (value: string) => new Prisma.Decimal(value);
+const invoice = (
+  amount: string,
+  at: string,
+  productId: string | null = null,
+  userId = 'rep-1',
+) => ({
+  amount: D(amount),
+  productId,
+  createdAt: new Date(`${at}T10:00:00.000Z`),
+  clientId: 'c-1',
+  client: { assignedUserId: userId },
+});
 
 describe('SalesTargetsService', () => {
   const rep: RequestUser = {
@@ -44,11 +59,11 @@ describe('SalesTargetsService', () => {
       findFirst: jest.Mock;
       create: jest.Mock;
     };
-    marketingClient: { findMany: jest.Mock };
+    $transaction: jest.Mock;
     marketingClientBilling: { findMany: jest.Mock };
     marketingCrmSettingOption: { findFirst: jest.Mock; findMany: jest.Mock };
   };
-  let accounting: { receiptsSummary: jest.Mock };
+  let accounting: { isConfigured: jest.Mock; getOptions: jest.Mock };
   let assignees: { namesFor: jest.Mock; activeUsers: jest.Mock };
   let service: SalesTargetsService;
 
@@ -59,12 +74,7 @@ describe('SalesTargetsService', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
       },
-      marketingClient: {
-        findMany: jest.fn().mockResolvedValue([
-          { id: 'c-1', assignedUserId: 'rep-1', accountingEntityId: 'e-1' },
-          { id: 'c-2', assignedUserId: 'rep-1', accountingEntityId: 'e-2' },
-        ]),
-      },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
       marketingClientBilling: { findMany: jest.fn().mockResolvedValue([]) },
       marketingCrmSettingOption: {
         findFirst: jest.fn().mockResolvedValue({ id: 'p-1' }),
@@ -72,18 +82,15 @@ describe('SalesTargetsService', () => {
       },
     };
     accounting = {
-      receiptsSummary: jest.fn().mockResolvedValue({
-        currency: 'GHS',
-        entities: [
-          { entityId: 'e-1', receivedAmount: '300.00' },
-          { entityId: 'e-2', receivedAmount: '200.50' },
-        ],
-        transactions: [],
-      }),
+      isConfigured: jest.fn().mockReturnValue(true),
+      getOptions: jest.fn().mockResolvedValue({ baseCurrency: 'GHS' }),
     };
     assignees = {
       namesFor: jest.fn().mockResolvedValue(new Map([['rep-1', 'Ama Mensah']])),
-      activeUsers: jest.fn().mockResolvedValue([{ userId: 'rep-1' }]),
+      activeUsers: jest.fn().mockResolvedValue([
+        { userId: 'rep-1', name: 'Ama Mensah' },
+        { userId: 'rep-2', name: 'Kofi Boateng' },
+      ]),
     };
     service = new SalesTargetsService(
       prisma as never,
@@ -93,17 +100,31 @@ describe('SalesTargetsService', () => {
   });
 
   describe('list', () => {
-    it('sums received money for the rep’s billable clients within the target dates', async () => {
+    it('sums the invoices raised for the rep’s clients within the target dates', async () => {
+      prisma.marketingClientBilling.findMany.mockResolvedValue([
+        invoice('300.00', '2026-01-01'),
+        invoice('200.50', '2026-03-31'),
+        // outside the dates, or someone else's
+        invoice('900.00', '2025-12-31'),
+        invoice('900.00', '2026-04-01'),
+        invoice('900.00', '2026-02-01', null, 'rep-2'),
+      ]);
+
       const [row] = await service.list(rep, {});
 
-      expect(accounting.receiptsSummary).toHaveBeenCalledWith(
-        {
-          tenantId: 'tenant-1',
-          entityIds: ['e-1', 'e-2'],
-          from: '2026-01-01',
-          to: '2026-03-31',
-        },
-        'rep-1',
+      expect(prisma.marketingClientBilling.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'tenant-1',
+            state: {
+              in: [
+                MarketingClientBillingState.SUBMITTED,
+                MarketingClientBillingState.POSTED,
+              ],
+            },
+            client: { assignedUserId: { in: ['rep-1'] } },
+          },
+        }),
       );
       expect(row).toMatchObject({
         userName: 'Ama Mensah',
@@ -134,61 +155,48 @@ describe('SalesTargetsService', () => {
       );
     });
 
-    it('counts only the transactions raised for the product on a product target', async () => {
+    it('counts only the invoices raised for the product on a product target', async () => {
       prisma.marketingSalesTarget.findMany.mockResolvedValue([
         target({ productId: 'p-1' }),
       ]);
       prisma.marketingClientBilling.findMany.mockResolvedValue([
-        { clientId: 'c-1', productId: 'p-1', accountingTransactionId: 'tx-1' },
-        { clientId: 'c-2', productId: 'p-1', accountingTransactionId: 'tx-2' },
+        invoice('100.00', '2026-02-01', 'p-1'),
+        invoice('50.00', '2026-02-02', 'p-1'),
+        invoice('700.00', '2026-02-03', 'p-2'),
+        invoice('700.00', '2026-02-04', null),
       ]);
-      accounting.receiptsSummary.mockResolvedValue({
-        currency: 'GHS',
-        entities: [],
-        transactions: [
-          { transactionId: 'tx-1', receivedAmount: '100.00' },
-          { transactionId: 'tx-2', receivedAmount: '50.00' },
-        ],
-      });
 
       const [row] = await service.list(rep, {});
 
-      expect(accounting.receiptsSummary).toHaveBeenCalledWith(
-        expect.objectContaining({
-          transactionIds: ['tx-1', 'tx-2'],
-          from: '2026-01-01',
-          to: '2026-03-31',
-        }),
-        'rep-1',
-      );
       expect(row).toMatchObject({
         productName: 'Loans',
         achieved: '150.00',
       });
     });
 
-    it('is zero without calling Accounting when the rep has no billable clients', async () => {
-      prisma.marketingClient.findMany.mockResolvedValue([]);
-
+    it('is zero when the rep has raised no invoices', async () => {
       const [row] = await service.list(rep, {});
 
-      expect(accounting.receiptsSummary).not.toHaveBeenCalled();
       expect(row.achieved).toBe('0.00');
     });
 
-    it('leaves achieved empty, not zero, when Accounting is unreachable', async () => {
-      accounting.receiptsSummary.mockRejectedValue(new Error('down'));
+    it('still shows achieved when the currency cannot be read', async () => {
+      accounting.getOptions.mockRejectedValue(new Error('down'));
+      prisma.marketingClientBilling.findMany.mockResolvedValue([
+        invoice('100.00', '2026-02-01'),
+      ]);
 
       const [row] = await service.list(rep, {});
 
-      expect(row.achieved).toBeNull();
-      expect(row.percent).toBeNull();
+      expect(row.achieved).toBe('100.00');
+      expect(row.currency).toBeNull();
     });
   });
 
   describe('create', () => {
     const dto = {
-      userId: 'rep-1',
+      name: 'Q2 revenue',
+      userIds: ['rep-1'],
       startDate: '2026-04-01',
       endDate: '2026-06-30',
       amount: 2000,
@@ -209,21 +217,54 @@ describe('SalesTargetsService', () => {
     });
 
     it('rejects an overlapping target for the same rep and product', async () => {
-      prisma.marketingSalesTarget.findFirst.mockResolvedValue({ id: 'other' });
+      prisma.marketingSalesTarget.findMany.mockResolvedValue([
+        { userId: 'rep-1' },
+      ]);
 
-      await expect(service.create(manager, dto)).rejects.toBeInstanceOf(
-        ConflictException,
+      await expect(service.create(manager, dto)).rejects.toThrow(
+        'Ama Mensah already has a target',
       );
-      expect(prisma.marketingSalesTarget.findFirst).toHaveBeenCalledWith({
+      expect(prisma.marketingSalesTarget.findMany).toHaveBeenCalledWith({
         where: {
           tenantId: 'tenant-1',
-          userId: 'rep-1',
+          userId: { in: ['rep-1'] },
           productId: null,
           startDate: { lte: new Date('2026-06-30T00:00:00.000Z') },
           endDate: { gte: new Date('2026-04-01T00:00:00.000Z') },
         },
-        select: { id: true },
+        select: { userId: true },
       });
+      expect(prisma.marketingSalesTarget.create).not.toHaveBeenCalled();
+    });
+
+    it('sets one target per rep, each of the full amount and sharing the name', async () => {
+      prisma.marketingSalesTarget.findMany.mockResolvedValue([]);
+      prisma.marketingSalesTarget.create.mockImplementation(
+        ({ data }: { data: { userId: string } }) =>
+          Promise.resolve(target({ id: `t-${data.userId}`, ...data })),
+      );
+
+      const created = await service.create(manager, {
+        ...dto,
+        userIds: ['rep-1', 'rep-2'],
+      });
+
+      expect(prisma.marketingSalesTarget.create).toHaveBeenCalledTimes(2);
+      expect(prisma.marketingSalesTarget.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'Q2 revenue',
+          userId: 'rep-2',
+          amount: D('2000'),
+        }) as unknown,
+      });
+      expect(created.map((t) => t.userId)).toEqual(['rep-1', 'rep-2']);
+    });
+
+    it('creates nothing when any one rep is not an eligible Marketing user', async () => {
+      await expect(
+        service.create(manager, { ...dto, userIds: ['rep-1', 'ghost'] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.marketingSalesTarget.create).not.toHaveBeenCalled();
     });
 
     it('rejects a product that is not in CRM Settings', async () => {

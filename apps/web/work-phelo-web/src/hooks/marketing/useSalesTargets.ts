@@ -39,7 +39,7 @@ export function useCreateSalesTarget() {
   const invalidate = useInvalidate();
   return useMutation({
     mutationFn: async (payload: CreateSalesTargetPayload) => {
-      const res = await api.post<SalesTarget>(ENDPOINT, payload);
+      const res = await api.post<SalesTarget[]>(ENDPOINT, payload);
       return res.data;
     },
     onSuccess: invalidate,

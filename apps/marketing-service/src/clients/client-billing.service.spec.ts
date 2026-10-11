@@ -55,12 +55,13 @@ describe('ClientBillingService', () => {
 
   const makePrisma = () => {
     const tx = {
-      marketingClient: { update: jest.fn() },
+      marketingClient: { update: jest.fn(), updateMany: jest.fn() },
       marketingClientBilling: {
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         count: jest.fn(),
+        groupBy: jest.fn(),
       },
       marketingClientProduct: { findUnique: jest.fn(), update: jest.fn() },
     };
@@ -87,9 +88,6 @@ describe('ClientBillingService', () => {
     getOptions: jest.fn(),
     createTransaction: jest.fn(),
     listTransactions: jest.fn(),
-    receiptsSummary: jest.fn(),
-    createPaymentRequest: jest.fn(),
-    cancelPaymentRequest: jest.fn(),
   });
 
   let prisma: ReturnType<typeof makePrisma>;
@@ -371,194 +369,6 @@ describe('ClientBillingService', () => {
     });
   });
 
-  describe('requestPayment', () => {
-    const payment = {
-      submissionId: '22222222-2222-4222-8222-222222222222',
-      invoiceId: 'inv-1',
-      amount: 5000,
-      paymentDate: '2026-09-12',
-      reference: 'TT-993',
-      note: 'First instalment',
-    };
-
-    beforeEach(() => {
-      prisma.marketingClient.findFirst.mockResolvedValue({
-        ...client,
-        accountingEntityId: 'entity-1',
-      });
-      accounting.createPaymentRequest.mockResolvedValue({
-        id: 'req-1',
-        status: 'PENDING',
-        amount: '5000.00',
-      });
-    });
-
-    it('refuses a user who has neither the billing permission nor the client', async () => {
-      await expect(
-        service.requestPayment(viewer, 'client-1', payment),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(accounting.createPaymentRequest).not.toHaveBeenCalled();
-    });
-
-    it('lets the client’s assignee request a payment without the billing permission', async () => {
-      prisma.marketingClient.findFirst.mockResolvedValue({
-        ...client,
-        assignedUserId: 'user-1',
-        accountingEntityId: 'entity-1',
-      });
-
-      await service.requestPayment(viewer, 'client-1', payment);
-
-      expect(accounting.createPaymentRequest).toHaveBeenCalled();
-    });
-
-    it('returns not found for a client the user cannot see', async () => {
-      prisma.marketingClient.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.requestPayment(biller, 'client-1', payment),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it('has nothing to pay for a client that was never billed', async () => {
-      prisma.marketingClient.findFirst.mockResolvedValue({ ...client });
-
-      await expect(
-        service.requestPayment(biller, 'client-1', payment),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(accounting.createPaymentRequest).not.toHaveBeenCalled();
-    });
-
-    it('sends the request as the user, tied to the client and this submission', async () => {
-      const result = await service.requestPayment(biller, 'client-1', payment);
-
-      expect(accounting.createPaymentRequest).toHaveBeenCalledWith(
-        {
-          tenantId: 'tenant-1',
-          idempotencyKey: `client-payment:client-1:${payment.submissionId}`,
-          externalRef: 'client-1',
-          invoiceId: 'inv-1',
-          amount: 5000,
-          paymentDate: '2026-09-12',
-          reference: 'TT-993',
-          note: 'First instalment',
-          requestedByName: 'Ada',
-        },
-        'user-1',
-      );
-      expect(result).toEqual({
-        id: 'req-1',
-        status: 'PENDING',
-        amount: '5000.00',
-      });
-    });
-
-    it('leaves out the optional details that were not given', async () => {
-      await service.requestPayment(biller, 'client-1', {
-        submissionId: payment.submissionId,
-        invoiceId: 'inv-1',
-        amount: 5000,
-        paymentDate: '2026-09-12',
-      });
-
-      const sent = accounting.createPaymentRequest.mock.calls[0][0];
-      expect(sent).not.toHaveProperty('reference');
-      expect(sent).not.toHaveProperty('note');
-    });
-
-    it("passes accounting's own message through, such as a balance that is too small", async () => {
-      accounting.createPaymentRequest.mockRejectedValue(
-        new InternalServiceClientError(
-          'The amount is more than can still be claimed (3000.00)',
-          false,
-          400,
-        ),
-      );
-
-      await expect(
-        service.requestPayment(biller, 'client-1', payment),
-      ).rejects.toMatchObject({
-        message: 'The amount is more than can still be claimed (3000.00)',
-        status: 400,
-      });
-    });
-
-    it('says nothing was sent when accounting cannot be reached', async () => {
-      accounting.createPaymentRequest.mockRejectedValue(
-        new InternalServiceClientError('timeout', true),
-      );
-
-      await expect(
-        service.requestPayment(biller, 'client-1', payment),
-      ).rejects.toBeInstanceOf(BadGatewayException);
-    });
-  });
-
-  describe('cancelPayment', () => {
-    beforeEach(() => {
-      prisma.marketingClient.findFirst.mockResolvedValue({
-        ...client,
-        accountingEntityId: 'entity-1',
-      });
-      accounting.cancelPaymentRequest.mockResolvedValue({
-        id: 'req-1',
-        status: 'CANCELLED',
-      });
-    });
-
-    it('refuses a user who has neither the billing permission nor the client', async () => {
-      await expect(
-        service.cancelPayment(viewer, 'client-1', 'req-1'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(accounting.cancelPaymentRequest).not.toHaveBeenCalled();
-    });
-
-    it('lets the client’s assignee cancel a payment request without the billing permission', async () => {
-      prisma.marketingClient.findFirst.mockResolvedValue({
-        ...client,
-        assignedUserId: 'user-1',
-        accountingEntityId: 'entity-1',
-      });
-
-      await service.cancelPayment(viewer, 'client-1', 'req-1');
-
-      expect(accounting.cancelPaymentRequest).toHaveBeenCalled();
-    });
-
-    it('returns not found for a client the user cannot see', async () => {
-      prisma.marketingClient.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.cancelPayment(biller, 'client-1', 'req-1'),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expect(accounting.cancelPaymentRequest).not.toHaveBeenCalled();
-    });
-
-    it('withdraws the request as the user, naming the client it must belong to', async () => {
-      const result = await service.cancelPayment(biller, 'client-1', 'req-1');
-
-      expect(accounting.cancelPaymentRequest).toHaveBeenCalledWith(
-        { tenantId: 'tenant-1', requestId: 'req-1', externalRef: 'client-1' },
-        'user-1',
-      );
-      expect(result).toEqual({ id: 'req-1', status: 'CANCELLED' });
-    });
-
-    it('tells the user when accounting already acted on it', async () => {
-      accounting.cancelPaymentRequest.mockRejectedValue(
-        new InternalServiceClientError(
-          'This payment request is no longer pending',
-          false,
-          409,
-        ),
-      );
-
-      await expect(
-        service.cancelPayment(biller, 'client-1', 'req-1'),
-      ).rejects.toMatchObject({ status: 409 });
-    });
-  });
-
   describe('listTransactions', () => {
     const item = (id: string, state: string) => ({
       id,
@@ -569,7 +379,6 @@ describe('ClientBillingService', () => {
       transactionTypeName: 'Invoice',
       documentNumber: null,
       reason: null,
-      receivedAmount: '0.00',
       createdAt: '2026-10-04T10:00:00.000Z',
     });
 
@@ -664,85 +473,71 @@ describe('ClientBillingService', () => {
   });
 
   describe('getSummary', () => {
-    it('has no figures for a client with no entity yet', async () => {
+    it('has no figures for a client that was never invoiced', async () => {
+      prisma.marketingClientBilling.findMany.mockResolvedValue([]);
+
       await expect(service.getSummary(viewer, 'client-1')).resolves.toEqual({
         currency: null,
         achievedRevenue: null,
         products: [],
       });
-      expect(accounting.receiptsSummary).not.toHaveBeenCalled();
     });
 
-    it('totals what accounting received, in total and per product', async () => {
+    it('totals the invoices raised, in total and per product,', async () => {
       prisma.marketingClient.findFirst.mockResolvedValue({
         ...client,
         accountingEntityId: 'entity-1',
       });
+      accounting.isConfigured.mockReturnValue(true);
+      accounting.getOptions.mockResolvedValue({ baseCurrency: 'GHS' });
       prisma.marketingClientBilling.findMany.mockResolvedValue([
-        { accountingTransactionId: 'txn-1', productId: 'p-1' },
-        { accountingTransactionId: 'txn-2', productId: 'p-1' },
-        { accountingTransactionId: 'txn-3', productId: null },
+        { productId: 'p-1', amount: '5000' },
+        { productId: 'p-1', amount: '2500.25' },
+        { productId: null, amount: '100' },
       ]);
-      accounting.receiptsSummary.mockResolvedValue({
-        currency: 'GHS',
-        entities: [{ entityId: 'entity-1', receivedAmount: '9000.5' }],
-        transactions: [
-          { transactionId: 'txn-1', receivedAmount: '5000' },
-          { transactionId: 'txn-2', receivedAmount: '2500.25' },
-          { transactionId: 'txn-3', receivedAmount: '100' },
-        ],
-      });
 
       const result = await service.getSummary(viewer, 'client-1');
 
-      expect(accounting.receiptsSummary).toHaveBeenCalledWith(
-        {
-          tenantId: 'tenant-1',
-          entityIds: ['entity-1'],
-          transactionIds: ['txn-1', 'txn-2', 'txn-3'],
-        },
-        'user-1',
+      expect(prisma.marketingClientBilling.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'tenant-1',
+            clientId: 'client-1',
+            state: {
+              in: [
+                MarketingClientBillingState.SUBMITTED,
+                MarketingClientBillingState.POSTED,
+              ],
+            },
+          },
+        }),
       );
       expect(result).toEqual({
         currency: 'GHS',
-        achievedRevenue: '9000.50',
+        achievedRevenue: '7600.25',
         products: [{ productId: 'p-1', achievedRevenue: '7500.25' }],
       });
     });
   });
 
-  describe('totalsForEntities', () => {
-    it('asks once for a whole page of clients', async () => {
-      accounting.receiptsSummary.mockResolvedValue({
-        currency: 'GHS',
-        entities: [
-          { entityId: 'e1', receivedAmount: '10' },
-          { entityId: 'e2', receivedAmount: '2.5' },
-        ],
-        transactions: [],
-      });
+  describe('totalsForClients', () => {
+    it('sums the live invoices for a whole page of clients in one query', async () => {
+      prisma.marketingClientBilling.groupBy.mockResolvedValue([
+        { clientId: 'c1', _sum: { amount: '10' } },
+        { clientId: 'c2', _sum: { amount: '2.5' } },
+      ]);
 
-      const totals = await service.totalsForEntities(viewer, ['e1', 'e2']);
+      const totals = await service.totalsForClients('tenant-1', ['c1', 'c2']);
 
-      expect(accounting.receiptsSummary).toHaveBeenCalledTimes(1);
-      expect(totals.get('e1')).toBe('10.00');
-      expect(totals.get('e2')).toBe('2.50');
+      expect(prisma.marketingClientBilling.groupBy).toHaveBeenCalledTimes(1);
+      expect(totals.get('c1')).toBe('10.00');
+      expect(totals.get('c2')).toBe('2.50');
     });
 
-    it('does not call accounting for an empty page or when it is not configured', async () => {
-      await service.totalsForEntities(viewer, []);
-      accounting.isConfigured.mockReturnValue(false);
-      await service.totalsForEntities(viewer, ['e1']);
+    it('does not query for an empty page', async () => {
+      await service.totalsForClients('tenant-1', []);
 
-      expect(accounting.receiptsSummary).not.toHaveBeenCalled();
-    });
-
-    it('returns nothing, rather than failing the list, when accounting is down', async () => {
-      accounting.receiptsSummary.mockRejectedValue(new Error('down'));
-
-      const totals = await service.totalsForEntities(viewer, ['e1']);
-
-      expect(totals.size).toBe(0);
+      expect(prisma.marketingClientBilling.groupBy).not.toHaveBeenCalled();
     });
   });
 
@@ -870,6 +665,41 @@ describe('ClientBillingService', () => {
         data: { state: MarketingClientBillingState.REJECTED },
       });
       expect(prisma.tx.marketingClientProduct.update).not.toHaveBeenCalled();
+    });
+
+    it('moves the client back to not billed when its last live transaction is rejected', async () => {
+      prisma.marketingClientBilling.findUnique.mockResolvedValue(
+        row(MarketingClientBillingState.SUBMITTED),
+      );
+      prisma.tx.marketingClientBilling.count.mockResolvedValue(0);
+      prisma.tx.marketingClientProduct.findUnique.mockResolvedValue(null);
+
+      await service.handleAccountingEvent(
+        event({ event: AccountingEvent.REJECTED }),
+      );
+
+      expect(prisma.tx.marketingClient.updateMany).toHaveBeenCalledWith({
+        where: { id: 'client-1', tenantId: 'tenant-1', isBillable: true },
+        data: { isBillable: false },
+      });
+    });
+
+    it('keeps the client billed while another transaction is live', async () => {
+      prisma.marketingClientBilling.findUnique.mockResolvedValue(
+        row(MarketingClientBillingState.POSTED),
+      );
+      prisma.tx.marketingClientBilling.count.mockResolvedValue(1);
+      prisma.tx.marketingClientProduct.findUnique.mockResolvedValue(null);
+
+      await service.handleAccountingEvent(
+        event({ event: AccountingEvent.REVERSED }),
+      );
+
+      // Billed already, so there is nothing to flip.
+      expect(prisma.tx.marketingClient.updateMany).toHaveBeenCalledWith({
+        where: { id: 'client-1', tenantId: 'tenant-1', isBillable: false },
+        data: { isBillable: true },
+      });
     });
   });
 });

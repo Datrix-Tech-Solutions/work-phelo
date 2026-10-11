@@ -27,7 +27,7 @@ interface ConvertToClientModalProps {
 export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToClientModalProps) {
   const toast = useToast();
   const convert = useConvertProspectToClient(prospect.id);
-  const [billable, setBillable] = useState(false);
+  const [raiseBilling, setRaiseBilling] = useState(false);
   const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
   const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
   const [converted, setConverted] = useState(false);
@@ -41,7 +41,7 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
   const contact = prospect.contacts.find((c) => c.isPrimary) ?? prospect.contacts[0];
 
   function handleClose() {
-    setBillable(false);
+    setRaiseBilling(false);
     setBilling(EMPTY_BILLING);
     setBillingErrors({});
     setConverted(false);
@@ -49,7 +49,7 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
   }
 
   function handleConfirm() {
-    if (billable && billingOptions) {
+    if (raiseBilling && billingOptions) {
       const next = validateBilling(billing, billingOptions);
       setBillingErrors(next);
       if (Object.keys(next).length > 0) return;
@@ -58,8 +58,9 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
     convert.mutate(
       {
         clientId,
-        isBillable: billable,
-        ...(billable && billingOptions ? { billing: toBillingInput(billing, billingOptions) } : {}),
+        ...(raiseBilling && billingOptions
+          ? { billing: toBillingInput(billing, billingOptions) }
+          : {}),
       },
       {
         onSuccess: () => setConverted(true),
@@ -74,7 +75,7 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
         isOpen={isOpen}
         onClose={handleClose}
         title="Converted to Client"
-        message={`${prospect.companyName} is now a client${billable ? ', and its first transaction was sent to Accounting' : ''}.`}
+        message={`${prospect.companyName} is now a client${raiseBilling ? ', and its first transaction was sent to Accounting' : ''}.`}
       />
     );
   }
@@ -111,8 +112,8 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
 
         <div className="border-t border-gray-100 pt-4">
           <BillingSection
-            enabled={billable}
-            onEnabledChange={setBillable}
+            enabled={raiseBilling}
+            onEnabledChange={setRaiseBilling}
             values={billing}
             onValuesChange={setBilling}
             errors={billingErrors}

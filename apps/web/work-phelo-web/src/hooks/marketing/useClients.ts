@@ -15,7 +15,6 @@ import {
   CreateClientPayload,
   CreateProspectInteractionPayload,
   RaiseClientBillingPayload,
-  RequestClientPaymentPayload,
   UpdateClientPayload,
 } from '@/types/marketing';
 
@@ -168,30 +167,6 @@ export function useRaiseClientBilling(id: string) {
   return useMutation({
     mutationFn: async (payload: RaiseClientBillingPayload) => {
       const res = await api.post(`${ENDPOINT}/${id}/billing`, payload);
-      return res.data;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
-  });
-}
-
-/** The client has paid (part of) a posted invoice — asks Accounting to record it. */
-export function useRequestClientPayment(id: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: RequestClientPaymentPayload) => {
-      const res = await api.post(`${ENDPOINT}/${id}/billing/payments`, payload);
-      return res.data;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),
-  });
-}
-
-/** Withdraws a payment request Accounting has not acted on yet. */
-export function useCancelClientPayment(id: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (requestId: string) => {
-      const res = await api.post(`${ENDPOINT}/${id}/billing/payments/${requestId}/cancel`);
       return res.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: CLIENTS_KEY }),

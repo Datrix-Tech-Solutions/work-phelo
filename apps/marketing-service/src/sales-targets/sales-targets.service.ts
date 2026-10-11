@@ -7,11 +7,11 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  MarketingClientBillingState,
   MarketingCrmSettingCategory,
   Prisma,
 } from '../../prisma/generated/client';
 import { AccountingClient } from '../accounting/accounting.client';
-import { callAccounting } from '../accounting/call-accounting';
 import { AssigneesService } from '../assignees/assignees.service';
 import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { PrismaService } from '../prisma/prisma.service';
@@ -26,27 +26,59 @@ const REP_NOT_ELIGIBLE_MESSAGE =
 const PRODUCT_INVALID_MESSAGE = 'Choose a product from CRM Settings';
 const PERIOD_INVALID_MESSAGE = 'The end date cannot be before the start date';
 const OVERLAP_MESSAGE =
-  'This rep already has a target for the same product that overlaps these dates';
+  'already has a target for the same product that overlaps these dates';
 const NOT_FOUND_MESSAGE = 'Target not found';
-const ENTITIES_PER_CALL = 100;
-const TRANSACTIONS_PER_CALL = 500;
+const DAY_MS = 86_400_000;
+/** An invoice counts while it is submitted or posted; a rejected or reversed one counts for nothing. */
+const LIVE_INVOICE_STATES = [
+  MarketingClientBillingState.SUBMITTED,
+  MarketingClientBillingState.POSTED,
+];
 
 type TargetRow = Prisma.MarketingSalesTargetGetPayload<object>;
-type Range = { from: string; to: string };
 
 const day = (date: Date) => date.toISOString().slice(0, 10);
 const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`);
-const chunks = <T>(items: T[], size: number) => {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size)
-    out.push(items.slice(i, i + size));
-  return out;
-};
+
+export interface InvoiceRow {
+  amount: Prisma.Decimal;
+  productId: string | null;
+  createdAt: Date;
+  clientId: string;
+  client: { assignedUserId: string };
+}
 
 /**
- * A rep's target is judged on money Accounting has received (the same figure the client cards
- * show), for the clients the rep owns, dated within the target's period. Achievement is read live
- * and never stored, so a reversal in Accounting lowers it the next time anyone looks.
+ * Adds up invoices, optionally for one rep, one product and a date range (YYYY-MM-DD, inclusive,
+ * judged on the day the invoice was raised).
+ */
+export function sumInvoiced(
+  rows: InvoiceRow[],
+  filter: {
+    userId?: string;
+    productId?: string | null;
+    from?: string;
+    to?: string;
+  } = {},
+): Prisma.Decimal {
+  const from = filter.from ? asDate(filter.from).getTime() : null;
+  const to = filter.to ? asDate(filter.to).getTime() + DAY_MS : null;
+  let total = new Prisma.Decimal(0);
+  for (const row of rows) {
+    if (filter.userId && row.client.assignedUserId !== filter.userId) continue;
+    if (filter.productId && row.productId !== filter.productId) continue;
+    const at = row.createdAt.getTime();
+    if (from !== null && at < from) continue;
+    if (to !== null && at >= to) continue;
+    total = total.plus(row.amount);
+  }
+  return total;
+}
+
+/**
+ * A rep's target is judged on the invoices raised for the clients the rep owns (the same figure
+ * the client cards show), dated within the target's period. Payments are not tracked here.
+ * Achievement is read live and never stored, so a rejected or reversed invoice stops counting.
  */
 @Injectable()
 export class SalesTargetsService {
@@ -103,31 +135,40 @@ export class SalesTargetsService {
     return this.withProgress(user, targets);
   }
 
+  /**
+   * Sets the same target for every rep in the request, all or nothing: if any rep is not an
+   * eligible Marketing user or already has an overlapping target, none are created.
+   */
   async create(user: RequestUser, dto: CreateSalesTargetDto) {
     this.assertPeriod(dto.startDate, dto.endDate);
-    await this.assertRep(user, dto.userId);
+    const reps = await this.assertReps(user, dto.userIds);
     if (dto.productId) await this.assertProduct(user.tenantId, dto.productId);
     await this.assertNoOverlap(
       user.tenantId,
-      dto.userId,
+      reps,
       dto.productId ?? null,
       asDate(dto.startDate),
       asDate(dto.endDate),
     );
 
-    const created = await this.prisma.marketingSalesTarget.create({
-      data: {
-        tenantId: user.tenantId,
-        userId: dto.userId,
-        productId: dto.productId ?? null,
-        startDate: asDate(dto.startDate),
-        endDate: asDate(dto.endDate),
-        amount: new Prisma.Decimal(dto.amount),
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
-      },
-    });
-    return (await this.withProgress(user, [created]))[0];
+    const created = await this.prisma.$transaction(
+      dto.userIds.map((userId) =>
+        this.prisma.marketingSalesTarget.create({
+          data: {
+            tenantId: user.tenantId,
+            name: dto.name,
+            userId,
+            productId: dto.productId ?? null,
+            startDate: asDate(dto.startDate),
+            endDate: asDate(dto.endDate),
+            amount: new Prisma.Decimal(dto.amount),
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
+          },
+        }),
+      ),
+    );
+    return this.withProgress(user, created);
   }
 
   async update(user: RequestUser, id: string, dto: UpdateSalesTargetDto) {
@@ -156,107 +197,29 @@ export class SalesTargetsService {
       .map((t) => t.productId)
       .filter((id): id is string => Boolean(id));
 
-    const [names, productNames, clients] = await Promise.all([
+    const [names, productNames, invoices, currency] = await Promise.all([
       this.assignees.namesFor(tenantId, userIds),
       this.productNames(tenantId, productIds),
-      this.prisma.marketingClient.findMany({
-        where: {
-          tenantId,
-          assignedUserId: { in: userIds },
-          accountingEntityId: { not: null },
-        },
-        select: { id: true, assignedUserId: true, accountingEntityId: true },
-      }),
+      this.invoiceRows(tenantId, { assignedUserId: { in: userIds } }),
+      this.baseCurrency(user),
     ]);
 
-    const entitiesByRep = new Map<string, string[]>();
-    const repByClient = new Map<string, string>();
-    for (const client of clients) {
-      if (!client.accountingEntityId) continue;
-      repByClient.set(client.id, client.assignedUserId);
-      const list = entitiesByRep.get(client.assignedUserId) ?? [];
-      list.push(client.accountingEntityId);
-      entitiesByRep.set(client.assignedUserId, list);
-    }
-
-    // Transactions raised for a product, by rep, only needed for product targets.
-    const transactionsByRepProduct = new Map<string, string[]>();
-    if (productIds.length > 0) {
-      const billings = await this.prisma.marketingClientBilling.findMany({
-        where: {
-          tenantId,
-          productId: { in: productIds },
-          clientId: { in: [...repByClient.keys()] },
-        },
-        select: {
-          clientId: true,
-          productId: true,
-          accountingTransactionId: true,
-        },
-      });
-      for (const billing of billings) {
-        const rep = repByClient.get(billing.clientId);
-        if (!rep || !billing.productId) continue;
-        const key = `${rep}:${billing.productId}`;
-        const list = transactionsByRepProduct.get(key) ?? [];
-        list.push(billing.accountingTransactionId);
-        transactionsByRepProduct.set(key, list);
-      }
-    }
-
-    let currency = null as string | null;
-    let accountingUp = true;
-    const achievedFor = async (target: TargetRow): Promise<string | null> => {
-      if (!accountingUp) return null;
-      const range = { from: day(target.startDate), to: day(target.endDate) };
-      try {
-        if (!target.productId) {
-          const entityIds = entitiesByRep.get(target.userId) ?? [];
-          if (entityIds.length === 0) return '0.00';
-          const result = await this.receivedByEntities(user, entityIds, range);
-          currency = result.currency || currency;
-          return result.amount;
-        }
-        const transactionIds =
-          transactionsByRepProduct.get(
-            `${target.userId}:${target.productId}`,
-          ) ?? [];
-        const anyEntity = entitiesByRep.get(target.userId)?.[0];
-        if (transactionIds.length === 0 || !anyEntity) return '0.00';
-        const result = await this.receivedByTransactions(
-          user,
-          anyEntity,
-          transactionIds,
-          range,
-        );
-        currency = result.currency || currency;
-        return result.amount;
-      } catch (error) {
-        accountingUp = false;
-        this.logger.warn(
-          `target progress unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
-        );
-        return null;
-      }
-    };
-
-    // Targets with the same rep, product and dates share one answer.
-    const cache = new Map<string, Promise<string | null>>();
-    const rows = await Promise.all(
-      targets.map(async (target) => {
-        const key = `${target.userId}:${target.productId ?? ''}:${day(target.startDate)}:${day(target.endDate)}`;
-        const pending = cache.get(key) ?? achievedFor(target);
-        cache.set(key, pending);
-        const achieved = await pending;
-        return { target, achieved };
-      }),
-    );
+    const rows = targets.map((target) => ({
+      target,
+      achieved: sumInvoiced(invoices, {
+        userId: target.userId,
+        productId: target.productId,
+        from: day(target.startDate),
+        to: day(target.endDate),
+      }).toFixed(2),
+    }));
 
     return rows.map(({ target, achieved }) => {
       const amount = new Prisma.Decimal(target.amount);
-      const got = achieved === null ? null : new Prisma.Decimal(achieved);
+      const got = new Prisma.Decimal(achieved);
       return {
         id: target.id,
+        name: target.name,
         userId: target.userId,
         userName: names.get(target.userId) ?? null,
         productId: target.productId,
@@ -266,68 +229,48 @@ export class SalesTargetsService {
         startDate: day(target.startDate),
         endDate: day(target.endDate),
         amount: amount.toFixed(2),
-        achieved: got ? got.toFixed(2) : null,
-        remaining: got
-          ? Prisma.Decimal.max(amount.minus(got), 0).toFixed(2)
-          : null,
-        percent: got
-          ? got.div(amount).times(100).toDecimalPlaces(1).toNumber()
-          : null,
+        achieved: got.toFixed(2),
+        remaining: Prisma.Decimal.max(amount.minus(got), 0).toFixed(2),
+        percent: got.div(amount).times(100).toDecimalPlaces(1).toNumber(),
         currency,
         canEdit: this.canManage(user),
       };
     });
   }
 
-  /** Money Accounting received from these entities within the range (YYYY-MM-DD, inclusive). */
-  async receivedByEntities(
-    user: RequestUser,
-    entityIds: string[],
-    range: Range,
-  ) {
-    let total = new Prisma.Decimal(0);
-    let currency = '';
-    for (const batch of chunks(entityIds, ENTITIES_PER_CALL)) {
-      const summary = await callAccounting(this.logger, () =>
-        this.accounting.receiptsSummary(
-          { tenantId: user.tenantId, entityIds: batch, ...range },
-          user.id,
-        ),
-      );
-      currency = summary.currency;
-      for (const entity of summary.entities) {
-        total = total.plus(entity.receivedAmount);
-      }
-    }
-    return { amount: total.toFixed(2), currency };
+  /** Live invoices raised for the clients matching `where`, with who owns each client. */
+  async invoiceRows(
+    tenantId: string,
+    where: Prisma.MarketingClientWhereInput = {},
+  ): Promise<InvoiceRow[]> {
+    return this.prisma.marketingClientBilling.findMany({
+      where: {
+        tenantId,
+        state: { in: LIVE_INVOICE_STATES },
+        client: where,
+      },
+      select: {
+        amount: true,
+        productId: true,
+        createdAt: true,
+        clientId: true,
+        client: { select: { assignedUserId: true } },
+      },
+    });
   }
 
-  private async receivedByTransactions(
-    user: RequestUser,
-    entityId: string,
-    transactionIds: string[],
-    range: Range,
-  ) {
-    let total = new Prisma.Decimal(0);
-    let currency = '';
-    for (const batch of chunks(transactionIds, TRANSACTIONS_PER_CALL)) {
-      const summary = await callAccounting(this.logger, () =>
-        this.accounting.receiptsSummary(
-          {
-            tenantId: user.tenantId,
-            entityIds: [entityId],
-            transactionIds: batch,
-            ...range,
-          },
-          user.id,
-        ),
+  /** The tenant's base currency from Accounting, for labelling; null when it cannot be read. */
+  async baseCurrency(user: RequestUser): Promise<string | null> {
+    if (!this.accounting.isConfigured()) return null;
+    try {
+      const options = await this.accounting.getOptions(user.tenantId, user.id);
+      return options.baseCurrency ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `base currency unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
-      currency = summary.currency;
-      for (const transaction of summary.transactions) {
-        total = total.plus(transaction.receivedAmount);
-      }
+      return null;
     }
-    return { amount: total.toFixed(2), currency };
   }
 
   // ---- checks ----
@@ -342,11 +285,14 @@ export class SalesTargetsService {
     }
   }
 
-  private async assertRep(user: RequestUser, userId: string) {
+  /** Every id must be an active Marketing user; returns their names for error messages. */
+  private async assertReps(user: RequestUser, userIds: string[]) {
     const reps = await this.assignees.activeUsers(user.tenantId);
-    if (!reps.some((rep) => rep.userId === userId)) {
+    const byId = new Map(reps.map((rep) => [rep.userId, rep.name]));
+    if (!userIds.every((id) => byId.has(id))) {
       throw new BadRequestException(REP_NOT_ELIGIBLE_MESSAGE);
     }
+    return new Map(userIds.map((id) => [id, byId.get(id) ?? 'This rep']));
   }
 
   private async assertProduct(tenantId: string, productId: string) {
@@ -363,22 +309,31 @@ export class SalesTargetsService {
 
   private async assertNoOverlap(
     tenantId: string,
-    userId: string,
+    reps: Map<string, string>,
     productId: string | null,
     startDate: Date,
     endDate: Date,
   ) {
-    const clash = await this.prisma.marketingSalesTarget.findFirst({
+    const clashes = await this.prisma.marketingSalesTarget.findMany({
       where: {
         tenantId,
-        userId,
+        userId: { in: [...reps.keys()] },
         productId,
         startDate: { lte: endDate },
         endDate: { gte: startDate },
       },
-      select: { id: true },
+      select: { userId: true },
     });
-    if (clash) throw new ConflictException(OVERLAP_MESSAGE);
+    if (clashes.length === 0) return;
+
+    const names = [...new Set(clashes.map((c) => reps.get(c.userId)))].map(
+      (name) => name ?? 'A rep',
+    );
+    throw new ConflictException(
+      names.length === 1
+        ? `${names[0]} ${OVERLAP_MESSAGE}`
+        : `${names.join(', ')} already have targets for the same product that overlap these dates`,
+    );
   }
 
   private async findOrThrow(tenantId: string, id: string) {

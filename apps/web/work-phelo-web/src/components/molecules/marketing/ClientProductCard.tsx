@@ -51,7 +51,7 @@ export function ClientProductCard({
   achievedRevenue,
 }: {
   product: ClientDetailProduct;
-  /** What Accounting has received for this product's transactions. Null/undefined shows a dash. */
+  /** What has been invoiced for this product. Null/undefined shows a dash. */
   achievedRevenue?: string | null;
 }) {
   const status = STATUS[product.status];

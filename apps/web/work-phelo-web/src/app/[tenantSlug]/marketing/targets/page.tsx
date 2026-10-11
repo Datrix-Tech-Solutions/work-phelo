@@ -69,6 +69,7 @@ export default function SalesTargetsPage() {
       (target) =>
         matchesPeriod(target, period) &&
         (!q ||
+          (target.name ?? '').toLowerCase().includes(q) ||
           (target.userName ?? '').toLowerCase().includes(q) ||
           (target.productName ?? '').toLowerCase().includes(q)),
     );
@@ -84,8 +85,10 @@ export default function SalesTargetsPage() {
 
   function handleCreate(payload: Parameters<typeof createTarget.mutate>[0]) {
     createTarget.mutate(payload, {
-      onSuccess: () => {
-        toast.success('Target created');
+      onSuccess: (created) => {
+        toast.success(
+          created.length === 1 ? 'Target created' : `${created.length} targets created`,
+        );
         closeModal();
       },
       onError: (error) => toast.error(apiErrorMessage(error, 'Failed to create target')),
@@ -182,7 +185,7 @@ export default function SalesTargetsPage() {
         title="Remove Target"
         description={
           removing
-            ? `Remove ${removing.userName ?? 'this rep'}'s target for ${formatDateRange(removing.startDate, removing.endDate)}? This cannot be undone.`
+            ? `Remove ${removing.userName ?? 'this rep'}'s target${removing.name ? ` "${removing.name}"` : ''} for ${formatDateRange(removing.startDate, removing.endDate)}? This cannot be undone.`
             : ''
         }
         width="max-w-sm"

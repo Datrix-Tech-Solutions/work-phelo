@@ -14,8 +14,8 @@ export function ClientCard({ client, onClick }: { client: ClientListItem; onClic
       subtitle={client.businessType?.name}
       statusChip={
         client.isBillable
-          ? { label: 'Billable', color: 'green' }
-          : { label: 'Non-billable', color: 'gray' }
+          ? { label: 'Billed', color: 'green' }
+          : { label: 'Not billed', color: 'gray' }
       }
       details={[
         {

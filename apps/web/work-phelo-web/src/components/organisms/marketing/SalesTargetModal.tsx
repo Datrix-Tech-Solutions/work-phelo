@@ -5,6 +5,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Input } from '@/components/atoms/Input';
+import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
 import { useTargetReps } from '@/hooks/marketing/useSalesTargets';
@@ -20,7 +21,7 @@ interface Props {
   onUpdate: (id: string, amount: number) => void;
 }
 
-type Errors = Partial<Record<'userId' | 'startDate' | 'endDate' | 'amount', string>>;
+type Errors = Partial<Record<'name' | 'userIds' | 'startDate' | 'endDate' | 'amount', string>>;
 
 function iso(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -52,7 +53,8 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
   const { data: reps = [], isLoading: loadingReps } = useTargetReps(!editing);
   const { data: products = [], isLoading: loadingProducts } = useProspectingSettings('products');
 
-  const [userId, setUserId] = useState('');
+  const [name, setName] = useState('');
+  const [userIds, setUserIds] = useState<string[]>([]);
   const [productId, setProductId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -75,7 +77,8 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
       next.amount = 'Enter an amount greater than zero';
     }
     if (!editing) {
-      if (!userId) next.userId = 'Choose a sales rep';
+      if (!name.trim()) next.name = 'Enter a name for the target';
+      if (userIds.length === 0) next.userIds = 'Choose at least one sales rep';
       if (!startDate) next.startDate = 'Choose a start date';
       if (!endDate) next.endDate = 'Choose an end date';
       else if (startDate && endDate < startDate)
@@ -88,7 +91,8 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
     if (editing) onUpdate(editing.id, rounded);
     else {
       onCreate({
-        userId,
+        name: name.trim(),
+        userIds,
         ...(productId ? { productId } : {}),
         startDate,
         endDate,
@@ -104,8 +108,8 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
       title={editing ? 'Edit Target' : 'New Target'}
       description={
         editing
-          ? `${editing.userName ?? 'Sales rep'} · ${editing.productName ?? 'All products'} · ${formatDateRange(editing.startDate, editing.endDate)}`
-          : 'Set what a sales rep should bring in. Achieved revenue is the money received from their billable clients in the period.'
+          ? `${editing.name ? `${editing.name} · ` : ''}${editing.userName ?? 'Sales rep'} · ${editing.productName ?? 'All products'} · ${formatDateRange(editing.startDate, editing.endDate)}`
+          : 'Set what sales reps should bring in. Each rep chosen gets a target of the full amount, measured on the invoices raised for their clients in the period.'
       }
       width="max-w-lg"
       height="max-h-[90vh]"
@@ -115,7 +119,11 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
             Cancel
           </Button>
           <Button onClick={submit} isLoading={isSubmitting}>
-            {editing ? 'Save Changes' : 'Create Target'}
+            {editing
+              ? 'Save Changes'
+              : userIds.length > 1
+                ? `Create ${userIds.length} Targets`
+                : 'Create Target'}
           </Button>
         </>
       }
@@ -123,14 +131,21 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
       <div className="flex flex-col gap-4">
         {!editing && (
           <>
-            <SearchSelect
-              label="Sales Rep"
-              placeholder={loadingReps ? 'Loading...' : 'Choose a sales rep'}
+            <Input
+              label="Target Name"
+              placeholder="e.g. Q1 2026 revenue"
+              maxLength={120}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              error={errors.name}
+            />
+            <MultiSelect
+              label="Sales Reps"
+              placeholder={loadingReps ? 'Loading...' : 'Choose one or more sales reps'}
               options={repOptions}
-              value={userId}
-              onChange={(v) => setUserId(v)}
-              error={errors.userId}
-              disabled={loadingReps}
+              value={userIds}
+              onChange={setUserIds}
+              error={errors.userIds}
             />
             <SearchSelect
               label="Product (optional)"
@@ -174,7 +189,7 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
           </>
         )}
         <Input
-          label="Target Amount"
+          label={editing ? 'Target Amount' : 'Target Amount (per rep)'}
           type="number"
           min="0"
           step="0.01"

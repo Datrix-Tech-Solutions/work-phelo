@@ -21,8 +21,9 @@ interface Props {
 }
 
 /**
- * The Billable switch together with the first-transaction form it opens. The switch can't be used
- * until Accounting is set up for billing clients, and says why.
+ * An optional "raise a transaction" switch together with the form it opens. A client becomes
+ * Billed once a transaction is raised. The switch can't be used until Accounting is set up for
+ * billing clients, and says why.
  */
 export function BillingSection({
   enabled,
@@ -50,11 +51,11 @@ export function BillingSection({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <ToggleRow
-          label="Billable"
+          label="Raise a transaction"
           description={
             lockedEntityTypeId
               ? 'Raise a new transaction in Accounting for this client.'
-              : "Raise this client's first transaction in Accounting."
+              : "Raise this client's first transaction in Accounting. Optional; the client stays Not billed until one is raised."
           }
           enabled={enabled && usable}
           onChange={onEnabledChange}

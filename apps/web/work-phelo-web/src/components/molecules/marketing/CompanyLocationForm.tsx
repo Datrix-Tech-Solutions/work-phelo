@@ -21,9 +21,16 @@ interface Props {
   onChange: (values: CompanyLocationFields) => void;
   /** Hide the map behind a toggle; search and current location stay visible. */
   collapsibleMap?: boolean;
+  /** Tighter padding and gaps, for use inside side panels. */
+  compact?: boolean;
 }
 
-export function CompanyLocationForm({ values, onChange, collapsibleMap = false }: Props) {
+export function CompanyLocationForm({
+  values,
+  onChange,
+  collapsibleMap = false,
+  compact = false,
+}: Props) {
   const [mapOpen, setMapOpen] = useState(false);
   const [query, setQuery] = useState('');
   const { data: suggestions = [] } = useGeocodeSearch(query);
@@ -69,7 +76,11 @@ export function CompanyLocationForm({ values, onChange, collapsibleMap = false }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col gap-4">
+    <div
+      className={`bg-white rounded-xl border border-gray-200 flex flex-col ${
+        compact ? 'px-4 py-2.5 gap-2' : 'p-6 gap-4'
+      }`}
+    >
       {/* Search row — mirrors DataTable toolbar layout */}
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-52 max-w-sm">
@@ -95,7 +106,11 @@ export function CompanyLocationForm({ values, onChange, collapsibleMap = false }
       </div>
 
       {values.location && (
-        <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
+        <div
+          className={`flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-4 ${
+            compact ? 'py-1.5' : 'py-2.5'
+          }`}
+        >
           <MapPin className="w-4 h-4 text-(--module-btn-bg,var(--color-brand)) shrink-0" />
           <span>{values.location}</span>
         </div>

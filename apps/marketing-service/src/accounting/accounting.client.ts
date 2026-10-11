@@ -49,34 +49,7 @@ export interface SourceTransactionCreated {
   state: string;
 }
 
-/** One payment against an invoice: a request waiting on the accountant, or money received. */
-export interface InvoicePayment {
-  id: string;
-  kind: 'PAYMENT_REQUEST' | 'RECEIPT';
-  /** PENDING, POSTED (received), REVERSED, REJECTED or CANCELLED. */
-  state: string;
-  stateLabel: string;
-  amount: string;
-  currency: string;
-  paymentDate: string;
-  reference: string | null;
-  requestedByName: string | null;
-  /** Why it was rejected (or reversed), when it was. */
-  reason: string | null;
-  createdAt: string;
-}
-
-/** What only an invoice carries. */
-export interface InvoiceBalanceFields {
-  outstandingAmount: string;
-  pendingAmount: string;
-  /** What a new payment request may still ask for: owed, less requests already waiting. */
-  claimableAmount: string;
-  canRequestPayment: boolean;
-  payments: InvoicePayment[];
-}
-
-export interface SourceTransactionItem extends Partial<InvoiceBalanceFields> {
+export interface SourceTransactionItem {
   id: string;
   kind: 'INVOICE' | 'CREDIT_NOTE' | 'RECEIPT' | 'CASHBOOK';
   /** Machine code: DRAFT, POSTED, REVERSED, REJECTED, ... */
@@ -88,41 +61,12 @@ export interface SourceTransactionItem extends Partial<InvoiceBalanceFields> {
   documentNumber: string | null;
   /** Why it was rejected, when it was. */
   reason: string | null;
-  receivedAmount: string;
   createdAt: string;
 }
 
 export interface SourceTransactionsPage {
   items: SourceTransactionItem[];
   meta: { page: number; limit: number; total: number; totalPages: number };
-}
-
-export interface ReceiptsSummary {
-  currency: string;
-  entities: { entityId: string; receivedAmount: string }[];
-  /** Received per transaction, for the transaction ids that were asked about. */
-  transactions: { transactionId: string; receivedAmount: string }[];
-}
-
-export interface CreatePaymentRequestInput {
-  tenantId: string;
-  /** Stable per submission, so a retry never raises a second request. */
-  idempotencyKey: string;
-  /** The client's id - Accounting checks the invoice belongs to this client's entity. */
-  externalRef: string;
-  invoiceId: string;
-  amount: number;
-  /** YYYY-MM-DD, not in the future. */
-  paymentDate: string;
-  reference?: string;
-  note?: string;
-  requestedByName?: string;
-}
-
-export interface PaymentRequestResult {
-  id: string;
-  status: string;
-  amount: string;
 }
 
 const BASE = '/internal/source-transactions';
@@ -175,46 +119,5 @@ export class AccountingClient {
       },
       actingUserId,
     });
-  }
-
-  receiptsSummary(
-    input: {
-      tenantId: string;
-      entityIds: string[];
-      transactionIds?: string[];
-      /** YYYY-MM-DD, inclusive: only receipts dated within the range count. */
-      from?: string;
-      to?: string;
-    },
-    actingUserId: string,
-  ) {
-    return this.http.post<ReceiptsSummary>(`${BASE}/receipts-summary`, {
-      body: { ...input, sourceModule: SOURCE_MODULE },
-      actingUserId,
-    });
-  }
-
-  createPaymentRequest(input: CreatePaymentRequestInput, actingUserId: string) {
-    return this.http.post<PaymentRequestResult>(`${BASE}/payment-requests`, {
-      body: { ...input, sourceModule: SOURCE_MODULE },
-      actingUserId,
-    });
-  }
-
-  cancelPaymentRequest(
-    input: { tenantId: string; requestId: string; externalRef: string },
-    actingUserId: string,
-  ) {
-    return this.http.post<{ id: string; status: string }>(
-      `${BASE}/payment-requests/${encodeURIComponent(input.requestId)}/cancel`,
-      {
-        body: {
-          tenantId: input.tenantId,
-          externalRef: input.externalRef,
-          sourceModule: SOURCE_MODULE,
-        },
-        actingUserId,
-      },
-    );
   }
 }

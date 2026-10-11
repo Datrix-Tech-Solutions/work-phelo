@@ -28,8 +28,6 @@ describe('ClientBillingController authorization contract', () => {
       ClientBillingController.prototype.options,
       ClientBillingController.prototype.transactions,
       ClientBillingController.prototype.summary,
-      ClientBillingController.prototype.requestPayment,
-      ClientBillingController.prototype.cancelPayment,
       ClientBillingController.prototype.raise,
     ]) {
       expect(anyPermissions(handler)).toBeUndefined();

@@ -20,6 +20,12 @@ function amountWithCurrency(amount: string | null, currency: string | null): str
 
 const COLUMNS: Column<SalesTarget>[] = [
   {
+    key: 'name',
+    label: 'Target',
+    width: 'minmax(140px, 1fr)',
+    render: (row) => <span className="text-gray-900">{row.name ?? '—'}</span>,
+  },
+  {
     key: 'rep',
     label: 'Sales Rep',
     width: 'minmax(140px, 1fr)',
@@ -124,7 +130,7 @@ export function SalesTargetsTable({
       data={data}
       isLoading={isLoading}
       emptyMessage="No targets yet"
-      searchPlaceholder="Search by rep or product..."
+      searchPlaceholder="Search by target, rep or product..."
       searchValue={searchValue}
       onSearch={onSearch}
       extraFilters={extraFilters}

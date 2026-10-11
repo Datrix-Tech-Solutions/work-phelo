@@ -6,7 +6,6 @@ import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSel
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
 import { BillingSection } from '@/components/organisms/marketing/BillingSection';
 import {
   ClientBillingErrors,
@@ -33,7 +32,6 @@ interface Props {
   /** The user it is assigned to now. */
   currentAssignedUserId: string;
   currentAssignedUserName?: string | null;
-  currentBillable: boolean;
   /** The client's entity type in Accounting, once it has an entity. */
   currentEntityTypeId: string | null;
   /** The client's products a billing transaction can be tagged to. */
@@ -49,7 +47,6 @@ export function EditClientCompanyModal({
   currentSourceTypeId,
   currentAssignedUserId,
   currentAssignedUserName,
-  currentBillable,
   currentEntityTypeId,
   productOptions,
   isOpen,
@@ -69,7 +66,7 @@ export function EditClientCompanyModal({
   const [businessTypeId, setBusinessTypeId] = useState(currentBusinessTypeId);
   const [sourceTypeId, setSourceTypeId] = useState(currentSourceTypeId);
   const [assignedUserId, setAssignedUserId] = useState(currentAssignedUserId);
-  const [billable, setBillable] = useState(currentBillable);
+  const [raiseTransaction, setRaiseTransaction] = useState(false);
   const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
   const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
 
@@ -87,12 +84,11 @@ export function EditClientCompanyModal({
     businessTypeId !== currentBusinessTypeId ||
     sourceTypeId !== currentSourceTypeId ||
     assignedUserId !== currentAssignedUserId ||
-    billable !== currentBillable;
+    raiseTransaction;
 
   const isPending = updateClient.isPending || raiseBilling.isPending;
-  // Billing is only ever switched ON by raising a transaction (below); a plain edit can only switch it off.
-  const switchingOn = !currentBillable && billable;
-  const switchingOff = currentBillable && !billable;
+  // Billed is never edited directly: raising a transaction makes the client Billed.
+  const switchingOn = raiseTransaction;
 
   async function handleSave() {
     if (switchingOn) {
@@ -107,15 +103,13 @@ export function EditClientCompanyModal({
         trimmedName !== clientName ||
         businessTypeId !== currentBusinessTypeId ||
         sourceTypeId !== currentSourceTypeId ||
-        assignedUserId !== currentAssignedUserId ||
-        switchingOff;
+        assignedUserId !== currentAssignedUserId;
       if (detailsChanged) {
         await updateClient.mutateAsync({
           companyName: trimmedName,
           businessTypeId: businessTypeId || null,
           sourceTypeId: sourceTypeId || null,
           ...(assignedUserId !== currentAssignedUserId ? { assignedUserId } : {}),
-          ...(switchingOff ? { isBillable: false } : {}),
         });
       }
     } catch (error) {
@@ -199,24 +193,15 @@ export function EditClientCompanyModal({
           value={assignedUserId}
           onChange={(id) => setAssignedUserId(id || currentAssignedUserId)}
         />
-        {currentBillable ? (
-          <ToggleRow
-            label="Billable"
-            description="Turn off to stop raising new transactions. Existing ones stay in Accounting."
-            enabled={billable}
-            onChange={setBillable}
-          />
-        ) : (
-          <BillingSection
-            enabled={billable}
-            onEnabledChange={setBillable}
-            values={billing}
-            onValuesChange={setBilling}
-            errors={billingErrors}
-            productOptions={productOptions}
-            lockedEntityTypeId={currentEntityTypeId}
-          />
-        )}
+        <BillingSection
+          enabled={raiseTransaction}
+          onEnabledChange={setRaiseTransaction}
+          values={billing}
+          onValuesChange={setBilling}
+          errors={billingErrors}
+          productOptions={productOptions}
+          lockedEntityTypeId={currentEntityTypeId}
+        />
       </div>
     </Modal>
   );

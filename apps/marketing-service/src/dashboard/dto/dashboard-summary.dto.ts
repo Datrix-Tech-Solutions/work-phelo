@@ -117,3 +117,37 @@ export interface DashboardRevenueByProduct {
   total: string;
   products: DashboardRevenueProduct[];
 }
+
+export class QueryDashboardSalesPersonnelDto {
+  @ApiProperty({ example: '2026-10-01', description: 'First day, inclusive.' })
+  @IsDateString({ strict: true })
+  fromDate!: string;
+
+  @ApiProperty({ example: '2026-10-09', description: 'Last day, inclusive.' })
+  @IsDateString({ strict: true })
+  toDate!: string;
+}
+
+export interface DashboardSalesRep {
+  userId: string;
+  /** Falls back to "Unknown user" when the directory cannot name them. */
+  name: string;
+  /** Open prospects (not yet clients) created in the period. */
+  prospects: number;
+  /** Clients created in the period. */
+  clients: number;
+  /** Prospects created in the period, and how many of those have since become clients. */
+  created: number;
+  converted: number;
+  /** converted / created as a percentage (1dp); null when none were created. */
+  conversion: number | null;
+  /** Value of deals not yet won whose expected close date falls in the period. */
+  expected: string;
+  /** Money Accounting received from the rep's clients in the period; null if Accounting is down. */
+  achieved: string | null;
+}
+
+export interface DashboardSalesPersonnel {
+  currency: string | null;
+  reps: DashboardSalesRep[];
+}

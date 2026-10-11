@@ -38,14 +38,8 @@ const ALREADY_CONVERTED_MESSAGE = 'This prospect has already been converted';
 const NOT_CONVERTIBLE_MESSAGE =
   'Only prospects at 100% progress can be converted to a client';
 const CONTACT_NAME_REQUIRED_MESSAGE = 'A contact name is required';
-const BILLING_REQUIRED_MESSAGE =
-  'A billable client needs its first billing transaction.';
-const BILLING_WITHOUT_BILLABLE_MESSAGE =
-  'Billing details can only be sent for a billable client.';
 const INVALID_BILLING_PRODUCT_MESSAGE =
   'The billing product must be one of the client’s products.';
-const BILLABLE_ON_MESSAGE =
-  'Billing is switched on by raising the client’s first billing transaction.';
 const HAS_BILLING_MESSAGE =
   'This client has billing in Accounting and cannot be deleted.';
 
@@ -102,11 +96,9 @@ export class ClientsService {
       }),
     ]);
 
-    const achieved = await this.billing.totalsForEntities(
-      user,
-      clients
-        .map((client) => client.accountingEntityId)
-        .filter((id): id is string => Boolean(id)),
+    const achieved = await this.billing.totalsForClients(
+      user.tenantId,
+      clients.map((client) => client.id),
     );
 
     const settings = await this.findSettingsByIds(user.tenantId, [
@@ -140,9 +132,7 @@ export class ClientsService {
           locationLabel: client.locationLabel,
           isBillable: client.isBillable,
           hasAccountingEntity: Boolean(client.accountingEntityId),
-          achievedRevenue: client.accountingEntityId
-            ? (achieved.get(client.accountingEntityId) ?? null)
-            : null,
+          achievedRevenue: achieved.get(client.id) ?? null,
           primaryContact: primary
             ? {
                 name: primary.name,
@@ -233,7 +223,6 @@ export class ClientsService {
     // Accounting first: if it cannot take the transaction, no client is created. If saving the
     // client then fails, a retry with the same client id finds the same entity and draft.
     const firstBilling = await this.sendFirstBilling(user, {
-      isBillable: dto.isBillable,
       billing: dto.billing,
       productIds,
       clientId,
@@ -298,9 +287,6 @@ export class ClientsService {
   async update(user: RequestUser, id: string, dto: UpdateClientDto) {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException(EMPTY_PATCH_MESSAGE);
-    }
-    if (dto.isBillable === true) {
-      throw new BadRequestException(BILLABLE_ON_MESSAGE);
     }
 
     const canEditAll = this.hasPermission(
@@ -370,9 +356,6 @@ export class ClientsService {
             : {}),
           ...(dto.sourceTypeId !== undefined
             ? { sourceTypeId: dto.sourceTypeId }
-            : {}),
-          ...(dto.isBillable !== undefined
-            ? { isBillable: dto.isBillable }
             : {}),
           ...(dto.location?.label !== undefined
             ? {
@@ -624,7 +607,6 @@ export class ClientsService {
 
     const clientId = dto.clientId ?? randomUUID();
     const firstBilling = await this.sendFirstBilling(user, {
-      isBillable: dto.isBillable,
       billing: dto.billing,
       productIds: prospect.products.map((p) => p.productId),
       clientId,
@@ -717,13 +699,12 @@ export class ClientsService {
   }
 
   /**
-   * Billable clients are created together with their first billing transaction. This sends it to
+   * A client can be created together with its first billing transaction. This sends it to
    * Accounting (which creates the entity and the draft) before anything is saved here.
    */
   private async sendFirstBilling(
     user: RequestUser,
     input: {
-      isBillable: boolean | undefined;
       billing: ClientBillingDto | undefined;
       productIds: string[];
       clientId: string;
@@ -732,13 +713,8 @@ export class ClientsService {
       assignedUserId: string;
     },
   ) {
-    if (!input.isBillable) {
-      if (input.billing) {
-        throw new BadRequestException(BILLING_WITHOUT_BILLABLE_MESSAGE);
-      }
-      return null;
-    }
-    if (!input.billing) throw new BadRequestException(BILLING_REQUIRED_MESSAGE);
+    // The first transaction is optional: a client without one is simply not billed yet.
+    if (!input.billing) return null;
     this.billing.assertCanBill(user, input.assignedUserId);
     if (
       input.billing.productId &&

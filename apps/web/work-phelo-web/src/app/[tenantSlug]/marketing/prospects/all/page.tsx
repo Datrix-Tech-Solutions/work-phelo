@@ -7,6 +7,7 @@ import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
 import { useDeleteProspect, useProspect, useProspects } from '@/hooks/marketing/useProspects';
 import { AllProspectsTable, Prospect } from '@/components/molecules/marketing/AllProspectsTable';
 import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
+import { AddProspectPanel } from '@/components/organisms/marketing/AddProspectPanel';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { useToast } from '@/hooks/useToast';
@@ -45,6 +46,7 @@ export default function AllProspectsPage() {
   const [pendingDelete, setPendingDelete] = useState<Prospect | null>(null);
   const [stageProspect, setStageProspect] = useState<Prospect | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const toast = useToast();
   const deleteProspect = useDeleteProspect();
 
@@ -109,7 +111,7 @@ export default function AllProspectsPage() {
         onUpdateStage={setStageProspect}
         onDelete={setPendingDelete}
         onConvertToClient={(row) => setConvertingId(row.id)}
-        onAdd={() => router.push(`/${tenantSlug}/marketing/prospects/all/new`)}
+        onAdd={() => setPanelOpen(true)}
         stageOptions={stageOptions}
         stageFilter={stageFilter}
         onStageFilter={(id) => {
@@ -118,6 +120,7 @@ export default function AllProspectsPage() {
         }}
         isLoading={isLoading}
       />
+      <AddProspectPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
       {convertingId && convertingProspect && (
         <ConvertToClientModal
           prospect={convertingProspect}

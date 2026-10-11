@@ -1,21 +1,49 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsDateString,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
+  IsString,
   IsUUID,
   Max,
+  MaxLength,
 } from 'class-validator';
+
+export const MAX_REPS_PER_TARGET = 100;
 
 export class CreateSalesTargetDto {
   @ApiProperty({
-    format: 'uuid',
-    description: 'The sales rep the target is for.',
+    example: 'Q1 2026 revenue',
+    description:
+      'What the target is called. Every rep in the request gets a target with this name.',
   })
-  @IsUUID()
-  userId!: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  name!: string;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The sales reps the target is set for. Each gets their own target of the full amount.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_REPS_PER_TARGET)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  userIds!: string[];
 
   @ApiPropertyOptional({
     format: 'uuid',
@@ -36,7 +64,8 @@ export class CreateSalesTargetDto {
 
   @ApiProperty({
     example: 50000,
-    description: "Revenue to receive, in the tenant's base currency.",
+    description:
+      "Revenue each rep is to receive, in the tenant's base currency.",
   })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

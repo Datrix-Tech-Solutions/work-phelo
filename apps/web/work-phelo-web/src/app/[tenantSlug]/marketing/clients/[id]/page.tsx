@@ -180,7 +180,7 @@ export default function ClientDetailPage() {
         title="Overview"
         headerExtra={
           <TypeChip
-            label={client.isBillable ? 'Billable' : 'Non-billable'}
+            label={client.isBillable ? 'Billed' : 'Not billed'}
             color={client.isBillable ? 'green' : 'purple'}
           />
         }
@@ -257,9 +257,7 @@ export default function ClientDetailPage() {
       {activeTab === 'transactions' && canViewBilling && (
         <ClientTransactionsTab
           clientId={id}
-          clientName={client.companyName}
           onNew={canBill ? () => setBillingOpen(true) : undefined}
-          canPay={canBill}
         />
       )}
 
@@ -295,7 +293,6 @@ export default function ClientDetailPage() {
           clientName={client.companyName}
           currentBusinessTypeId={client.businessType?.id ?? ''}
           currentSourceTypeId={client.sourceType?.id ?? ''}
-          currentBillable={client.isBillable}
           currentEntityTypeId={client.accountingEntityTypeId}
           productOptions={billingProductOptions}
           isOpen

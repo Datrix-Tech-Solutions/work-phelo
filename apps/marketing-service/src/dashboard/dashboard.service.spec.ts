@@ -4,6 +4,18 @@ import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-setting
 import { DashboardService } from './dashboard.service';
 
 const D = (value: string) => new Prisma.Decimal(value);
+const invoice = (
+  amount: string,
+  at: string,
+  productId: string | null = null,
+  userId = 'rep-1',
+) => ({
+  amount: D(amount),
+  productId,
+  createdAt: new Date(`${at}T10:00:00.000Z`),
+  clientId: `client-of-${userId}`,
+  client: { assignedUserId: userId },
+});
 
 describe('DashboardService', () => {
   const rep: RequestUser = {
@@ -35,14 +47,22 @@ describe('DashboardService', () => {
   let prisma: {
     marketingProspect: { count: jest.Mock; groupBy: jest.Mock };
     marketingProspectProduct: { aggregate: jest.Mock; findMany: jest.Mock };
-    marketingClient: { count: jest.Mock; findMany: jest.Mock };
+    marketingClient: {
+      count: jest.Mock;
+      findMany: jest.Mock;
+      groupBy: jest.Mock;
+    };
     marketingClientBilling: { findMany: jest.Mock };
     marketingClientProduct: { findMany: jest.Mock; aggregate: jest.Mock };
     marketingPipelineStage: { findMany: jest.Mock };
     marketingCrmSettingOption: { findMany: jest.Mock };
   };
-  let accounting: { receiptsSummary: jest.Mock };
-  let targets: { receivedByEntities: jest.Mock; listOverlapping: jest.Mock };
+  let targets: {
+    invoiceRows: jest.Mock;
+    baseCurrency: jest.Mock;
+    listOverlapping: jest.Mock;
+  };
+  let assignees: { namesFor: jest.Mock };
   let service: DashboardService;
 
   beforeEach(() => {
@@ -60,6 +80,7 @@ describe('DashboardService', () => {
       marketingClient: {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
       marketingClientBilling: { findMany: jest.fn().mockResolvedValue([]) },
       marketingClientProduct: {
@@ -71,17 +92,18 @@ describe('DashboardService', () => {
       marketingPipelineStage: { findMany: jest.fn().mockResolvedValue([]) },
       marketingCrmSettingOption: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    accounting = { receiptsSummary: jest.fn() };
     targets = {
-      receivedByEntities: jest
-        .fn()
-        .mockResolvedValue({ amount: '0.00', currency: 'GHS' }),
+      invoiceRows: jest.fn().mockResolvedValue([]),
+      baseCurrency: jest.fn().mockResolvedValue('GHS'),
       listOverlapping: jest.fn().mockResolvedValue([]),
+    };
+    assignees = {
+      namesFor: jest.fn().mockResolvedValue(new Map<string, string>()),
     };
     service = new DashboardService(
       prisma as never,
       targets as never,
-      accounting as never,
+      assignees as never,
     );
   });
 
@@ -228,38 +250,30 @@ describe('DashboardService', () => {
     }
   });
 
-  it('reads achieved revenue for each period from Accounting', async () => {
-    prisma.marketingClient.findMany.mockResolvedValue([
-      { accountingEntityId: 'e-1' },
-      { accountingEntityId: 'e-2' },
+  it('adds up the invoices raised in each period', async () => {
+    targets.invoiceRows.mockResolvedValue([
+      invoice('500.00', '2026-10-03'),
+      invoice('300.00', '2026-10-09'),
+      invoice('200.00', '2026-09-05'),
+      invoice('999.00', '2026-08-01'),
     ]);
-    targets.receivedByEntities
-      .mockResolvedValueOnce({ amount: '800.00', currency: 'GHS' })
-      .mockResolvedValueOnce({ amount: '500.00', currency: 'GHS' });
 
     const result = await service.summary(manager, query);
 
-    expect(targets.receivedByEntities).toHaveBeenCalledWith(
-      manager,
-      ['e-1', 'e-2'],
-      { from: '2026-10-01', to: '2026-10-09' },
-    );
     expect(result.achievedRevenue).toEqual({
       current: '800.00',
-      previous: '500.00',
+      previous: '200.00',
     });
     expect(result.currency).toBe('GHS');
   });
 
-  it('reports achieved revenue as unavailable when Accounting cannot be reached', async () => {
-    prisma.marketingClient.findMany.mockResolvedValue([
-      { accountingEntityId: 'e-1' },
-    ]);
-    targets.receivedByEntities.mockRejectedValue(new Error('down'));
+  it('still reports achieved revenue when the currency cannot be read', async () => {
+    targets.invoiceRows.mockResolvedValue([invoice('100.00', '2026-10-03')]);
+    targets.baseCurrency.mockResolvedValue(null);
 
     const result = await service.summary(manager, query);
 
-    expect(result.achievedRevenue).toEqual({ current: null, previous: null });
+    expect(result.achievedRevenue.current).toBe('100.00');
     expect(result.currency).toBeNull();
   });
 
@@ -395,36 +409,20 @@ describe('DashboardService', () => {
 
   describe('revenueByProduct', () => {
     const range = { fromDate: '2026-10-01', toDate: '2026-10-10' };
-    const billing = (
-      productId: string | null,
-      accountingTransactionId: string,
-    ) => ({
-      productId,
-      accountingTransactionId,
-      client: { accountingEntityId: 'e-1' },
-    });
 
-    it('attributes received money to the product each transaction was raised for', async () => {
-      prisma.marketingClientBilling.findMany.mockResolvedValue([
-        billing('p-1', 't-1'),
-        billing('p-1', 't-2'),
-        billing('p-2', 't-3'),
-        billing(null, 't-4'),
+    it('adds up the invoices raised in the period for the product each was raised for', async () => {
+      targets.invoiceRows.mockResolvedValue([
+        invoice('300.00', '2026-10-02', 'p-1'),
+        invoice('200.00', '2026-10-10', 'p-1'),
+        invoice('900.00', '2026-10-05', 'p-2'),
+        invoice('50.00', '2026-10-06', null),
+        // outside the period
+        invoice('7000.00', '2026-09-30', 'p-1'),
       ]);
       prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
         { id: 'p-1', name: 'Loans' },
         { id: 'p-2', name: 'Savings' },
       ]);
-      accounting.receiptsSummary.mockResolvedValue({
-        currency: 'GHS',
-        entities: [],
-        transactions: [
-          { transactionId: 't-1', receivedAmount: '300.00' },
-          { transactionId: 't-2', receivedAmount: '200.00' },
-          { transactionId: 't-3', receivedAmount: '900.00' },
-          { transactionId: 't-4', receivedAmount: '50.00' },
-        ],
-      });
 
       const result = await service.revenueByProduct(manager, range);
 
@@ -439,54 +437,102 @@ describe('DashboardService', () => {
       });
     });
 
-    it('asks Accounting only about the period and drops products with nothing received', async () => {
-      prisma.marketingClientBilling.findMany.mockResolvedValue([
-        billing('p-1', 't-1'),
-        billing('p-2', 't-2'),
-      ]);
-      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
-        { id: 'p-1', name: 'Loans' },
-      ]);
-      accounting.receiptsSummary.mockResolvedValue({
-        currency: 'GHS',
-        entities: [],
-        transactions: [
-          { transactionId: 't-1', receivedAmount: '120.00' },
-          { transactionId: 't-2', receivedAmount: '0.00' },
-        ],
-      });
-
+    it('returns nothing when no invoice was raised', async () => {
       const result = await service.revenueByProduct(manager, range);
 
-      expect(accounting.receiptsSummary).toHaveBeenCalledWith(
-        {
-          tenantId: 'tenant-1',
-          entityIds: ['e-1'],
-          transactionIds: ['t-1', 't-2'],
-          from: '2026-10-01',
-          to: '2026-10-10',
-        },
-        'mgr-1',
-      );
-      expect(result.products).toEqual([
-        { productId: 'p-1', name: 'Loans', amount: '120.00' },
-      ]);
-    });
-
-    it('returns nothing without calling Accounting when no client has been billed', async () => {
-      const result = await service.revenueByProduct(manager, range);
-
-      expect(result).toEqual({ currency: null, total: '0.00', products: [] });
-      expect(accounting.receiptsSummary).not.toHaveBeenCalled();
+      expect(result).toEqual({ currency: 'GHS', total: '0.00', products: [] });
     });
 
     it('limits a user without view-all to their own clients', async () => {
       await service.revenueByProduct(rep, range);
 
-      const [args] = prisma.marketingClientBilling.findMany.mock.calls[0] as [
-        { where: { client: Record<string, unknown> } },
+      expect(targets.invoiceRows).toHaveBeenCalledWith('tenant-1', {
+        assignedUserId: 'rep-1',
+      });
+    });
+  });
+
+  describe('salesPersonnel', () => {
+    const range = { fromDate: '2026-10-01', toDate: '2026-10-09' };
+
+    it('brings each rep’s counts, expected value and achieved revenue together', async () => {
+      prisma.marketingProspect.groupBy
+        .mockResolvedValueOnce([
+          { assignedUserId: 'rep-1', _count: { _all: 4 } },
+        ])
+        .mockResolvedValueOnce([
+          { assignedUserId: 'rep-1', _count: { _all: 8 } },
+        ])
+        .mockResolvedValueOnce([
+          { assignedUserId: 'rep-1', _count: { _all: 2 } },
+        ]);
+      prisma.marketingClient.groupBy.mockResolvedValue([
+        { assignedUserId: 'rep-1', _count: { _all: 2 } },
+        { assignedUserId: 'rep-2', _count: { _all: 1 } },
+      ]);
+      prisma.marketingClientProduct.findMany.mockResolvedValue([
+        { expectedValue: D('100'), client: { assignedUserId: 'rep-1' } },
+        { expectedValue: null, client: { assignedUserId: 'rep-1' } },
+      ]);
+      prisma.marketingProspectProduct.findMany.mockResolvedValue([
+        { expectedValue: D('50.5'), prospect: { assignedUserId: 'rep-1' } },
+      ]);
+      targets.invoiceRows.mockResolvedValue([
+        invoice('600.00', '2026-10-02'),
+        invoice('300.00', '2026-10-08'),
+        // outside the period
+        invoice('5000.00', '2026-09-20'),
+      ]);
+      assignees.namesFor.mockResolvedValue(new Map([['rep-1', 'Ama Mensah']]));
+
+      const result = await service.salesPersonnel(manager, range);
+
+      expect(result.currency).toBe('GHS');
+      expect(result.reps).toEqual(
+        expect.arrayContaining([
+          {
+            userId: 'rep-1',
+            name: 'Ama Mensah',
+            prospects: 4,
+            clients: 2,
+            created: 8,
+            converted: 2,
+            conversion: 25,
+            expected: '150.50',
+            achieved: '900.00',
+          },
+          {
+            userId: 'rep-2',
+            name: 'Unknown user',
+            prospects: 0,
+            clients: 1,
+            created: 0,
+            converted: 0,
+            conversion: null,
+            expected: '0.00',
+            achieved: '0.00',
+          },
+        ]),
+      );
+    });
+
+    it('counts a reversed or rejected invoice as nothing', async () => {
+      prisma.marketingClient.groupBy.mockResolvedValue([
+        { assignedUserId: 'rep-1', _count: { _all: 1 } },
+      ]);
+      // invoiceRows only ever returns live invoices; asking for them is what keeps the rest out.
+      await service.salesPersonnel(manager, range);
+
+      expect(targets.invoiceRows).toHaveBeenCalledWith('tenant-1', {});
+    });
+
+    it('limits a user without view-all to their own records', async () => {
+      await service.salesPersonnel(rep, range);
+
+      const [args] = prisma.marketingClient.groupBy.mock.calls[0] as [
+        { where: { assignedUserId: string } },
       ];
-      expect(args.where.client.assignedUserId).toBe('rep-1');
+      expect(args.where.assignedUserId).toBe('rep-1');
     });
   });
 });
