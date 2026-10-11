@@ -12,6 +12,8 @@ import type { MarketingSalesRep } from '@/types/marketing';
 
 const BAR_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ef4444'];
 const TOP = 5;
+/** Figures about what a rep holds now, not about the selected period. */
+const CURRENT_METRICS: Metric[] = ['clients', 'prospects', 'conversion'];
 
 type Metric = 'achieved' | 'expected' | 'clients' | 'prospects' | 'conversion';
 
@@ -100,7 +102,9 @@ export function TopSalesPersonnelChart({ period, year, className }: TopSalesPers
         <div className="flex flex-col">
           <h3 className="text-sm font-semibold text-gray-900">Top 5 Sales Personnel</h3>
           <span className="text-xs text-gray-400">
-            {SUBTITLES[period]} · by {config.label.toLowerCase()}
+            {CURRENT_METRICS.includes(metric)
+              ? `Current total · by ${config.label.toLowerCase()}`
+              : `${SUBTITLES[period]} · by ${config.label.toLowerCase()}`}
           </span>
         </div>
         <div className="w-44 shrink-0">
@@ -128,7 +132,9 @@ export function TopSalesPersonnelChart({ period, year, className }: TopSalesPers
         </div>
       ) : rows.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
-          Nothing to rank in this period.
+          {CURRENT_METRICS.includes(metric)
+            ? `No ${config.label.toLowerCase()} yet.`
+            : `No ${config.label.toLowerCase()} recorded in this period.`}
         </div>
       ) : (
         <div ref={plotRef} className="relative flex-1 min-h-0 -ml-4">
