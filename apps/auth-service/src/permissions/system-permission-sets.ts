@@ -111,6 +111,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
           PermissionAction.DELETE,
         ],
         'hr-settings': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'hr.dashboard': [PermissionAction.VIEW],
         leave: [PermissionAction.VIEW, PermissionAction.APPROVE],
         'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
         'leave-settings': [PermissionAction.EDIT],

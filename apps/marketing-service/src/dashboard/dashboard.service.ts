@@ -23,6 +23,8 @@ import {
   QueryDashboardRevenueDto,
   QueryDashboardSalesPersonnelDto,
   QueryDashboardSummaryDto,
+  QueryDashboardTargetsDto,
+  DashboardTargetsOverview,
 } from './dto/dashboard-summary.dto';
 
 const DAY_MS = 86_400_000;
@@ -227,8 +229,9 @@ export class DashboardService {
   }
 
   /**
-   * Every rep with prospects, clients or pipeline value in the period, with the four figures the
-   * dashboard ranks them on. Scoped like the lists: without view-all, only the caller appears.
+   * Every rep who owns prospects or clients, or has pipeline value in the period, with the
+   * figures the dashboard ranks them on. Prospects, clients and conversion are what each rep
+   * holds now; expected and achieved are for the period. Scoped like the lists: without view-all, only the caller appears.
    */
   async salesPersonnel(
     user: RequestUser,
@@ -243,7 +246,6 @@ export class DashboardService {
     const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
       ? {}
       : { assignedUserId: user.id };
-    const createdAt = { gte: range.from, lt: range.to };
     const expectedCloseDate = { gte: range.from, lt: range.to };
 
     const [
@@ -257,32 +259,22 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.marketingProspect.groupBy({
         by: ['assignedUserId'],
-        where: {
-          tenantId,
-          ...prospectScope,
-          client: { is: null },
-          createdAt,
-        },
+        where: { tenantId, ...prospectScope, client: { is: null } },
         _count: { _all: true },
       }),
       this.prisma.marketingProspect.groupBy({
         by: ['assignedUserId'],
-        where: { tenantId, ...prospectScope, createdAt },
+        where: { tenantId, ...prospectScope },
         _count: { _all: true },
       }),
       this.prisma.marketingProspect.groupBy({
         by: ['assignedUserId'],
-        where: {
-          tenantId,
-          ...prospectScope,
-          createdAt,
-          client: { isNot: null },
-        },
+        where: { tenantId, ...prospectScope, client: { isNot: null } },
         _count: { _all: true },
       }),
       this.prisma.marketingClient.groupBy({
         by: ['assignedUserId'],
-        where: { tenantId, ...clientScope, createdAt },
+        where: { tenantId, ...clientScope },
         _count: { _all: true },
       }),
       this.prisma.marketingClientProduct.findMany({
@@ -600,6 +592,48 @@ export class DashboardService {
    */
   private async targetProgress(user: RequestUser, days: DayRange) {
     const rows = await this.targets.listOverlapping(user, days.from, days.to);
+    return this.sumTargets(rows);
+  }
+
+  /**
+   * Target, achieved and remaining for the range, optionally for one rep, with the reps who
+   * have a target in it so the dashboard can offer a filter. Scoped like the targets list: a
+   * user without view-all sees, and can pick, only themselves.
+   */
+  async targetsOverview(
+    user: RequestUser,
+    query: QueryDashboardTargetsDto,
+  ): Promise<DashboardTargetsOverview> {
+    const rows = await this.targets.listOverlapping(
+      user,
+      query.fromDate,
+      query.toDate,
+    );
+    const repIds = [...new Set(rows.map((row) => row.userId))];
+    const names = await this.assignees.namesFor(user.tenantId, repIds);
+    const reps = repIds
+      .map((userId) => ({ userId, name: names.get(userId) ?? 'Unknown rep' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const selected = query.userId
+      ? rows.filter((row) => row.userId === query.userId)
+      : rows;
+    return { ...this.sumTargets(selected), reps };
+  }
+
+  /**
+   * One total target per rep: the rep's overall targets when they have any, otherwise their
+   * per-product ones. Achieved is null as soon as any counted target's figure is unavailable.
+   */
+  private sumTargets(
+    rows: {
+      userId: string;
+      productId: string | null;
+      /** Money as a 2dp string, as the targets list returns it. */
+      amount: string;
+      achieved: string | null;
+    }[],
+  ) {
     const byRep = new Map<string, typeof rows>();
     for (const row of rows) {
       byRep.set(row.userId, [...(byRep.get(row.userId) ?? []), row]);

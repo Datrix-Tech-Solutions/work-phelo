@@ -1465,11 +1465,11 @@ export interface MarketingRevenueByProduct {
 export interface MarketingSalesRep {
   userId: string;
   name: string;
-  /** Open prospects (not yet clients) created in the period. */
+  /** Open prospects (not yet clients) the rep holds now. */
   prospects: number;
-  /** Clients created in the period. */
+  /** Clients the rep holds now. */
   clients: number;
-  /** Prospects created in the period, and how many of those have since become clients. */
+  /** Every prospect the rep has had, and how many of those have become clients. */
   created: number;
   converted: number;
   /** converted / created as a percentage (1dp); null when none were created. */
@@ -1483,4 +1483,14 @@ export interface MarketingSalesRep {
 export interface MarketingSalesPersonnel {
   currency: string | null;
   reps: MarketingSalesRep[];
+}
+
+/** Target progress for a period, optionally for one rep, plus the reps who have a target in it. */
+export interface MarketingTargetsOverview {
+  count: number;
+  target: string;
+  achieved: string | null;
+  remaining: string | null;
+  percent: number | null;
+  reps: { userId: string; name: string }[];
 }

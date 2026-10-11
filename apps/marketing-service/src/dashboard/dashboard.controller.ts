@@ -12,10 +12,12 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import { DashboardService } from './dashboard.service';
 import {
@@ -23,6 +25,7 @@ import {
   QueryDashboardRevenueDto,
   QueryDashboardSalesPersonnelDto,
   QueryDashboardSummaryDto,
+  QueryDashboardTargetsDto,
 } from './dto/dashboard-summary.dto';
 
 type AuthedRequest = Request & { user: RequestUser };
@@ -45,9 +48,11 @@ type AuthedRequest = Request & { user: RequestUser };
 export class DashboardController {
   constructor(private readonly service: DashboardService) {}
 
-  // Open to every Marketing user, like the lists it summarises: without the matching
-  // view-all permission the figures cover only the caller's own prospects and clients.
+  // Needs the general dashboard permission. Within it the figures are still scoped like the lists
+  // they summarise: without the matching view-all permission they cover only the caller's own
+  // prospects and clients.
   @Get('summary')
+  @RequirePermissions(P.DASHBOARD_VIEW)
   @ApiOperation({
     summary: 'Marketing dashboard figures for a period',
     description:
@@ -61,7 +66,23 @@ export class DashboardController {
     return this.service.summary(request.user, query);
   }
 
+  @Get('targets')
+  @RequirePermissions(P.DASHBOARD_VIEW)
+  @ApiOperation({
+    summary: 'Sales target progress for a period, optionally for one rep',
+    description:
+      'Total target, achieved, remaining and percent for targets overlapping the range, plus the reps who have one so the dashboard can filter by rep. Without the view-all targets permission only the caller’s own targets are included.',
+  })
+  @ApiOkResponse({ description: 'Target figures and the reps to filter by.' })
+  targets(
+    @Query() query: QueryDashboardTargetsDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.targetsOverview(request.user, query);
+  }
+
   @Get('growth')
+  @RequirePermissions(P.DASHBOARD_VIEW)
   @ApiOperation({
     summary: 'New prospects and new clients for several date ranges at once',
     description:
@@ -76,6 +97,7 @@ export class DashboardController {
   }
 
   @Get('revenue-by-product')
+  @RequirePermissions(P.DASHBOARD_VIEW)
   @ApiOperation({
     summary: 'Revenue achieved in a period, split by product',
     description:
@@ -90,6 +112,7 @@ export class DashboardController {
   }
 
   @Get('sales-personnel')
+  @RequirePermissions(P.DASHBOARD_VIEW)
   @ApiOperation({
     summary: 'Prospects, clients, expected and achieved revenue per sales rep',
     description:

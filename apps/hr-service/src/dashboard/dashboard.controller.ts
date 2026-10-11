@@ -4,10 +4,11 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { DashboardService } from './dashboard.service';
+import { QueryDashboardKpisDto } from './dto/dashboard-kpis.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -69,17 +70,46 @@ export class DashboardController {
     );
   }
 
+  @Get('kpis')
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
+  @ApiOperation({
+    summary: 'Headcount, attendance, leave and hires/exits for a period',
+    description:
+      'Figures for the date range and for the previous range, so the dashboard can show trends.',
+  })
+  @ApiResponse({ status: 200, description: 'Dashboard KPIs returned' })
+  getKpis(
+    @Query() query: QueryDashboardKpisDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.dashboardService.getKpis(req.user.tenantId, query);
+  }
+
   @Get('department-distribution')
-  @RequirePermissions(Permission.READ_DEPARTMENTS)
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
   @ApiOperation({ summary: 'Get employee count per department' })
   @ApiResponse({ status: 200, description: 'Department distribution returned' })
   getDepartmentDistribution(@Req() req: AuthenticatedRequest) {
     return this.dashboardService.getDepartmentDistribution(req.user.tenantId);
   }
 
+  @Get('pending-actions')
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
+  @ApiOperation({
+    summary:
+      'Counts of items waiting on HR (approvals, reviews, dates ending soon)',
+  })
+  @ApiResponse({ status: 200, description: 'Pending action counts returned' })
+  getPendingActions(@Req() req: AuthenticatedRequest) {
+    return this.dashboardService.getPendingActions(req.user.tenantId);
+  }
+
   @Get('recent-activity')
-  @RequirePermissions(Permission.READ_EMPLOYEES)
-  @ApiOperation({ summary: 'Get last 5 employee record changes' })
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
+  @ApiOperation({
+    summary:
+      'Get the latest HR events (hires, status changes, offboarding, resignations, leave and time-correction decisions)',
+  })
   @ApiResponse({ status: 200, description: 'Recent activity returned' })
   getRecentActivity(@Req() req: AuthenticatedRequest) {
     return this.dashboardService.getRecentActivity(req.user.tenantId);

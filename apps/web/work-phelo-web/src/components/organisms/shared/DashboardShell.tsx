@@ -1,6 +1,9 @@
 'use client';
 
-import { DashboardViewToggle } from '@/components/atoms/DashboardViewToggle';
+import {
+  DashboardViewToggle,
+  type DashboardViewOption,
+} from '@/components/atoms/DashboardViewToggle';
 import { PeriodToggle } from '@/components/atoms/PeriodToggle';
 import { SearchSelect, type SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { YearSelect } from '@/components/atoms/YearSelect';
@@ -20,6 +23,8 @@ interface DashboardShellProps {
   fields?: DashboardFilterField[];
   /** Show the General / Detailed toggle at the top right (default off). Read `filters.view` to switch content. */
   showViewToggle?: boolean;
+  /** The views the toggle offers; General and Detailed by default. */
+  viewOptions?: DashboardViewOption[];
   /** Extra right-aligned slot in the filter bar row (export button, …). */
   actions?: React.ReactNode;
   children?: React.ReactNode;
@@ -31,6 +36,7 @@ export function DashboardShell({
   filters,
   fields = [],
   showViewToggle = false,
+  viewOptions,
   actions,
   children,
 }: DashboardShellProps) {
@@ -58,7 +64,11 @@ export function DashboardShell({
         <div className="flex items-center gap-3 ml-auto">
           {actions}
           {showViewToggle && (
-            <DashboardViewToggle value={filters.view} onChange={filters.setView} />
+            <DashboardViewToggle
+              value={filters.view}
+              onChange={filters.setView}
+              views={viewOptions}
+            />
           )}
         </div>
       </div>

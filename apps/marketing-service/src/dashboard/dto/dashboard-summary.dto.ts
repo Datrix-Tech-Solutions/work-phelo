@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsString, Matches } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateString, IsOptional, IsString, Matches } from 'class-validator';
 
 export class QueryDashboardSummaryDto {
   @ApiProperty({ example: '2026-10-01', description: 'First day, inclusive.' })
@@ -132,11 +132,11 @@ export interface DashboardSalesRep {
   userId: string;
   /** Falls back to "Unknown user" when the directory cannot name them. */
   name: string;
-  /** Open prospects (not yet clients) created in the period. */
+  /** Open prospects (not yet clients) the rep holds now. */
   prospects: number;
-  /** Clients created in the period. */
+  /** Clients the rep holds now. */
   clients: number;
-  /** Prospects created in the period, and how many of those have since become clients. */
+  /** Every prospect the rep has had, and how many of those have become clients. */
   created: number;
   converted: number;
   /** converted / created as a percentage (1dp); null when none were created. */
@@ -150,4 +150,37 @@ export interface DashboardSalesRep {
 export interface DashboardSalesPersonnel {
   currency: string | null;
   reps: DashboardSalesRep[];
+}
+
+export class QueryDashboardTargetsDto {
+  @ApiProperty({ example: '2026-10-01', description: 'First day, inclusive.' })
+  @IsDateString({ strict: true })
+  fromDate!: string;
+
+  @ApiProperty({ example: '2026-10-31', description: 'Last day, inclusive.' })
+  @IsDateString({ strict: true })
+  toDate!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s targets. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+}
+
+export interface DashboardTargetRep {
+  userId: string;
+  name: string;
+}
+
+export interface DashboardTargetsOverview {
+  count: number;
+  target: string;
+  achieved: string | null;
+  remaining: string | null;
+  percent: number | null;
+  /** Reps with a target in the range that the caller may see, by name, for filtering. */
+  reps: DashboardTargetRep[];
 }

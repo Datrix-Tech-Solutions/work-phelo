@@ -90,6 +90,17 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     },
   },
   {
+    label: 'Dashboard',
+    description: 'The organisation-wide HR dashboard, which is the first page HR opens on',
+    resources: ['hr.dashboard'],
+    resourceLabels: {
+      'hr.dashboard': 'HR Dashboard',
+    },
+    resourceActions: {
+      'hr.dashboard': ['VIEW'],
+    },
+  },
+  {
     label: 'People Operations',
     description: 'Company-wide employee, leave, appraisal, asset and communication workflows',
     resources: [
