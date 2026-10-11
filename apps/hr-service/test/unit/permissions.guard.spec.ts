@@ -154,4 +154,24 @@ describe('PermissionsGuard (HR service — user.permissions array)', () => {
       true,
     );
   });
+
+  it('allows recruitment vacancy and candidate permissions through recruitment resources', () => {
+    reflector.getAllAndOverride = jest
+      .fn()
+      .mockReturnValue([
+        Permission.CREATE_RECRUITMENT_VACANCY,
+        Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE,
+      ]);
+
+    expect(
+      guard.canActivate(
+        makeContext(
+          employee([
+            'recruitment.vacancies:CREATE',
+            'recruitment.candidates:EDIT',
+          ]),
+        ),
+      ),
+    ).toBe(true);
+  });
 });

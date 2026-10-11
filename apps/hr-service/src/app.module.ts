@@ -31,6 +31,7 @@ import { SettingsModule } from './settings/settings.module';
 import { ProjectsModule } from './projects/projects.module';
 import { HrImportsModule } from './imports/hr-imports.module';
 import { BulkImportModule } from './bulk-import/bulk-import.module';
+import { RecruitmentModule } from './recruitment/recruitment.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     ProjectsModule,
     HrImportsModule,
     BulkImportModule,
+    RecruitmentModule,
   ],
   providers: [
     RabbitMQSetupService,

@@ -56,6 +56,36 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'hr.dashboard', actions: ['VIEW'] },
   ],
   [Permission.VIEW_HR_REPORTS]: [{ resource: 'hr.reports', actions: ['VIEW'] }],
+  [Permission.READ_RECRUITMENT_VACANCIES]: [
+    { resource: 'recruitment.vacancies', actions: ['VIEW'] },
+  ],
+  [Permission.CREATE_RECRUITMENT_VACANCY]: [
+    { resource: 'recruitment.vacancies', actions: ['CREATE'] },
+  ],
+  [Permission.UPDATE_RECRUITMENT_VACANCY]: [
+    { resource: 'recruitment.vacancies', actions: ['EDIT'] },
+  ],
+  [Permission.CLOSE_RECRUITMENT_VACANCY]: [
+    { resource: 'recruitment.vacancies', actions: ['EDIT'] },
+  ],
+  [Permission.READ_RECRUITMENT_CANDIDATES]: [
+    { resource: 'recruitment.candidates', actions: ['VIEW'] },
+  ],
+  [Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE]: [
+    { resource: 'recruitment.candidates', actions: ['EDIT'] },
+  ],
+  [Permission.READ_RECRUITMENT_STAGES]: [
+    { resource: 'recruitment.stages', actions: ['VIEW'] },
+  ],
+  [Permission.CREATE_RECRUITMENT_STAGE]: [
+    { resource: 'recruitment.stages', actions: ['CREATE'] },
+  ],
+  [Permission.UPDATE_RECRUITMENT_STAGE]: [
+    { resource: 'recruitment.stages', actions: ['EDIT'] },
+  ],
+  [Permission.DELETE_RECRUITMENT_STAGE]: [
+    { resource: 'recruitment.stages', actions: ['DELETE'] },
+  ],
 
   // ── Departments ───────────────────────────────────────────────────────────
   [Permission.CREATE_BRANCH]: [{ resource: 'branches', actions: ['CREATE'] }],

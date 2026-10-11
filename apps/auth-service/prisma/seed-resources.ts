@@ -50,6 +50,21 @@ export const RESOURCES = [
     description: 'HR report builder and saved reports',
   },
   {
+    name: 'recruitment.vacancies',
+    module: 'HR',
+    description: 'Recruitment job vacancy setup and publication',
+  },
+  {
+    name: 'recruitment.candidates',
+    module: 'HR',
+    description: 'Recruitment candidate applications and stage movement',
+  },
+  {
+    name: 'recruitment.stages',
+    module: 'HR',
+    description: 'Tenant recruitment pipeline stage configuration',
+  },
+  {
     name: 'leave',
     module: 'HR',
     description: 'Company-wide leave requests and approvals',
