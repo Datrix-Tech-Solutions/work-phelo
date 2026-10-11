@@ -21,6 +21,7 @@ import { DashboardService } from './dashboard.service';
 import {
   QueryDashboardGrowthDto,
   QueryDashboardRevenueDto,
+  QueryDashboardSalesPersonnelDto,
   QueryDashboardSummaryDto,
 } from './dto/dashboard-summary.dto';
 
@@ -86,5 +87,21 @@ export class DashboardController {
     @Req() request: AuthedRequest,
   ) {
     return this.service.revenueByProduct(request.user, query);
+  }
+
+  @Get('sales-personnel')
+  @ApiOperation({
+    summary: 'Prospects, clients, expected and achieved revenue per sales rep',
+    description:
+      'One entry per rep with activity in the period, for ranking on any of the four figures. Achieved revenue is null for every rep when Accounting cannot be reached.',
+  })
+  @ApiOkResponse({
+    description: 'Figures per sales rep, in no particular order.',
+  })
+  salesPersonnel(
+    @Query() query: QueryDashboardSalesPersonnelDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.salesPersonnel(request.user, query);
   }
 }

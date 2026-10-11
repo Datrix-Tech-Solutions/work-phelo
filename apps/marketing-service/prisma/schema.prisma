@@ -962,6 +962,8 @@ model MarketingTransportRequestStop {
 model MarketingSalesTarget {
   id              String   @id @default(uuid())
   tenantId        String
+  /// What the target is called, shared by the targets created together. Null on older targets.
+  name            String?
   userId          String
   productId       String?
   startDate       DateTime @db.Date

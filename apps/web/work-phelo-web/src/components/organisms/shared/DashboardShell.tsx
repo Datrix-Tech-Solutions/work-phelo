@@ -50,10 +50,10 @@ export function DashboardShell({
               />
             </div>
           ))}
+          <PeriodToggle value={filters.period} onChange={filters.setPeriod} />
           {filters.period === 'yearly' && (
             <YearSelect value={filters.year} onChange={filters.setYear} />
           )}
-          <PeriodToggle value={filters.period} onChange={filters.setPeriod} />
         </div>
         <div className="flex items-center gap-3 ml-auto">
           {actions}

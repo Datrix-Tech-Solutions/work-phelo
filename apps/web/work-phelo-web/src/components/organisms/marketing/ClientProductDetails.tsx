@@ -20,7 +20,7 @@ export const EMPTY_PRODUCT_DETAIL: ClientProductDetail = {
 };
 
 /** Commission is the rate's share of the expected revenue. Achieved revenue is never entered here:
- * it comes from the billing transactions once the client is billable. */
+ * it comes from the billing transactions once the client is billed. */
 export function commissionAmount(detail: ClientProductDetail): number | null {
   const rate = parseFloat(detail.commissionRate);
   const expected = parseFloat(detail.expectedRevenue);
@@ -106,16 +106,48 @@ export function ClientProductTotals({
   details,
   expanded,
   onToggle,
+  inline = false,
 }: {
   details: ClientProductDetail[];
   expanded: boolean;
   onToggle: () => void;
+  /** Shows the totals as plain text next to the label instead of read-only fields. */
+  inline?: boolean;
 }) {
   const sum = (pick: (d: ClientProductDetail) => number | null) =>
     details.reduce((acc, d) => {
       const n = pick(d);
       return acc + (n != null && Number.isFinite(n) ? n : 0);
     }, 0);
+
+  if (inline) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex items-center gap-1.5 text-xs font-bold text-gray-900"
+        >
+          <ChevronDown
+            className={`w-3.5 h-3.5 transition-transform ${expanded ? '' : '-rotate-90'}`}
+          />
+          Totals · {details.length} products
+          <span className="font-normal text-gray-500">({expanded ? 'hide' : 'show'} products)</span>
+        </button>
+        <p className="text-xs text-gray-600">
+          Expected Revenue:{' '}
+          <span className="font-bold text-gray-900">
+            {formatMoney(sum((d) => parseFloat(d.expectedRevenue)))}
+          </span>
+        </p>
+        <p className="text-xs text-gray-600">
+          Expected Commission:{' '}
+          <span className="font-bold text-gray-900">{formatMoney(sum(commissionAmount))}</span>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5">

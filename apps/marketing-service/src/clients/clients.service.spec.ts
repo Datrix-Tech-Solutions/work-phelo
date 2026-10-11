@@ -78,7 +78,7 @@ describe('ClientsService', () => {
   });
 
   const makeBillingService = () => ({
-    totalsForEntities: jest.fn(),
+    totalsForClients: jest.fn(),
     assertCanBill: jest.fn(),
     submit: jest.fn(),
     record: jest.fn(),
@@ -149,7 +149,7 @@ describe('ClientsService', () => {
       count: 1,
     });
     billing = makeBillingService();
-    billing.totalsForEntities.mockResolvedValue(new Map());
+    billing.totalsForClients.mockResolvedValue(new Map());
     billing.submit.mockResolvedValue({
       entityId: 'entity-1',
       entityTypeId: 'entity-type-1',
@@ -253,20 +253,21 @@ describe('ClientsService', () => {
   });
 
   describe('list billing fields', () => {
-    it('shows the entity flag and achieved revenue from accounting', async () => {
+    it('shows the entity flag and the invoiced total for each client', async () => {
       prisma.marketingClient.count.mockResolvedValue(2);
       prisma.marketingClient.findMany.mockResolvedValue([
         { ...clientRecord, id: 'c-1', accountingEntityId: 'entity-1' },
         { ...clientRecord, id: 'c-2', accountingEntityId: null },
       ]);
-      billing.totalsForEntities.mockResolvedValue(
-        new Map([['entity-1', '12500.00']]),
+      billing.totalsForClients.mockResolvedValue(
+        new Map([['c-1', '12500.00']]),
       );
 
       const result = await service.list(user);
 
-      expect(billing.totalsForEntities).toHaveBeenCalledWith(user, [
-        'entity-1',
+      expect(billing.totalsForClients).toHaveBeenCalledWith('tenant-1', [
+        'c-1',
+        'c-2',
       ]);
       expect(result.data[0]).toMatchObject({
         id: 'c-1',
@@ -420,19 +421,19 @@ describe('ClientsService', () => {
       prisma.marketingClient.findFirst.mockResolvedValue(null);
     });
 
-    it('needs the first transaction for a billable client', async () => {
-      await expect(
-        service.create(user, { ...makeDto(), isBillable: true }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(billing.submit).not.toHaveBeenCalled();
-      expect(prisma.marketingClient.create).not.toHaveBeenCalled();
-    });
+    it('creates a client without billing as not billed', async () => {
+      prisma.marketingClient.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(clientRecord);
 
-    it('refuses billing details for a client that is not billable', async () => {
-      await expect(
-        service.create(user, { ...makeDto(), billing: makeBilling() }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await service.create(user, { ...makeDto(), id: clientId });
+
       expect(billing.submit).not.toHaveBeenCalled();
+      const arg = prisma.marketingClient.create.mock.calls[0][0];
+      expect(arg.data).toMatchObject({
+        isBillable: false,
+        accountingEntityId: null,
+      });
     });
 
     it('refuses users who cannot bill', async () => {
@@ -443,7 +444,6 @@ describe('ClientsService', () => {
       await expect(
         service.create(user, {
           ...makeDto(),
-          isBillable: true,
           billing: makeBilling(),
         }),
       ).rejects.toBeInstanceOf(ForbiddenException);
@@ -454,7 +454,6 @@ describe('ClientsService', () => {
       await expect(
         service.create(user, {
           ...makeDto(),
-          isBillable: true,
           billing: {
             ...makeBilling(),
             productId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -473,7 +472,6 @@ describe('ClientsService', () => {
       await service.create(user, {
         ...makeDto(),
         id: clientId,
-        isBillable: true,
         billing: makeBilling(),
       });
 
@@ -516,7 +514,6 @@ describe('ClientsService', () => {
       await expect(
         service.create(user, {
           ...makeDto(),
-          isBillable: true,
           billing: makeBilling(),
         }),
       ).rejects.toThrow('accounting down');
@@ -532,7 +529,6 @@ describe('ClientsService', () => {
       await service.create(user, {
         ...makeDto(),
         id: clientId,
-        isBillable: true,
         billing: makeBilling(),
       });
 
@@ -611,22 +607,14 @@ describe('ClientsService', () => {
       prisma.marketingClient.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.update(user, 'client-1', { isBillable: false }),
+        service.update(user, 'client-1', { companyName: 'New Name' }),
       ).rejects.toBeInstanceOf(NotFoundException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('does not switch billing on - only a billing transaction does', async () => {
-      await expect(
-        service.update(user, 'client-1', { isBillable: true }),
-      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('updates company fields, normalising the name', async () => {
       await service.update(user, 'client-1', {
         companyName: '  New   Name ',
-        isBillable: false,
         businessTypeId: null,
       });
 
@@ -637,7 +625,6 @@ describe('ClientsService', () => {
           companyName: 'New Name',
           normalizedCompanyName: 'new name',
           businessTypeId: null,
-          isBillable: false,
         },
       });
     });
@@ -1078,18 +1065,9 @@ describe('ClientsService', () => {
         productId,
       });
 
-      it('needs the first transaction for a billable client', async () => {
-        await expect(
-          service.convertProspect(user, 'prospect-1', { isBillable: true }),
-        ).rejects.toBeInstanceOf(BadRequestException);
-        expect(billing.submit).not.toHaveBeenCalled();
-        expect(prisma.$transaction).not.toHaveBeenCalled();
-      });
-
       it('rejects a billing product the prospect did not have', async () => {
         await expect(
           service.convertProspect(user, 'prospect-1', {
-            isBillable: true,
             billing: billingFor('p-9'),
           }),
         ).rejects.toBeInstanceOf(BadRequestException);
@@ -1099,7 +1077,6 @@ describe('ClientsService', () => {
       it('sends the transaction first, then converts with the entity and records the billing', async () => {
         await service.convertProspect(user, 'prospect-1', {
           clientId,
-          isBillable: true,
           billing: billingFor('p-1'),
         });
 
@@ -1136,7 +1113,6 @@ describe('ClientsService', () => {
 
         await expect(
           service.convertProspect(user, 'prospect-1', {
-            isBillable: true,
             billing: billingFor('p-1'),
           }),
         ).rejects.toThrow('accounting down');
@@ -1155,7 +1131,6 @@ describe('ClientsService', () => {
 
         const result = await service.convertProspect(user, 'prospect-1', {
           clientId,
-          isBillable: true,
           billing: billingFor('p-1'),
         });
 

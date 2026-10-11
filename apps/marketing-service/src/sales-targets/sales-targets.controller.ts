@@ -87,7 +87,11 @@ export class SalesTargetsController {
 
   @Post()
   @RequirePermissions(P.TARGETS_CREATE)
-  @ApiOperation({ summary: 'Set a target for a sales rep' })
+  @ApiOperation({
+    summary: 'Set a target for one or more sales reps',
+    description:
+      'Creates one target per rep, each of the full amount, all or nothing. Returns the created targets.',
+  })
   create(@Body() dto: CreateSalesTargetDto, @Req() request: AuthedRequest) {
     return this.service.create(request.user, dto);
   }

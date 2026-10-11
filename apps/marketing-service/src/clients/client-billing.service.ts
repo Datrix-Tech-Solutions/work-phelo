@@ -24,7 +24,6 @@ import {
   AccountingEventDto,
   QueryClientBillingDto,
   RaiseClientBillingDto,
-  RequestClientPaymentDto,
 } from './dto/billing.dto';
 
 const SOURCE_MODULE = 'MARKETING';
@@ -33,14 +32,10 @@ const ENTITY_TYPE_REQUIRED_MESSAGE =
   'An entity type is required for the first transaction of a client.';
 const INVALID_PRODUCT_MESSAGE =
   'The product must be one of this client’s products, and not an uninterested one.';
-const NOT_BILLED_MESSAGE =
-  'This client has not been billed yet, so there is no invoice to pay.';
-const SEND_PAYMENT_FAILED_MESSAGE =
-  'Accounting could not be reached, so the payment request was not sent. Please try again.';
 const SEND_FAILED_MESSAGE =
   'Accounting could not be reached, so nothing was created. Please try again.';
 
-/** Shown on the Billable toggle when billing cannot be used. */
+/** Shown on the billing form when billing cannot be used. */
 export type BillingNotReadyReason =
   | 'NOT_CONFIGURED'
   | 'NOT_SET_UP'
@@ -63,6 +58,12 @@ export interface BillingSubmission {
 }
 
 type Tx = Prisma.TransactionClient;
+
+/** An invoice counts while it is submitted or posted. */
+const LIVE_STATES = [
+  MarketingClientBillingState.SUBMITTED,
+  MarketingClientBillingState.POSTED,
+];
 
 @Injectable()
 export class ClientBillingService {
@@ -92,7 +93,7 @@ export class ClientBillingService {
     throw new ForbiddenException(NO_PERMISSION_MESSAGE);
   }
 
-  /** What the Billable toggle and billing form need. Never throws - "not ready" is an answer. */
+  /** What the billing form needs. Never throws - "not ready" is an answer. */
   async getOptions(user: RequestUser) {
     // Billing is per client (the permission, or the client being the user's own), so the form is
     // offered to everyone and the server decides when it is submitted.
@@ -284,56 +285,6 @@ export class ClientBillingService {
     return this.toRaiseResponse(row);
   }
 
-  /**
-   * The client has paid (part of) a posted invoice: asks Accounting to record it. Accounting
-   * confirms through its own Receive Payment, choosing the bank, or rejects it. Nothing is
-   * stored here - the request and its outcome are read back from Accounting.
-   */
-  async requestPayment(
-    user: RequestUser,
-    clientId: string,
-    dto: RequestClientPaymentDto,
-  ) {
-    const client = await this.findVisibleClient(user, clientId);
-    this.assertCanBill(user, client.assignedUserId);
-    if (!client.accountingEntityId) {
-      throw new BadRequestException(NOT_BILLED_MESSAGE);
-    }
-
-    return callAccounting(
-      this.logger,
-      () =>
-        this.accounting.createPaymentRequest(
-          {
-            tenantId: user.tenantId,
-            idempotencyKey: `client-payment:${client.id}:${dto.submissionId}`,
-            externalRef: client.id,
-            invoiceId: dto.invoiceId,
-            amount: dto.amount,
-            paymentDate: dto.paymentDate,
-            ...(dto.reference ? { reference: dto.reference } : {}),
-            ...(dto.note ? { note: dto.note } : {}),
-            ...(user.firstName ? { requestedByName: user.firstName } : {}),
-          },
-          user.id,
-        ),
-      SEND_PAYMENT_FAILED_MESSAGE,
-    );
-  }
-
-  /** Withdraws a payment request that Accounting has not acted on yet. */
-  async cancelPayment(user: RequestUser, clientId: string, requestId: string) {
-    const client = await this.findVisibleClient(user, clientId);
-    this.assertCanBill(user, client.assignedUserId);
-
-    return callAccounting(this.logger, () =>
-      this.accounting.cancelPaymentRequest(
-        { tenantId: user.tenantId, requestId, externalRef: client.id },
-        user.id,
-      ),
-    );
-  }
-
   /** The client's transactions, with their state read live from Accounting. */
   async listTransactions(
     user: RequestUser,
@@ -390,7 +341,16 @@ export class ClientBillingService {
       items: result.items.map((item) => {
         const row = rowByTransaction.get(item.id);
         return {
-          ...item,
+          id: item.id,
+          kind: item.kind,
+          state: item.state,
+          stateLabel: item.stateLabel,
+          amount: item.amount,
+          currency: item.currency,
+          transactionTypeName: item.transactionTypeName,
+          documentNumber: item.documentNumber,
+          reason: item.reason,
+          createdAt: item.createdAt,
           productId: row?.productId ?? null,
           productName: row?.productId
             ? (productNames.get(row.productId) ?? null)
@@ -402,54 +362,41 @@ export class ClientBillingService {
     };
   }
 
-  /** Achieved revenue: what Accounting has received, for the client and per product. */
+  /**
+   * Achieved revenue: what has been invoiced to the client, in total and per product. Only live
+   * invoices count (submitted or posted), so a rejected or reversed one takes its amount back off.
+   * Payments are not tracked in Marketing.
+   */
   async getSummary(user: RequestUser, clientId: string) {
     const client = await this.findVisibleClient(user, clientId);
-    if (!client.accountingEntityId) {
+    const rows = await this.prisma.marketingClientBilling.findMany({
+      where: {
+        tenantId: user.tenantId,
+        clientId: client.id,
+        state: { in: LIVE_STATES },
+      },
+      select: { productId: true, amount: true },
+    });
+    if (rows.length === 0 && !client.accountingEntityId) {
       return { currency: null, achievedRevenue: null, products: [] };
     }
-    const entityId = client.accountingEntityId;
 
-    const rows = await this.prisma.marketingClientBilling.findMany({
-      where: { tenantId: user.tenantId, clientId: client.id },
-      select: { accountingTransactionId: true, productId: true },
-    });
-
-    const summary = await callAccounting(this.logger, () =>
-      this.accounting.receiptsSummary(
-        {
-          tenantId: user.tenantId,
-          entityIds: [entityId],
-          transactionIds: rows.map((row) => row.accountingTransactionId),
-        },
-        user.id,
-      ),
-    );
-
-    const receivedByTransaction = new Map(
-      summary.transactions.map((t) => [
-        t.transactionId,
-        new Prisma.Decimal(t.receivedAmount),
-      ]),
-    );
+    let total = new Prisma.Decimal(0);
     const byProduct = new Map<string, Prisma.Decimal>();
     for (const row of rows) {
+      total = total.plus(row.amount);
       if (!row.productId) continue;
-      const received = receivedByTransaction.get(row.accountingTransactionId);
-      if (!received) continue;
       byProduct.set(
         row.productId,
-        (byProduct.get(row.productId) ?? new Prisma.Decimal(0)).plus(received),
+        (byProduct.get(row.productId) ?? new Prisma.Decimal(0)).plus(
+          row.amount,
+        ),
       );
     }
 
-    const total = summary.entities.find(
-      (e) => e.entityId === entityId,
-    )?.receivedAmount;
     return {
-      currency: summary.currency,
-      achievedRevenue:
-        total !== undefined ? new Prisma.Decimal(total).toFixed(2) : null,
+      currency: await this.baseCurrency(user),
+      achievedRevenue: total.toFixed(2),
       products: [...byProduct.entries()].map(([productId, amount]) => ({
         productId,
         achievedRevenue: amount.toFixed(2),
@@ -457,31 +404,40 @@ export class ClientBillingService {
     };
   }
 
-  /** Achieved revenue for a page of clients in one call. Never throws: a card just shows "—". */
-  async totalsForEntities(
-    user: RequestUser,
-    entityIds: string[],
+  /** Achieved revenue for a page of clients in one query, by client id. */
+  async totalsForClients(
+    tenantId: string,
+    clientIds: string[],
   ): Promise<Map<string, string>> {
     const totals = new Map<string, string>();
-    if (entityIds.length === 0 || !this.accounting.isConfigured())
-      return totals;
-    try {
-      const summary = await this.accounting.receiptsSummary(
-        { tenantId: user.tenantId, entityIds },
-        user.id,
-      );
-      for (const entity of summary.entities) {
-        totals.set(
-          entity.entityId,
-          new Prisma.Decimal(entity.receivedAmount).toFixed(2),
-        );
-      }
-    } catch (error) {
-      this.logger.warn(
-        `achieved revenue unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+    if (clientIds.length === 0) return totals;
+    const sums = await this.prisma.marketingClientBilling.groupBy({
+      by: ['clientId'],
+      where: {
+        tenantId,
+        clientId: { in: clientIds },
+        state: { in: LIVE_STATES },
+      },
+      _sum: { amount: true },
+    });
+    for (const row of sums) {
+      totals.set(
+        row.clientId,
+        new Prisma.Decimal(row._sum.amount ?? 0).toFixed(2),
       );
     }
     return totals;
+  }
+
+  /** The tenant's base currency from Accounting, for labelling; null when it cannot be read. */
+  private async baseCurrency(user: RequestUser): Promise<string | null> {
+    if (!this.accounting.isConfigured()) return null;
+    try {
+      const options = await this.accounting.getOptions(user.tenantId, user.id);
+      return options.baseCurrency ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Accounting tells us a transaction was posted, reversed or rejected. Safe to repeat. */
@@ -543,6 +499,27 @@ export class ClientBillingService {
         row.clientId,
         row.productId,
       );
+      await this.recomputeBilled(tx, tenantId, row.clientId);
+    });
+  }
+
+  /**
+   * A client is billed while at least one of its transactions is live (submitted or posted). If
+   * every one is reversed or rejected it goes back to not billed, and to billed again on the
+   * next transaction. The Accounting entity stays, so later invoices reuse it.
+   */
+  private async recomputeBilled(tx: Tx, tenantId: string, clientId: string) {
+    const live = await tx.marketingClientBilling.count({
+      where: {
+        tenantId,
+        clientId,
+        state: { in: LIVE_STATES },
+      },
+    });
+    // Only touches the row when the flag actually needs to flip.
+    await tx.marketingClient.updateMany({
+      where: { id: clientId, tenantId, isBillable: live === 0 },
+      data: { isBillable: live > 0 },
     });
   }
 

@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
-  IsBoolean,
   IsDateString,
   IsNotEmpty,
   IsNotEmptyObject,
@@ -63,15 +62,6 @@ export class CreateClientDto {
   @IsUUID()
   sourceTypeId?: string;
 
-  @ApiPropertyOptional({
-    default: false,
-    description:
-      'A billable client must come with its first billing transaction, which is sent to Accounting.',
-  })
-  @IsOptional()
-  @IsBoolean()
-  isBillable?: boolean;
-
   @ApiPropertyOptional({ type: ClientBillingDto })
   @IsOptional()
   @ValidateNested()
@@ -121,15 +111,6 @@ export class ConvertProspectToClientDto {
   @IsOptional()
   @IsUUID()
   clientId?: string;
-
-  @ApiPropertyOptional({
-    default: false,
-    description:
-      'Marks the new client as billable. Requires the first billing transaction.',
-  })
-  @IsOptional()
-  @IsBoolean()
-  isBillable?: boolean;
 
   @ApiPropertyOptional({ type: ClientBillingDto })
   @IsOptional()

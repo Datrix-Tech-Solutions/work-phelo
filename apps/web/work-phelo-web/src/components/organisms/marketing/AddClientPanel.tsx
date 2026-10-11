@@ -32,6 +32,7 @@ import {
   useProspectingSettings,
 } from '@/hooks/marketing/useProspectingSettings';
 import { useBillingOptions, useCreateClient } from '@/hooks/marketing/useClients';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import { inputClass, isValidEmail } from '@/lib/utils';
@@ -46,7 +47,8 @@ interface FormValues {
   phone: string;
   email: string;
   productIds: string[];
-  isBillable: boolean;
+  /** Raise the client's first transaction now. Optional: without one the client is Not billed. */
+  raiseBilling: boolean;
   location: CompanyLocationFields;
   /** Empty means the person creating the client. */
   assignedUserId: string;
@@ -65,7 +67,7 @@ const EMPTY: FormValues = {
   phone: '',
   email: '',
   productIds: [],
-  isBillable: false,
+  raiseBilling: false,
   location: { location: '' },
   assignedUserId: '',
 };
@@ -76,7 +78,7 @@ function toOptions(items: ProspectingSetting[]) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">{children}</p>
+    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-1">{children}</p>
   );
 }
 
@@ -119,7 +121,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleClose() {
+  function resetForm() {
     setValues(EMPTY);
     setErrors({});
     setBilling(EMPTY_BILLING);
@@ -127,8 +129,16 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     setProductDetails({});
     setProductsExpanded(true);
     setClientId(crypto.randomUUID());
+  }
+
+  function handleClose() {
+    resetForm();
     onClose();
   }
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop;
+  // Continue clears the form for the next client.
+  const entry = useMultiEntryPanel({ isOpen, onStop: handleClose, onContinue: resetForm });
 
   function validate(): boolean {
     const next: FormErrors = {};
@@ -142,7 +152,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     setErrors(next);
 
     let billingValid = true;
-    if (values.isBillable && billingOptions) {
+    if (values.raiseBilling && billingOptions) {
       const nextBilling = validateBilling(billing, billingOptions);
       setBillingErrors(nextBilling);
       billingValid = Object.keys(nextBilling).length === 0;
@@ -159,8 +169,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
       ...(values.assignedUserId ? { assignedUserId: values.assignedUserId } : {}),
       ...(values.businessType ? { businessTypeId: values.businessType } : {}),
       ...(values.sourceType ? { sourceTypeId: values.sourceType } : {}),
-      isBillable: values.isBillable,
-      ...(values.isBillable && billingOptions
+      ...(values.raiseBilling && billingOptions
         ? { billing: toBillingInput(billing, billingOptions) }
         : {}),
       primaryContact: {
@@ -193,7 +202,10 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     createClient.mutate(buildPayload(), {
       onSuccess: () => {
         toast.success('Client created');
-        handleClose();
+        entry.finishSave(
+          { title: 'Client Added!', message: `${values.companyName.trim()} has been added.` },
+          handleClose,
+        );
       },
       onError: (error) => toast.error(apiErrorMessage(error, 'Failed to create client')),
     });
@@ -203,6 +215,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
+      {...entry.panelProps}
       title="New Client"
       description="Add a business you already work with."
       // width="sm:w-[640px]"
@@ -217,7 +230,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
         </div>
       }
     >
-      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+      <div className="flex flex-col gap-2">
         <SectionTitle>Company Data</SectionTitle>
 
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
@@ -340,6 +353,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           <ClientProductTotals
             details={values.productIds.map((id) => productDetails[id] ?? EMPTY_PRODUCT_DETAIL)}
             expanded={productsExpanded}
+            inline
             onToggle={() => setProductsExpanded((v) => !v)}
           />
         )}
@@ -347,8 +361,8 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
         <SectionTitle>Billing</SectionTitle>
 
         <BillingSection
-          enabled={values.isBillable}
-          onEnabledChange={(v) => set('isBillable', v)}
+          enabled={values.raiseBilling}
+          onEnabledChange={(v) => set('raiseBilling', v)}
           values={billing}
           onValuesChange={setBilling}
           errors={billingErrors}
@@ -361,6 +375,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           values={values.location}
           onChange={(v) => set('location', v)}
           collapsibleMap
+          compact
         />
         {errors.location && <p className="text-xs text-red-500">{errors.location}</p>}
       </div>

@@ -84,6 +84,7 @@ import {
   Bell,
   Lock,
   LockOpen,
+  Target,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -164,6 +165,8 @@ export const Icons = {
   MapPin,
   Lock,
   LockOpen,
+  Target,
+  Timer,
 } as const;
 
 export type IconName = keyof typeof Icons;

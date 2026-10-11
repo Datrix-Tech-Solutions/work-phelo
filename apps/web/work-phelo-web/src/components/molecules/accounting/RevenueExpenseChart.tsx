@@ -12,11 +12,11 @@ const REVENUE_COLOR = '#1baf7a';
 const EXPENSE_COLOR = '#e34948';
 
 const SUBTITLES: Record<Period, string> = {
-  daily: 'This week, Monday to Sunday',
+  daily: 'This week',
   weekly: 'Weeks of this month',
-  monthly: 'This month and the previous 5',
-  quarterly: 'Quarters of the current fiscal year',
-  yearly: 'Current fiscal year and the previous 5',
+  monthly: 'Last 6 months',
+  quarterly: 'Quarters of this year',
+  yearly: 'Last 6 years',
 };
 
 const compact = (value: number) => {

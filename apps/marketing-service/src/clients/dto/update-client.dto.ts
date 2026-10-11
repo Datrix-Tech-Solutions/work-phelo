@@ -1,7 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  IsBoolean,
   IsOptional,
   IsString,
   IsUUID,
@@ -39,11 +38,6 @@ export class UpdateClientDto {
   @IsOptional()
   @IsUUID()
   sourceTypeId?: string | null;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  isBillable?: boolean;
 
   @ApiPropertyOptional({ type: UpdateProspectPrimaryContactDto })
   @IsOptional()

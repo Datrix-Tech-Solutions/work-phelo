@@ -6,23 +6,26 @@ import {
   MarketingCrmSettingCategory,
   Prisma,
 } from '../../prisma/generated/client';
-import { AccountingClient } from '../accounting/accounting.client';
-import { callAccounting } from '../accounting/call-accounting';
+import { AssigneesService } from '../assignees/assignees.service';
 import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { PrismaService } from '../prisma/prisma.service';
-import { SalesTargetsService } from '../sales-targets/sales-targets.service';
+import {
+  SalesTargetsService,
+  sumInvoiced,
+} from '../sales-targets/sales-targets.service';
 import {
   DashboardGrowthPoint,
   DashboardRevenueByProduct,
+  DashboardSalesPersonnel,
   DashboardStage,
   DashboardSummary,
   QueryDashboardGrowthDto,
   QueryDashboardRevenueDto,
+  QueryDashboardSalesPersonnelDto,
   QueryDashboardSummaryDto,
 } from './dto/dashboard-summary.dto';
 
 const DAY_MS = 86_400_000;
-const TRANSACTIONS_PER_CALL = 500;
 const ZERO = new Prisma.Decimal(0);
 
 /** Half-open [from, to): `to` is the day after the last day shown. */
@@ -54,7 +57,7 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly targets: SalesTargetsService,
-    private readonly accounting: AccountingClient,
+    private readonly assignees: AssigneesService,
   ) {}
 
   async summary(
@@ -166,9 +169,8 @@ export class DashboardService {
   }
 
   /**
-   * Money Accounting received in the range against posted client transactions, per product.
-   * A transaction carries the product it was raised for, so received money is attributed
-   * through that link. Fails (502) when Accounting cannot be reached.
+   * Invoices raised in the range, per product. An invoice carries the product it was raised for.
+   * Rejected or reversed invoices are left out; payments are not tracked here.
    */
   async revenueByProduct(
     user: RequestUser,
@@ -177,51 +179,19 @@ export class DashboardService {
     const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
       ? {}
       : { assignedUserId: user.id };
-    const billings = await this.prisma.marketingClientBilling.findMany({
-      where: {
-        tenantId: user.tenantId,
-        state: MarketingClientBillingState.POSTED,
-        client: { ...clientScope, accountingEntityId: { not: null } },
-      },
-      select: {
-        productId: true,
-        accountingTransactionId: true,
-        client: { select: { accountingEntityId: true } },
-      },
-    });
-    // Accounting needs an entity with every call; the per-transaction answer does not depend on it.
-    const entityId = billings[0]?.client.accountingEntityId;
-    if (!entityId) return { currency: null, total: money(ZERO), products: [] };
+    const [invoices, currency] = await Promise.all([
+      this.targets.invoiceRows(user.tenantId, clientScope),
+      this.targets.baseCurrency(user),
+    ]);
 
-    const productByTransaction = new Map(
-      billings.map((b) => [b.accountingTransactionId, b.productId]),
-    );
+    const range = toRange(query.fromDate, query.toDate);
     const byProduct = new Map<string | null, Prisma.Decimal>();
-    let currency = '';
-    for (const batch of chunks(
-      [...productByTransaction.keys()],
-      TRANSACTIONS_PER_CALL,
-    )) {
-      const summary = await callAccounting(this.logger, () =>
-        this.accounting.receiptsSummary(
-          {
-            tenantId: user.tenantId,
-            entityIds: [entityId],
-            transactionIds: batch,
-            from: query.fromDate,
-            to: query.toDate,
-          },
-          user.id,
-        ),
+    for (const invoice of invoices) {
+      if (!inRange(invoice.createdAt, range)) continue;
+      byProduct.set(
+        invoice.productId,
+        (byProduct.get(invoice.productId) ?? ZERO).plus(invoice.amount),
       );
-      currency = summary.currency || currency;
-      for (const transaction of summary.transactions) {
-        const received = new Prisma.Decimal(transaction.receivedAmount);
-        if (received.isZero()) continue;
-        const product =
-          productByTransaction.get(transaction.transactionId) ?? null;
-        byProduct.set(product, (byProduct.get(product) ?? ZERO).plus(received));
-      }
     }
 
     const productIds = [...byProduct.keys()].filter(
@@ -253,7 +223,154 @@ export class DashboardService {
       }));
     const total = [...byProduct.values()].reduce((sum, v) => sum.plus(v), ZERO);
 
-    return { currency: currency || null, total: money(total), products };
+    return { currency, total: money(total), products };
+  }
+
+  /**
+   * Every rep with prospects, clients or pipeline value in the period, with the four figures the
+   * dashboard ranks them on. Scoped like the lists: without view-all, only the caller appears.
+   */
+  async salesPersonnel(
+    user: RequestUser,
+    query: QueryDashboardSalesPersonnelDto,
+  ): Promise<DashboardSalesPersonnel> {
+    const range = toRange(query.fromDate, query.toDate);
+    const days: DayRange = { from: query.fromDate, to: query.toDate };
+    const tenantId = user.tenantId;
+    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
+      ? {}
+      : { assignedUserId: user.id };
+    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
+      ? {}
+      : { assignedUserId: user.id };
+    const createdAt = { gte: range.from, lt: range.to };
+    const expectedCloseDate = { gte: range.from, lt: range.to };
+
+    const [
+      prospects,
+      created,
+      converted,
+      clients,
+      clientProducts,
+      prospectProducts,
+      invoices,
+    ] = await Promise.all([
+      this.prisma.marketingProspect.groupBy({
+        by: ['assignedUserId'],
+        where: {
+          tenantId,
+          ...prospectScope,
+          client: { is: null },
+          createdAt,
+        },
+        _count: { _all: true },
+      }),
+      this.prisma.marketingProspect.groupBy({
+        by: ['assignedUserId'],
+        where: { tenantId, ...prospectScope, createdAt },
+        _count: { _all: true },
+      }),
+      this.prisma.marketingProspect.groupBy({
+        by: ['assignedUserId'],
+        where: {
+          tenantId,
+          ...prospectScope,
+          createdAt,
+          client: { isNot: null },
+        },
+        _count: { _all: true },
+      }),
+      this.prisma.marketingClient.groupBy({
+        by: ['assignedUserId'],
+        where: { tenantId, ...clientScope, createdAt },
+        _count: { _all: true },
+      }),
+      this.prisma.marketingClientProduct.findMany({
+        where: {
+          tenantId,
+          status: MarketingClientProductStatus.PENDING,
+          expectedCloseDate,
+          client: clientScope,
+        },
+        select: {
+          expectedValue: true,
+          client: { select: { assignedUserId: true } },
+        },
+      }),
+      this.prisma.marketingProspectProduct.findMany({
+        where: {
+          tenantId,
+          expectedCloseDate,
+          prospect: { ...prospectScope, client: { is: null } },
+        },
+        select: {
+          expectedValue: true,
+          prospect: { select: { assignedUserId: true } },
+        },
+      }),
+      this.targets.invoiceRows(tenantId, clientScope),
+    ]);
+
+    const prospectCount = new Map(
+      prospects.map((row) => [row.assignedUserId, row._count._all]),
+    );
+    const createdCount = new Map(
+      created.map((row) => [row.assignedUserId, row._count._all]),
+    );
+    const convertedCount = new Map(
+      converted.map((row) => [row.assignedUserId, row._count._all]),
+    );
+    const clientCount = new Map(
+      clients.map((row) => [row.assignedUserId, row._count._all]),
+    );
+    const expected = new Map<string, Prisma.Decimal>();
+    const addExpected = (userId: string, value: Prisma.Decimal | null) => {
+      if (!value) return;
+      expected.set(userId, (expected.get(userId) ?? ZERO).plus(value));
+    };
+    for (const row of clientProducts) {
+      addExpected(row.client.assignedUserId, row.expectedValue);
+    }
+    for (const row of prospectProducts) {
+      addExpected(row.prospect.assignedUserId, row.expectedValue);
+    }
+    const userIds = [
+      ...new Set([
+        ...prospectCount.keys(),
+        ...createdCount.keys(),
+        ...clientCount.keys(),
+        ...expected.keys(),
+        ...invoices.map((row) => row.client.assignedUserId),
+      ]),
+    ];
+
+    const currency = await this.targets.baseCurrency(user);
+
+    const names = new Map<string, string>();
+    for (const batch of chunks(userIds, 50)) {
+      for (const [id, name] of await this.assignees.namesFor(tenantId, batch)) {
+        names.set(id, name);
+      }
+    }
+
+    return {
+      currency,
+      reps: userIds.map((id) => {
+        const made = createdCount.get(id) ?? 0;
+        const won = convertedCount.get(id) ?? 0;
+        return {
+          userId: id,
+          name: names.get(id) || 'Unknown user',
+          prospects: prospectCount.get(id) ?? 0,
+          clients: clientCount.get(id) ?? 0,
+          created: made,
+          converted: won,
+          conversion: made > 0 ? Math.round((won / made) * 1000) / 10 : null,
+          expected: money(expected.get(id) ?? ZERO),
+          achieved: money(sumInvoiced(invoices, { userId: id, ...days })),
+        };
+      }),
+    };
   }
 
   private canViewAll(user: RequestUser, permission: string) {
@@ -459,44 +576,22 @@ export class DashboardService {
     return { total, new: created, billable, nonBillable: total - billable };
   }
 
-  /** Money Accounting received from the in-scope clients in each range; null if Accounting is down. */
+  /** Invoices raised for the in-scope clients in each range. */
   private async achievedRevenue(
     user: RequestUser,
     clientScope: { assignedUserId?: string },
     days: DayRange,
     prevDays: DayRange,
   ) {
-    const clients = await this.prisma.marketingClient.findMany({
-      where: {
-        tenantId: user.tenantId,
-        ...clientScope,
-        accountingEntityId: { not: null },
-      },
-      select: { accountingEntityId: true },
-    });
-    const entityIds = clients
-      .map((client) => client.accountingEntityId)
-      .filter((id): id is string => Boolean(id));
-    if (entityIds.length === 0) {
-      return { current: money(ZERO), previous: money(ZERO), currency: null };
-    }
-
-    try {
-      const [now, before] = await Promise.all([
-        this.targets.receivedByEntities(user, entityIds, days),
-        this.targets.receivedByEntities(user, entityIds, prevDays),
-      ]);
-      return {
-        current: now.amount,
-        previous: before.amount,
-        currency: now.currency || before.currency || null,
-      };
-    } catch (error) {
-      this.logger.warn(
-        `achieved revenue unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
-      return { current: null, previous: null, currency: null };
-    }
+    const [invoices, currency] = await Promise.all([
+      this.targets.invoiceRows(user.tenantId, clientScope),
+      this.targets.baseCurrency(user),
+    ]);
+    return {
+      current: money(sumInvoiced(invoices, days)),
+      previous: money(sumInvoiced(invoices, prevDays)),
+      currency,
+    };
   }
 
   /**

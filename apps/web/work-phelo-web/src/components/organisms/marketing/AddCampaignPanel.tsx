@@ -6,6 +6,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { Icons } from '@/components/atoms/icons';
@@ -105,7 +106,9 @@ export function AddCampaignPanel({
   const [segmentModal, setSegmentModal] = useState<{ segment: CampaignSegment | null } | null>(
     null,
   );
-  const { data: smsSenders = [], isPending: sendersPending } = useSmsSenderIdentities();
+  const { data: smsSenders = [], isPending: sendersPending } = useSmsSenderIdentities({
+    status: 'APPROVED',
+  });
   const prefilled = useRef(false);
   /** Segments of the campaign being reused that no longer exist, so were left out. */
   const droppedSegments =
@@ -121,15 +124,18 @@ export function AddCampaignPanel({
       })),
     [segments],
   );
+  // Only approved sender IDs are offered, and only those that can actually be used to send.
   const senderOptions = useMemo(
     () =>
-      smsSenders.map((sender) => ({
-        value: sender.id,
-        label: sender.displayName ? `${sender.senderId} · ${sender.displayName}` : sender.senderId,
-        disabled: !sender.readiness?.ready,
-        reason: sender.readiness?.reasonMessage ?? 'Sender identity is not ready',
-        isDefault: sender.isDefault,
-      })),
+      smsSenders
+        .filter((sender) => sender.status === 'APPROVED' && sender.readiness?.ready)
+        .map((sender) => ({
+          value: sender.id,
+          label: sender.senderId,
+          sublabel: sender.displayName || undefined,
+          tag: sender.isDefault ? 'Default' : undefined,
+          isDefault: sender.isDefault,
+        })),
     [smsSenders],
   );
 
@@ -182,9 +188,7 @@ export function AddCampaignPanel({
       ...DEFAULT_VALUES,
       ...initial,
       targetSegment,
-      senderIdentityId: senderOptions.some(
-        (sender) => sender.value === initial.senderIdentityId && !sender.disabled,
-      )
+      senderIdentityId: senderOptions.some((sender) => sender.value === initial.senderIdentityId)
         ? initial.senderIdentityId
         : '',
     });
@@ -204,9 +208,7 @@ export function AddCampaignPanel({
 
   useEffect(() => {
     if (!usesSms || senderIdentityId || senderOptions.length === 0) return;
-    const selectableSenders = senderOptions.filter((sender) => !sender.disabled);
-    const defaultSender =
-      selectableSenders.find((sender) => sender.isDefault) ?? selectableSenders[0];
+    const defaultSender = senderOptions.find((sender) => sender.isDefault) ?? senderOptions[0];
     if (!defaultSender) return;
     setValue('senderIdentityId', defaultSender.value, { shouldValidate: true });
   }, [senderIdentityId, senderOptions, setValue, usesSms]);
@@ -250,29 +252,60 @@ export function AddCampaignPanel({
           Campaign Details
         </p>
 
-        <FormField
-          label="Campaign Name"
-          registration={register('name', { required: 'Required' })}
-          error={errors.name}
-          placeholder="eg; Q4 Product Launch"
-        />
+        <div className="grid grid-cols-[3fr_2fr] gap-4">
+          <FormField
+            label="Campaign Name"
+            registration={register('name', { required: 'Required' })}
+            error={errors.name}
+            placeholder="eg; Q4 Product Launch"
+          />
 
-        <input
-          type="hidden"
-          {...register('outreachChannel', {
-            validate: (v) => v.length > 0 || 'Select at least one channel',
-          })}
-        />
-        <MultiSelect
-          label="Outreach Channel"
-          placeholder="Select outreach channels"
-          value={channelValue}
-          onChange={(v) =>
-            setValue('outreachChannel', v as CampaignChannel[], { shouldValidate: true })
-          }
-          options={CHANNEL_OPTIONS}
-          error={errors.outreachChannel?.message}
-        />
+          <input
+            type="hidden"
+            {...register('outreachChannel', {
+              validate: (v) => v.length > 0 || 'Select at least one channel',
+            })}
+          />
+          <MultiSelect
+            label="Outreach Channel"
+            placeholder="Select outreach channels"
+            value={channelValue}
+            onChange={(v) =>
+              setValue('outreachChannel', v as CampaignChannel[], { shouldValidate: true })
+            }
+            options={CHANNEL_OPTIONS}
+            error={errors.outreachChannel?.message}
+          />
+        </div>
+
+        {usesSms && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+            <input
+              type="hidden"
+              {...register('senderIdentityId', {
+                validate: (v) =>
+                  !usesSms ||
+                  senderOptions.some((sender) => sender.value === v) ||
+                  'Select an approved SMS sender ID',
+              })}
+            />
+            <SearchSelect
+              label="Approved SMS Sender ID"
+              placeholder={sendersPending ? 'Loading sender IDs…' : 'Select sender ID'}
+              options={senderOptions}
+              value={senderIdentityId}
+              onChange={(v) => setValue('senderIdentityId', v, { shouldValidate: true })}
+              error={errors.senderIdentityId?.message}
+              disabled={sendersPending}
+            />
+            {senderOptions.length === 0 && (
+              <p className="mt-2 text-xs text-amber-700">
+                No approved SMS sender ID is available. Create and get one approved in Marketing
+                settings before creating an SMS campaign.
+              </p>
+            )}
+          </div>
+        )}
 
         <input
           type="hidden"
@@ -355,44 +388,6 @@ export function AddCampaignPanel({
             {selectedSegments.length === 1 ? '' : 's'} · {preview.data.reachable} message
             {preview.data.reachable === 1 ? '' : 's'}
           </p>
-        )}
-
-        {usesSms && (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <label className="text-sm font-bold text-gray-900">Approved SMS Sender ID</label>
-            <select
-              {...register('senderIdentityId', {
-                validate: (v) =>
-                  !usesSms ||
-                  senderOptions.some((sender) => sender.value === v && !sender.disabled) ||
-                  'Select a ready SMS sender ID',
-              })}
-              className="mt-2 w-full rounded-input border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20"
-            >
-              <option value="">Select sender ID</option>
-              {senderOptions.map((sender) => (
-                <option key={sender.value} value={sender.value} disabled={sender.disabled}>
-                  {sender.label}
-                  {sender.isDefault ? ' (default)' : ''}
-                  {sender.disabled ? ` - ${sender.reason}` : ''}
-                </option>
-              ))}
-            </select>
-            {errors.senderIdentityId && (
-              <p className="mt-1 text-xs text-red-500">{errors.senderIdentityId.message}</p>
-            )}
-            {senderOptions.length === 0 && (
-              <p className="mt-2 text-xs text-amber-700">
-                No SMS sender ID is available. Create and approve one in Marketing settings before
-                creating an SMS campaign.
-              </p>
-            )}
-            {senderOptions.length > 0 && senderOptions.every((sender) => sender.disabled) && (
-              <p className="mt-2 text-xs text-amber-700">
-                No ready SMS sender ID is available for the current campaign enforcement mode.
-              </p>
-            )}
-          </div>
         )}
 
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">
