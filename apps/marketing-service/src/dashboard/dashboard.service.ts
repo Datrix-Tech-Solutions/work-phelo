@@ -23,6 +23,8 @@ import {
   QueryDashboardRevenueDto,
   QueryDashboardSalesPersonnelDto,
   QueryDashboardSummaryDto,
+  QueryDashboardTargetsDto,
+  DashboardTargetsOverview,
 } from './dto/dashboard-summary.dto';
 
 const DAY_MS = 86_400_000;
@@ -590,6 +592,47 @@ export class DashboardService {
    */
   private async targetProgress(user: RequestUser, days: DayRange) {
     const rows = await this.targets.listOverlapping(user, days.from, days.to);
+    return this.sumTargets(rows);
+  }
+
+  /**
+   * Target, achieved and remaining for the range, optionally for one rep, with the reps who
+   * have a target in it so the dashboard can offer a filter. Scoped like the targets list: a
+   * user without view-all sees, and can pick, only themselves.
+   */
+  async targetsOverview(
+    user: RequestUser,
+    query: QueryDashboardTargetsDto,
+  ): Promise<DashboardTargetsOverview> {
+    const rows = await this.targets.listOverlapping(
+      user,
+      query.fromDate,
+      query.toDate,
+    );
+    const repIds = [...new Set(rows.map((row) => row.userId))];
+    const names = await this.assignees.namesFor(user.tenantId, repIds);
+    const reps = repIds
+      .map((userId) => ({ userId, name: names.get(userId) ?? 'Unknown rep' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const selected = query.userId
+      ? rows.filter((row) => row.userId === query.userId)
+      : rows;
+    return { ...this.sumTargets(selected), reps };
+  }
+
+  /**
+   * One total target per rep: the rep's overall targets when they have any, otherwise their
+   * per-product ones. Achieved is null as soon as any counted target's figure is unavailable.
+   */
+  private sumTargets(
+    rows: {
+      userId: string;
+      productId: string | null;
+      amount: Prisma.Decimal;
+      achieved: Prisma.Decimal | null;
+    }[],
+  ) {
     const byRep = new Map<string, typeof rows>();
     for (const row of rows) {
       byRep.set(row.userId, [...(byRep.get(row.userId) ?? []), row]);

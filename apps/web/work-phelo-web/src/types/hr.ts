@@ -577,6 +577,69 @@ export interface DashboardSummary {
   hasEmployees: boolean;
 }
 
+export interface PendingActions {
+  leaveRequests: number;
+  timeCorrections: number;
+  shiftSwaps: number;
+  resignations: number;
+  payrollApprovals: number;
+  appraisalFinalizations: number;
+  probationEnding: number;
+  contractsEnding: number;
+  endingWithinDays: number;
+}
+
+export type RecentActivityType =
+  | 'HIRED'
+  | 'STATUS_CHANGED'
+  | 'OFFBOARDED'
+  | 'OFFBOARDING_INITIATED'
+  | 'RESIGNATION_SUBMITTED'
+  | 'RESIGNATION_WITHDRAWN'
+  | 'RESIGNATION_DISMISSED'
+  | 'LEAVE_APPROVED'
+  | 'LEAVE_REJECTED'
+  | 'TIME_CORRECTION_APPROVED'
+  | 'TIME_CORRECTION_REJECTED';
+
+export interface RecentActivityEvent {
+  id: string;
+  type: RecentActivityType;
+  employeeId: string;
+  employeeName: string;
+  detail: string | null;
+  actor: string | null;
+  timestamp: string;
+}
+
+export interface DepartmentDistribution {
+  distribution: {
+    department: string;
+    count: number;
+    gender: { male: number; female: number; other: number; unspecified: number };
+  }[];
+  hasData: boolean;
+}
+
+export interface HrDashboardKpis {
+  headcount: { current: number; previous: number; onProbation: number; suspended: number };
+  attendance: {
+    rate: number | null;
+    previousRate: number | null;
+    late: number;
+    absent: number;
+  };
+  onLeave: { current: number; previous: number; today: number; pending: number };
+  hiresAndExits: {
+    hires: number;
+    previousHires: number;
+    exits: number;
+    previousExits: number;
+    turnoverRate: number | null;
+    previousTurnoverRate: number | null;
+  };
+}
+
 // ── Employee Query Params ─────────────────────────────────
 export interface EmployeeQuery {
   page?: number;

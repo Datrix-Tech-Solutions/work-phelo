@@ -1484,3 +1484,13 @@ export interface MarketingSalesPersonnel {
   currency: string | null;
   reps: MarketingSalesRep[];
 }
+
+/** Target progress for a period, optionally for one rep, plus the reps who have a target in it. */
+export interface MarketingTargetsOverview {
+  count: number;
+  target: string;
+  achieved: string | null;
+  remaining: string | null;
+  percent: number | null;
+  reps: { userId: string; name: string }[];
+}

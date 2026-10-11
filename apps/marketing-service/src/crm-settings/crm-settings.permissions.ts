@@ -45,6 +45,7 @@ export const MarketingCrmSettingsPermission = {
   CLIENTS_ASSIGN: 'marketing.clients:ASSIGN',
   CLIENTS_BILLING_VIEW: 'marketing.clients.billing:VIEW',
   CLIENTS_BILLING_CREATE: 'marketing.clients.billing:CREATE',
+  DASHBOARD_VIEW: 'marketing.dashboard:VIEW',
   TARGETS_VIEW_ALL: 'marketing.targets.all:VIEW',
   TARGETS_CREATE: 'marketing.targets:CREATE',
   TARGETS_EDIT: 'marketing.targets:EDIT',

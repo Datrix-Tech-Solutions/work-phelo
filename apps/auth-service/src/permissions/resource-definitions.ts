@@ -33,6 +33,12 @@ export const RESOURCES = [
   { name: 'branches', module: 'HR', description: 'Branch locations' },
   { name: 'hr-settings', module: 'HR', description: 'HR workspace settings' },
   {
+    name: 'hr.dashboard',
+    module: 'HR',
+    description:
+      'Organisation-wide HR dashboard (headcount, attendance, leave, pending actions)',
+  },
+  {
     name: 'leave',
     module: 'HR',
     description: 'Company-wide leave requests and approvals',
@@ -233,6 +239,11 @@ export const RESOURCES = [
     name: 'marketing.clients.billing',
     module: 'MARKETING',
     description: 'Raise and review client billing transactions in Accounting',
+  },
+  {
+    name: 'marketing.dashboard',
+    module: 'MARKETING',
+    description: 'General (organisation-wide) Marketing dashboard',
   },
   {
     name: 'marketing.targets',

@@ -109,7 +109,7 @@ export function TopSalesPersonnelChart({ period, year, className }: TopSalesPers
         </div>
         <div className="w-44 shrink-0">
           <SearchSelect
-            size="sm"
+            size="xs"
             clearable={false}
             options={METRICS.map((m) => ({ value: m.value, label: m.label }))}
             value={metric}

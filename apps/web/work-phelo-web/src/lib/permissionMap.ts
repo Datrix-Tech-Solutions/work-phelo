@@ -28,6 +28,7 @@ export enum Permission {
   EXPORT_EMPLOYEES = 'export:employees',
   READ_HR_SETTINGS = 'read:hr_settings',
   MANAGE_HR_SETTINGS = 'manage:hr_settings',
+  VIEW_HR_DASHBOARD = 'view:hr_dashboard',
 
   // ── Branches ──────────────────────────────────────────────────────────────
   READ_BRANCHES = 'read:branches',
@@ -136,6 +137,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.EXPORT_EMPLOYEES]: ['employees:EXPORT'],
   [Permission.READ_HR_SETTINGS]: ['hr-settings:VIEW'],
   [Permission.MANAGE_HR_SETTINGS]: ['hr-settings:EDIT'],
+  [Permission.VIEW_HR_DASHBOARD]: ['hr.dashboard:VIEW'],
 
   // Branches
   [Permission.READ_BRANCHES]: ['branches:VIEW'],
@@ -235,6 +237,8 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   'hr-settings': ['VIEW', 'EDIT'],
+  'hr.dashboard': ['VIEW'],
+  'marketing.dashboard': ['VIEW'],
   leave: ['VIEW', 'APPROVE'],
   'leave-self': ['VIEW', 'CREATE'],
   'leave-settings': ['EDIT'],
@@ -322,6 +326,7 @@ export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
   'projects',
   'project-tasks',
   'hr-settings',
+  'hr.dashboard',
   'operations.reinsurance.dashboard',
   'operations.reinsurance.placements',
   'operations.reinsurance.counterparties',

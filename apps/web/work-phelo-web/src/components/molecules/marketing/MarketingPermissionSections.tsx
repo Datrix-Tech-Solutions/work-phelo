@@ -20,6 +20,11 @@ interface PermissionSection {
 
 export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
   {
+    key: 'dashboard',
+    label: 'Dashboard',
+    tags: [{ key: 'view_dashboard', label: 'View General Dashboard' }],
+  },
+  {
     key: 'prospecting',
     label: 'Prospecting',
     umbrellaKey: 'manage_prospects',
@@ -155,6 +160,9 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   manage_billing: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.billing', ['VIEW', 'CREATE'])],
 
   assign_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients', ['ASSIGN'])],
+
+  // The general (organisation-wide) dashboard. Without it a user only has the personal dashboard.
+  view_dashboard: pairs('marketing.dashboard', ['VIEW']),
 
   // Sales targets — everyone sees their own progress; this pill adds every rep's.
   view_all_targets: pairs('marketing.targets.all', ['VIEW']),

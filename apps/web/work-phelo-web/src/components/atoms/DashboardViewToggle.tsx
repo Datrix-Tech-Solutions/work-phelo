@@ -2,9 +2,15 @@
 
 import { cardClass, cn } from '@/lib/utils';
 
-export type DashboardView = 'detailed' | 'general';
+export type DashboardView = 'detailed' | 'general' | 'personal';
 
-const VIEWS: { label: string; value: DashboardView }[] = [
+export interface DashboardViewOption {
+  label: string;
+  value: DashboardView;
+}
+
+/** General and Detailed, unless a module passes its own views. */
+export const DEFAULT_DASHBOARD_VIEWS: DashboardViewOption[] = [
   { label: 'General Dashboard', value: 'general' },
   { label: 'Detailed Dashboard', value: 'detailed' },
 ];
@@ -12,12 +18,17 @@ const VIEWS: { label: string; value: DashboardView }[] = [
 interface DashboardViewToggleProps {
   value: DashboardView;
   onChange: (value: DashboardView) => void;
+  views?: DashboardViewOption[];
 }
 
-export function DashboardViewToggle({ value, onChange }: DashboardViewToggleProps) {
+export function DashboardViewToggle({
+  value,
+  onChange,
+  views = DEFAULT_DASHBOARD_VIEWS,
+}: DashboardViewToggleProps) {
   return (
     <div className={cardClass('flex items-center gap-1 p-1 shadow-none')}>
-      {VIEWS.map(({ label, value: v }) => (
+      {views.map(({ label, value: v }) => (
         <button
           key={v}
           type="button"

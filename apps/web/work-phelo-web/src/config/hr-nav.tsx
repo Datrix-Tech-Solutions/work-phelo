@@ -38,7 +38,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         key: 'dashboard',
         label: 'Home',
         icon: <DashboardIcon />,
-        href: '',
+        href: 'home',
         enabled: true,
         active: true,
         exact: true,

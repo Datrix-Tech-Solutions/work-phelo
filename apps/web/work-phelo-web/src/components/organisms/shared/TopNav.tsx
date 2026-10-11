@@ -429,6 +429,7 @@ export function TopNav({ showMenuButton = false, onMenuClick, tabs, userInitials
         isOpen={notificationsOpen}
         onClose={() => setNotificationsOpen(false)}
         title="Notifications"
+        width="sm:w-[440px]"
         description="Stay up to date with what's happening."
         descriptionAction={
           notificationCount > 0 && (

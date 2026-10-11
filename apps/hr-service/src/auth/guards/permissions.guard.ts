@@ -52,6 +52,9 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.MANAGE_HR_SETTINGS]: [
     { resource: 'hr-settings', actions: ['EDIT'] },
   ],
+  [Permission.VIEW_HR_DASHBOARD]: [
+    { resource: 'hr.dashboard', actions: ['VIEW'] },
+  ],
 
   // ── Departments ───────────────────────────────────────────────────────────
   [Permission.CREATE_BRANCH]: [{ resource: 'branches', actions: ['CREATE'] }],
