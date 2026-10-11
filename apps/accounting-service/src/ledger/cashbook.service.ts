@@ -862,6 +862,29 @@ export class CashbookService {
         'This entry was raised by another module and changes there.',
       );
     }
+    // The reversal of a receipt or payment is taken back from that receipt or payment, which
+    // keeps the two in step.
+    const reversedId =
+      transaction.reversalOfTransactionId ??
+      transaction.voidedReversalOfTransactionId;
+    if (!viaDocument && reversedId) {
+      const settles = await tx.cashbookTransaction.findFirst({
+        where: {
+          id: reversedId,
+          tenantId,
+          OR: [
+            { receivableReceipt: { isNot: null } },
+            { payablePayment: { isNot: null } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (settles) {
+        throw new ConflictException(
+          'This reverses a receipt or payment. Void the reversal from that receipt or payment.',
+        );
+      }
+    }
     if (transaction.bankStatementMatches.length > 0) {
       throw new ConflictException(
         'This entry is matched to a bank statement. Unmatch it in the reconciliation first.',
