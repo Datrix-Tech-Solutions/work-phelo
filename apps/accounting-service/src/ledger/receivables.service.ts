@@ -119,6 +119,15 @@ const receivableReceiptInclude = {
       reference: true,
       postedJournalEntryId: true,
       reversalJournalEntryId: true,
+      reversalTransaction: {
+        select: {
+          id: true,
+          status: true,
+          reference: true,
+          transactionNumber: true,
+          transactionDate: true,
+        },
+      },
     },
   },
 } satisfies Prisma.AccountingReceivableReceiptInclude;
@@ -393,8 +402,10 @@ export class ReceivablesService {
         documentDate: dto.documentDate,
       },
     );
+    // A rule may post to an asset account (e.g. selling equipment on credit), so only the
+    // account's state is checked here, not its category.
     for (const accountId of new Set(lineAccounts)) {
-      await this.assertPostingOffsetAccount(user.tenantId, accountId);
+      await this.assertPostingOffsetAccount(user.tenantId, accountId, true);
     }
     // Taxes and charges add to what is owed; deductions take away from it.
     const totalAmount = subtotalAmount.plus(taxAmount).plus(netAdjustment);
@@ -624,8 +635,10 @@ export class ReceivablesService {
         documentDate: dto.documentDate,
       },
     );
+    // A rule may post to an asset account (e.g. selling equipment on credit), so only the
+    // account's state is checked here, not its category.
     for (const accountId of new Set(lineAccounts)) {
-      await this.assertPostingOffsetAccount(user.tenantId, accountId);
+      await this.assertPostingOffsetAccount(user.tenantId, accountId, true);
     }
     // Taxes and charges add to what is owed; deductions take away from it.
     const totalAmount = subtotalAmount.plus(taxAmount).plus(netAdjustment);
@@ -1156,6 +1169,71 @@ export class ReceivablesService {
       });
       return updated;
     });
+  }
+
+  /**
+   * Takes a receipt's reversal back: the reversing cash entry is voided and the receipt is posted
+   * again. Its allocations stay released; it is applied again with Allocate.
+   */
+  async voidReceiptReversal(
+    user: RequestUser,
+    receiptId: string,
+    dto: VoidEntryDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const receipt = await this.loadChangeableReceipt(
+        tx,
+        user.tenantId,
+        receiptId,
+      );
+      if (receipt.status !== AccountingReceivableStatus.REVERSED) {
+        throw new ConflictException(
+          'Only a reversed receipt has a reversal to void',
+        );
+      }
+      const reversal = await tx.cashbookTransaction.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          reversalOfTransactionId: receipt.cashbookTransactionId,
+        },
+        select: { id: true },
+      });
+      if (!reversal) {
+        throw new ConflictException('The reversal entry could not be found');
+      }
+      await this.cashbook.voidInTransaction(tx, user, reversal.id, dto, true);
+      // The reversing entry is an internal part of this receipt, not something to list in the archive.
+      await tx.cashbookTransaction.updateMany({
+        where: { id: reversal.id, tenantId: user.tenantId },
+        data: {
+          archiveDeletedAt: new Date(),
+          archiveDeletedByUserId: user.id,
+        },
+      });
+      await tx.accountingReceivableReceipt.update({
+        where: { id_tenantId: { id: receipt.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingReceivableStatus.POSTED,
+          reversedAt: null,
+          reversedByUserId: null,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'RECEIVABLE_RECEIPT_REVERSAL_VOIDED',
+          entityType: 'AccountingReceivableReceipt',
+          entityId: receipt.id,
+          changedFields: {
+            reason: dto.reason,
+            voidedReversalTransactionId: reversal.id,
+          },
+        },
+      });
+    });
+    return this.getReceipt(user, receiptId);
   }
 
   async reverseReceipt(
@@ -2782,6 +2860,7 @@ export class ReceivablesService {
   private async assertPostingOffsetAccount(
     tenantId: string,
     glAccountId: string,
+    allowAsset = false,
   ) {
     const account = await this.prisma.gLAccount.findFirst({
       where: { id: glAccountId, tenantId },
@@ -2792,10 +2871,12 @@ export class ReceivablesService {
       account.status !== RecordStatus.ACTIVE ||
       !account.allowPosting ||
       account._count.childAccounts > 0 ||
-      account.category === GLAccountCategory.ASSET
+      (!allowAsset && account.category === GLAccountCategory.ASSET)
     ) {
       throw new BadRequestException(
-        'Receivable offset account must be active, leaf, posting-enabled and non-asset',
+        allowAsset
+          ? 'Receivable account must be active, leaf and posting-enabled'
+          : 'Receivable offset account must be active, leaf, posting-enabled and non-asset',
       );
     }
   }

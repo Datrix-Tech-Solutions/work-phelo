@@ -134,6 +134,78 @@ describe('voiding invoices, credit notes and receipts', () => {
     ).rejects.toThrow(/Only posted/);
   });
 
+  it('takes a receipt reversal back so the receipt is posted again', async () => {
+    const receipt = {
+      id: 'rc-1',
+      status: AccountingReceivableStatus.REVERSED,
+      sourceModule: null,
+      cashbookTransactionId: 'cb-0',
+    };
+    const tx: Record<string, any> = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      accountingReceivableReceipt: {
+        findFirst: jest.fn().mockResolvedValue(receipt),
+        update: jest.fn(),
+      },
+      cashbookTransaction: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'cb-rev' }),
+        updateMany: jest.fn(),
+      },
+      accountingAuditLog: { create: jest.fn() },
+    };
+    const cashbook = { voidInTransaction: jest.fn() };
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) => fn(tx),
+      accountingReceivableReceipt: {
+        findFirst: jest.fn().mockResolvedValue(receipt),
+      },
+    };
+    const service = new ReceivablesService(
+      prisma as never,
+      cashbook as never,
+      {} as never,
+    );
+    await service.voidReceiptReversal(actor, 'rc-1', { reason: 'Mistake' });
+    expect(cashbook.voidInTransaction).toHaveBeenCalledWith(
+      tx,
+      actor,
+      'cb-rev',
+      { reason: 'Mistake' },
+      true,
+    );
+    expect(tx.accountingReceivableReceipt.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: AccountingReceivableStatus.POSTED,
+          reversedAt: null,
+        }),
+      }),
+    );
+  });
+
+  it('only voids the reversal of a reversed receipt', async () => {
+    const receipt = {
+      id: 'rc-1',
+      status: AccountingReceivableStatus.POSTED,
+      sourceModule: null,
+      cashbookTransactionId: 'cb-0',
+    };
+    const tx: Record<string, any> = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      accountingReceivableReceipt: {
+        findFirst: jest.fn().mockResolvedValue(receipt),
+      },
+    };
+    const service = new ReceivablesService(
+      { $transaction: (fn: (t: unknown) => unknown) => fn(tx) } as never,
+      {} as never,
+      {} as never,
+    );
+    await expect(
+      service.voidReceiptReversal(actor, 'rc-1', { reason: 'x' }),
+    ).rejects.toThrow(/Only a reversed receipt/);
+  });
+
   it('only restores a voided invoice', async () => {
     const { service } = setup();
     await expect(service.restoreInvoice(actor, 'doc-1', {})).rejects.toThrow(
@@ -227,6 +299,8 @@ describe('voiding cashbook entries', () => {
         sourceLedgerAllocations: [],
         lines: [],
       })
+      // The guard asking whether the original settles a receipt or payment: it does not.
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ postedJournalEntryId: 'j-0' });
     await service.voidPostedTransaction(actor, 'cb-1', { reason: 'Mistake' });
     expect(journals.setReversedInTransaction).toHaveBeenCalledWith(
@@ -246,6 +320,30 @@ describe('voiding cashbook entries', () => {
         }),
       }),
     );
+  });
+
+  it('leaves the reversal of a receipt to be voided from that receipt', async () => {
+    const { tx, journals, service } = setup({
+      reversalOfTransactionId: 'cb-0',
+    });
+    tx.cashbookTransaction.findFirst
+      .mockResolvedValueOnce({
+        id: 'cb-1',
+        status: CashbookTransactionStatus.POSTED,
+        sourceModule: null,
+        postedJournalEntryId: 'j-1',
+        reversalOfTransactionId: 'cb-0',
+        receivableReceipt: null,
+        payablePayment: null,
+        bankStatementMatches: [],
+        sourceLedgerAllocations: [],
+        lines: [],
+      })
+      .mockResolvedValueOnce({ id: 'cb-0' });
+    await expect(
+      service.voidPostedTransaction(actor, 'cb-1', { reason: 'x' }),
+    ).rejects.toThrow(/Void the reversal from that receipt or payment/);
+    expect(journals.voidSystemJournalInTransaction).not.toHaveBeenCalled();
   });
 
   it('holds entries matched to a bank statement', async () => {

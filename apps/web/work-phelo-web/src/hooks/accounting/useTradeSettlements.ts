@@ -200,6 +200,34 @@ export function useReversePayablePayment() {
   return useReverseSettlement('PAYABLE');
 }
 
+/** Takes a reversed receipt's or payment's reversal back, so it is posted again. */
+export function useVoidReceivableReceiptReversal() {
+  return useVoidSettlementReversal('RECEIVABLE');
+}
+export function useVoidPayablePaymentReversal() {
+  return useVoidSettlementReversal('PAYABLE');
+}
+
+function useVoidSettlementReversal(side: AccountingTradeSide) {
+  const config = SETTLEMENT_SIDE_CONFIG[side];
+  const invalidate = useInvalidateSettlement(side);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await api.post<RawSettlement>(
+        `${config.base}/${config.segment}/${id}/void-reversal`,
+        { reason },
+      );
+      return mapSettlement(res.data, side);
+    },
+    onSuccess: () => {
+      invalidate();
+      // The reversing entry leaves the books, so every balance and report moves.
+      queryClient.invalidateQueries({ queryKey: ['accounting'] });
+    },
+  });
+}
+
 function useReverseSettlement(side: AccountingTradeSide) {
   const config = SETTLEMENT_SIDE_CONFIG[side];
   const invalidate = useInvalidateSettlement(side);

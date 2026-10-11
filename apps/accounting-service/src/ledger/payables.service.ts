@@ -108,6 +108,15 @@ const payablePaymentInclude = {
       reference: true,
       postedJournalEntryId: true,
       reversalJournalEntryId: true,
+      reversalTransaction: {
+        select: {
+          id: true,
+          status: true,
+          reference: true,
+          transactionNumber: true,
+          transactionDate: true,
+        },
+      },
     },
   },
 } satisfies Prisma.AccountingPayablePaymentInclude;
@@ -951,6 +960,71 @@ export class PayablesService {
       });
       return updated;
     });
+  }
+
+  /**
+   * Takes a payment's reversal back: the reversing cash entry is voided and the payment is posted
+   * again. Its allocations stay released; it is applied again with Allocate.
+   */
+  async voidPaymentReversal(
+    user: RequestUser,
+    paymentId: string,
+    dto: VoidEntryDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status !== AccountingPayableStatus.REVERSED) {
+        throw new ConflictException(
+          'Only a reversed payment has a reversal to void',
+        );
+      }
+      const reversal = await tx.cashbookTransaction.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          reversalOfTransactionId: payment.cashbookTransactionId,
+        },
+        select: { id: true },
+      });
+      if (!reversal) {
+        throw new ConflictException('The reversal entry could not be found');
+      }
+      await this.cashbook.voidInTransaction(tx, user, reversal.id, dto, true);
+      // The reversing entry is an internal part of this payment, not something to list in the archive.
+      await tx.cashbookTransaction.updateMany({
+        where: { id: reversal.id, tenantId: user.tenantId },
+        data: {
+          archiveDeletedAt: new Date(),
+          archiveDeletedByUserId: user.id,
+        },
+      });
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingPayableStatus.POSTED,
+          reversedAt: null,
+          reversedByUserId: null,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_REVERSAL_VOIDED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: {
+            reason: dto.reason,
+            voidedReversalTransactionId: reversal.id,
+          },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
   }
 
   async reversePayment(

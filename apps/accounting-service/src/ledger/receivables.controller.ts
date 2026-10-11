@@ -337,6 +337,19 @@ export class ReceivablesController {
     return this.service.reverseReceipt(request.user, receiptId, dto);
   }
 
+  @Post('receipts/:receiptId/void-reversal')
+  @ApiOperation({
+    summary: 'Void the reversal of a receipt, returning it to posted',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_REVERSE)
+  voidReceiptReversal(
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidReceiptReversal(request.user, receiptId, dto);
+  }
+
   @Post('receipts/:receiptId/allocations')
   @ApiOperation({
     summary: 'Allocate posted receipt balance to a posted invoice',

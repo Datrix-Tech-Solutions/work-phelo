@@ -10,13 +10,26 @@ interface Props {
   /** What is being voided, e.g. "Invoice INV26-00001". */
   subject: string;
   isPending: boolean;
+  /** Wording for taking a reversal back instead of voiding the entry itself. */
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
   onConfirm: (reason: string) => void;
   onClose: () => void;
 }
 
 /** Asks why a posted entry is being voided. It leaves the books and goes to the archive, from
  *  where it can be restored while its period is open. */
-export function VoidEntryModal({ isOpen, subject, isPending, onConfirm, onClose }: Props) {
+export function VoidEntryModal({
+  isOpen,
+  subject,
+  isPending,
+  title = 'Void Entry',
+  description,
+  confirmLabel = 'Void',
+  onConfirm,
+  onClose,
+}: Props) {
   const [reason, setReason] = useState('');
 
   // Start empty each time the modal opens again.
@@ -35,8 +48,11 @@ export function VoidEntryModal({ isOpen, subject, isPending, onConfirm, onClose 
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Void Entry"
-      description={`${subject} will come out of the books and every balance and report. It moves to the archive, where it can be restored while its period is open.`}
+      title={title}
+      description={
+        description ??
+        `${subject} will come out of the books and every balance and report. It moves to the archive, where it can be restored while its period is open.`
+      }
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -49,7 +65,7 @@ export function VoidEntryModal({ isOpen, subject, isPending, onConfirm, onClose 
             disabled={!reason.trim()}
             onClick={() => onConfirm(reason.trim())}
           >
-            Void
+            {confirmLabel}
           </Button>
         </div>
       }

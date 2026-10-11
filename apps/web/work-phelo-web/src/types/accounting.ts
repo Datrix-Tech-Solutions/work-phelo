@@ -1364,6 +1364,14 @@ export interface AccountingTradeSettlement {
     reference: string | null;
     postedJournalEntryId: string | null;
     reversalJournalEntryId: string | null;
+    /** The cash entry that reverses this one, while the receipt or payment is reversed. */
+    reversalTransaction?: {
+      id: string;
+      status: string;
+      reference: string | null;
+      transactionNumber: string | null;
+      transactionDate: string;
+    } | null;
   };
 }
 
