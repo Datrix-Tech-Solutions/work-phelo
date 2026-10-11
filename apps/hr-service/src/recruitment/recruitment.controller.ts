@@ -26,6 +26,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
+  CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
   UpdateRecruitmentCandidateStageDto,
 } from './dto/candidate.dto';
@@ -35,10 +36,49 @@ import {
 } from './dto/stage.dto';
 import {
   CreateRecruitmentVacancyDto,
+  QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
   UpdateRecruitmentVacancyDto,
 } from './dto/vacancy.dto';
 import { RecruitmentService } from './recruitment.service';
+
+@ApiTags('Recruitment Public')
+@Controller('recruitment/public')
+export class RecruitmentPublicController {
+  constructor(private readonly recruitmentService: RecruitmentService) {}
+
+  @Get('vacancies')
+  @ApiOperation({ summary: 'List public open recruitment vacancies' })
+  listPublicVacancies(@Query() query: QueryPublicRecruitmentVacanciesDto) {
+    return this.recruitmentService.listPublicVacancies(query);
+  }
+
+  @Get('vacancies/:vacancyId')
+  @ApiOperation({ summary: 'Get a public open recruitment vacancy' })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  getPublicVacancy(
+    @Param('vacancyId') vacancyId: string,
+    @Query('tenantId') tenantId: string,
+  ) {
+    return this.recruitmentService.getPublicVacancy(tenantId, vacancyId);
+  }
+
+  @Post('vacancies/:vacancyId/applications')
+  @ApiOperation({ summary: 'Submit a public recruitment application' })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  @ApiBody({ type: CreateRecruitmentApplicationDto })
+  createPublicApplication(
+    @Param('vacancyId') vacancyId: string,
+    @Query('tenantId') tenantId: string,
+    @Body() dto: CreateRecruitmentApplicationDto,
+  ) {
+    return this.recruitmentService.createPublicApplication(
+      tenantId,
+      vacancyId,
+      dto,
+    );
+  }
+}
 
 @ApiTags('Recruitment')
 @Controller('recruitment')
@@ -183,6 +223,23 @@ export class RecruitmentController {
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.recruitmentService.getCandidate(req.user.tenantId, candidateId);
+  }
+
+  @Get('candidates/:candidateId/documents')
+  @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
+  @ApiOperation({ summary: 'Get recruitment candidate document references' })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  getCandidateDocuments(
+    @Param('candidateId') candidateId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.getCandidateDocuments(
+      req.user.tenantId,
+      candidateId,
+    );
   }
 
   @Patch('candidates/:candidateId/stage')

@@ -11,6 +11,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 export class QueryRecruitmentCandidatesDto {
@@ -59,9 +60,19 @@ export class UpdateRecruitmentCandidateStageDto {
   note?: string;
 }
 
-export class CreateRecruitmentApplicationDto {
+export class RecruitmentApplicationAnswerDto {
   @IsUUID()
-  vacancyId!: string;
+  questionId!: string;
+
+  @IsString()
+  @MaxLength(4000)
+  answer!: string;
+}
+
+export class CreateRecruitmentApplicationDto {
+  @IsOptional()
+  @IsUUID()
+  vacancyId?: string;
 
   @IsString()
   @MaxLength(80)
@@ -140,4 +151,10 @@ export class CreateRecruitmentApplicationDto {
   @IsString()
   @MaxLength(1000)
   githubUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RecruitmentApplicationAnswerDto)
+  answers?: RecruitmentApplicationAnswerDto[];
 }

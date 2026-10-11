@@ -628,9 +628,29 @@ model RecruitmentVacancy {
   updatedAt        DateTime                 @updatedAt
 
   applications RecruitmentApplication[]
+  questions    RecruitmentVacancyQuestion[]
 
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
+model RecruitmentVacancyQuestion {
+  id        String    @id @default(uuid())
+  tenantId  String
+  vacancyId String
+  question  String
+  required  Boolean   @default(false)
+  sortOrder Int
+  retiredAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  vacancy RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  answers RecruitmentApplicationAnswer[]
+
+  @@index([tenantId, vacancyId, retiredAt])
+  @@index([tenantId, sortOrder])
   @@schema("hr")
 }
 
@@ -681,14 +701,33 @@ model RecruitmentApplication {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  vacancy      RecruitmentVacancy        @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
-  currentStage RecruitmentStage          @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
+  vacancy      RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  currentStage RecruitmentStage               @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
   stageHistory RecruitmentStageHistory[]
+  answers      RecruitmentApplicationAnswer[]
 
   @@index([tenantId, vacancyId])
   @@index([tenantId, currentStageId])
   @@index([tenantId, appliedAt])
   @@index([tenantId, email])
+  @@schema("hr")
+}
+
+model RecruitmentApplicationAnswer {
+  id               String   @id @default(uuid())
+  tenantId         String
+  applicationId    String
+  questionId       String
+  questionSnapshot String
+  answer           String
+  createdAt        DateTime @default(now())
+
+  application RecruitmentApplication     @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  question    RecruitmentVacancyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([applicationId, questionId])
+  @@index([tenantId, applicationId])
+  @@index([tenantId, questionId])
   @@schema("hr")
 }
 
@@ -698,7 +737,7 @@ model RecruitmentStageHistory {
   applicationId       String
   previousStageId     String?
   newStageId          String
-  changedByUserId     String
+  changedByUserId     String?
   changedByEmployeeId String?
   note                String?
   changedAt           DateTime @default(now())

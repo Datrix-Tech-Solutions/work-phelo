@@ -20,7 +20,9 @@ import {
 } from './dto/stage.dto';
 import {
   CreateRecruitmentVacancyDto,
+  QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
+  RecruitmentVacancyQuestionDto,
   UpdateRecruitmentVacancyDto,
 } from './dto/vacancy.dto';
 
@@ -40,8 +42,20 @@ const MAX_LIMIT = 100;
 const RECRUITMENT_CANDIDATE_INCLUDE = {
   vacancy: true,
   currentStage: true,
+  answers: {
+    include: { question: true },
+    orderBy: { createdAt: 'asc' },
+  },
   _count: { select: { stageHistory: true } },
 } satisfies Prisma.RecruitmentApplicationInclude;
+
+const RECRUITMENT_VACANCY_INCLUDE = {
+  questions: {
+    where: { retiredAt: null },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+  },
+  _count: { select: { applications: true } },
+} satisfies Prisma.RecruitmentVacancyInclude;
 
 @Injectable()
 export class RecruitmentService {
@@ -71,7 +85,7 @@ export class RecruitmentService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.recruitmentVacancy.findMany({
         where,
-        include: { _count: { select: { applications: true } } },
+        include: RECRUITMENT_VACANCY_INCLUDE,
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -95,23 +109,36 @@ export class RecruitmentService {
       this.assertPublishable(dto);
     }
 
-    const vacancy = await this.prisma.recruitmentVacancy.create({
-      data: {
-        tenantId,
-        title: this.optionalTrim(dto.title),
-        location: this.optionalTrim(dto.location),
-        jobType: dto.jobType,
-        description: this.optionalTrim(dto.description),
-        responsibilities: this.optionalTrim(dto.responsibilities),
-        requirements: this.optionalTrim(dto.requirements),
-        salaryMin: this.toDecimal(dto.salaryMin),
-        salaryMax: this.toDecimal(dto.salaryMax),
-        salaryCurrency: this.optionalTrim(dto.salaryCurrency)?.toUpperCase(),
-        status: dto.status ?? RecruitmentVacancyStatus.DRAFT,
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
-      },
-      include: { _count: { select: { applications: true } } },
+    const vacancy = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.recruitmentVacancy.create({
+        data: {
+          tenantId,
+          title: this.optionalTrim(dto.title),
+          location: this.optionalTrim(dto.location),
+          jobType: dto.jobType,
+          description: this.optionalTrim(dto.description),
+          responsibilities: this.optionalTrim(dto.responsibilities),
+          requirements: this.optionalTrim(dto.requirements),
+          salaryMin: this.toDecimal(dto.salaryMin),
+          salaryMax: this.toDecimal(dto.salaryMax),
+          salaryCurrency: this.optionalTrim(dto.salaryCurrency)?.toUpperCase(),
+          status: dto.status ?? RecruitmentVacancyStatus.DRAFT,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+      if (dto.questions !== undefined) {
+        await this.replaceVacancyQuestions(
+          tx,
+          tenantId,
+          created.id,
+          dto.questions,
+        );
+      }
+      return tx.recruitmentVacancy.findFirstOrThrow({
+        where: { tenantId, id: created.id },
+        include: RECRUITMENT_VACANCY_INCLUDE,
+      });
     });
 
     return this.serializeVacancy(vacancy);
@@ -120,10 +147,63 @@ export class RecruitmentService {
   async getVacancy(tenantId: string, vacancyId: string) {
     const vacancy = await this.prisma.recruitmentVacancy.findFirst({
       where: { tenantId, id: vacancyId },
-      include: { _count: { select: { applications: true } } },
+      include: RECRUITMENT_VACANCY_INCLUDE,
     });
     if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
     return this.serializeVacancy(vacancy);
+  }
+
+  async listPublicVacancies(query: QueryPublicRecruitmentVacanciesDto) {
+    const page = this.page(query.page);
+    const limit = this.limit(query.limit);
+    const tenantId = this.requirePublicTenantId(query.tenantId);
+    const where: Prisma.RecruitmentVacancyWhereInput = {
+      tenantId,
+      status: RecruitmentVacancyStatus.OPEN,
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              {
+                location: {
+                  contains: query.search.trim(),
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.recruitmentVacancy.findMany({
+        where,
+        include: RECRUITMENT_VACANCY_INCLUDE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.recruitmentVacancy.count({ where }),
+    ]);
+
+    return {
+      items: items.map((item) => this.serializePublicVacancy(item)),
+      meta: { page, limit, total },
+    };
+  }
+
+  async getPublicVacancy(tenantId: string, vacancyId: string) {
+    const publicTenantId = this.requirePublicTenantId(tenantId);
+    const vacancy = await this.prisma.recruitmentVacancy.findFirst({
+      where: {
+        tenantId: publicTenantId,
+        id: vacancyId,
+        status: RecruitmentVacancyStatus.OPEN,
+      },
+      include: RECRUITMENT_VACANCY_INCLUDE,
+    });
+    if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
+    return this.serializePublicVacancy(vacancy);
   }
 
   async updateVacancy(
@@ -152,42 +232,55 @@ export class RecruitmentService {
       this.assertPublishable(next);
     }
 
-    const vacancy = await this.prisma.recruitmentVacancy.update({
-      where: { id: vacancyId },
-      data: {
-        ...(dto.title !== undefined
-          ? { title: this.optionalTrim(dto.title) }
-          : {}),
-        ...(dto.location !== undefined
-          ? { location: this.optionalTrim(dto.location) }
-          : {}),
-        ...(dto.jobType !== undefined ? { jobType: dto.jobType } : {}),
-        ...(dto.description !== undefined
-          ? { description: this.optionalTrim(dto.description) }
-          : {}),
-        ...(dto.responsibilities !== undefined
-          ? { responsibilities: this.optionalTrim(dto.responsibilities) }
-          : {}),
-        ...(dto.requirements !== undefined
-          ? { requirements: this.optionalTrim(dto.requirements) }
-          : {}),
-        ...(dto.salaryMin !== undefined
-          ? { salaryMin: this.toDecimal(dto.salaryMin) }
-          : {}),
-        ...(dto.salaryMax !== undefined
-          ? { salaryMax: this.toDecimal(dto.salaryMax) }
-          : {}),
-        ...(dto.salaryCurrency !== undefined
-          ? {
-              salaryCurrency: this.optionalTrim(
-                dto.salaryCurrency,
-              )?.toUpperCase(),
-            }
-          : {}),
-        ...(dto.status !== undefined ? { status: dto.status } : {}),
-        updatedByUserId: user.id,
-      },
-      include: { _count: { select: { applications: true } } },
+    const vacancy = await this.prisma.$transaction(async (tx) => {
+      await tx.recruitmentVacancy.update({
+        where: { id: vacancyId },
+        data: {
+          ...(dto.title !== undefined
+            ? { title: this.optionalTrim(dto.title) }
+            : {}),
+          ...(dto.location !== undefined
+            ? { location: this.optionalTrim(dto.location) }
+            : {}),
+          ...(dto.jobType !== undefined ? { jobType: dto.jobType } : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optionalTrim(dto.description) }
+            : {}),
+          ...(dto.responsibilities !== undefined
+            ? { responsibilities: this.optionalTrim(dto.responsibilities) }
+            : {}),
+          ...(dto.requirements !== undefined
+            ? { requirements: this.optionalTrim(dto.requirements) }
+            : {}),
+          ...(dto.salaryMin !== undefined
+            ? { salaryMin: this.toDecimal(dto.salaryMin) }
+            : {}),
+          ...(dto.salaryMax !== undefined
+            ? { salaryMax: this.toDecimal(dto.salaryMax) }
+            : {}),
+          ...(dto.salaryCurrency !== undefined
+            ? {
+                salaryCurrency: this.optionalTrim(
+                  dto.salaryCurrency,
+                )?.toUpperCase(),
+              }
+            : {}),
+          ...(dto.status !== undefined ? { status: dto.status } : {}),
+          updatedByUserId: user.id,
+        },
+      });
+      if (dto.questions !== undefined) {
+        await this.replaceVacancyQuestions(
+          tx,
+          tenantId,
+          vacancyId,
+          dto.questions,
+        );
+      }
+      return tx.recruitmentVacancy.findFirstOrThrow({
+        where: { tenantId, id: vacancyId },
+        include: RECRUITMENT_VACANCY_INCLUDE,
+      });
     });
 
     return this.serializeVacancy(vacancy);
@@ -203,7 +296,7 @@ export class RecruitmentService {
         closedByUserId: user.id,
         updatedByUserId: user.id,
       },
-      include: { _count: { select: { applications: true } } },
+      include: RECRUITMENT_VACANCY_INCLUDE,
     });
     return this.serializeVacancy(vacancy);
   }
@@ -361,6 +454,26 @@ export class RecruitmentService {
     return this.serializeCandidate(candidate);
   }
 
+  async getCandidateDocuments(tenantId: string, candidateId: string) {
+    const candidate = await this.prisma.recruitmentApplication.findFirst({
+      where: { tenantId, id: candidateId },
+      select: {
+        id: true,
+        tenantId: true,
+        vacancyId: true,
+        resumeUrl: true,
+        resumeFileName: true,
+        coverLetterUrl: true,
+        coverLetterFileName: true,
+        portfolioUrl: true,
+        githubUrl: true,
+      },
+    });
+    if (!candidate)
+      throw new NotFoundException('Recruitment candidate not found');
+    return this.serializeCandidateDocuments(candidate);
+  }
+
   async moveCandidateStage(
     tenantId: string,
     user: RequestUser,
@@ -429,30 +542,42 @@ export class RecruitmentService {
 
   async createApplication(
     tenantId: string,
-    user: RequestUser,
+    user: RequestUser | null,
     dto: CreateRecruitmentApplicationDto,
   ) {
+    if (!dto.vacancyId) {
+      throw new BadRequestException('vacancyId is required');
+    }
+    const vacancyId = dto.vacancyId;
     const vacancy = await this.prisma.recruitmentVacancy.findFirst({
       where: {
         tenantId,
-        id: dto.vacancyId,
+        id: vacancyId,
         status: RecruitmentVacancyStatus.OPEN,
       },
-      select: { id: true },
+      include: {
+        questions: {
+          where: { retiredAt: null },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
+      },
     });
     if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
 
     const initialStage = await this.getDefaultStage(tenantId);
-    const actorEmployee = await this.prisma.employee.findFirst({
-      where: { tenantId, userId: user.id },
-      select: { id: true },
-    });
+    const actorEmployee = user
+      ? await this.prisma.employee.findFirst({
+          where: { tenantId, userId: user.id },
+          select: { id: true },
+        })
+      : null;
+    const answers = this.validateApplicationAnswers(vacancy.questions, dto);
 
     return this.prisma.$transaction(async (tx) => {
       const application = await tx.recruitmentApplication.create({
         data: {
           tenantId,
-          vacancyId: dto.vacancyId,
+          vacancyId,
           currentStageId: initialStage.id,
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
@@ -475,13 +600,24 @@ export class RecruitmentService {
           githubUrl: this.optionalTrim(dto.githubUrl),
         },
       });
+      if (answers.length > 0) {
+        await tx.recruitmentApplicationAnswer.createMany({
+          data: answers.map((answer) => ({
+            tenantId,
+            applicationId: application.id,
+            questionId: answer.questionId,
+            questionSnapshot: answer.questionSnapshot,
+            answer: answer.answer,
+          })),
+        });
+      }
       await tx.recruitmentStageHistory.create({
         data: {
           tenantId,
           applicationId: application.id,
           previousStageId: null,
           newStageId: initialStage.id,
-          changedByUserId: user.id,
+          changedByUserId: user?.id,
           changedByEmployeeId: actorEmployee?.id,
           note: 'Initial application stage',
         },
@@ -492,6 +628,17 @@ export class RecruitmentService {
         include: RECRUITMENT_CANDIDATE_INCLUDE,
       });
       return this.serializeCandidate(created);
+    });
+  }
+
+  async createPublicApplication(
+    tenantId: string,
+    vacancyId: string,
+    dto: CreateRecruitmentApplicationDto,
+  ) {
+    return this.createApplication(this.requirePublicTenantId(tenantId), null, {
+      ...dto,
+      vacancyId,
     });
   }
 
@@ -534,6 +681,132 @@ export class RecruitmentService {
     if (!stage)
       throw new ConflictException('No default recruitment stage found');
     return stage;
+  }
+
+  private async replaceVacancyQuestions(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    vacancyId: string,
+    questions: RecruitmentVacancyQuestionDto[],
+  ) {
+    const existing = await tx.recruitmentVacancyQuestion.findMany({
+      where: { tenantId, vacancyId },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((question) => question.id));
+    const retainedIds = new Set<string>();
+    const now = new Date();
+
+    for (const [index, question] of questions.entries()) {
+      const questionText = question.question.trim();
+      const sortOrder = question.sortOrder ?? index + 1;
+      if (question.id) {
+        if (!existingIds.has(question.id)) {
+          throw new NotFoundException('Recruitment vacancy question not found');
+        }
+        if (retainedIds.has(question.id)) {
+          throw new BadRequestException(
+            'Duplicate recruitment vacancy question id',
+          );
+        }
+        retainedIds.add(question.id);
+        await tx.recruitmentVacancyQuestion.update({
+          where: { id: question.id },
+          data: {
+            question: questionText,
+            required: question.required ?? false,
+            sortOrder,
+            retiredAt: null,
+          },
+        });
+        continue;
+      }
+
+      await tx.recruitmentVacancyQuestion.create({
+        data: {
+          tenantId,
+          vacancyId,
+          question: questionText,
+          required: question.required ?? false,
+          sortOrder,
+        },
+      });
+    }
+
+    const retiredIds = existing
+      .map((question) => question.id)
+      .filter((questionId) => !retainedIds.has(questionId));
+    if (retiredIds.length > 0) {
+      await tx.recruitmentVacancyQuestion.updateMany({
+        where: {
+          tenantId,
+          vacancyId,
+          retiredAt: null,
+          id: { in: retiredIds },
+        },
+        data: { retiredAt: now },
+      });
+    }
+  }
+
+  private validateApplicationAnswers(
+    questions: Array<{
+      id: string;
+      question: string;
+      required: boolean;
+    }>,
+    dto: CreateRecruitmentApplicationDto,
+  ) {
+    const activeQuestions = new Map(
+      questions.map((question) => [question.id, question]),
+    );
+    const answers = dto.answers ?? [];
+    const seen = new Set<string>();
+    const normalizedAnswers: Array<{
+      questionId: string;
+      questionSnapshot: string;
+      answer: string;
+    }> = [];
+
+    for (const answer of answers) {
+      if (seen.has(answer.questionId)) {
+        throw new BadRequestException(
+          'Duplicate answer for recruitment vacancy question',
+        );
+      }
+      seen.add(answer.questionId);
+      const question = activeQuestions.get(answer.questionId);
+      if (!question) {
+        throw new BadRequestException(
+          'Answer references an invalid recruitment vacancy question',
+        );
+      }
+      const value = answer.answer.trim();
+      if (!value) {
+        throw new BadRequestException(
+          'Recruitment vacancy question answers cannot be empty',
+        );
+      }
+      normalizedAnswers.push({
+        questionId: answer.questionId,
+        questionSnapshot: question.question,
+        answer: value,
+      });
+    }
+
+    const answeredIds = new Set(
+      normalizedAnswers.map((answer) => answer.questionId),
+    );
+    const missingRequired = questions.some(
+      (question) => question.required && !answeredIds.has(question.id),
+    );
+    if (missingRequired) {
+      throw new BadRequestException(
+        'Required recruitment vacancy questions must be answered',
+      );
+    }
+
+    return normalizedAnswers;
   }
 
   private async getStageOrThrow(tenantId: string, stageId: string) {
@@ -593,7 +866,7 @@ export class RecruitmentService {
 
   private serializeVacancy(
     vacancy: Prisma.RecruitmentVacancyGetPayload<{
-      include: { _count: { select: { applications: true } } };
+      include: typeof RECRUITMENT_VACANCY_INCLUDE;
     }>,
   ) {
     return {
@@ -601,6 +874,35 @@ export class RecruitmentService {
       salaryMin: this.decimalToNumber(vacancy.salaryMin),
       salaryMax: this.decimalToNumber(vacancy.salaryMax),
       applicantCount: vacancy._count.applications,
+    };
+  }
+
+  private serializePublicVacancy(
+    vacancy: Prisma.RecruitmentVacancyGetPayload<{
+      include: typeof RECRUITMENT_VACANCY_INCLUDE;
+    }>,
+  ) {
+    return {
+      id: vacancy.id,
+      tenantId: vacancy.tenantId,
+      title: vacancy.title,
+      location: vacancy.location,
+      jobType: vacancy.jobType,
+      description: vacancy.description,
+      responsibilities: vacancy.responsibilities,
+      requirements: vacancy.requirements,
+      salaryMin: this.decimalToNumber(vacancy.salaryMin),
+      salaryMax: this.decimalToNumber(vacancy.salaryMax),
+      salaryCurrency: vacancy.salaryCurrency,
+      status: vacancy.status,
+      createdAt: vacancy.createdAt,
+      updatedAt: vacancy.updatedAt,
+      questions: vacancy.questions.map((question) => ({
+        id: question.id,
+        question: question.question,
+        required: question.required,
+        sortOrder: question.sortOrder,
+      })),
     };
   }
 
@@ -617,6 +919,47 @@ export class RecruitmentService {
         salaryMin: this.decimalToNumber(candidate.vacancy.salaryMin),
         salaryMax: this.decimalToNumber(candidate.vacancy.salaryMax),
       },
+      answers: candidate.answers.map((answer) => ({
+        id: answer.id,
+        questionId: answer.questionId,
+        question: answer.questionSnapshot,
+        currentQuestion: answer.question.question,
+        answer: answer.answer,
+        createdAt: answer.createdAt,
+      })),
+      documents: this.serializeCandidateDocuments(candidate),
+    };
+  }
+
+  private serializeCandidateDocuments(candidate: {
+    id: string;
+    tenantId: string;
+    vacancyId: string;
+    resumeUrl: string | null;
+    resumeFileName: string | null;
+    coverLetterUrl: string | null;
+    coverLetterFileName: string | null;
+    portfolioUrl: string | null;
+    githubUrl: string | null;
+  }) {
+    return {
+      candidateId: candidate.id,
+      tenantId: candidate.tenantId,
+      vacancyId: candidate.vacancyId,
+      resume: candidate.resumeUrl
+        ? {
+            url: candidate.resumeUrl,
+            fileName: candidate.resumeFileName,
+          }
+        : null,
+      coverLetter: candidate.coverLetterUrl
+        ? {
+            url: candidate.coverLetterUrl,
+            fileName: candidate.coverLetterFileName,
+          }
+        : null,
+      portfolioUrl: candidate.portfolioUrl,
+      githubUrl: candidate.githubUrl,
     };
   }
 
@@ -678,5 +1021,13 @@ export class RecruitmentService {
 
   private decimalToNumber(value?: Prisma.Decimal | null) {
     return value instanceof Prisma.Decimal ? value.toNumber() : value;
+  }
+
+  private requirePublicTenantId(value?: string) {
+    const tenantId = value?.trim();
+    if (!tenantId) {
+      throw new BadRequestException('tenantId is required');
+    }
+    return tenantId;
   }
 }

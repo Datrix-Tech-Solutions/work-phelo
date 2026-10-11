@@ -1,20 +1,46 @@
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import {
   EmploymentType,
   RecruitmentVacancyStatus,
 } from '../../../prisma/generated/client';
+
+export class RecruitmentVacancyQuestionDto {
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(1000)
+  question!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  sortOrder?: number;
+}
 
 export class CreateRecruitmentVacancyDto {
   @IsOptional()
@@ -70,6 +96,12 @@ export class CreateRecruitmentVacancyDto {
   @IsOptional()
   @IsEnum(RecruitmentVacancyStatus)
   status?: RecruitmentVacancyStatus;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RecruitmentVacancyQuestionDto)
+  questions?: RecruitmentVacancyQuestionDto[];
 }
 
 export class UpdateRecruitmentVacancyDto extends PartialType(
@@ -80,6 +112,30 @@ export class QueryRecruitmentVacanciesDto {
   @IsOptional()
   @IsEnum(RecruitmentVacancyStatus)
   status?: RecruitmentVacancyStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class QueryPublicRecruitmentVacanciesDto {
+  @IsString()
+  @MaxLength(120)
+  tenantId!: string;
 
   @IsOptional()
   @IsString()

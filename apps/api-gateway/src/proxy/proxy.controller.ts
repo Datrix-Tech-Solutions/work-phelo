@@ -34,6 +34,9 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/tenants\/slug\/[^/]+\/branding$/,
   /^\/api\/v1\/auth\/users\/accept-invite$/,
   /^\/api\/v1\/auth\/mfa\/send-sms$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/vacancies$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/vacancies\/[^/]+$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/vacancies\/[^/]+\/applications$/,
   /^\/api\/v1\/operations\/reinsurance\/health$/,
   /^\/api\/v1\/accounting\/health$/,
 ];
