@@ -302,6 +302,19 @@ export class PayablesController {
     return this.service.reversePayment(request.user, paymentId, dto);
   }
 
+  @Post('payments/:paymentId/void-reversal')
+  @ApiOperation({
+    summary: 'Void the reversal of a payment, returning it to posted',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_REVERSE)
+  voidPaymentReversal(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidPaymentReversal(request.user, paymentId, dto);
+  }
+
   @Post('payments/:paymentId/allocations')
   @ApiOperation({
     summary: 'Allocate posted vendor payment balance to a posted bill',

@@ -1302,6 +1302,27 @@ model PayrollGroup {
   @@schema("hr")
 }
 
+/// A report built in the HR report builder and saved for everyone who can open the reports page.
+/// `definition` is the report spec the builder produces (type, period and blocks); it is
+/// validated against the report catalog on save and again every time it runs.
+model SavedReport {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  description   String?
+  /// TABLE or CHART. A report is one or the other, never both.
+  type          String
+  definition    Json
+  createdBy     String
+  createdByName String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@schema("hr")
+}
+
 /// A pay component kept for reuse. Adding it to a configuration copies it, so later edits never
 /// change components already added.
 model PayrollSavedComponent {

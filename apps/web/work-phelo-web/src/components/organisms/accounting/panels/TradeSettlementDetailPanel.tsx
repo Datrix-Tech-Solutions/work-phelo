@@ -15,7 +15,13 @@ import {
   AccountingTradeSide,
 } from '@/types/accounting';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
+import { ReverseAllocationModal } from '@/components/organisms/accounting/panels/ReverseAllocationModal';
+import { TableButton } from '@/components/atoms/TableButton';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import {
+  SourceRecordPanel,
+  SourceRecordTarget,
+} from '@/components/organisms/accounting/panels/SourceRecordPanel';
 import {
   useAllocatePayablePayment,
   useAllocateReceivableReceipt,
@@ -28,6 +34,8 @@ import {
   useReceivableReceiptAllocations,
   useReversePayableAllocation,
   useReversePayablePayment,
+  useVoidPayablePaymentReversal,
+  useVoidReceivableReceiptReversal,
   useReverseReceivableAllocation,
   useReverseReceivableReceipt,
   useRestoreTradeEntry,
@@ -116,10 +124,24 @@ export function TradeSettlementDetailPanel({
   const [voidOpen, setVoidOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [voidReversalOpen, setVoidReversalOpen] = useState(false);
+  // The allocation whose reversal is being confirmed.
+  const [allocationToReverse, setAllocationToReverse] = useState<{
+    id: string;
+    subject: string;
+  } | null>(null);
+  const [reversalTarget, setReversalTarget] = useState<SourceRecordTarget | null>(null);
+  const voidReceiptReversal = useVoidReceivableReceiptReversal();
+  const voidPaymentReversal = useVoidPayablePaymentReversal();
+  const voidReversal = isReceivable ? voidReceiptReversal : voidPaymentReversal;
   const isExternal = !!settlement?.sourceModule && settlement.sourceModule !== 'ACCOUNTING';
   const periodOpen = isPeriodOpen(settlement?.settlementDate);
   const canVoid = settlement?.status === 'POSTED' && !isExternal && periodOpen;
   const canRestore = settlement?.status === 'VOIDED' && !isExternal && periodOpen;
+  // A reversed receipt or payment is taken back from here: the reversing cash entry is voided and
+  // it is posted again (then voided or reversed like any other).
+  const canVoidReversal = settlement?.status === 'REVERSED' && !isExternal;
+  const reversalEntry = settlement?.cashbookTransaction?.reversalTransaction ?? null;
 
   const handleVoid = async (voidReason: string) => {
     if (!settlement) return;
@@ -179,10 +201,28 @@ export function TradeSettlementDetailPanel({
     }
   };
 
-  const handleReverseAllocation = async (allocationId: string) => {
+  const handleVoidReversal = async (voidReason: string) => {
+    if (!settlement) return;
     try {
-      await reverseAllocation.mutateAsync({ allocationId, reason: 'Allocation reversed' });
+      await voidReversal.mutateAsync({ id: settlement.id, reason: voidReason });
+      toast.success(
+        `The reversal of ${settlement.settlementNumber} is voided. It is posted again; apply it with Allocate.`,
+      );
+      setVoidReversalOpen(false);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to void the reversal'));
+    }
+  };
+
+  const handleReverseAllocation = async (reversalReason: string) => {
+    if (!allocationToReverse) return;
+    try {
+      await reverseAllocation.mutateAsync({
+        allocationId: allocationToReverse.id,
+        reason: reversalReason,
+      });
       toast.success('Allocation reversed.');
+      setAllocationToReverse(null);
     } catch (err) {
       toast.error(extractError(err, 'Failed to reverse allocation'));
     }
@@ -227,6 +267,11 @@ export function TradeSettlementDetailPanel({
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {canVoidReversal && (
+                <Button variant="danger" onClick={() => setVoidReversalOpen(true)}>
+                  Void Reversal
+                </Button>
+              )}
               {canRestore && <Button onClick={() => setRestoreOpen(true)}>Restore</Button>}
               {settlement?.status === 'VOIDED' && (
                 <Button variant="danger" onClick={() => setDeleteOpen(true)}>
@@ -274,6 +319,32 @@ export function TradeSettlementDetailPanel({
               </div>
             )}
 
+            {settlement.status === 'REVERSED' && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-900 flex flex-col gap-2">
+                <p>
+                  Reversed{settlement.reversedAt ? ` on ${fmtDate(settlement.reversedAt)}` : ''}
+                  {reversalEntry
+                    ? ` by transaction ${reversalEntry.transactionNumber ?? reversalEntry.reference ?? reversalEntry.id}.`
+                    : '.'}
+                </p>
+                {reversalEntry && (
+                  <button
+                    type="button"
+                    className="self-start text-xs font-medium text-brand hover:underline"
+                    onClick={() => setReversalTarget({ type: 'CASHBOOK', id: reversalEntry.id })}
+                  >
+                    Open the reversing entry
+                  </button>
+                )}
+                {canVoidReversal && (
+                  <p className="text-xs text-red-800">
+                    Void the reversal to post this {documentLabel.toLowerCase()} again. Its
+                    allocations stay released.
+                  </p>
+                )}
+              </div>
+            )}
+
             {settlement.cashbookTransaction?.postedJournalEntryId && (
               <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-sm text-green-900">
                 Posted through Cashbook (transaction{' '}
@@ -307,13 +378,17 @@ export function TradeSettlementDetailPanel({
                         {allocation.reversedAt ? (
                           <Badge label="Reversed" variant="danger" />
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleReverseAllocation(allocation.id)}
-                            className="text-xs font-medium text-red-600 hover:text-red-700"
+                          <TableButton
+                            variant="red"
+                            onClick={() =>
+                              setAllocationToReverse({
+                                id: allocation.id,
+                                subject: allocation.document.documentNumber,
+                              })
+                            }
                           >
                             Reverse
-                          </button>
+                          </TableButton>
                         )}
                       </div>
                     ))}
@@ -378,6 +453,27 @@ export function TradeSettlementDetailPanel({
         }
         onClose={() => setDeleteOpen(false)}
         onDeleted={handleClose}
+      />
+      <ReverseAllocationModal
+        isOpen={!!allocationToReverse}
+        subject={allocationToReverse?.subject ?? 'this document'}
+        isPending={reverseAllocation.isPending}
+        onConfirm={handleReverseAllocation}
+        onClose={() => setAllocationToReverse(null)}
+      />
+      <VoidEntryModal
+        isOpen={voidReversalOpen}
+        subject={settlement?.settlementNumber ?? documentLabel}
+        isPending={voidReversal.isPending}
+        title="Void Reversal"
+        description={`The reversal of ${settlement?.settlementNumber ?? documentLabel} comes out of the books and it is posted again. Its allocations stay released, so apply it again with Allocate.`}
+        confirmLabel="Void Reversal"
+        onConfirm={handleVoidReversal}
+        onClose={() => setVoidReversalOpen(false)}
+      />
+      <SourceRecordPanel
+        target={reversalTarget}
+        onClose={() => setReversalTarget((t) => (t ? { type: t.type } : null))}
       />
       <RestoreEntryModal
         isOpen={restoreOpen}

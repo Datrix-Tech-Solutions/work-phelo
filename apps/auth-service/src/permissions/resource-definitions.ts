@@ -39,6 +39,11 @@ export const RESOURCES = [
       'Organisation-wide HR dashboard (headcount, attendance, leave, pending actions)',
   },
   {
+    name: 'hr.reports',
+    module: 'HR',
+    description: 'HR report builder and saved reports',
+  },
+  {
     name: 'leave',
     module: 'HR',
     description: 'Company-wide leave requests and approvals',
