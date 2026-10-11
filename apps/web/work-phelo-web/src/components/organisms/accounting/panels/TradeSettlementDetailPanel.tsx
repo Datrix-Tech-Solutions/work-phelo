@@ -5,6 +5,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Badge } from '@/components/atoms/Badge';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
@@ -32,6 +33,7 @@ import {
   useRestoreTradeEntry,
   useVoidTradeEntry,
 } from '@/hooks';
+import { DeleteArchivedEntryModal } from '@/components/organisms/accounting/panels/DeleteArchivedEntryModal';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -113,6 +115,7 @@ export function TradeSettlementDetailPanel({
   const restoreEntry = useRestoreTradeEntry(side);
   const [voidOpen, setVoidOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const isExternal = !!settlement?.sourceModule && settlement.sourceModule !== 'ACCOUNTING';
   const periodOpen = isPeriodOpen(settlement?.settlementDate);
   const canVoid = settlement?.status === 'POSTED' && !isExternal && periodOpen;
@@ -225,6 +228,11 @@ export function TradeSettlementDetailPanel({
                 Close
               </Button>
               {canRestore && <Button onClick={() => setRestoreOpen(true)}>Restore</Button>}
+              {settlement?.status === 'VOIDED' && (
+                <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                  Delete
+                </Button>
+              )}
             </div>
           )
         }
@@ -339,12 +347,7 @@ export function TradeSettlementDetailPanel({
         }
       >
         <div className="flex flex-col gap-4">
-          <Input
-            label="Reversal Date"
-            type="date"
-            value={reversalDate}
-            onChange={(e) => setReversalDate(e.target.value)}
-          />
+          <DatePicker label="Reversal Date" value={reversalDate} onChange={setReversalDate} />
           <Input
             label="Reason"
             type="textarea"
@@ -362,6 +365,19 @@ export function TradeSettlementDetailPanel({
         isPending={voidEntry.isPending}
         onConfirm={handleVoid}
         onClose={() => setVoidOpen(false)}
+      />
+      <DeleteArchivedEntryModal
+        target={
+          deleteOpen && settlement
+            ? {
+                kind: isReceivable ? 'RECEIPT' : 'PAYMENT',
+                id: settlement.id,
+                subject: settlement.settlementNumber ?? documentLabel,
+              }
+            : null
+        }
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={handleClose}
       />
       <RestoreEntryModal
         isOpen={restoreOpen}

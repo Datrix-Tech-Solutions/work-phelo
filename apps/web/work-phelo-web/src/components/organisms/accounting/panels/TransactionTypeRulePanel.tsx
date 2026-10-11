@@ -63,16 +63,24 @@ const DEDUCTION_DIRECTION_OPTIONS: SearchSelectOption[] = [
   { value: 'CR', label: 'Credit (CR)' },
 ];
 
+type ScopeFormValues = {
+  category: GLAccountCategory | '';
+  classificationId: string;
+  accountId: string;
+};
+
+const EMPTY_SCOPE: ScopeFormValues = { category: '', classificationId: '', accountId: '' };
+
 type LineFormValues = {
   kind: LineKind;
   /** Only used when kind is DEDUCTION — a deduction can land on either side
    *  (e.g. output VAT is a credit, input VAT is a debit). */
   deductionDirection: PostingLineDirection | '';
   accountId: string;
-  /** Main line only (see isMainLine): where the user may pick the account from. The deepest
-   *  one chosen is what's saved — an account, else a classification, else the category. */
-  scopeCategory: GLAccountCategory | '';
-  scopeClassificationId: string;
+  /** Main line only (see isMainLine): where the user may pick the account from. Each row is a
+   *  category, narrowed to a classification and/or one account. A single row that names an account
+   *  is saved as the rule's fixed account. */
+  scopes: ScopeFormValues[];
   /** Only used when kind is DEDUCTION. */
   taxTypeId: string;
   description: string;
@@ -89,8 +97,7 @@ const EMPTY_LINE: LineFormValues = {
   kind: 'DEBIT',
   deductionDirection: '',
   accountId: '',
-  scopeCategory: '',
-  scopeClassificationId: '',
+  scopes: [{ ...EMPTY_SCOPE }],
   taxTypeId: '',
   description: '',
 };
@@ -145,13 +152,19 @@ function directionOf(
   return '';
 }
 
-/** What a main line saves: the deepest level picked. */
+/** What a main line saves: one fixed account, or the list of places to choose one from. */
 function scopeInput(
   line: LineFormValues,
-): Pick<TransactionTypeRuleLineInput, 'accountId' | 'scopeCategory' | 'scopeClassificationId'> {
-  if (line.accountId) return { accountId: line.accountId };
-  if (line.scopeClassificationId) return { scopeClassificationId: line.scopeClassificationId };
-  return { scopeCategory: (line.scopeCategory || undefined) as GLAccountCategory | undefined };
+): Pick<TransactionTypeRuleLineInput, 'accountId' | 'scopes'> {
+  const rows = line.scopes.filter((s) => s.category);
+  if (rows.length === 1 && rows[0].accountId) return { accountId: rows[0].accountId };
+  return {
+    scopes: rows.map((s) => ({
+      category: s.category as GLAccountCategory,
+      classificationId: s.classificationId || undefined,
+      accountId: s.accountId || undefined,
+    })),
+  };
 }
 
 function lineToFormValues(line: TransactionTypeRule['lines'][number]): LineFormValues {
@@ -160,8 +173,7 @@ function lineToFormValues(line: TransactionTypeRule['lines'][number]): LineFormV
       kind: line.settlementKind === 'DEDUCTION' ? 'SETTLEMENT_DEDUCTION' : 'SETTLEMENT_CHARGE',
       deductionDirection: '',
       accountId: line.account?.id ?? '',
-      scopeCategory: '',
-      scopeClassificationId: '',
+      scopes: [],
       taxTypeId: line.taxType?.id ?? '',
       description: line.description ?? '',
     };
@@ -171,8 +183,7 @@ function lineToFormValues(line: TransactionTypeRule['lines'][number]): LineFormV
       kind: 'DEDUCTION',
       deductionDirection: line.direction,
       accountId: line.account?.id ?? '',
-      scopeCategory: '',
-      scopeClassificationId: '',
+      scopes: [],
       taxTypeId: line.taxType.id,
       description: line.description ?? '',
     };
@@ -182,9 +193,21 @@ function lineToFormValues(line: TransactionTypeRule['lines'][number]): LineFormV
     deductionDirection: '',
     accountId: line.account?.id ?? '',
     // A fixed account still opens the main line's category / classification pickers filled in.
-    scopeCategory:
-      line.account?.category ?? line.scopeCategory ?? line.scopeClassification?.category ?? '',
-    scopeClassificationId: line.account?.classificationId ?? line.scopeClassification?.id ?? '',
+    scopes: line.account
+      ? [
+          {
+            category: line.account.category,
+            classificationId: line.account.classificationId ?? '',
+            accountId: line.account.id,
+          },
+        ]
+      : line.scopes.length > 0
+        ? line.scopes.map((s) => ({
+            category: s.category,
+            classificationId: s.classification?.id ?? '',
+            accountId: s.account?.id ?? '',
+          }))
+        : [{ ...EMPTY_SCOPE }],
     taxTypeId: '',
     description: line.description ?? '',
   };
@@ -582,52 +605,66 @@ function RuleLineEditor({
   settlementCategory: TransactionTypeCategory | undefined;
 }) {
   const kind = useWatch({ control, name: `lines.${index}.kind` });
-  const scopeCategory = useWatch({ control, name: `lines.${index}.scopeCategory` });
-  const scopeClassificationId = useWatch({ control, name: `lines.${index}.scopeClassificationId` });
+  const scopeRows = useFieldArray({ control, name: `lines.${index}.scopes` });
+  const scopes = useWatch({ control, name: `lines.${index}.scopes` }) ?? [];
   const { data: allAccounts = [] } = useGLAccounts();
   // Every level works on its own, like the journal entry lines: a level that's set narrows the
   // ones below it, and picking a lower level fills in the ones above.
   const { data: classificationsData } = useAccountClassifications({ isActive: true });
   const classifications = classificationsData?.items ?? [];
-  const classificationOptions: SearchSelectOption[] = classifications
-    .filter((c) => !scopeCategory || c.category === scopeCategory)
-    .map((c) => ({ value: c.id, label: c.name }));
-  const scopedAccountOptions: SearchSelectOption[] = allAccounts
-    .filter(
-      (a: GLAccount) =>
-        a.status === 'ACTIVE' &&
-        a.allowPosting &&
-        (!scopeCategory || a.category === scopeCategory) &&
-        (!scopeClassificationId || a.classificationId === scopeClassificationId),
-    )
-    .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
-  const accountId = useWatch({ control, name: `lines.${index}.accountId` });
+  // Every row can go all the way down to one account, so a rule can list, say, two exact accounts
+  // and the transaction offers just those two.
+  const isSingleScope = scopes.length <= 1;
+  const classificationOptionsFor = (category: GLAccountCategory | ''): SearchSelectOption[] =>
+    classifications
+      .filter((c) => !category || c.category === category)
+      .map((c) => ({ value: c.id, label: c.name }));
+  const accountOptionsFor = (row: ScopeFormValues | undefined): SearchSelectOption[] =>
+    allAccounts
+      .filter(
+        (a: GLAccount) =>
+          a.status === 'ACTIVE' &&
+          a.allowPosting &&
+          (!row?.category || a.category === row.category) &&
+          (!row?.classificationId || a.classificationId === row.classificationId),
+      )
+      .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
 
-  const pickCategory = (category: GLAccountCategory) => {
-    setValue(`lines.${index}.scopeCategory`, category);
+  // A scoped line always shows at least one row to fill in.
+  useEffect(() => {
+    if (isMainLine && scopeRows.fields.length === 0) scopeRows.append({ ...EMPTY_SCOPE });
+  }, [isMainLine, scopeRows]);
+
+  const pickCategory = (row: number, category: GLAccountCategory) => {
+    setValue(`lines.${index}.scopes.${row}.category`, category);
     // Keep a lower level only while it still sits under the new category.
-    const classification = classifications.find((c) => c.id === scopeClassificationId);
+    const classification = classifications.find((c) => c.id === scopes[row]?.classificationId);
     if (classification && classification.category !== category) {
-      setValue(`lines.${index}.scopeClassificationId`, '');
+      setValue(`lines.${index}.scopes.${row}.classificationId`, '');
     }
-    const account = allAccounts.find((a) => a.id === accountId);
-    if (account && account.category !== category) setValue(`lines.${index}.accountId`, '');
+    const account = allAccounts.find((a) => a.id === scopes[row]?.accountId);
+    if (account && account.category !== category) {
+      setValue(`lines.${index}.scopes.${row}.accountId`, '');
+    }
   };
-  const pickClassification = (id: string) => {
-    setValue(`lines.${index}.scopeClassificationId`, id);
+  const pickClassification = (row: number, id: string) => {
+    setValue(`lines.${index}.scopes.${row}.classificationId`, id);
     const classification = classifications.find((c) => c.id === id);
-    if (classification) setValue(`lines.${index}.scopeCategory`, classification.category);
-    const account = allAccounts.find((a) => a.id === accountId);
-    if (id && account && account.classificationId !== id) setValue(`lines.${index}.accountId`, '');
+    if (classification) setValue(`lines.${index}.scopes.${row}.category`, classification.category);
+    const account = allAccounts.find((a) => a.id === scopes[row]?.accountId);
+    if (id && account && account.classificationId !== id) {
+      setValue(`lines.${index}.scopes.${row}.accountId`, '');
+    }
   };
-  const pickAccount = (id: string) => {
-    setValue(`lines.${index}.accountId`, id);
+  const pickAccount = (row: number, id: string) => {
+    setValue(`lines.${index}.scopes.${row}.accountId`, id);
     const account = allAccounts.find((a) => a.id === id);
     if (account) {
-      setValue(`lines.${index}.scopeCategory`, account.category);
-      setValue(`lines.${index}.scopeClassificationId`, account.classificationId ?? '');
+      setValue(`lines.${index}.scopes.${row}.category`, account.category);
+      setValue(`lines.${index}.scopes.${row}.classificationId`, account.classificationId ?? '');
     }
   };
+  const addScope = () => scopeRows.append({ ...EMPTY_SCOPE });
 
   useEffect(() => {
     if (kind === 'DEDUCTION' && fixedDeductionDirection) {
@@ -708,21 +745,7 @@ function RuleLineEditor({
     />
   );
 
-  const accountField = isMainLine ? (
-    <Controller
-      name={`lines.${index}.accountId`}
-      control={control}
-      render={({ field: f }) => (
-        <SearchSelect
-          label="Account (optional)"
-          placeholder="Any — chosen on the transaction"
-          options={scopedAccountOptions}
-          value={f.value}
-          onChange={pickAccount}
-        />
-      )}
-    />
-  ) : (
+  const accountField = (
     <Controller
       name={`lines.${index}.accountId`}
       control={control}
@@ -766,43 +789,88 @@ function RuleLineEditor({
     </div>
   );
 
-  // The main line narrows where it posts: line type, category, classification, account on one
-  // row, with the description beneath. Every other line is a single row.
+  // The main line narrows where it posts. Each row is a place the account may come from: a
+  // category, narrowed to a classification if wanted. One row can go on to a single fixed account;
+  // several rows leave the choice to the transaction, from any of them.
   if (isMainLine) {
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-2.5">
-        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           {kindField}
-          <Controller
-            name={`lines.${index}.scopeCategory`}
-            control={control}
-            rules={{ required: 'Choose a category, classification or account' }}
-            render={({ field: f }) => (
-              <SearchSelect
-                label="Category"
-                placeholder="Select a category…"
-                options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
-                value={f.value}
-                onChange={(value) => pickCategory(value as GLAccountCategory)}
-                error={errors.lines?.[index]?.scopeCategory?.message}
-              />
-            )}
-          />
-          <Controller
-            name={`lines.${index}.scopeClassificationId`}
-            control={control}
-            render={({ field: f }) => (
-              <SearchSelect
-                label="Classification (optional)"
-                placeholder="Any"
-                options={classificationOptions}
-                value={f.value}
-                onChange={pickClassification}
-              />
-            )}
-          />
-          {accountField}
           {removeButton}
+        </div>
+        {scopeRows.fields.map((row, rowIndex) => (
+          <div
+            key={row.id}
+            className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]"
+          >
+            <Controller
+              name={`lines.${index}.scopes.${rowIndex}.category`}
+              control={control}
+              rules={{ required: 'Choose a category' }}
+              render={({ field: f }) => (
+                <SearchSelect
+                  label="Category"
+                  placeholder="Select a category…"
+                  options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+                  value={f.value}
+                  onChange={(value) => pickCategory(rowIndex, value as GLAccountCategory)}
+                  error={errors.lines?.[index]?.scopes?.[rowIndex]?.category?.message}
+                />
+              )}
+            />
+            <Controller
+              name={`lines.${index}.scopes.${rowIndex}.classificationId`}
+              control={control}
+              render={({ field: f }) => (
+                <SearchSelect
+                  label="Classification (optional)"
+                  placeholder="Any"
+                  options={classificationOptionsFor(scopes[rowIndex]?.category ?? '')}
+                  value={f.value}
+                  onChange={(value) => pickClassification(rowIndex, value)}
+                />
+              )}
+            />
+            <Controller
+              name={`lines.${index}.scopes.${rowIndex}.accountId`}
+              control={control}
+              render={({ field: f }) => (
+                <SearchSelect
+                  label="Account (optional)"
+                  placeholder="Any"
+                  options={accountOptionsFor(scopes[rowIndex])}
+                  value={f.value}
+                  onChange={(value) => pickAccount(rowIndex, value)}
+                />
+              )}
+            />
+            <div className="flex h-10 items-center">
+              {isSingleScope ? (
+                <span className="w-[27px]" aria-hidden />
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Remove this row"
+                  title="Remove this row"
+                  onClick={() => scopeRows.remove(rowIndex)}
+                  className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-500">
+            {isSingleScope
+              ? 'Add another row to let the transaction pick from more than one place.'
+              : 'The transaction offers the accounts from all of these rows, and one is picked.'}
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={addScope}>
+            Add another row
+          </Button>
         </div>
         {descriptionField}
       </div>

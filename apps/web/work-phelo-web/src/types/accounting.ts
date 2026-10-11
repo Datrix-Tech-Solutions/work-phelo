@@ -490,15 +490,20 @@ export interface TransactionTypeRuleLine {
     category: GLAccountCategory;
     classificationId: string | null;
   } | null;
-  /** Set when the main line lets the user choose any posting account in this category
-   *  (or in `scopeClassification`, which narrows it). */
-  scopeCategory: GLAccountCategory | null;
-  scopeClassification: {
+  /** Set when the main line lets the user choose the account: the account may come from any
+   *  one of these (a whole category, or one classification inside it). Empty on a fixed line. */
+  scopes: {
     id: string;
-    code: string;
-    name: string;
     category: GLAccountCategory;
-  } | null;
+    classification: {
+      id: string;
+      code: string;
+      name: string;
+      category: GLAccountCategory;
+    } | null;
+    /** Set when this scope is one specific account rather than a category or classification. */
+    account: { id: string; code: string; name: string; category: GLAccountCategory } | null;
+  }[];
   /** Set on a line that applies when the document is settled, not when it is raised: a
    *  deduction reduces the cash that moves (discount, withholding tax), a charge adds to it. */
   settlementKind: RuleLineSettlementKind | null;
@@ -531,10 +536,9 @@ export type RuleLineSettlementKind = 'DEDUCTION' | 'CHARGE';
 export interface TransactionTypeRuleLineInput {
   direction: PostingLineDirection;
   settlementKind?: RuleLineSettlementKind;
-  /** Exactly one of accountId / scopeCategory / scopeClassificationId. */
+  /** Either a fixed accountId or one or more scopes to choose from. */
   accountId?: string;
-  scopeCategory?: GLAccountCategory;
-  scopeClassificationId?: string;
+  scopes?: { category: GLAccountCategory; classificationId?: string; accountId?: string }[];
   taxTypeId?: string;
   subledgerType?: SubledgerType;
   description?: string;

@@ -12,6 +12,8 @@ import { Button } from '@/components/atoms/Button';
 export interface Column<T> {
   key: string;
   label: string;
+  /** Replaces the label in the header, e.g. a select-all checkbox. The label stays the text used for exports. */
+  headerRender?: () => React.ReactNode;
   width?: string;
   className?: string;
   render?: (row: T) => React.ReactNode;
@@ -63,7 +65,15 @@ interface DataTableProps<T extends { id: string | number }> {
     disabled?: boolean;
     title?: string;
   }[];
-  actionButton?: { label: string; onClick: () => void; disabled?: boolean };
+  /** The primary toolbar button. `variant: 'danger'` makes it red for a destructive action, and
+   *  drops the hover "+" that goes with adding something. */
+  actionButton?: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    variant?: 'primary' | 'danger';
+    title?: string;
+  };
   rowActions?: (row: T) => RowAction[];
   /** When a row has exactly one action, it renders as a standalone inline button by default.
    *  Set false to always render the ⋯ menu instead, even for a single action. */
@@ -331,14 +341,18 @@ export function DataTable<T extends { id: string | number }>({
             {actionButton && (
               <Button
                 size="sm"
+                variant={actionButton.variant}
                 onClick={actionButton.onClick}
                 disabled={actionButton.disabled}
+                title={actionButton.title}
                 className="group"
               >
                 {actionButton.label}
-                <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
-                  <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
-                </span>
+                {actionButton.variant !== 'danger' && (
+                  <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
+                    <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
+                  </span>
+                )}
               </Button>
             )}
           </div>
@@ -386,7 +400,7 @@ export function DataTable<T extends { id: string | number }>({
                         col.className,
                       )}
                     >
-                      {col.label}
+                      {col.headerRender ? col.headerRender() : col.label}
                       <span className="flex items-center -space-x-1 shrink-0">
                         <ArrowUp
                           className={cn(
@@ -413,7 +427,7 @@ export function DataTable<T extends { id: string | number }>({
                     </button>
                   ) : (
                     <div key={col.key} className={cn('min-w-0', col.className)}>
-                      {col.label}
+                      {col.headerRender ? col.headerRender() : col.label}
                     </div>
                   ),
                 )}

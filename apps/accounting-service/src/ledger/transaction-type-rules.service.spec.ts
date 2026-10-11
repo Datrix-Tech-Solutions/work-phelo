@@ -27,7 +27,12 @@ const payableControl = {
 };
 const scopedMain = {
   direction: PostingDirection.DR,
-  scopeClassificationId: 'cls-fixed-assets',
+  scopes: [
+    {
+      category: GLAccountCategory.ASSET,
+      classificationId: 'cls-fixed-assets',
+    },
+  ],
 };
 
 function setup(
@@ -40,7 +45,10 @@ function setup(
   const prisma = {
     transactionType: { findFirst: jest.fn().mockResolvedValue(type) },
     accountClassification: {
-      findFirst: jest.fn().mockResolvedValue({ id: 'cls-fixed-assets' }),
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'cls-fixed-assets',
+        category: GLAccountCategory.ASSET,
+      }),
     },
     transactionTypeRule: { create },
     accountingAuditLog: { create: jest.fn() },
@@ -67,8 +75,126 @@ describe('TransactionTypeRulesService scoped lines', () => {
     const lines = create.mock.calls[0][0].data.lines.create;
     expect(lines[0]).toMatchObject({
       accountId: null,
-      scopeClassificationId: 'cls-fixed-assets',
+      scopes: {
+        create: [
+          {
+            category: GLAccountCategory.ASSET,
+            classificationId: 'cls-fixed-assets',
+          },
+        ],
+      },
     });
+  });
+
+  it('accepts several scopes on one main line', async () => {
+    const { service, create } = setup();
+    await service.createRule(user, {
+      transactionTypeId: 'tt1',
+      lines: [
+        {
+          direction: PostingDirection.DR,
+          scopes: [
+            { category: GLAccountCategory.EXPENSE },
+            {
+              category: GLAccountCategory.ASSET,
+              classificationId: 'cls-fixed-assets',
+            },
+          ],
+        },
+        payableControl,
+      ],
+    });
+    const lines = create.mock.calls[0][0].data.lines.create;
+    expect(lines[0]).toMatchObject({
+      accountId: null,
+      scopes: { create: [{ category: 'EXPENSE' }, { category: 'ASSET' }] },
+    });
+  });
+
+  it('accepts specific accounts as scopes', async () => {
+    const { service, create } = setup();
+    await service.createRule(user, {
+      transactionTypeId: 'tt1',
+      lines: [
+        {
+          direction: PostingDirection.DR,
+          scopes: [
+            {
+              category: GLAccountCategory.LIABILITY,
+              accountId: 'acc-trade-payable',
+            },
+          ],
+        },
+        payableControl,
+      ],
+    });
+    const lines = create.mock.calls[0][0].data.lines.create;
+    expect(lines[0]).toMatchObject({
+      scopes: {
+        create: [{ category: 'LIABILITY', accountId: 'acc-trade-payable' }],
+      },
+    });
+  });
+
+  it('rejects an account listed under the wrong category', async () => {
+    const { service } = setup();
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          {
+            direction: PostingDirection.DR,
+            scopes: [
+              {
+                category: GLAccountCategory.EXPENSE,
+                accountId: 'acc-trade-payable',
+              },
+            ],
+          },
+          payableControl,
+        ],
+      }),
+    ).rejects.toThrow('must sit inside');
+  });
+
+  it('rejects the same scope listed twice', async () => {
+    const { service } = setup();
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          {
+            direction: PostingDirection.DR,
+            scopes: [
+              { category: GLAccountCategory.EXPENSE },
+              { category: GLAccountCategory.EXPENSE },
+            ],
+          },
+          payableControl,
+        ],
+      }),
+    ).rejects.toThrow('more than once');
+  });
+
+  it('rejects a classification listed under the wrong category', async () => {
+    const { service } = setup();
+    await expect(
+      service.createRule(user, {
+        transactionTypeId: 'tt1',
+        lines: [
+          {
+            direction: PostingDirection.DR,
+            scopes: [
+              {
+                category: GLAccountCategory.EXPENSE,
+                classificationId: 'cls-fixed-assets',
+              },
+            ],
+          },
+          payableControl,
+        ],
+      }),
+    ).rejects.toThrow('must belong to the category');
   });
 
   it('rejects a scoped control line', async () => {
@@ -80,7 +206,7 @@ describe('TransactionTypeRulesService scoped lines', () => {
           { direction: PostingDirection.DR, accountId: 'acc-x' },
           {
             direction: PostingDirection.CR,
-            scopeCategory: GLAccountCategory.LIABILITY,
+            scopes: [{ category: GLAccountCategory.LIABILITY }],
           },
         ],
       }),
@@ -121,7 +247,7 @@ describe('TransactionTypeRulesService scoped lines', () => {
         lines: [
           {
             direction: PostingDirection.DR,
-            scopeCategory: GLAccountCategory.EXPENSE,
+            scopes: [{ category: GLAccountCategory.EXPENSE }],
           },
         ],
       }),
@@ -226,7 +352,7 @@ describe('TransactionTypeRulesService settlement lines', () => {
           ...docLines,
           {
             direction: PostingDirection.CR,
-            scopeCategory: GLAccountCategory.LIABILITY,
+            scopes: [{ category: GLAccountCategory.LIABILITY }],
             settlementKind: RuleLineSettlementKind.DEDUCTION,
           },
         ],

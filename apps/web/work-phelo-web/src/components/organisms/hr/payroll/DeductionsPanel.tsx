@@ -1,5 +1,6 @@
 'use client';
 
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { useState } from 'react';
 import { Plus, CheckCircle2, Clock } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -363,15 +364,11 @@ function DeductionsPanelContent({
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500">Start Date</label>
-                  <input
-                    type="date"
-                    value={form.startDate}
-                    onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-                    className={inputClass(undefined)}
-                  />
-                </div>
+                <DatePicker
+                  label="Start Date"
+                  value={form.startDate}
+                  onChange={(v) => setForm((p) => ({ ...p, startDate: v }))}
+                />
 
                 {previewMonths !== null && previewMonths > 0 && (
                   <p className="text-xs text-gray-400">

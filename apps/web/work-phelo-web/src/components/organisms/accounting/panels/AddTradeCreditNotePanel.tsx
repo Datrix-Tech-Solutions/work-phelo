@@ -3,6 +3,7 @@
 import { useForm, useWatch, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { AccountingTradeSide } from '@/types/accounting';
@@ -166,11 +167,18 @@ export function AddTradeCreditNotePanel({ isOpen, onClose, side }: AddTradeCredi
         />
 
         <div className="grid grid-cols-2 gap-3">
-          <FormField
-            label="Document Date"
-            type="date"
-            registration={register('documentDate', { required: 'Document date is required' })}
-            error={errors.documentDate}
+          <Controller
+            name="documentDate"
+            control={control}
+            rules={{ required: 'Document date is required' }}
+            render={({ field }) => (
+              <DatePicker
+                label="Document Date"
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.documentDate?.message}
+              />
+            )}
           />
           <FormField
             label="Currency"

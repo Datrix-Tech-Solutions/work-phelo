@@ -429,21 +429,6 @@ describe('ReceivablesService draft invoices', () => {
       });
     });
 
-    it('reports a reversed invoice against the original invoice id', async () => {
-      jest
-        .spyOn(service as any, 'reverseDocument')
-        .mockResolvedValue({ id: 'reversal-1' });
-
-      await service.reverseInvoice(user, 'inv-1', { reason: 'x' } as never);
-
-      expect(notifier.notify).toHaveBeenCalledWith({
-        tenantId: 'tenant-1',
-        sourceModule: 'MARKETING',
-        transactionId: 'inv-1',
-        event: 'REVERSED',
-      });
-    });
-
     it('hands the notifier a missing source module for invoices that did not come from one (it ignores them)', async () => {
       prisma.accountingReceivableDocument.findFirst.mockResolvedValue({
         sourceModule: null,

@@ -1,5 +1,6 @@
 'use client';
 
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
@@ -185,13 +186,11 @@ function ShiftForm({
           <input type="date" value={initial.startDate} readOnly className={readonlyClass} />
         </div>
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">End Date</label>
-          <input
-            type="date"
+          <DatePicker
+            label="End Date"
             value={endDate}
-            min={initial.startDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className={inputClass}
+            minDate={initial.startDate}
+            onChange={setEndDate}
           />
         </div>
       </div>

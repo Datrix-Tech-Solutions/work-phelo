@@ -91,6 +91,30 @@ export class UpdateTaxTypeDto extends PartialType(CreateTaxTypeDto) {
   isActive?: boolean;
 }
 
+export class RuleLineScopeDto {
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Narrows the category to one classification. Omit to allow the whole category.',
+  })
+  @IsOptional()
+  @IsUUID()
+  classificationId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Narrows it to one specific posting account (inside the category / classification).',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
+}
+
 export class TransactionTypeRuleLineDto {
   @ApiProperty({ enum: PostingDirection })
   @IsEnum(PostingDirection)
@@ -100,29 +124,22 @@ export class TransactionTypeRuleLineDto {
     format: 'uuid',
     description:
       'A fixed account. Omit on a Receivable/Payable main line that is scoped instead ' +
-      '(scopeCategory / scopeClassificationId) — exactly one of the three is required.',
+      '(`scopes`) — either a fixed account or at least one scope is required.',
   })
   @IsOptional()
   @IsUUID()
   accountId?: string;
 
   @ApiPropertyOptional({
-    enum: GLAccountCategory,
+    type: [RuleLineScopeDto],
     description:
-      'Main line only: lets the user pick any posting account in this category on the form.',
+      'Main line only: the categories / classifications the user picks one account from on the form. Several may be listed; the account may come from any of them.',
   })
   @IsOptional()
-  @IsEnum(GLAccountCategory)
-  scopeCategory?: GLAccountCategory;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    description:
-      'Main line only: lets the user pick any posting account in this classification on the form.',
-  })
-  @IsOptional()
-  @IsUUID()
-  scopeClassificationId?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RuleLineScopeDto)
+  scopes?: RuleLineScopeDto[];
 
   @ApiPropertyOptional({
     enum: RuleLineSettlementKind,

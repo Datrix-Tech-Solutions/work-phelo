@@ -50,8 +50,16 @@ const ruleInclude = {
           classificationId: true,
         },
       },
-      scopeClassification: {
-        select: { id: true, code: true, name: true, category: true },
+      scopes: {
+        orderBy: { createdAt: 'asc' as const },
+        include: {
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+          account: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+        },
       },
       taxType: { select: { id: true, name: true, rate: true } },
     },
@@ -353,8 +361,13 @@ export class TransactionTypeRulesService {
       sequence: index + 1,
       direction: line.direction,
       accountId: line.accountId ?? null,
-      scopeCategory: line.scopeCategory ?? null,
-      scopeClassificationId: line.scopeClassificationId ?? null,
+      scopes: {
+        create: (line.scopes ?? []).map((scope) => ({
+          category: scope.category,
+          classificationId: scope.classificationId ?? null,
+          accountId: scope.accountId ?? null,
+        })),
+      },
       taxTypeId: line.taxTypeId,
       subledgerType: line.subledgerType,
       settlementKind: line.settlementKind ?? null,
@@ -390,11 +403,7 @@ export class TransactionTypeRulesService {
   ) {
     if (transactionType.postsToCashbook) {
       this.validateCashbookLine(transactionType.category, allLines);
-      if (
-        !allLines[0].accountId ||
-        allLines[0].scopeCategory ||
-        allLines[0].scopeClassificationId
-      ) {
+      if (!allLines[0].accountId || allLines[0].scopes?.length) {
         throw new BadRequestException(
           'The offset line of a cashbook type needs a fixed account.',
         );
@@ -473,7 +482,7 @@ export class TransactionTypeRulesService {
       );
     }
     for (const line of lines) {
-      if (!line.accountId || line.scopeCategory || line.scopeClassificationId) {
+      if (!line.accountId || line.scopes?.length) {
         throw new BadRequestException(
           'A settlement line needs a fixed account.',
         );
@@ -501,7 +510,7 @@ export class TransactionTypeRulesService {
     }
   }
 
-  /** Exactly one of a fixed account, a category scope or a classification scope per line.
+  /** Each line is either one fixed account or a list of scopes (category / classification).
    *  Only a Receivable/Payable type's main line (not the control line, not a tax line) may be
    *  scoped — the control account and tax accounts stay fixed, and a source-linked type
    *  has no form to pick from. */
@@ -518,14 +527,18 @@ export class TransactionTypeRulesService {
       transactionType.isLinked,
     );
     for (const line of lines) {
-      const chosen = [
-        line.accountId,
-        line.scopeCategory,
-        line.scopeClassificationId,
-      ].filter(Boolean).length;
-      if (chosen !== 1) {
+      const scopeCount = line.scopes?.length ?? 0;
+      if (line.accountId ? scopeCount > 0 : scopeCount === 0) {
         throw new BadRequestException(
-          'Each line needs exactly one of a fixed account, a category or a classification.',
+          'Each line needs either a fixed account or at least one category / classification to choose from.',
+        );
+      }
+      const keys = (line.scopes ?? []).map(
+        (s) => `${s.category}:${s.classificationId ?? ''}:${s.accountId ?? ''}`,
+      );
+      if (new Set(keys).size !== keys.length) {
+        throw new BadRequestException(
+          'The same category, classification or account is listed more than once.',
         );
       }
       const scoped = !line.accountId;
@@ -603,14 +616,36 @@ export class TransactionTypeRulesService {
           ? GLAccountCategory.LIABILITY
           : null;
     for (const line of lines) {
-      if (line.scopeClassificationId) {
+      for (const scope of line.scopes ?? []) {
+        if (!scope.classificationId) continue;
         const classification =
           await this.prisma.accountClassification.findFirst({
-            where: { id: line.scopeClassificationId, tenantId, isActive: true },
-            select: { id: true },
+            where: { id: scope.classificationId, tenantId, isActive: true },
+            select: { id: true, category: true },
           });
         if (!classification) {
           throw new BadRequestException('Classification not found or inactive');
+        }
+        if (classification.category !== scope.category) {
+          throw new BadRequestException(
+            'A classification must belong to the category it is listed under.',
+          );
+        }
+      }
+      for (const scope of line.scopes ?? []) {
+        if (!scope.accountId) continue;
+        const scoped = await this.masterData.findGLAccount(
+          tenantId,
+          scope.accountId,
+        );
+        if (
+          scoped.category !== scope.category ||
+          (scope.classificationId &&
+            scoped.classificationId !== scope.classificationId)
+        ) {
+          throw new BadRequestException(
+            'An account must sit inside the category and classification it is listed under.',
+          );
         }
       }
       const account = line.accountId
@@ -674,9 +709,12 @@ export class TransactionTypeRulesService {
         sequence: line.sequence,
         direction: line.direction,
         account: line.account,
-        scopeCategory:
-          line.scopeCategory ?? line.scopeClassification?.category ?? null,
-        scopeClassification: line.scopeClassification,
+        scopes: line.scopes.map((scope) => ({
+          id: scope.id,
+          category: scope.category,
+          classification: scope.classification,
+          account: scope.account,
+        })),
         taxType: line.taxType
           ? {
               id: line.taxType.id,

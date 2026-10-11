@@ -420,23 +420,32 @@ export function NewTransactionPanel({
           !parentIds.has(a.id) &&
           a.id !== controlAccountId &&
           !cashGlIds.has(a.id) &&
-          (mainLine.scopeClassification
-            ? a.classificationId === mainLine.scopeClassification.id
-            : a.category === mainLine.scopeCategory),
+          // Inside any one of the rule's scopes.
+          mainLine.scopes.some((scope) =>
+            scope.account
+              ? a.id === scope.account.id
+              : scope.classification
+                ? a.classificationId === scope.classification.id
+                : a.category === scope.category,
+          ),
       )
       .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
   }, [isScopedMainLine, mainLine, glAccounts, cashAccounts, controlAccountId]);
   // A department tag only makes sense on a profit-and-loss account, so an item's cost centre is
   // offered when its account is an expense or revenue one. Before one is picked, the rule's scope
   // decides; if that is unknown too, err on the side of offering it.
-  const mainLineCategory = mainLine?.account
-    ? glAccounts.find((a) => a.id === mainLine.account?.id)?.category
-    : (mainLine?.scopeClassification?.category ?? mainLine?.scopeCategory);
+  const isProfitAndLoss = (category: string) => category === 'EXPENSE' || category === 'REVENUE';
+  const mainLineCategories: string[] = mainLine?.account
+    ? [glAccounts.find((a) => a.id === mainLine.account?.id)?.category].filter(
+        (c): c is NonNullable<typeof c> => !!c,
+      )
+    : (mainLine?.scopes ?? []).map((scope) => scope.category);
   const showCostCentreFor = (row: DocLineRow) => {
-    const category =
-      (row.glAccountId ? glAccounts.find((a) => a.id === row.glAccountId)?.category : undefined) ??
-      mainLineCategory;
-    return !category || category === 'EXPENSE' || category === 'REVENUE';
+    const picked = row.glAccountId
+      ? glAccounts.find((a) => a.id === row.glAccountId)?.category
+      : undefined;
+    if (picked) return isProfitAndLoss(picked);
+    return mainLineCategories.length === 0 || mainLineCategories.some(isProfitAndLoss);
   };
   // A rule that fixes one account has nothing to pick, and so nothing to add to.
   const fixedAccountLabel = mainLine?.account

@@ -3,6 +3,7 @@
 import { ChangeEvent, useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCashAccounts, useGLAccounts, useUpdateCashbookDraft } from '@/hooks';
@@ -124,11 +125,10 @@ export function EditCashbookDraftModal({ transaction, onClose, onSaved }: Props)
           </div>
         </div>
 
-        <Input
+        <DatePicker
           label="Transaction Date"
-          type="date"
           value={transactionDate}
-          onChange={(e) => setTransactionDate(e.target.value)}
+          onChange={setTransactionDate}
         />
         <SearchSelect
           label="Cash / Bank Account"

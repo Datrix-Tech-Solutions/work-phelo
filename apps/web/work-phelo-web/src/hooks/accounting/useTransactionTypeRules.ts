@@ -10,10 +10,43 @@ import { TRANSACTION_TYPES_KEY } from './useTransactionTypes';
 const BASE = '/accounting/transaction-type-rules';
 export const TRANSACTION_TYPE_RULES_KEY = ['accounting', 'transaction-type-rules'] as const;
 
+type RawRuleLine = Omit<TransactionTypeRule['lines'][number], 'scopes'> & {
+  scopes?: TransactionTypeRule['lines'][number]['scopes'];
+  // The shape before a main line could list several scopes.
+  scopeCategory?: TransactionTypeRule['lines'][number]['scopes'][number]['category'] | null;
+  scopeClassification?: TransactionTypeRule['lines'][number]['scopes'][number]['classification'];
+};
+
+/** Reads a rule from the API. A server that still returns the single `scopeCategory` /
+ *  `scopeClassification` is read as a list of one, so the screens only deal with `scopes`. */
+function toRule(raw: Omit<TransactionTypeRule, 'lines'> & { lines: RawRuleLine[] }) {
+  return {
+    ...raw,
+    lines: raw.lines.map((line) => {
+      const category = line.scopeCategory ?? line.scopeClassification?.category;
+      return {
+        ...line,
+        scopes:
+          line.scopes ??
+          (category
+            ? [
+                {
+                  id: line.id,
+                  category,
+                  classification: line.scopeClassification ?? null,
+                  account: null,
+                },
+              ]
+            : []),
+      };
+    }),
+  } satisfies TransactionTypeRule;
+}
+
 export function useTransactionTypeRules() {
   return useQuery({
     queryKey: TRANSACTION_TYPE_RULES_KEY,
-    queryFn: async () => (await api.get<TransactionTypeRule[]>(BASE)).data,
+    queryFn: async () => (await api.get<Parameters<typeof toRule>[0][]>(BASE)).data.map(toRule),
   });
 }
 
@@ -27,7 +60,7 @@ export function useCreateTransactionTypeRule() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: CreateTransactionTypeRulePayload) =>
-      (await api.post<TransactionTypeRule>(BASE, payload)).data,
+      toRule((await api.post<Parameters<typeof toRule>[0]>(BASE, payload)).data),
     onSuccess: () => invalidateRuleQueries(queryClient),
   });
 }
@@ -36,7 +69,7 @@ export function useUpdateTransactionTypeRule() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...payload }: UpdateTransactionTypeRulePayload & { id: string }) =>
-      (await api.patch<TransactionTypeRule>(`${BASE}/${id}`, payload)).data,
+      toRule((await api.patch<Parameters<typeof toRule>[0]>(`${BASE}/${id}`, payload)).data),
     onSuccess: () => invalidateRuleQueries(queryClient),
   });
 }

@@ -3,6 +3,7 @@
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { AccountingCashbookSettlementMethod, AccountingTradeSide } from '@/types/accounting';
@@ -187,13 +188,18 @@ export function AddTradeSettlementPanel({ isOpen, onClose, side }: AddTradeSettl
           />
         </div>
 
-        <FormField
-          label={`${documentLabel} Date`}
-          type="date"
-          registration={register('settlementDate', {
-            required: `${documentLabel} date is required`,
-          })}
-          error={errors.settlementDate}
+        <Controller
+          name="settlementDate"
+          control={control}
+          rules={{ required: `${documentLabel} date is required` }}
+          render={({ field }) => (
+            <DatePicker
+              label={`${documentLabel} Date`}
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.settlementDate?.message}
+            />
+          )}
         />
 
         <Controller

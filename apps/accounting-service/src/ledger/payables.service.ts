@@ -11,7 +11,6 @@ import {
   AccountingPayableStatus,
   FiscalPeriodStatus,
   GLAccountCategory,
-  JournalStatus,
   PostingDirection,
   Prisma,
   RecordStatus,
@@ -762,28 +761,6 @@ export class PayablesService {
     );
   }
 
-  async reverseBill(user: RequestUser, billId: string, dto: ReversePayableDto) {
-    return this.reverseDocument(
-      user,
-      billId,
-      AccountingPayableDocumentType.BILL,
-      dto,
-    );
-  }
-
-  async reverseCreditNote(
-    user: RequestUser,
-    creditNoteId: string,
-    dto: ReversePayableDto,
-  ) {
-    return this.reverseDocument(
-      user,
-      creditNoteId,
-      AccountingPayableDocumentType.CREDIT_NOTE,
-      dto,
-    );
-  }
-
   async createPayment(user: RequestUser, dto: CreatePayablePaymentDto) {
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
@@ -1292,127 +1269,6 @@ export class PayablesService {
           entityType: 'AccountingPayableDocument',
           entityId: document.id,
           changedFields: { journalEntryId: journal.id },
-        },
-      });
-      return tx.accountingPayableDocument.findUniqueOrThrow({
-        where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
-        include: payableDocumentInclude,
-      });
-    });
-  }
-
-  private async reverseDocument(
-    user: RequestUser,
-    documentId: string,
-    documentType: AccountingPayableDocumentType,
-    dto: ReversePayableDto,
-  ) {
-    return this.prisma.$transaction(async (tx) => {
-      const document = await tx.accountingPayableDocument.findFirst({
-        where: { id: documentId, tenantId: user.tenantId, documentType },
-        include: payableDocumentInclude,
-      });
-      if (!document) throw new NotFoundException('Payable document not found');
-      if (document.status !== AccountingPayableStatus.POSTED) {
-        throw new ConflictException(
-          'Only posted payable documents can be reversed',
-        );
-      }
-      const activeAllocations = await tx.accountingPayableAllocation.count({
-        where: {
-          tenantId: user.tenantId,
-          reversedAt: null,
-          OR:
-            document.documentType === AccountingPayableDocumentType.BILL
-              ? [{ billId: document.id }]
-              : [{ creditNoteId: document.id }],
-        },
-      });
-      if (activeAllocations > 0) {
-        throw new ConflictException(
-          'Reverse active allocations before reversing this payable document',
-        );
-      }
-      if (!document.postedJournalEntryId) {
-        throw new ConflictException(
-          'Posted payable document is missing its journal',
-        );
-      }
-      const reversalDate = new Date(dto.reversalDate);
-      const period = await this.resolveOpenPeriod(
-        tx,
-        user.tenantId,
-        reversalDate,
-      );
-      const originalJournal = await tx.journalEntry.findFirst({
-        where: {
-          id: document.postedJournalEntryId,
-          tenantId: user.tenantId,
-          status: JournalStatus.POSTED,
-        },
-        include: { lines: { orderBy: { lineNumber: 'asc' } } },
-      });
-      if (!originalJournal) {
-        throw new ConflictException(
-          'Original posted payable journal is not available for reversal',
-        );
-      }
-      const reversalJournal = await this.journals.createPostedInTransaction(
-        tx,
-        user,
-        {
-          transactionDate: reversalDate.toISOString(),
-          fiscalPeriodId: period.id,
-          transactionCurrency: originalJournal.transactionCurrency,
-          exchangeRate: Number(originalJournal.exchangeRate.toString()),
-          reference: `REVERSAL-${document.documentNumber}`,
-          description: `Payable reversal of ${document.documentNumber}: ${dto.reason}`,
-          idempotencyKey: `payable:${document.id}:reversal:v1`,
-          sourceModule: 'ACCOUNTING',
-          sourceRecordType: 'PAYABLE_DOCUMENT_REVERSAL',
-          sourceRecordId: document.id,
-          lines: originalJournal.lines.map((line) => ({
-            glAccountId: line.glAccountId,
-            subledgerAccountId: line.subledgerAccountId ?? undefined,
-            costCentreId: line.costCentreId ?? undefined,
-            description: line.description ?? undefined,
-            debit: Number(line.transactionCredit.toString()),
-            credit: Number(line.transactionDebit.toString()),
-          })),
-        },
-      );
-      await tx.journalEntry.update({
-        where: {
-          id_tenantId: { id: originalJournal.id, tenantId: user.tenantId },
-        },
-        data: {
-          status: JournalStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-      });
-      await tx.accountingPayableDocument.update({
-        where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
-        data: {
-          status: AccountingPayableStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          reversalJournalEntryId: reversalJournal.id,
-          updatedByUserId: user.id,
-        },
-      });
-      await tx.accountingAuditLog.create({
-        data: {
-          tenantId: user.tenantId,
-          actorUserId: user.id,
-          action:
-            document.documentType === AccountingPayableDocumentType.BILL
-              ? 'PAYABLE_BILL_REVERSED'
-              : 'PAYABLE_CREDIT_NOTE_REVERSED',
-          entityType: 'AccountingPayableDocument',
-          entityId: document.id,
-          changedFields: { reversalJournalEntryId: reversalJournal.id },
         },
       });
       return tx.accountingPayableDocument.findUniqueOrThrow({
@@ -2777,7 +2633,7 @@ export class PayablesService {
 
     const rule = await this.prisma.transactionTypeRule.findFirst({
       where: { tenantId, transactionTypeId },
-      include: { lines: { include: { taxType: true } } },
+      include: { lines: { include: { taxType: true, scopes: true } } },
     });
     if (!rule) {
       throw new BadRequestException(

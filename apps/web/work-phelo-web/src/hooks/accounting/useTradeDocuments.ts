@@ -11,7 +11,6 @@ import type {
   PaginatedResult,
   QueryTradeDocumentsParams,
   RejectDraftPayload,
-  ReverseTradeDocumentPayload,
   UpdateInvoiceDraftPayload,
 } from '@/types/accounting';
 
@@ -290,27 +289,6 @@ function usePostDocument(side: AccountingTradeSide, segment: string) {
   });
 }
 
-function useReverseDocument(side: AccountingTradeSide, segment: string) {
-  const config = SIDE_CONFIG[side];
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...payload }: ReverseTradeDocumentPayload & { id: string }) => {
-      const res = await api.post<RawTradeDocument>(
-        `${config.base}/${segment}/${id}/reverse`,
-        payload,
-      );
-      return mapDocument(res.data, side);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentsKey(side, segment) });
-      // Reversing a credit/debit note gives its original invoice/bill its balance back.
-      if (segment === CREDIT_NOTE_SEGMENT) {
-        queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
-      }
-    },
-  });
-}
-
 // ---- Invoices (AR) / Bills (AP) ----
 
 export function useReceivableInvoices(
@@ -330,9 +308,6 @@ export function useCreateReceivableInvoice() {
 }
 export function usePostReceivableInvoice() {
   return usePostDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment);
-}
-export function useReverseReceivableInvoice() {
-  return useReverseDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment);
 }
 
 /** Completes a draft invoice's dates, cost centre and references. Its amount stays as raised. */
@@ -407,9 +382,6 @@ export function useCreatePayableBill() {
 export function usePostPayableBill() {
   return usePostDocument('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment);
 }
-export function useReversePayableBill() {
-  return useReverseDocument('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment);
-}
 
 // ---- Credit Notes (AR customer credits / AP vendor credits) ----
 
@@ -427,9 +399,6 @@ export function useCreateReceivableCreditNote() {
 }
 export function usePostReceivableCreditNote() {
   return usePostDocument('RECEIVABLE', CREDIT_NOTE_SEGMENT);
-}
-export function useReverseReceivableCreditNote() {
-  return useReverseDocument('RECEIVABLE', CREDIT_NOTE_SEGMENT);
 }
 export function useAllocateReceivableCreditNote() {
   return useAllocateCreditNote('RECEIVABLE');
@@ -449,9 +418,6 @@ export function useCreatePayableCreditNote() {
 }
 export function usePostPayableCreditNote() {
   return usePostDocument('PAYABLE', CREDIT_NOTE_SEGMENT);
-}
-export function useReversePayableCreditNote() {
-  return useReverseDocument('PAYABLE', CREDIT_NOTE_SEGMENT);
 }
 export function useAllocatePayableCreditNote() {
   return useAllocateCreditNote('PAYABLE');
