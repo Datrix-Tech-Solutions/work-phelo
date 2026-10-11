@@ -227,8 +227,9 @@ export class DashboardService {
   }
 
   /**
-   * Every rep with prospects, clients or pipeline value in the period, with the four figures the
-   * dashboard ranks them on. Scoped like the lists: without view-all, only the caller appears.
+   * Every rep who owns prospects or clients, or has pipeline value in the period, with the
+   * figures the dashboard ranks them on. Prospects, clients and conversion are what each rep
+   * holds now; expected and achieved are for the period. Scoped like the lists: without view-all, only the caller appears.
    */
   async salesPersonnel(
     user: RequestUser,
@@ -243,7 +244,6 @@ export class DashboardService {
     const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
       ? {}
       : { assignedUserId: user.id };
-    const createdAt = { gte: range.from, lt: range.to };
     const expectedCloseDate = { gte: range.from, lt: range.to };
 
     const [
@@ -257,32 +257,22 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.marketingProspect.groupBy({
         by: ['assignedUserId'],
-        where: {
-          tenantId,
-          ...prospectScope,
-          client: { is: null },
-          createdAt,
-        },
+        where: { tenantId, ...prospectScope, client: { is: null } },
         _count: { _all: true },
       }),
       this.prisma.marketingProspect.groupBy({
         by: ['assignedUserId'],
-        where: { tenantId, ...prospectScope, createdAt },
+        where: { tenantId, ...prospectScope },
         _count: { _all: true },
       }),
       this.prisma.marketingProspect.groupBy({
         by: ['assignedUserId'],
-        where: {
-          tenantId,
-          ...prospectScope,
-          createdAt,
-          client: { isNot: null },
-        },
+        where: { tenantId, ...prospectScope, client: { isNot: null } },
         _count: { _all: true },
       }),
       this.prisma.marketingClient.groupBy({
         by: ['assignedUserId'],
-        where: { tenantId, ...clientScope, createdAt },
+        where: { tenantId, ...clientScope },
         _count: { _all: true },
       }),
       this.prisma.marketingClientProduct.findMany({
