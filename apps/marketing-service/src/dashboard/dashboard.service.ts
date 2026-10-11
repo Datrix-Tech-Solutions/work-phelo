@@ -629,8 +629,9 @@ export class DashboardService {
     rows: {
       userId: string;
       productId: string | null;
-      amount: Prisma.Decimal;
-      achieved: Prisma.Decimal | null;
+      /** Money as a 2dp string, as the targets list returns it. */
+      amount: string;
+      achieved: string | null;
     }[],
   ) {
     const byRep = new Map<string, typeof rows>();
