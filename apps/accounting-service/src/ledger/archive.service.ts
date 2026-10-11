@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
 import {
   AccountingPayableStatus,
   AccountingReceivableStatus,
@@ -82,6 +83,7 @@ export class ArchiveService {
             where: {
               tenantId,
               status: JournalStatus.VOIDED,
+              archiveDeletedAt: null,
               sourceModule: null,
               ...range('transactionDate'),
               ...(search
@@ -111,6 +113,7 @@ export class ArchiveService {
             where: {
               tenantId,
               status: CashbookTransactionStatus.VOIDED,
+              archiveDeletedAt: null,
               receivableReceipt: { is: null },
               payablePayment: { is: null },
               ...range('transactionDate'),
@@ -156,6 +159,7 @@ export class ArchiveService {
             where: {
               tenantId,
               status: AccountingReceivableStatus.VOIDED,
+              archiveDeletedAt: null,
               ...range('receiptDate'),
               ...(search
                 ? {
@@ -197,6 +201,7 @@ export class ArchiveService {
             where: {
               tenantId,
               status: AccountingPayableStatus.VOIDED,
+              archiveDeletedAt: null,
               ...range('paymentDate'),
               ...(search
                 ? {
@@ -312,6 +317,120 @@ export class ArchiveService {
     };
   }
 
+  /**
+   * Deletes an archived entry: it leaves the archive for good. Only a voided entry can be deleted,
+   * whatever its period. The row, its journals and the audit trail stay, so nothing is lost from
+   * the books' history; it simply stops being listed.
+   */
+  async deleteArchived(user: RequestUser, kind: ArchiveKind, id: string) {
+    if (!(await this.markDeleted(user, kind, id))) {
+      throw new NotFoundException('That entry is not in the archive');
+    }
+    return { id, kind };
+  }
+
+  /**
+   * Deletes several archived entries at once. Anything no longer in the archive (already deleted,
+   * or restored meanwhile) is skipped rather than failing the rest.
+   */
+  async deleteArchivedMany(
+    user: RequestUser,
+    items: { kind: ArchiveKind; id: string }[],
+  ) {
+    let deleted = 0;
+    for (const item of items) {
+      if (await this.markDeleted(user, item.kind, item.id)) deleted += 1;
+    }
+    return { deleted, skipped: items.length - deleted };
+  }
+
+  /** Hides one voided entry from the archive. False when it is not (or no longer) there. */
+  private async markDeleted(
+    user: RequestUser,
+    kind: ArchiveKind,
+    id: string,
+  ): Promise<boolean> {
+    const tenantId = user.tenantId;
+    const data = {
+      archiveDeletedAt: new Date(),
+      archiveDeletedByUserId: user.id,
+    };
+    const base = { id, tenantId, archiveDeletedAt: null };
+    let count: number;
+    let entityType: string;
+    switch (kind) {
+      case 'JOURNAL':
+        entityType = 'JournalEntry';
+        ({ count } = await this.prisma.journalEntry.updateMany({
+          where: { ...base, status: JournalStatus.VOIDED, sourceModule: null },
+          data,
+        }));
+        break;
+      case 'CASHBOOK':
+        entityType = 'CashbookTransaction';
+        ({ count } = await this.prisma.cashbookTransaction.updateMany({
+          where: {
+            ...base,
+            status: CashbookTransactionStatus.VOIDED,
+            receivableReceipt: { is: null },
+            payablePayment: { is: null },
+          },
+          data,
+        }));
+        break;
+      case 'INVOICE':
+      case 'CREDIT_NOTE':
+        entityType = 'AccountingReceivableDocument';
+        ({ count } = await this.prisma.accountingReceivableDocument.updateMany({
+          where: {
+            ...base,
+            documentType: kind,
+            status: AccountingReceivableStatus.VOIDED,
+          },
+          data,
+        }));
+        break;
+      case 'RECEIPT':
+        entityType = 'AccountingReceivableReceipt';
+        ({ count } = await this.prisma.accountingReceivableReceipt.updateMany({
+          where: { ...base, status: AccountingReceivableStatus.VOIDED },
+          data,
+        }));
+        break;
+      case 'BILL':
+      case 'DEBIT_NOTE':
+        entityType = 'AccountingPayableDocument';
+        ({ count } = await this.prisma.accountingPayableDocument.updateMany({
+          where: {
+            ...base,
+            documentType: kind === 'BILL' ? 'BILL' : 'CREDIT_NOTE',
+            status: AccountingPayableStatus.VOIDED,
+          },
+          data,
+        }));
+        break;
+      case 'PAYMENT':
+        entityType = 'AccountingPayablePayment';
+        ({ count } = await this.prisma.accountingPayablePayment.updateMany({
+          where: { ...base, status: AccountingPayableStatus.VOIDED },
+          data,
+        }));
+        break;
+    }
+    if (count === 0) return false;
+    await this.prisma.accountingAuditLog.create({
+      data: {
+        tenantId,
+        actorUserId: user.id,
+        action: 'ARCHIVE_ENTRY_DELETED',
+        entityType,
+        entityId: id,
+        changedFields: { kind },
+      },
+    });
+    return true;
+  }
+
   private documentWhere(
     tenantId: string,
     documentType: 'INVOICE' | 'CREDIT_NOTE',
@@ -322,6 +441,7 @@ export class ArchiveService {
       tenantId,
       documentType,
       status: AccountingReceivableStatus.VOIDED,
+      archiveDeletedAt: null,
       ...range('documentDate'),
       ...(search
         ? {
@@ -344,6 +464,7 @@ export class ArchiveService {
       tenantId,
       documentType,
       status: AccountingPayableStatus.VOIDED,
+      archiveDeletedAt: null,
       ...range('documentDate'),
       ...(search
         ? {

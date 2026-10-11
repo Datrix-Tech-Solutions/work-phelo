@@ -13,7 +13,6 @@ import {
   AccountingReceivableStatus,
   FiscalPeriodStatus,
   GLAccountCategory,
-  JournalStatus,
   PostingDirection,
   Prisma,
   RecordStatus,
@@ -794,21 +793,6 @@ export class ReceivablesService {
     );
   }
 
-  async reverseInvoice(
-    user: RequestUser,
-    invoiceId: string,
-    dto: ReverseReceivableDto,
-  ) {
-    const reversed = await this.reverseDocument(
-      user,
-      invoiceId,
-      AccountingReceivableDocumentType.INVOICE,
-      dto,
-    );
-    await this.notifySource(user.tenantId, invoiceId, 'REVERSED');
-    return reversed;
-  }
-
   /**
    * Completes a draft invoice - the dates, currency, tax lines, cost centre and references. What the
    * draft is for stays fixed: the amount, quantity, unit price, entity and transaction type were set
@@ -975,19 +959,6 @@ export class ReceivablesService {
       transactionId: documentId,
       event,
     });
-  }
-
-  async reverseCreditNote(
-    user: RequestUser,
-    creditNoteId: string,
-    dto: ReverseReceivableDto,
-  ) {
-    return this.reverseDocument(
-      user,
-      creditNoteId,
-      AccountingReceivableDocumentType.CREDIT_NOTE,
-      dto,
-    );
   }
 
   async createReceipt(user: RequestUser, dto: CreateReceivableReceiptDto) {
@@ -1512,128 +1483,6 @@ export class ReceivablesService {
           entityType: 'AccountingReceivableDocument',
           entityId: document.id,
           changedFields: { journalEntryId: journal.id },
-        },
-      });
-      return tx.accountingReceivableDocument.findUniqueOrThrow({
-        where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
-        include: receivableDocumentInclude,
-      });
-    });
-  }
-
-  private async reverseDocument(
-    user: RequestUser,
-    documentId: string,
-    documentType: AccountingReceivableDocumentType,
-    dto: ReverseReceivableDto,
-  ) {
-    return this.prisma.$transaction(async (tx) => {
-      const document = await tx.accountingReceivableDocument.findFirst({
-        where: { id: documentId, tenantId: user.tenantId, documentType },
-        include: receivableDocumentInclude,
-      });
-      if (!document)
-        throw new NotFoundException('Receivable document not found');
-      if (document.status !== AccountingReceivableStatus.POSTED) {
-        throw new ConflictException(
-          'Only posted receivable documents can be reversed',
-        );
-      }
-      const activeAllocations = await tx.accountingReceivableAllocation.count({
-        where: {
-          tenantId: user.tenantId,
-          reversedAt: null,
-          OR:
-            document.documentType === AccountingReceivableDocumentType.INVOICE
-              ? [{ invoiceId: document.id }]
-              : [{ creditNoteId: document.id }],
-        },
-      });
-      if (activeAllocations > 0) {
-        throw new ConflictException(
-          'Reverse active allocations before reversing this receivable document',
-        );
-      }
-      if (!document.postedJournalEntryId) {
-        throw new ConflictException(
-          'Posted receivable document is missing its journal',
-        );
-      }
-      const reversalDate = new Date(dto.reversalDate);
-      const period = await this.resolveOpenPeriod(
-        tx,
-        user.tenantId,
-        reversalDate,
-      );
-      const originalJournal = await tx.journalEntry.findFirst({
-        where: {
-          id: document.postedJournalEntryId,
-          tenantId: user.tenantId,
-          status: JournalStatus.POSTED,
-        },
-        include: { lines: { orderBy: { lineNumber: 'asc' } } },
-      });
-      if (!originalJournal) {
-        throw new ConflictException(
-          'Original posted receivable journal is not available for reversal',
-        );
-      }
-      const reversalJournal = await this.journals.createPostedInTransaction(
-        tx,
-        user,
-        {
-          transactionDate: reversalDate.toISOString(),
-          fiscalPeriodId: period.id,
-          transactionCurrency: originalJournal.transactionCurrency,
-          exchangeRate: Number(originalJournal.exchangeRate.toString()),
-          reference: `REVERSAL-${document.documentNumber}`,
-          description: `Receivable reversal of ${document.documentNumber}: ${dto.reason}`,
-          idempotencyKey: `receivable:${document.id}:reversal:v1`,
-          sourceModule: 'ACCOUNTING',
-          sourceRecordType: 'RECEIVABLE_DOCUMENT_REVERSAL',
-          sourceRecordId: document.id,
-          lines: originalJournal.lines.map((line) => ({
-            glAccountId: line.glAccountId,
-            subledgerAccountId: line.subledgerAccountId ?? undefined,
-            costCentreId: line.costCentreId ?? undefined,
-            description: line.description ?? undefined,
-            debit: Number(line.transactionCredit.toString()),
-            credit: Number(line.transactionDebit.toString()),
-          })),
-        },
-      );
-      await tx.journalEntry.update({
-        where: {
-          id_tenantId: { id: originalJournal.id, tenantId: user.tenantId },
-        },
-        data: {
-          status: JournalStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-      });
-      await tx.accountingReceivableDocument.update({
-        where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
-        data: {
-          status: AccountingReceivableStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          reversalJournalEntryId: reversalJournal.id,
-          updatedByUserId: user.id,
-        },
-      });
-      await tx.accountingAuditLog.create({
-        data: {
-          tenantId: user.tenantId,
-          actorUserId: user.id,
-          action:
-            document.documentType === AccountingReceivableDocumentType.INVOICE
-              ? 'RECEIVABLE_INVOICE_REVERSED'
-              : 'RECEIVABLE_CREDIT_NOTE_REVERSED',
-          entityType: 'AccountingReceivableDocument',
-          entityId: document.id,
-          changedFields: { reversalJournalEntryId: reversalJournal.id },
         },
       });
       return tx.accountingReceivableDocument.findUniqueOrThrow({
@@ -3026,7 +2875,7 @@ export class ReceivablesService {
 
     const rule = await this.prisma.transactionTypeRule.findFirst({
       where: { tenantId, transactionTypeId },
-      include: { lines: { include: { taxType: true } } },
+      include: { lines: { include: { taxType: true, scopes: true } } },
     });
     if (!rule) {
       throw new BadRequestException(

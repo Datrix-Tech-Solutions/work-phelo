@@ -1,5 +1,6 @@
 'use client';
 
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -100,15 +101,7 @@ export function UploadCompanyDocumentModal({ isOpen, onClose, onUpload, isUpload
         )}
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">
-            Expires on (optional)
-          </label>
-          <input
-            type="date"
-            value={expiresAt}
-            onChange={(e) => setExpiresAt(e.target.value)}
-            className={inputClass()}
-          />
+          <DatePicker label="Expires on (optional)" value={expiresAt} onChange={setExpiresAt} />
         </div>
       </div>
     </Modal>

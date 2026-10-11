@@ -3,6 +3,7 @@
 import { ChangeEvent, useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCostCentres, useUpdateReceivableInvoiceDraft } from '@/hooks';
@@ -128,18 +129,8 @@ export function EditInvoiceDraftModal({ document, onClose, onSaved }: Props) {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="Document Date"
-            type="date"
-            value={documentDate}
-            onChange={(e) => setDocumentDate(e.target.value)}
-          />
-          <Input
-            label="Due Date"
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-          />
+          <DatePicker label="Document Date" value={documentDate} onChange={setDocumentDate} />
+          <DatePicker label="Due Date" value={dueDate} onChange={setDueDate} />
         </div>
         <SearchSelect
           label="Cost Centre"

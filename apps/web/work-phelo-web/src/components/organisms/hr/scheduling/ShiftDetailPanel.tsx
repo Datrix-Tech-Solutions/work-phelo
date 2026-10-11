@@ -1,5 +1,6 @@
 'use client';
 
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -285,13 +286,11 @@ function EditForm({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-900">End Date</label>
-            <input
-              type="date"
+            <DatePicker
+              label="End Date"
               value={effectiveTo}
-              min={schedule.effectiveFrom.slice(0, 10)}
-              onChange={(e) => setEffectiveTo(e.target.value)}
-              className={inputClass}
+              minDate={schedule.effectiveFrom.slice(0, 10)}
+              onChange={setEffectiveTo}
             />
           </div>
         </div>

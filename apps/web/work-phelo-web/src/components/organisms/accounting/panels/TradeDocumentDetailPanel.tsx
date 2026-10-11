@@ -1,11 +1,9 @@
 'use client';
 
-import { Fragment, useState, ChangeEvent } from 'react';
+import { Fragment, useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { Input } from '@/components/atoms/Input';
 import { EditInvoiceDraftModal } from '@/components/organisms/accounting/panels/EditInvoiceDraftModal';
 import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
 import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
@@ -15,6 +13,8 @@ import {
 } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import { DeleteArchivedEntryModal } from '@/components/organisms/accounting/panels/DeleteArchivedEntryModal';
+import { AddDocumentDeductionModal } from '@/components/organisms/accounting/panels/AddDocumentDeductionModal';
 import {
   SourceRecordPanel,
   SourceRecordTarget,
@@ -43,10 +43,6 @@ import {
   useReceivableInvoiceBalance,
   useRejectPaymentRequest,
   useRejectReceivableInvoice,
-  useReversePayableBill,
-  useReversePayableCreditNote,
-  useReverseReceivableCreditNote,
-  useReverseReceivableInvoice,
   useTaxTypes,
   useDeleteTradeDraft,
   useTransactionTypes,
@@ -139,7 +135,6 @@ export function TradeDocumentDetailPanel({
   onPostedForPayment,
 }: TradeDocumentDetailPanelProps) {
   const toast = useToast();
-  const [reverseOpen, setReverseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [choiceOpen, setChoiceOpen] = useState(false);
@@ -153,9 +148,9 @@ export function TradeDocumentDetailPanel({
   const setRedoTarget = (doc: AccountingTradeDocument | null) =>
     setFormTarget(doc ? { document: doc, mode: 'redo' } : null);
   const [voidOpen, setVoidOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deductionOpen, setDeductionOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
-  const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
-  const [reason, setReason] = useState('');
   const [receiveRequest, setReceiveRequest] = useState<PaymentRequest | null>(null);
   const [rejectRequest, setRejectRequest] = useState<PaymentRequest | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -195,19 +190,12 @@ export function TradeDocumentDetailPanel({
   const postPayableBill = usePostPayableBill();
   const postReceivableCreditNote = usePostReceivableCreditNote();
   const postPayableCreditNote = usePostPayableCreditNote();
-  const reverseReceivableInvoice = useReverseReceivableInvoice();
   const rejectInvoice = useRejectReceivableInvoice();
-  const reversePayableBill = useReversePayableBill();
-  const reverseReceivableCreditNote = useReverseReceivableCreditNote();
-  const reversePayableCreditNote = useReversePayableCreditNote();
 
   const postReceivable = isCreditNote ? postReceivableCreditNote : postReceivableInvoice;
   const postPayable = isCreditNote ? postPayableCreditNote : postPayableBill;
-  const reverseReceivable = isCreditNote ? reverseReceivableCreditNote : reverseReceivableInvoice;
-  const reversePayable = isCreditNote ? reversePayableCreditNote : reversePayableBill;
 
   const isPosting = isReceivable ? postReceivable.isPending : postPayable.isPending;
-  const isReversing = isReceivable ? reverseReceivable.isPending : reversePayable.isPending;
 
   // A draft customer invoice can be completed or turned down, whoever raised it. Its amount, quantity
   // and unit price are fixed when it is raised.
@@ -242,7 +230,19 @@ export function TradeDocumentDetailPanel({
   const canChangePosted = document?.status === 'POSTED' && !isExternal && periodOpen;
   const canVoidPosted = canChangePosted && untouched;
   const canEditPosted = canVoidPosted && !isCreditNote && !!redoType(document ?? null);
+  // A deduction is a credit note applied to this document, so it works on any posted invoice or bill
+  // with something still owed - including ones raised by another module.
+  const outstandingAmount = Number(balance?.outstandingAmount ?? 0);
+  const canAddDeduction = document?.status === 'POSTED' && !isCreditNote && outstandingAmount > 0;
   const canRestore = document?.status === 'VOIDED' && !isExternal && periodOpen;
+  const canDeleteArchived = document?.status === 'VOIDED';
+  const archiveKind = isReceivable
+    ? isCreditNote
+      ? 'CREDIT_NOTE'
+      : 'INVOICE'
+    : isCreditNote
+      ? 'DEBIT_NOTE'
+      : 'BILL';
   const restoresInForm = canRestore && !isCreditNote && !!redoType(document ?? null);
   const sourceLabel = document?.sourceModule
     ? (SOURCE_MODULE_LABELS[document.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
@@ -280,8 +280,6 @@ export function TradeDocumentDetailPanel({
   });
 
   const handleClose = () => {
-    setReverseOpen(false);
-    setReason('');
     onClose();
   };
 
@@ -373,35 +371,6 @@ export function TradeDocumentDetailPanel({
     }
   };
 
-  const handleReverse = async () => {
-    if (!document) return;
-    if (!reason.trim()) {
-      toast.error('A reversal reason is required.');
-      return;
-    }
-    try {
-      if (isReceivable) {
-        await reverseReceivable.mutateAsync({
-          id: document.id,
-          reversalDate,
-          reason: reason.trim(),
-        });
-      } else {
-        await reversePayable.mutateAsync({
-          id: document.id,
-          reversalDate,
-          reason: reason.trim(),
-        });
-      }
-      toast.success('Document reversed.');
-      setReverseOpen(false);
-      setReason('');
-      handleClose();
-    } catch (err) {
-      toast.error(extractError(err, 'Failed to reverse document'));
-    }
-  };
-
   return (
     <>
       <SidePanel
@@ -415,6 +384,21 @@ export function TradeDocumentDetailPanel({
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {isOwnDraft && (
+                <Button variant="danger" onClick={() => setChoiceOpen(true)}>
+                  Reject
+                </Button>
+              )}
+              {canReviewDraft && (
+                <>
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    Edit
+                  </Button>
+                  <Button variant="danger" onClick={() => setRejectOpen(true)}>
+                    Reject
+                  </Button>
+                </>
+              )}
               {onPostedForPayment && !isExternal && (
                 <Button
                   variant="outline"
@@ -434,15 +418,52 @@ export function TradeDocumentDetailPanel({
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
-              <Button variant="danger" onClick={() => setReverseOpen(true)}>
-                Reverse
-              </Button>
+              {canEditPosted && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFormTarget({ document, mode: 'edit' });
+                    handleClose();
+                  }}
+                >
+                  Edit
+                </Button>
+              )}
+              {canAddDeduction && (
+                <Button variant="outline" onClick={() => setDeductionOpen(true)}>
+                  Add Deduction
+                </Button>
+              )}
+              {canVoidPosted && (
+                <Button variant="outline" onClick={() => setVoidOpen(true)}>
+                  Void
+                </Button>
+              )}
             </div>
           ) : (
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
+              {canRestore && (
+                <Button
+                  onClick={() => {
+                    if (!restoresInForm) {
+                      setRestoreOpen(true);
+                      return;
+                    }
+                    setFormTarget({ document, mode: 'restore' });
+                    handleClose();
+                  }}
+                >
+                  Restore
+                </Button>
+              )}
+              {canDeleteArchived && (
+                <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                  Delete
+                </Button>
+              )}
             </div>
           )
         }
@@ -463,57 +484,6 @@ export function TradeDocumentDetailPanel({
                 )}
                 {balance && creditStatus && <Badge label={creditStatus} variant="info" />}
               </div>
-              {isOwnDraft && (
-                <Button size="sm" variant="danger" onClick={() => setChoiceOpen(true)}>
-                  Reject
-                </Button>
-              )}
-              {(canEditPosted || canVoidPosted) && (
-                <div className="flex items-center gap-2">
-                  {canEditPosted && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setFormTarget({ document, mode: 'edit' });
-                        handleClose();
-                      }}
-                    >
-                      Edit
-                    </Button>
-                  )}
-                  {canVoidPosted && (
-                    <Button size="sm" variant="danger" onClick={() => setVoidOpen(true)}>
-                      Void
-                    </Button>
-                  )}
-                </div>
-              )}
-              {canRestore && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (!restoresInForm) {
-                      setRestoreOpen(true);
-                      return;
-                    }
-                    setFormTarget({ document, mode: 'restore' });
-                    handleClose();
-                  }}
-                >
-                  Restore
-                </Button>
-              )}
-              {canReviewDraft && (
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-                    Edit
-                  </Button>
-                  <Button size="sm" variant="danger" onClick={() => setRejectOpen(true)}>
-                    Reject
-                  </Button>
-                </div>
-              )}
             </div>
 
             {sourceLabel && document.status === 'DRAFT' && (
@@ -851,6 +821,26 @@ export function TradeDocumentDetailPanel({
         onClose={() => setChoiceOpen(false)}
       />
 
+      {document && canAddDeduction && (
+        <AddDocumentDeductionModal
+          isOpen={deductionOpen}
+          document={document}
+          outstanding={outstandingAmount}
+          onClose={() => setDeductionOpen(false)}
+          onDone={() => setDeductionOpen(false)}
+        />
+      )}
+
+      <DeleteArchivedEntryModal
+        target={
+          deleteOpen && document
+            ? { kind: archiveKind, id: document.id, subject: document.documentNumber }
+            : null
+        }
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={handleClose}
+      />
+
       <VoidEntryModal
         isOpen={voidOpen}
         subject={document?.documentNumber ?? 'This document'}
@@ -921,45 +911,6 @@ export function TradeDocumentDetailPanel({
         onConfirm={handleReject}
         onClose={() => setRejectOpen(false)}
       />
-
-      <Modal
-        isOpen={reverseOpen}
-        onClose={() => setReverseOpen(false)}
-        title="Reverse Document"
-        description="Posted documents are immutable. Reversal creates a reversing journal. Active allocations must be reversed first."
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setReverseOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              isLoading={isReversing}
-              loadingText="Reversing…"
-              onClick={handleReverse}
-            >
-              Reverse Document
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <Input
-            label="Reversal Date"
-            type="date"
-            value={reversalDate}
-            onChange={(e) => setReversalDate(e.target.value)}
-          />
-          <Input
-            label="Reason"
-            type="textarea"
-            rows={3}
-            value={reason}
-            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setReason(e.target.value)}
-            placeholder="e.g. Correction approved by finance"
-          />
-        </div>
-      </Modal>
     </>
   );
 }

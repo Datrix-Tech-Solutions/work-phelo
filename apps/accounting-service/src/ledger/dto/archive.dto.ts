@@ -1,14 +1,19 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsIn,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 export const ARCHIVE_KINDS = [
@@ -61,4 +66,24 @@ export class QueryArchiveDto {
   @IsInt()
   @Min(0)
   offset?: number;
+}
+
+export class ArchiveEntryRefDto {
+  @ApiProperty({ enum: ARCHIVE_KINDS })
+  @IsIn(ARCHIVE_KINDS)
+  kind!: (typeof ARCHIVE_KINDS)[number];
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  id!: string;
+}
+
+export class DeleteArchivedEntriesDto {
+  @ApiProperty({ type: [ArchiveEntryRefDto], minItems: 1, maxItems: 200 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => ArchiveEntryRefDto)
+  items!: ArchiveEntryRefDto[];
 }

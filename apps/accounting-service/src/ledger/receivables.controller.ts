@@ -187,21 +187,6 @@ export class ReceivablesController {
     return this.service.postInvoice(request.user, invoiceId);
   }
 
-  @Post('invoices/:invoiceId/reverse')
-  @ApiOperation({
-    summary: 'Reverse a posted customer invoice',
-    description:
-      'Posted invoices are immutable. Reversal creates a reversing journal and requires dependent allocations to be reversed first.',
-  })
-  @RequirePermissions(AccountingPermission.RECEIVABLES_REVERSE)
-  reverseInvoice(
-    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
-    @Body() dto: ReverseReceivableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseInvoice(request.user, invoiceId, dto);
-  }
-
   @Get('invoices/:invoiceId/balance')
   @ApiOperation({
     summary: 'Get backend-calculated invoice balance',
@@ -272,17 +257,6 @@ export class ReceivablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.postCreditNote(request.user, creditNoteId);
-  }
-
-  @Post('credit-notes/:creditNoteId/reverse')
-  @ApiOperation({ summary: 'Reverse a posted customer credit note' })
-  @RequirePermissions(AccountingPermission.RECEIVABLES_REVERSE)
-  reverseCreditNote(
-    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
-    @Body() dto: ReverseReceivableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseCreditNote(request.user, creditNoteId, dto);
   }
 
   @Post('credit-notes/:creditNoteId/allocations')

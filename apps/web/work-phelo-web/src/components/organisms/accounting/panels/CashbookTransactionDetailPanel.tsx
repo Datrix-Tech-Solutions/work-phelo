@@ -12,6 +12,7 @@ import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTr
 import { ReverseEntryModal } from '@/components/organisms/accounting/panels/ReverseEntryModal';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import { DeleteArchivedEntryModal } from '@/components/organisms/accounting/panels/DeleteArchivedEntryModal';
 import {
   SourceRecordPanel,
   SourceRecordTarget,
@@ -118,6 +119,7 @@ export function CashbookTransactionDetailPanel({
   const [reverseOpen, setReverseOpen] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   // A receipt or payment on an invoice or bill is voided from its own panel, opened from here.
   const [settlementTarget, setSettlementTarget] = useState<SourceRecordTarget | null>(null);
   const settlementRef = transaction?.receivableReceipt
@@ -141,6 +143,8 @@ export function CashbookTransactionDetailPanel({
     !isReversalEntry &&
     transaction.transactionType !== 'TRANSFER';
   const canRestore = isDirect && transaction?.status === 'VOIDED' && periodOpen;
+  // A receipt's or payment's own cash entry goes with that record, which is archived instead.
+  const canDeleteArchived = transaction?.status === 'VOIDED' && !settlementRef;
   const restoresAsIs = !!transaction?.voidedReversalOfTransactionId;
 
   // A draft entered on the Transactions page (not raised by another module) can be redone or
@@ -329,6 +333,11 @@ export function CashbookTransactionDetailPanel({
                   Restore
                 </Button>
               )}
+              {canDeleteArchived && (
+                <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                  Delete
+                </Button>
+              )}
               {settlementRef && (
                 <Button variant="outline" onClick={() => setSettlementTarget(settlementRef)}>
                   Open {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'}
@@ -508,6 +517,19 @@ export function CashbookTransactionDetailPanel({
           isPending={reverseEntry.isPending}
           onConfirm={handleReverse}
           onClose={() => setReverseOpen(false)}
+        />
+        <DeleteArchivedEntryModal
+          target={
+            deleteOpen && transaction
+              ? {
+                  kind: 'CASHBOOK',
+                  id: transaction.id,
+                  subject: transaction.transactionNumber ?? 'This entry',
+                }
+              : null
+          }
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={onClose}
         />
         <RestoreEntryModal
           isOpen={restoreOpen}

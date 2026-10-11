@@ -3,6 +3,7 @@
 import { ChangeEvent, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Input } from '@/components/atoms/Input';
 
 interface Props {
@@ -56,12 +57,7 @@ export function ReverseEntryModal({ isOpen, subject, isPending, onConfirm, onClo
       }
     >
       <div className="flex flex-col gap-4">
-        <Input
-          label="Reversal Date"
-          type="date"
-          value={reversalDate}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setReversalDate(e.target.value)}
-        />
+        <DatePicker label="Reversal Date" value={reversalDate} onChange={setReversalDate} />
         <Input
           label="Reason"
           type="textarea"

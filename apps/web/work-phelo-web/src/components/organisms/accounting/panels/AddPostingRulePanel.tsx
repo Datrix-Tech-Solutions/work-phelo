@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { CreatableSearchSelect, CreatableOption } from '@/components/atoms/CreatableSearchSelect';
@@ -315,19 +316,32 @@ export function AddPostingRulePanel({ isOpen, onClose }: AddPostingRulePanelProp
         )}
 
         <div className={cn('grid gap-3', mode === 'advanced' ? 'grid-cols-2' : 'grid-cols-1')}>
-          <FormField
-            label="Effective From"
-            type="date"
-            registration={register('effectiveFrom', { required: 'Effective from is required' })}
-            error={errors.effectiveFrom}
+          <Controller
+            name="effectiveFrom"
+            control={control}
+            rules={{ required: 'Effective from is required' }}
+            render={({ field }) => (
+              <DatePicker
+                label="Effective From"
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.effectiveFrom?.message}
+              />
+            )}
           />
           {mode === 'advanced' && (
-            <FormField
-              label="Effective To"
-              type="date"
-              registration={register('effectiveTo')}
-              error={errors.effectiveTo}
-              placeholder="Optional — open-ended if blank"
+            <Controller
+              name="effectiveTo"
+              control={control}
+              render={({ field }) => (
+                <DatePicker
+                  label="Effective To"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.effectiveTo?.message}
+                  placeholder="Optional — open-ended if blank"
+                />
+              )}
             />
           )}
         </div>

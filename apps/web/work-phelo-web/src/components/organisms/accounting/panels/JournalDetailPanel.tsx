@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Badge } from '@/components/atoms/Badge';
 import { Input } from '@/components/atoms/Input';
 import {
@@ -25,6 +26,7 @@ import {
 import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
 import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
 import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import { DeleteArchivedEntryModal } from '@/components/organisms/accounting/panels/DeleteArchivedEntryModal';
 import {
   SourceRecordPanel,
   SourceRecordTarget,
@@ -95,6 +97,7 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const restoreJournal = useRestoreJournal();
   const [voidOpen, setVoidOpen] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   // A journal posted by an invoice, receipt or the like is changed from that record, which is
   // opened in its own panel from here. The type is kept after closing so a form it hosts survives.
   const [sourceTarget, setSourceTarget] = useState<SourceRecordTarget | null>(null);
@@ -109,6 +112,7 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const canEditPosted = canChangePosted && !hasLiveReversal && !journal?.reversalOfJournalId;
   const canVoidPosted = canChangePosted && !hasLiveReversal;
   const canRestore = journal?.status === 'VOIDED' && isChangeableHere && periodOpen;
+  const canDeleteArchived = journal?.status === 'VOIDED' && isChangeableHere;
   const restoresAsIs = Boolean(journal?.voidedReversalOfJournalId);
 
   // Debit and credit always match on a saved journal, so one total covers both sides.
@@ -284,6 +288,11 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                   Restore
                 </Button>
               )}
+              {canDeleteArchived && (
+                <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                  Delete
+                </Button>
+              )}
             </div>
           )
         }
@@ -441,12 +450,7 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
         }
       >
         <div className="flex flex-col gap-4">
-          <Input
-            label="Reversal Date"
-            type="date"
-            value={reversalDate}
-            onChange={(e) => setReversalDate(e.target.value)}
-          />
+          <DatePicker label="Reversal Date" value={reversalDate} onChange={setReversalDate} />
           <Input
             label="Reason"
             type="textarea"
@@ -467,6 +471,19 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
         isPending={voidJournal.isPending}
         onConfirm={handleVoid}
         onClose={() => setVoidOpen(false)}
+      />
+      <DeleteArchivedEntryModal
+        target={
+          deleteOpen && journal
+            ? {
+                kind: 'JOURNAL',
+                id: journal.id,
+                subject: formatJournalNumber(journal.journalNumber),
+              }
+            : null
+        }
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={handleClose}
       />
       <RestoreEntryModal
         isOpen={restoreOpen}

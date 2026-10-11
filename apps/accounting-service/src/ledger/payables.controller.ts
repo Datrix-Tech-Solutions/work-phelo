@@ -152,21 +152,6 @@ export class PayablesController {
     return this.service.postBill(request.user, billId);
   }
 
-  @Post('bills/:billId/reverse')
-  @ApiOperation({
-    summary: 'Reverse a posted vendor bill',
-    description:
-      'Posted bills are immutable. Reversal creates a reversing journal and requires dependent allocations to be reversed first.',
-  })
-  @RequirePermissions(AccountingPermission.PAYABLES_REVERSE)
-  reverseBill(
-    @Param('billId', ParseUUIDPipe) billId: string,
-    @Body() dto: ReversePayableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseBill(request.user, billId, dto);
-  }
-
   @Get('bills/:billId/balance')
   @ApiOperation({
     summary: 'Get backend-calculated bill balance',
@@ -237,17 +222,6 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.postCreditNote(request.user, creditNoteId);
-  }
-
-  @Post('credit-notes/:creditNoteId/reverse')
-  @ApiOperation({ summary: 'Reverse a posted vendor credit note' })
-  @RequirePermissions(AccountingPermission.PAYABLES_REVERSE)
-  reverseCreditNote(
-    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
-    @Body() dto: ReversePayableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseCreditNote(request.user, creditNoteId, dto);
   }
 
   @Post('credit-notes/:creditNoteId/allocations')

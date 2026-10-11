@@ -2,12 +2,16 @@ import { BadRequestException } from '@nestjs/common';
 import { GLAccountCategory, RecordStatus } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** What a rule line posts to: one fixed account, or a scope the user picks an account from
- *  on the transaction form — a whole category, or one classification within it. */
+/** What a rule line posts to: one fixed account, or a list of scopes the user picks one account
+ *  from on the transaction form — each a whole category, one classification within it, or one
+ *  specific account. */
 export interface RuleLineScope {
   accountId: string | null;
-  scopeCategory: GLAccountCategory | null;
-  scopeClassificationId: string | null;
+  scopes: {
+    category: GLAccountCategory;
+    classificationId: string | null;
+    accountId: string | null;
+  }[];
 }
 
 export const isScopedLine = (line: RuleLineScope) => line.accountId === null;
@@ -46,9 +50,14 @@ export async function resolveMainLineAccount(
       childAccounts: { none: {} },
       // A cash/bank account is settled through the Cashbook, never a purchase or sale line.
       cashAccounts: { none: {} },
-      ...(line.scopeClassificationId
-        ? { classificationId: line.scopeClassificationId }
-        : { category: line.scopeCategory ?? undefined }),
+      // Inside any one of the rule's scopes.
+      OR: line.scopes.map((scope) =>
+        scope.accountId
+          ? { id: scope.accountId }
+          : scope.classificationId
+            ? { classificationId: scope.classificationId }
+            : { category: scope.category },
+      ),
     },
     select: { id: true },
   });

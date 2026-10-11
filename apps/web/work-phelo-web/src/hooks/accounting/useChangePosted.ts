@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   AccountingTradeSide,
+  ArchiveKind,
   ArchiveListResult,
   QueryArchiveParams,
 } from '@/types/accounting';
@@ -126,6 +127,33 @@ export function useRestoreTradeEntry(side: AccountingTradeSide) {
 }
 
 /* ---- The archive ---- */
+
+/** Deletes several archived entries at once; any no longer in the archive are skipped. */
+export function useDeleteArchivedEntries() {
+  const refresh = useRefreshAccounting();
+  return useMutation({
+    mutationFn: async (items: { kind: ArchiveKind; id: string }[]) => {
+      const res = await api.post<{ deleted: number; skipped: number }>(
+        '/accounting/archive/delete',
+        { items },
+      );
+      return res.data;
+    },
+    onSuccess: refresh,
+  });
+}
+
+/** Deletes an archived entry: it leaves the archive for good (its record and audit trail stay). */
+export function useDeleteArchivedEntry() {
+  const refresh = useRefreshAccounting();
+  return useMutation({
+    mutationFn: async ({ kind, id }: { kind: ArchiveKind; id: string }) => {
+      const res = await api.delete(`/accounting/archive/${kind}/${id}`);
+      return res.data as unknown;
+    },
+    onSuccess: refresh,
+  });
+}
 
 export function useArchive(params: QueryArchiveParams = {}) {
   return useQuery({
