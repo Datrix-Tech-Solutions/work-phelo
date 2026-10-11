@@ -15,6 +15,7 @@ import { PayrollGroupsModule } from './payroll-groups/payroll-groups.module';
 import { PayrollRunsModule } from './payroll-runs/payroll-runs.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportsModule } from './reports/reports.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -55,6 +56,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     PayrollRunsModule,
     AppraisalsModule,
     DashboardModule,
+    ReportsModule,
     AssetsModule,
     DirectoryModule,
     CompanyPoliciesModule,

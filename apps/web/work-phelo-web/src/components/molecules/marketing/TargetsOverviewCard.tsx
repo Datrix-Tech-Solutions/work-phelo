@@ -59,20 +59,17 @@ export function TargetsOverviewCard({ period, year, className }: TargetsOverview
       subtitle={SUBTITLES[period]}
       className={className}
       headerAction={
-        // Someone who only sees their own targets has no one to filter between.
-        reps.length > 1 ? (
-          <div className="w-44">
-            <SearchSelect
-              placeholder="Sales rep"
-              options={reps.map((rep) => ({ value: rep.userId, label: rep.name }))}
-              value={selectedRep}
-              onChange={setRepId}
-              size="xs"
-              showAllOption
-              allLabel="All sales reps"
-            />
-          </div>
-        ) : undefined
+        <div className="w-44">
+          <SearchSelect
+            placeholder="Sales rep"
+            options={reps.map((rep) => ({ value: rep.userId, label: rep.name }))}
+            value={selectedRep}
+            onChange={setRepId}
+            size="xs"
+            showAllOption
+            allLabel="All sales reps"
+          />
+        </div>
       }
       isLoading={isLoading}
       isEmpty={count === 0}

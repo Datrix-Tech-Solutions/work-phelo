@@ -112,6 +112,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         ],
         'hr-settings': [PermissionAction.VIEW, PermissionAction.EDIT],
         'hr.dashboard': [PermissionAction.VIEW],
+        'hr.reports': [PermissionAction.VIEW],
         leave: [PermissionAction.VIEW, PermissionAction.APPROVE],
         'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
         'leave-settings': [PermissionAction.EDIT],

@@ -29,6 +29,7 @@ export enum Permission {
   READ_HR_SETTINGS = 'read:hr_settings',
   MANAGE_HR_SETTINGS = 'manage:hr_settings',
   VIEW_HR_DASHBOARD = 'view:hr_dashboard',
+  VIEW_HR_REPORTS = 'view:hr_reports',
 
   // ── Departments ───────────────────────────────────────────────────────────
   CREATE_DEPARTMENT = 'create:department',
