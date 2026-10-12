@@ -492,7 +492,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'status',
         label: 'Status',
-        width: '70px',
+        width: '80px',
         render: (row) => (
           <div className="flex flex-col gap-0.5">
             <Badge label={STATUS_LABEL[row.status]} variant={STATUS_VARIANT[row.status]} />
