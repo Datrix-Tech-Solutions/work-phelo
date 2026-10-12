@@ -73,19 +73,6 @@ export function CashAccountsTable() {
     [groupsData],
   );
 
-  const fixedGroup = useMemo(
-    () =>
-      cashAndBankGroup
-        ? {
-            accountType: cashAndBankGroup.classification.category,
-            classificationId: cashAndBankGroup.classificationId,
-            groupId: cashAndBankGroup.id,
-            label: `${cashAndBankGroup.classification.name} > ${cashAndBankGroup.name}`,
-          }
-        : undefined,
-    [cashAndBankGroup],
-  );
-
   const rows = useMemo<Row[]>(() => {
     const linkedGlAccountIds = new Set(cashAccounts.map((ca) => ca.glAccountId));
     const incomplete = glAccounts.filter(
@@ -334,11 +321,7 @@ export function CashAccountsTable() {
         }
       />
 
-      <AddCashAndBankAccountPanel
-        isOpen={addPanelOpen}
-        onClose={() => setAddPanelOpen(false)}
-        fixedGroup={fixedGroup}
-      />
+      <AddCashAndBankAccountPanel isOpen={addPanelOpen} onClose={() => setAddPanelOpen(false)} />
 
       <NewTransferPanel isOpen={transferPanelOpen} onClose={() => setTransferPanelOpen(false)} />
 

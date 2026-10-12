@@ -139,6 +139,7 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
     try {
       await postJournal.mutateAsync(journal.id);
       toast.success('Journal posted.');
+      handleClose();
     } catch (err) {
       toast.error(extractError(err, 'Failed to post journal'));
     }

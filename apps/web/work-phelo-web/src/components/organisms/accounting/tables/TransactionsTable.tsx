@@ -36,6 +36,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
 import { CashbookTransactionDetailPanel } from '@/components/organisms/accounting/panels/CashbookTransactionDetailPanel';
+import { useTabUsage } from '@/hooks/useTabUsage';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import { BulkPaymentPanel } from '@/components/organisms/accounting/panels/BulkPaymentPanel';
@@ -279,9 +280,24 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const { data: transactionTypes = [], isLoading: isLoadingTransactionTypes } =
     useTransactionTypes();
   const selectableTypes = useMemo(
-    () => transactionTypes.filter((t) => t.category === 'RECEIVABLE' || t.category === 'PAYABLE'),
+    () =>
+      transactionTypes
+        .filter((t) => t.category === 'RECEIVABLE' || t.category === 'PAYABLE')
+        .map((t) => ({ ...t, key: t.id })),
     [transactionTypes],
   );
+  // The types used most come first, as on the HR profile tabs: the order is counted per browser
+  // and settles at the next visit. Types that can't be used yet (no rule or source) go last.
+  const { tabs: typesByUse, recordUse: recordTypeUse } = useTabUsage(
+    'accounting-transaction-types-usage',
+    selectableTypes,
+    { pinFirst: false },
+  );
+  const orderedTypes = useMemo(() => {
+    const usable = (t: TransactionTypeDefinition) =>
+      t.rulesCount > 0 || Boolean(t.sourceTypeId) || t.postsToCashbook;
+    return [...typesByUse.filter(usable), ...typesByUse.filter((t) => !usable(t))];
+  }, [typesByUse]);
 
   // The search waits for a pause in typing before it goes to the server.
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -593,7 +609,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-2">
-            {selectableTypes.map((type) => {
+            {orderedTypes.map((type) => {
               // A rule and a source are each independently sufficient to use a type. A cashbook
               // type (direct receipt/payment) needs neither: both accounts are picked on the
               // form, and a rule would only pre-fill one of them.
@@ -607,6 +623,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
                   disabled={!canSelect}
                   onClick={() => {
                     if (!canSelect) return;
+                    recordTypeUse(type.id);
                     setNewTransactionOpen(false);
                     setSelectedType(type);
                   }}
