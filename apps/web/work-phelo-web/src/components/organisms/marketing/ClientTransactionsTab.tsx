@@ -58,7 +58,7 @@ export function ClientTransactionsTab({ clientId, onNew }: Props) {
     },
     {
       key: 'productName',
-      label: 'Product',
+      label: 'Product/Service',
       width: 'minmax(120px, 1fr)',
       render: (row) => <span>{row.productName ?? '—'}</span>,
     },

@@ -94,7 +94,7 @@ export function RevenueByProductChart({ period, year, className }: RevenueByProd
   return (
     <div className={cn(cardClass('flex flex-col gap-2 p-3 h-60', 'glass'), className)}>
       <div className="flex flex-col">
-        <h3 className="text-sm font-semibold text-gray-900">Achieved Revenue by Product</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Achieved Revenue by Product/Service</h3>
         <span className="text-xs text-gray-400">{SUBTITLES[period]}</span>
       </div>
 

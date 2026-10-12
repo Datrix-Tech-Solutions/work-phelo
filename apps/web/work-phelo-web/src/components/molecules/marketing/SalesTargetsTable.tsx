@@ -33,9 +33,9 @@ const COLUMNS: Column<SalesTarget>[] = [
   },
   {
     key: 'product',
-    label: 'Product',
+    label: 'Product/Service',
     width: 'minmax(120px, 1fr)',
-    render: (row) => row.productName ?? (row.productId ? '—' : 'All products'),
+    render: (row) => row.productName ?? (row.productId ? '—' : 'All products/services'),
   },
   {
     key: 'period',
@@ -130,7 +130,7 @@ export function SalesTargetsTable({
       data={data}
       isLoading={isLoading}
       emptyMessage="No targets yet"
-      searchPlaceholder="Search by target, rep or product..."
+      searchPlaceholder="Search by target, rep or product/service..."
       searchValue={searchValue}
       onSearch={onSearch}
       extraFilters={extraFilters}

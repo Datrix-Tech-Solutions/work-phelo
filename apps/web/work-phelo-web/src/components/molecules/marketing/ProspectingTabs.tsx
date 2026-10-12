@@ -11,12 +11,10 @@ interface Props {
 export function ProspectingTabs({ base, className }: Props) {
   const tabs = [
     { key: 'sales-pipeline', label: 'Sales Pipeline', href: `${base}/sales-pipeline` },
-    { key: 'product', label: 'Product', href: `${base}/product` },
+    { key: 'product', label: 'Product/Service', href: `${base}/product` },
     { key: 'decision-maker', label: 'Decision Maker', href: `${base}/decision-maker` },
     { key: 'source-type', label: 'Source Type', href: `${base}/source-type` },
     { key: 'interaction-medium', label: 'Interaction Medium', href: `${base}/interaction-medium` },
-    { key: 'domains', label: 'Business Domains', href: `${base}/domains` },
-    { key: 'sms-senders', label: 'SMS Senders', href: `${base}/sms-senders` },
     {
       key: 'prospect-business-type',
       label: 'Prospect Business Type',

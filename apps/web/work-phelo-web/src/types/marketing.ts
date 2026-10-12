@@ -89,6 +89,8 @@ export interface ProspectListItem {
   salesStage: ProspectSalesStage;
   progress: number;
   lastInteractionDate: string | null;
+  /** How many interactions (follow-ups) are recorded against the prospect. */
+  interactionCount: number;
   expectedCloseDate: string | null;
   assignedUserId: string;
   assignedUserName: string | null;
@@ -686,6 +688,13 @@ export interface TransportRequest {
     byName: string | null;
     previous: { travelDate: string; departureTime: string | null; returnTime: string | null };
   } | null;
+  /** What the requester asked for; the approval pop-up starts from it. Null when they asked for nothing. */
+  requested: {
+    vehicle: { assetId: string; name: string | null } | null;
+    driver: { employeeId: string; name: string | null } | null;
+    /** The requester wants to drive themselves. */
+    selfDriven: boolean;
+  } | null;
   /** Set once approved: who is driving what. */
   allocation: {
     vehicle: { assetId: string; name: string | null; assetNumber: string | null };
@@ -712,6 +721,10 @@ export interface TransportRequestListResponse {
 export interface TransportRequestFormOptions {
   requester: { name: string; department: string | null };
   employees: TransportRequestPerson[];
+  /** Vehicles that can be asked for. Availability is the approver's call. */
+  vehicles: { assetId: string; name: string; assetNumber: string }[];
+  /** Active transport officers who can be asked to drive. */
+  drivers: { employeeId: string; name: string; department: string | null }[];
 }
 
 export interface TransportStopRef {
@@ -731,13 +744,24 @@ export interface CreateTransportRequestPayload {
   destination?: string;
   passengerIds?: string[];
   notes?: string;
+  /** What the requester would like; the approver decides the real allocation. */
+  preferredVehicleAssetId?: string;
+  preferredDriverEmployeeId?: string;
+  /** The requester wants to drive themselves; cannot be combined with a preferred driver. */
+  preferredSelfDriven?: boolean;
 }
 
 export type UpdateTransportRequestPayload = Partial<
-  Omit<CreateTransportRequestPayload, 'returnTime'>
+  Omit<
+    CreateTransportRequestPayload,
+    'returnTime' | 'preferredVehicleAssetId' | 'preferredDriverEmployeeId'
+  >
 > & {
   /** Null clears the return time. */
   returnTime?: string | null;
+  /** Null clears the preference. */
+  preferredVehicleAssetId?: string | null;
+  preferredDriverEmployeeId?: string | null;
 };
 
 export interface TransportRequestAllocationOptions {

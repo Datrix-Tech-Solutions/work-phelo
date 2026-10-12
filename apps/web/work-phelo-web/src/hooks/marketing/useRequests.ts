@@ -95,6 +95,26 @@ export function useRequestAllocationOptions(
   });
 }
 
+/**
+ * Which vehicles and drivers are free for a date and times, for the request form. Pass null until
+ * the date and departure are known.
+ */
+export function useRequestAvailability(window: TransportRequestWindow | null) {
+  return useQuery({
+    queryKey: [...REQUESTS_KEY, 'availability', window] as const,
+    queryFn: async () => {
+      const res = await api.get<TransportRequestAllocationOptions>(`${ENDPOINT}/availability`, {
+        params: window,
+      });
+      return res.data;
+    },
+    enabled: !!window,
+    // Bookings change as other requests get approved, so don't serve stale answers.
+    staleTime: 0,
+    placeholderData: (previous) => previous,
+  });
+}
+
 /** Requests drive vehicle and driver status (booked / on route), so their lists refresh too. */
 function useInvalidateRequests() {
   const queryClient = useQueryClient();

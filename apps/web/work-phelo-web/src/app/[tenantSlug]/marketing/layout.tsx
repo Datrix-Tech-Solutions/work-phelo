@@ -7,7 +7,8 @@ import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { ModuleRail } from '@/components/organisms/shared/ModuleRail';
-import { MARKETING_NAV_GROUPS } from '@/config/marketing-nav';
+import { MARKETING_NAV_GROUPS, MARKETING_TABS } from '@/config/marketing-nav';
+import { useMarketingNavStore } from '@/store/marketingNav.store';
 import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { useModuleThemeScope } from '@/hooks';
@@ -44,7 +45,7 @@ export default function MarketingLayout({
 
   // A page shows in the menu only when the user can open at least one of its tabs.
   const { canSeePage, canSeeTab, tabsOf, isResolving, isMarketer } = useMarketingAccess();
-  const groups = MARKETING_NAV_GROUPS.map((group) => ({
+  const allGroups = MARKETING_NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.map(prefixItem).map((item) => ({
       ...item,
@@ -52,9 +53,41 @@ export default function MarketingLayout({
     })),
   }));
 
-  // Typing the address of a page (or tab) that is out of reach shows the same answer as the menu.
+  // The top nav switches between Campaign, Prospecting and Transport; every other group is a constant
+  // that always shows. A tab is only offered when one of its pages is open to the user.
   const pathname = usePathname();
   const [page, tab] = pathname.replace(`${BASE}/`, '').split('/');
+  const visibleTabs = MARKETING_TABS.map((t) => {
+    const group = allGroups.find((g) => g.label === t.groupLabel);
+    const pages = (group?.items ?? []).filter((item) => item.enabled);
+    return { ...t, pages, firstHref: pages[0]?.href };
+  }).filter((t) => !!t.firstHref);
+
+  const pageTab = visibleTabs.find((t) => t.pages.some((item) => item.key === page))?.key;
+  const lastTab = useMarketingNavStore((s) => s.lastTab);
+  const setLastTab = useMarketingNavStore((s) => s.setLastTab);
+  useEffect(() => {
+    if (pageTab && pageTab !== lastTab) setLastTab(pageTab);
+  }, [pageTab, lastTab, setLastTab]);
+
+  // On a page outside any tab (dashboard, targets, administration) keep the last tab the user was in.
+  const activeTab =
+    pageTab ?? visibleTabs.find((t) => t.key === lastTab)?.key ?? visibleTabs[0]?.key;
+
+  const tabGroupLabels: string[] = MARKETING_TABS.map((t) => t.groupLabel);
+  const activeGroupLabel = MARKETING_TABS.find((t) => t.key === activeTab)?.groupLabel;
+  const groups = allGroups.filter(
+    (g) => !tabGroupLabels.includes(g.label) || g.label === activeGroupLabel,
+  );
+
+  const navTabs = visibleTabs.map((t) => ({
+    key: t.key,
+    label: t.label,
+    href: t.firstHref as string,
+    active: t.key === activeTab,
+  }));
+
+  // Typing the address of a page (or tab) that is out of reach shows the same answer as the menu.
   const blocked =
     !isResolving &&
     !!page &&
@@ -79,6 +112,7 @@ export default function MarketingLayout({
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
         userInitials={initials}
+        tabs={navTabs}
         logoVariant="image"
       />
       <div className="flex flex-1 min-h-0 relative">

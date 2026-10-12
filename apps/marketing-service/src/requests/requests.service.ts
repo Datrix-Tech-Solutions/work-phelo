@@ -29,6 +29,7 @@ import { RequestNotifier } from './request-notifier.service';
 import { TransportOfficersService } from '../transport-officers/transport-officers.service';
 import {
   AllocationOptionsQueryDto,
+  AvailabilityQueryDto,
   ApproveTransportRequestDto,
   CompleteTransportRequestDto,
   CreateTransportRequestDto,
@@ -84,6 +85,15 @@ const windowText = (departureTime: string, returnTime: string | null) =>
   returnTime
     ? `${departureTime}–${returnTime}`
     : `from ${departureTime}, no return time`;
+
+/** The stored fields holding what a requester asked for. */
+interface RequestPreferences {
+  preferredVehicleAssetId?: string | null;
+  preferredVehicleName?: string | null;
+  preferredDriverEmployeeId?: string | null;
+  preferredDriverName?: string | null;
+  preferredSelfDriven?: boolean;
+}
 
 @Injectable()
 export class RequestsService {
@@ -168,15 +178,27 @@ export class RequestsService {
     return this.toResponse(row, this.trips.now());
   }
 
-  /** What the request form needs: who is asking, and who can come along. */
+  /**
+   * What the request form needs: who is asking, who can come along, and the vehicles and drivers the
+   * requester may ask for. Availability is not checked here; the approver decides the allocation.
+   */
   async formOptions(user: RequestUser) {
-    const [people, resolved] = await Promise.all([
-      this.callHr(() => this.directory.list(user.tenantId)),
-      this.callHr(() =>
-        this.directory.resolve(user.tenantId, { userId: user.id }),
-      ),
-    ]);
+    const [people, resolved, vehicles, fleetDetails, drivers] =
+      await Promise.all([
+        this.callHr(() => this.directory.list(user.tenantId)),
+        this.callHr(() =>
+          this.directory.resolve(user.tenantId, { userId: user.id }),
+        ),
+        this.callHr(() => this.fleet.listVehicles(user.tenantId)),
+        this.prisma.marketingFleetVehicle.findMany({
+          where: { tenantId: user.tenantId },
+        }),
+        this.officers.activeDrivers(user.tenantId),
+      ]);
     const requester = this.requesterFrom(user, resolved.person);
+    const detailsByAsset = new Map(
+      fleetDetails.map((row) => [row.assetId, row]),
+    );
     return {
       requester: {
         name: requester.name,
@@ -185,7 +207,86 @@ export class RequestsService {
       employees: people.filter(
         (person) => person.employeeId !== requester.employeeId,
       ),
+      vehicles: vehicles
+        .filter(
+          (vehicle) =>
+            vehicle.status !== 'RETIRED' && vehicle.status !== 'MAINTENANCE',
+        )
+        .map((vehicle) => {
+          const details = detailsByAsset.get(vehicle.id);
+          return {
+            assetId: vehicle.id,
+            name: details ? `${details.make} ${details.model}` : vehicle.name,
+            assetNumber: vehicle.assetNumber,
+          };
+        }),
+      drivers: drivers.map((person) => ({
+        employeeId: person.employeeId,
+        name: person.name,
+        department: person.department,
+      })),
     };
+  }
+
+  /**
+   * Turns what a requester asked for (vehicle, driver or driving themselves) into the stored
+   * preference fields. `undefined` leaves a field alone, `null` clears it. The vehicle must be
+   * usable and the driver an active transport officer, but availability is left to the approver.
+   */
+  private async preferenceData(
+    tenantId: string,
+    input: {
+      vehicleAssetId?: string | null;
+      driverEmployeeId?: string | null;
+      selfDriven?: boolean;
+    },
+  ): Promise<RequestPreferences> {
+    if (input.selfDriven === true && input.driverEmployeeId) {
+      throw new BadRequestException(
+        'Choose either a driver or self-driven, not both',
+      );
+    }
+    const data: RequestPreferences = {};
+
+    if (input.vehicleAssetId === null) {
+      data.preferredVehicleAssetId = null;
+      data.preferredVehicleName = null;
+    } else if (input.vehicleAssetId !== undefined) {
+      const vehicle = await this.callHr(() =>
+        this.fleet.getVehicle(tenantId, input.vehicleAssetId),
+      );
+      this.assertVehicleUsable(vehicle);
+      const details = await this.prisma.marketingFleetVehicle.findUnique({
+        where: { tenantId_assetId: { tenantId, assetId: vehicle.id } },
+      });
+      data.preferredVehicleAssetId = vehicle.id;
+      data.preferredVehicleName = details
+        ? `${details.make} ${details.model}`
+        : vehicle.name;
+    }
+
+    if (input.selfDriven === true) {
+      data.preferredSelfDriven = true;
+      data.preferredDriverEmployeeId = null;
+      data.preferredDriverName = null;
+    } else if (input.driverEmployeeId === null) {
+      data.preferredDriverEmployeeId = null;
+      data.preferredDriverName = null;
+      if (input.selfDriven === false) data.preferredSelfDriven = false;
+    } else if (input.driverEmployeeId !== undefined) {
+      await this.officers.assertActiveOfficer(tenantId, input.driverEmployeeId);
+      const resolved = await this.callHr(() =>
+        this.directory.resolve(tenantId, {
+          employeeIds: [input.driverEmployeeId],
+        }),
+      );
+      data.preferredDriverEmployeeId = input.driverEmployeeId;
+      data.preferredDriverName = resolved.people[0]?.name ?? null;
+      data.preferredSelfDriven = false;
+    } else if (input.selfDriven === false) {
+      data.preferredSelfDriven = false;
+    }
+    return data;
   }
 
   async create(user: RequestUser, dto: CreateTransportRequestDto) {
@@ -222,6 +323,11 @@ export class RequestsService {
     const passengers = resolved.people.filter(
       (person) => person.employeeId !== requester.employeeId,
     );
+    const preferences = await this.preferenceData(user.tenantId, {
+      vehicleAssetId: dto.preferredVehicleAssetId,
+      driverEmployeeId: dto.preferredDriverEmployeeId,
+      selfDriven: dto.preferredSelfDriven,
+    });
 
     const created = await this.prisma.marketingTransportRequest.create({
       data: {
@@ -242,6 +348,7 @@ export class RequestsService {
           ? this.summarize(stops)
           : dto.destination || this.summarize(stops),
         notes: dto.notes || null,
+        ...preferences,
         passengers: {
           create: passengers.map((person) => ({
             tenantId: user.tenantId,
@@ -351,6 +458,12 @@ export class RequestsService {
         ? await this.resolveStops(user, dto.stops)
         : undefined;
 
+    const preferences = await this.preferenceData(user.tenantId, {
+      vehicleAssetId: dto.preferredVehicleAssetId,
+      driverEmployeeId: dto.preferredDriverEmployeeId,
+      selfDriven: dto.preferredSelfDriven,
+    });
+
     // Typed text (personal trips) wins; otherwise the places chosen, when they were sent.
     const destination =
       dto.destination !== undefined
@@ -385,6 +498,7 @@ export class RequestsService {
             ? { returnTime: dto.returnTime }
             : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
+          ...preferences,
           ...(passengers
             ? {
                 passengers: {
@@ -818,14 +932,56 @@ export class RequestsService {
           returnTime: query.returnTime ?? null,
         }
       : request;
+    return this.availabilityFor(user.tenantId, window, request.id, true);
+  }
+
+  /**
+   * Which vehicles and drivers are free for a date and times, for the request form. Same checks as
+   * the approver's pop-up, but without naming the trips that hold them. It is only a hint: the
+   * approver still decides, and two requesters can ask for the same free vehicle.
+   */
+  async availability(user: RequestUser, query: AvailabilityQueryDto) {
+    this.assertSchedule(
+      query.travelDate,
+      query.departureTime,
+      query.returnTime,
+      false,
+    );
+    const id = '00000000-0000-0000-0000-000000000000';
+    return this.availabilityFor(
+      user.tenantId,
+      {
+        id,
+        tenantId: user.tenantId,
+        travelDate: this.toDate(query.travelDate),
+        departureTime: query.departureTime,
+        returnTime: query.returnTime ?? null,
+      },
+      id,
+      false,
+    );
+  }
+
+  private async availabilityFor(
+    tenantId: string,
+    window: {
+      id: string;
+      tenantId: string;
+      travelDate: Date;
+      departureTime: string;
+      returnTime: string | null;
+    },
+    excludeId: string,
+    detailed: boolean,
+  ) {
     const now = this.trips.now();
 
     const [vehicles, people, fleetDetails, overlapping, stale] =
       await Promise.all([
-        this.callHr(() => this.fleet.listVehicles(user.tenantId)),
-        this.officers.activeDrivers(user.tenantId),
+        this.callHr(() => this.fleet.listVehicles(tenantId)),
+        this.officers.activeDrivers(tenantId),
         this.prisma.marketingFleetVehicle.findMany({
-          where: { tenantId: user.tenantId },
+          where: { tenantId: tenantId },
         }),
         this.prisma.marketingTransportRequest.findMany({
           where: this.overlapWhere(window),
@@ -838,7 +994,7 @@ export class RequestsService {
           },
         }),
         this.prisma.marketingTransportRequest.findMany({
-          where: this.staleWhere(user.tenantId, request.id, now),
+          where: this.staleWhere(tenantId, excludeId, now),
           select: {
             vehicleAssetId: true,
             driverEmployeeId: true,
@@ -852,10 +1008,15 @@ export class RequestsService {
     const detailsByAsset = new Map(
       fleetDetails.map((row) => [row.assetId, row]),
     );
+    // Approvers see whose trip holds a vehicle or driver; a requester only learns that it is held.
     const bookedText = (row: (typeof overlapping)[number]) =>
-      `Already allocated to ${row.requesterName}'s trip (${windowText(row.departureTime, row.returnTime)})`;
+      detailed
+        ? `Already allocated to ${row.requesterName}'s trip (${windowText(row.departureTime, row.returnTime)})`
+        : 'Booked for that time';
     const overdueText = (row: (typeof stale)[number]) =>
-      `Still out on ${row.requesterName}'s trip (${this.fromDate(row.travelDate)} ${windowText(row.departureTime, row.returnTime)}). Complete it first`;
+      detailed
+        ? `Still out on ${row.requesterName}'s trip (${this.fromDate(row.travelDate)} ${windowText(row.departureTime, row.returnTime)}). Complete it first`
+        : 'Out on a trip';
 
     type Kind = 'MAINTENANCE' | 'OVERDUE' | 'BOOKED';
     const verdict = (
@@ -1609,6 +1770,27 @@ export class RequestsService {
                 departureTime: row.previousDepartureTime,
                 returnTime: row.previousReturnTime,
               },
+            }
+          : null,
+      // What the requester asked for; the approver's pop-up starts from it.
+      requested:
+        row.preferredVehicleAssetId ||
+        row.preferredDriverEmployeeId ||
+        row.preferredSelfDriven
+          ? {
+              vehicle: row.preferredVehicleAssetId
+                ? {
+                    assetId: row.preferredVehicleAssetId,
+                    name: row.preferredVehicleName,
+                  }
+                : null,
+              driver: row.preferredDriverEmployeeId
+                ? {
+                    employeeId: row.preferredDriverEmployeeId,
+                    name: row.preferredDriverName,
+                  }
+                : null,
+              selfDriven: row.preferredSelfDriven,
             }
           : null,
       allocation:

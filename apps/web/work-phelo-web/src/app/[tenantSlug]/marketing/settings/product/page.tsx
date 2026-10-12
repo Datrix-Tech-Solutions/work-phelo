@@ -16,6 +16,7 @@ import {
   useUpdateProspectingSetting,
 } from '@/hooks/marketing/useProspectingSettings';
 import { useToast } from '@/hooks/useToast';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: ProductFields = { name: '', description: '' };
@@ -43,6 +44,17 @@ export default function ProductPage() {
   const [form, setForm] = useState<ProductFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<ProductFields>>({});
 
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop;
+  // Continue clears the form for the next entry.
+  const entry = useMultiEntryPanel({
+    isOpen: panelOpen,
+    onStop: () => setPanelOpen(false),
+    onContinue: () => {
+      setForm(EMPTY_FORM);
+      setErrors({});
+    },
+  });
+
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [inUseMessage, setInUseMessage] = useState<string | null>(null);
 
@@ -68,13 +80,13 @@ export default function ProductPage() {
 
   function validate(): boolean {
     const next: Partial<ProductFields> = {};
-    if (!form.name.trim()) next.name = 'Product name is required.';
+    if (!form.name.trim()) next.name = 'Product/service name is required.';
     else if (
       productData.some(
         (i) => i.id !== editingId && i.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
       )
     )
-      next.name = 'This product already exists. Please enter a different name.';
+      next.name = 'This product/service already exists. Please enter a different name.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -91,10 +103,13 @@ export default function ProductPage() {
         { name, ...(description ? { description } : {}), displayOrder: productData.length },
         {
           onSuccess: () => {
-            toast.success('Product added');
-            setPanelOpen(false);
+            toast.success('Product/service added');
+            entry.finishSave(
+              { title: 'Product/Service Added!', message: `${name} has been added.` },
+              () => setPanelOpen(false),
+            );
           },
-          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add product')),
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add product/service')),
         },
       );
     } else if (editingId) {
@@ -117,11 +132,11 @@ export default function ProductPage() {
       { id: editingId, name, description },
       {
         onSuccess: () => {
-          toast.success('Product updated');
+          toast.success('Product/service updated');
           renameGuard.closeConfirm();
           setPanelOpen(false);
         },
-        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update product')),
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update product/service')),
       },
     );
   }
@@ -135,7 +150,7 @@ export default function ProductPage() {
     if (!deleteId) return;
     deleteProduct.mutate(deleteId, {
       onSuccess: () => {
-        toast.success('Product deleted');
+        toast.success('Product/service deleted');
         setDeleteId(null);
       },
       onError: (error) => {
@@ -143,24 +158,26 @@ export default function ProductPage() {
           setInUseMessage(apiErrorMessage(error, 'This item is in use and cannot be deleted.'));
           return;
         }
-        toast.error(apiErrorMessage(error, 'Failed to delete product'));
+        toast.error(apiErrorMessage(error, 'Failed to delete product/service'));
       },
     });
   }
 
   if (isLoading) {
-    return <p className="text-sm text-gray-400 text-center py-8">Loading products...</p>;
+    return <p className="text-sm text-gray-400 text-center py-8">Loading products/services...</p>;
   }
 
   if (isError) {
-    return <p className="text-sm text-red-500 text-center py-8">Failed to load products.</p>;
+    return (
+      <p className="text-sm text-red-500 text-center py-8">Failed to load products/services.</p>
+    );
   }
 
   return (
     <div className="flex flex-col gap-4">
       <CardList
-        title="Products"
-        addLabel="Add Product"
+        title="Products/Services"
+        addLabel="Add Product/Service"
         items={filtered}
         onAdd={openAdd}
         onEdit={openEdit}
@@ -173,7 +190,8 @@ export default function ProductPage() {
       <SidePanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        title={panelMode === 'add' ? 'Add Product' : 'Edit Product'}
+        {...(panelMode === 'add' ? entry.panelProps : {})}
+        title={panelMode === 'add' ? 'Add Product/Service' : 'Edit Product/Service'}
         footer={
           <div className="flex items-center justify-end gap-3">
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
@@ -185,7 +203,7 @@ export default function ProductPage() {
                 createProduct.isPending || updateProduct.isPending || renameGuard.isChecking
               }
             >
-              {panelMode === 'add' ? 'Add Product' : 'Save Changes'}
+              {panelMode === 'add' ? 'Add Product/Service' : 'Save Changes'}
             </Button>
           </div>
         }
@@ -195,7 +213,7 @@ export default function ProductPage() {
 
       <RenameInUseModal
         isOpen={renameGuard.confirmOpen}
-        itemLabel="Product"
+        itemLabel="Product/Service"
         isLoading={updateProduct.isPending}
         onConfirm={saveUpdate}
         onClose={renameGuard.closeConfirm}
@@ -205,10 +223,10 @@ export default function ProductPage() {
       <Modal
         isOpen={!!deleteId}
         onClose={closeDelete}
-        title="Delete Product"
+        title="Delete Product/Service"
         description={
           inUseMessage ??
-          'Are you sure you want to delete this product? This action cannot be undone.'
+          'Are you sure you want to delete this product/service? This action cannot be undone.'
         }
         width="max-w-sm"
         height="max-h-fit"

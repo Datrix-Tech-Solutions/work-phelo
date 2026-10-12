@@ -30,7 +30,7 @@ import { ProspectingSetting } from '@/types/marketing';
 
 const STEPS = [
   'Company Information',
-  'Product / Service Info.',
+  'Product/Service Info.',
   'Company Location',
   'Sale Stage',
   'Preview',
@@ -161,7 +161,7 @@ export function ProspectWizard({
     if (currentStep === 1) {
       const hasCompleteRow = productRows.some(isCompleteRow);
       setProductsError(
-        hasCompleteRow ? undefined : 'Add at least one product with an expected revenue.',
+        hasCompleteRow ? undefined : 'Add at least one product/service with an expected revenue.',
       );
       return hasCompleteRow;
     }

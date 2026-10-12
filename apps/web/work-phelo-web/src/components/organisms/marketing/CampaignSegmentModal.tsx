@@ -242,8 +242,8 @@ function SegmentForm({
         onChange={setBusinessTypeIds}
       />
       <MultiSelect
-        label="Product / Service"
-        placeholder="Any product or service"
+        label="Product/Service"
+        placeholder="Any product/service"
         options={products.map((item) => ({ value: item.id, label: item.name }))}
         value={productIds}
         onChange={setProductIds}

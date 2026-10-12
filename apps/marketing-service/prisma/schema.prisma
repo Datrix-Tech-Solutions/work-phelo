@@ -545,6 +545,13 @@ model MarketingTransportRequest {
   driverName            String?
   /// True when the requester drives; driverEmployeeId/driverName then hold the requester.
   selfDriven            Boolean                         @default(false)
+  /// What the requester asked for when raising the request. Only a starting point: the approver
+  /// decides the real allocation above. Names are snapshots; self-driven means the requester drives.
+  preferredVehicleAssetId    String?
+  preferredVehicleName       String?
+  preferredDriverEmployeeId  String?
+  preferredDriverName        String?
+  preferredSelfDriven        Boolean                         @default(false)
   /// Set when someone starts the trip: a trip is on route only once started, never by the clock.
   startedAt             DateTime?
   startedByUserId       String?

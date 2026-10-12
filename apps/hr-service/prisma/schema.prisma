@@ -372,9 +372,21 @@ enum RecruitmentVacancyStatus {
 }
 
 enum RecruitmentQuestionType {
-  TEXT
-  SINGLE_SELECT
-  MULTI_SELECT
+  SHORT_ANSWER
+  PARAGRAPH
+  YES_NO
+  MULTIPLE_CHOICE
+  CHECKBOXES
+  DROPDOWN
+
+  @@schema("hr")
+}
+
+enum RecruitmentSalaryType {
+  FIXED
+  RANGE
+  NEGOTIABLE
+  NON_DISCLOSED
 
   @@schema("hr")
 }
@@ -409,6 +421,8 @@ model Branch {
   assets      Asset[]
   departments Department[]
 
+  recruitmentVacancies RecruitmentVacancy[]
+
   @@unique([tenantId, name])
   @@schema("hr")
 }
@@ -431,6 +445,8 @@ model Department {
   children  Department[] @relation("DepartmentHierarchy")
   branch    Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
   employees Employee[]
+
+  recruitmentVacancies RecruitmentVacancy[]
 
   @@unique([tenantId, name])
   @@index([tenantId, branchId])
@@ -626,11 +642,29 @@ model RecruitmentVacancy {
   id               String                   @id @default(uuid())
   tenantId         String
   title            String?
+  departmentId     String?
+  branchId         String?
   location         String?
+  city             String?
   jobType          EmploymentType?
+  workMode         WorkMode?
+  vacancies        Int                      @default(1)
+  closingDate      DateTime?                @db.Date
+  /// Plain text: the job summary.
   description      String?
+  /// Plain text.
   responsibilities String?
+  /// Plain text.
+  perksAndBenefits String?
+  /// Plain text rendering of `details`, kept for the public posting.
   requirements     String?
+  /// Structured requirements: education, experience, skills, languages, certificates and the
+  /// documents applicants are asked for. A missing key means the field is not part of the vacancy.
+  details          Json?
+  salaryType       RecruitmentSalaryType    @default(NON_DISCLOSED)
+  /// Set when salaryType is FIXED.
+  salaryAmount     Decimal?                 @db.Decimal(15, 2)
+  /// Set when salaryType is RANGE.
   salaryMin        Decimal?                 @db.Decimal(15, 2)
   salaryMax        Decimal?                 @db.Decimal(15, 2)
   salaryCurrency   String?
@@ -642,11 +676,17 @@ model RecruitmentVacancy {
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  branch     Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
   applications RecruitmentApplication[]
   questions    RecruitmentVacancyQuestion[]
 
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, branchId])
+  @@index([tenantId, closingDate])
   @@schema("hr")
 }
 
@@ -655,7 +695,7 @@ model RecruitmentVacancyQuestion {
   tenantId  String
   vacancyId String
   question  String
-  type      RecruitmentQuestionType @default(TEXT)
+  type      RecruitmentQuestionType @default(SHORT_ANSWER)
   options   Json?
   required  Boolean                 @default(false)
   sortOrder Int

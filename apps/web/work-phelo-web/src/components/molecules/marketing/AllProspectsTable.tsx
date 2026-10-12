@@ -21,6 +21,8 @@ export interface Prospect {
   salesStageProgress: number;
   decisionMaker: string;
   lastInteraction: string;
+  /** Interactions recorded against the prospect (its follow-ups). */
+  interactionCount: number;
   /** The assigned marketer's name. */
   assignedTo: string;
 }
@@ -41,7 +43,7 @@ const COLUMNS: Column<Prospect>[] = [
   },
   {
     key: 'product',
-    label: 'Product',
+    label: 'Product/Service',
     width: 'minmax(100px, 1fr)',
     render: (row) => <span className="font-semibold">{row.product}</span>,
   },
@@ -60,7 +62,7 @@ const COLUMNS: Column<Prospect>[] = [
   {
     key: 'lastInteraction',
     label: 'Last Interaction',
-    width: '150px',
+    width: '120px',
     render: (row) =>
       row.lastInteraction ? (
         <span className="font-semibold">
@@ -73,6 +75,13 @@ const COLUMNS: Column<Prospect>[] = [
       ) : (
         <span className="text-gray-400 font-semibold">—</span>
       ),
+  },
+  {
+    key: 'interactionCount',
+    label: 'Follow-ups',
+    width: '90px',
+    className: 'text-right',
+    render: (row) => <span className="font-semibold text-gray-700">{row.interactionCount}</span>,
   },
   {
     key: 'salesStage',

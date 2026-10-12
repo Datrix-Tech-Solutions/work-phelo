@@ -16,6 +16,7 @@ import {
   useUpdateProspectingSetting,
 } from '@/hooks/marketing/useProspectingSettings';
 import { useToast } from '@/hooks/useToast';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: SourceTypeFields = { name: '', description: '' };
@@ -39,6 +40,18 @@ export default function SourceTypePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SourceTypeFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<SourceTypeFields>>({});
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop;
+  // Continue clears the form for the next entry.
+  const entry = useMultiEntryPanel({
+    isOpen: panelOpen,
+    onStop: () => setPanelOpen(false),
+    onContinue: () => {
+      setForm(EMPTY_FORM);
+      setErrors({});
+    },
+  });
+
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [inUseMessage, setInUseMessage] = useState<string | null>(null);
 
@@ -88,7 +101,10 @@ export default function SourceTypePage() {
         {
           onSuccess: () => {
             toast.success('Source type added');
-            setPanelOpen(false);
+            entry.finishSave(
+              { title: 'Source Type Added!', message: `${name} has been added.` },
+              () => setPanelOpen(false),
+            );
           },
           onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add source type')),
         },
@@ -168,6 +184,7 @@ export default function SourceTypePage() {
       <SidePanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
+        {...(panelMode === 'add' ? entry.panelProps : {})}
         title={panelMode === 'add' ? 'Add Source Type' : 'Edit Source Type'}
         footer={
           <div className="flex items-center justify-end gap-3">

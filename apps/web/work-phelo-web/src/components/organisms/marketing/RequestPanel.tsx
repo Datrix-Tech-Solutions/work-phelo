@@ -7,12 +7,14 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
+import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
 import { Icons } from '@/components/atoms/icons';
 import { MapPin } from 'lucide-react';
 import { useGeocodeSearch } from '@/hooks';
 import { useDestinationPicker } from '@/hooks/marketing/useDestinationPicker';
 import {
   useCreateRequest,
+  useRequestAvailability,
   useRequestFormOptions,
   useUpdateRequest,
 } from '@/hooks/marketing/useRequests';
@@ -20,7 +22,7 @@ import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import { formatAppointmentTime } from '@/lib/appointments';
 import { formatDate } from '@/lib/formatters';
-import { PURPOSE_OPTIONS } from '@/lib/requestOptions';
+import { ALLOCATION_BLOCK_TAGS, PURPOSE_OPTIONS } from '@/lib/requestOptions';
 import { inputClass } from '@/lib/utils';
 import type {
   Appointment,
@@ -39,6 +41,10 @@ interface FormValues {
   returnTime: string;
   passengerIds: string[];
   notes: string;
+  /** Optional asks for the approver: a vehicle, and either a driver or driving themselves. */
+  vehicleAssetId: string;
+  driverEmployeeId: string;
+  selfDriven: boolean;
 }
 
 type FormErrors = Partial<
@@ -62,6 +68,9 @@ const emptyValues = (): FormValues => ({
   returnTime: '',
   passengerIds: [],
   notes: '',
+  vehicleAssetId: '',
+  driverEmployeeId: '',
+  selfDriven: false,
 });
 
 /** The places already saved on a request, in the shape the picker works with. */
@@ -132,6 +141,9 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
             returnTime: request.returnTime ?? '',
             passengerIds: request.passengers.map((p) => p.employeeId),
             notes: request.notes ?? '',
+            vehicleAssetId: request.requested?.vehicle?.assetId ?? '',
+            driverEmployeeId: request.requested?.driver?.employeeId ?? '',
+            selfDriven: request.requested?.selfDriven ?? false,
           }
         : appointment
           ? {
@@ -165,6 +177,98 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
         jobTitle: null,
       },
   );
+
+  // Which vehicles and drivers are free is checked once the date and departure are known. It is
+  // only a hint: the approver decides, and two requesters can ask for the same free vehicle.
+  const windowValid =
+    !!values.travelDate &&
+    !!values.departureTime &&
+    (!values.returnTime || values.returnTime > values.departureTime);
+  const { data: availability } = useRequestAvailability(
+    isOpen && windowValid
+      ? {
+          travelDate: values.travelDate,
+          departureTime: values.departureTime,
+          ...(values.returnTime ? { returnTime: values.returnTime } : {}),
+        }
+      : null,
+  );
+  const vehicleStatus = useMemo(
+    () => new Map((availability?.vehicles ?? []).map((v) => [v.assetId, v])),
+    [availability],
+  );
+  const driverStatus = useMemo(
+    () => new Map((availability?.drivers ?? []).map((d) => [d.employeeId, d])),
+    [availability],
+  );
+
+  // A saved choice may have left the lists (e.g. the vehicle went into maintenance); keep it visible.
+  // Unavailable ones stay in the list, greyed out and tagged with why, after the ones that can be picked.
+  const vehicleOptions = useMemo(() => {
+    const listed = (options?.vehicles ?? []).map((v) => {
+      const status = vehicleStatus.get(v.assetId);
+      return {
+        value: v.assetId,
+        label: v.name,
+        sublabel: v.assetNumber,
+        disabled: status ? !status.available : false,
+        tag: status?.unavailableKind ? ALLOCATION_BLOCK_TAGS[status.unavailableKind] : undefined,
+      };
+    });
+    const saved = request?.requested?.vehicle;
+    const all =
+      saved && !listed.some((o) => o.value === saved.assetId)
+        ? [
+            {
+              value: saved.assetId,
+              label: saved.name ?? 'Unknown vehicle',
+              sublabel: undefined,
+              disabled: false,
+              tag: undefined,
+            },
+            ...listed,
+          ]
+        : listed;
+    return all.sort((a, b) => Number(a.disabled) - Number(b.disabled));
+  }, [options, request, vehicleStatus]);
+  const driverOptions = useMemo(() => {
+    const listed = (options?.drivers ?? []).map((d) => {
+      const status = driverStatus.get(d.employeeId);
+      return {
+        value: d.employeeId,
+        label: d.name,
+        sublabel: d.department ?? undefined,
+        disabled: status ? !status.available : false,
+        tag: status?.unavailableKind ? ALLOCATION_BLOCK_TAGS[status.unavailableKind] : undefined,
+      };
+    });
+    const saved = request?.requested?.driver;
+    const all =
+      saved && !listed.some((o) => o.value === saved.employeeId)
+        ? [
+            {
+              value: saved.employeeId,
+              label: saved.name ?? 'Unknown driver',
+              sublabel: undefined,
+              disabled: false,
+              tag: undefined,
+            },
+            ...listed,
+          ]
+        : listed;
+    return all.sort((a, b) => Number(a.disabled) - Number(b.disabled));
+  }, [options, request, driverStatus]);
+
+  // A choice that stops being available (e.g. after changing the date) is dropped, not sent.
+  const pickedVehicle = vehicleOptions.some((o) => o.value === values.vehicleAssetId && !o.disabled)
+    ? values.vehicleAssetId
+    : '';
+  const pickedDriver = driverOptions.some((o) => o.value === values.driverEmployeeId && !o.disabled)
+    ? values.driverEmployeeId
+    : '';
+  const vehicleLost = !!values.vehicleAssetId && !!availability && !pickedVehicle;
+  const driverLost =
+    !!values.driverEmployeeId && !values.selfDriven && !!availability && !pickedDriver;
 
   const isPersonal = values.purpose === 'PERSONAL';
   // Personal and operations trips store a typed or searched destination instead of clients/prospects.
@@ -214,6 +318,12 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
       passengerIds: values.passengerIds,
     };
     const notes = values.notes.trim();
+    // Self-driving and a named driver exclude each other.
+    const driverAsk = values.selfDriven
+      ? { preferredSelfDriven: true }
+      : pickedDriver
+        ? { preferredDriverEmployeeId: pickedDriver }
+        : {};
 
     if (request) {
       updateRequest.mutate(
@@ -223,6 +333,10 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
           notes,
           // Clearing the field removes the return time.
           returnTime: values.returnTime || null,
+          // Clearing a choice removes it.
+          preferredVehicleAssetId: pickedVehicle || null,
+          preferredSelfDriven: values.selfDriven,
+          preferredDriverEmployeeId: values.selfDriven ? null : pickedDriver || null,
           // Personal trips type their destination; picked places are dropped.
           // Otherwise stops are only sent when changed, so an older request's typed destination is left alone.
           ...(usesPlaceText
@@ -248,6 +362,8 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
         ...(appointment ? { appointmentId: appointment.id } : {}),
         ...(notes ? { notes } : {}),
         ...(values.returnTime ? { returnTime: values.returnTime } : {}),
+        ...(pickedVehicle ? { preferredVehicleAssetId: pickedVehicle } : {}),
+        ...driverAsk,
         ...(usesPlaceText
           ? { destination: values.destination.trim() }
           : destinations.refs.length
@@ -458,6 +574,55 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
             {errors.returnTime && <p className="text-xs text-red-500">{errors.returnTime}</p>}
           </div>
         </div>
+
+        <SectionTitle>Vehicle and driver</SectionTitle>
+
+        <p className="text-xs text-gray-500 -mt-2">
+          Optional. The approver starts from your choice and can keep or change it.
+        </p>
+
+        <SearchSelect
+          label="Vehicle (optional)"
+          placeholder={options ? 'Select a vehicle' : 'Loading vehicles…'}
+          options={vehicleOptions}
+          value={pickedVehicle}
+          onChange={(v) => set('vehicleAssetId', v)}
+        />
+        {!windowValid && (
+          <p className="text-xs text-gray-400 -mt-2">
+            Set the travel date and departure time to see which vehicles and drivers are free.
+          </p>
+        )}
+        {vehicleLost && (
+          <p className="text-xs text-amber-600 -mt-2">
+            That vehicle isn&apos;t free for this date and time, so it won&apos;t be requested.
+          </p>
+        )}
+
+        <ToggleRow
+          label="I will drive myself"
+          description="No driver is needed for this trip."
+          enabled={values.selfDriven}
+          onChange={(enabled) => {
+            set('selfDriven', enabled);
+            if (enabled) set('driverEmployeeId', '');
+          }}
+        />
+
+        {!values.selfDriven && (
+          <SearchSelect
+            label="Driver (optional)"
+            placeholder={options ? 'Select a driver' : 'Loading drivers…'}
+            options={driverOptions}
+            value={pickedDriver}
+            onChange={(v) => set('driverEmployeeId', v)}
+          />
+        )}
+        {!values.selfDriven && driverLost && (
+          <p className="text-xs text-amber-600 -mt-2">
+            That driver isn&apos;t free for this date and time, so they won&apos;t be requested.
+          </p>
+        )}
 
         <SectionTitle>Passengers</SectionTitle>
 

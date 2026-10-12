@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { HrSidebar } from '@/components/organisms/shared/HrSidebar';
-import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
+import { useHrSidebarGroups, useHrTabs } from '@/hooks/hr/useHrSidebarGroups';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useModuleThemeScope } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
@@ -45,15 +45,16 @@ export default function HRLayout({
   }, [markHrVisited]);
 
   const groups = useHrSidebarGroups(tenantSlug, 'hr');
+  const tabs = useHrTabs(tenantSlug);
 
   // Lets the sidebar be pinned open via TopNav's menu button, for anyone who
   // doesn't want to rely on hover to see it expanded.
   const [pinned, setPinned] = useState(false);
 
-  // Payroll, Appraisal and Leave each have their own dedicated navigation now
+  // Payroll, Appraisal, Leave, Recruitment and Projects each have their own dedicated navigation now
   // (their own layout.tsx), same pattern as Accounting/Operations — hand off
   // chrome entirely instead of nesting HR's sidebar/TopNav around them.
-  const SELF_CONTAINED_SECTIONS = ['payroll', 'appraisal', 'leave'];
+  const SELF_CONTAINED_SECTIONS = ['payroll', 'appraisal', 'leave', 'recruitment', 'projects'];
   if (
     SELF_CONTAINED_SECTIONS.some((section) => pathname.startsWith(`/${tenantSlug}/hr/${section}`))
   ) {
@@ -65,6 +66,7 @@ export default function HRLayout({
       <TopNav
         showMenuButton
         onMenuClick={() => setPinned((v) => !v)}
+        tabs={tabs}
         userInitials={initials}
         logoVariant="image"
       />

@@ -363,7 +363,7 @@ export function NewTransferPanel({
               rules={{ required: 'Exchange rate is required for cross-currency transfers' }}
               render={({ field }) => (
                 <NumberField
-                  label={`Exchange Rate (${sourceAccount?.currency} → ${destinationAccount?.currency})`}
+                  label={`Exchange Rate (${sourceAccount?.currency} - ${destinationAccount?.currency})`}
                   value={Number(field.value) || 0}
                   onChange={(value) => field.onChange(String(value))}
                   error={errors.exchangeRate?.message}
@@ -422,13 +422,13 @@ export function NewTransferPanel({
               <div className="flex justify-between">
                 <span className="text-gray-600">{sourceAccount.name}</span>
                 <span className="font-semibold text-red-600">
-                  −{fmtAmount(amountValue + chargeAmountValue, sourceAccount.currency)}
+                  Credit {fmtAmount(amountValue + chargeAmountValue, sourceAccount.currency)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">{destinationAccount.name}</span>
                 <span className="font-semibold text-green-600">
-                  +{fmtAmount(amountValue, destinationAccount.currency)}
+                  Debit {fmtAmount(amountValue, destinationAccount.currency)}
                 </span>
               </div>
               {chargeAmountValue > 0 && (

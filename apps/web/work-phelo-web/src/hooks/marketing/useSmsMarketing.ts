@@ -38,13 +38,14 @@ export function useSmsSenderIdentities(
   });
 }
 
-export function useSmsWalletBalance() {
+export function useSmsWalletBalance(enabled = true) {
   return useQuery({
     queryKey: [...SMS_KEY, 'wallet', 'balance'] as const,
     queryFn: async () => {
       const res = await api.get<SmsWalletBalance>(`${WALLET_ENDPOINT}/balance`);
       return res.data;
     },
+    enabled,
   });
 }
 
