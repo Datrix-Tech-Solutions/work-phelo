@@ -108,6 +108,11 @@ export interface BulkImportAccountsResult {
 export interface GLAccountLedgerEntry {
   id: string;
   description: string | null;
+  glAccountId: string;
+  journalEntryId: string;
+  /** Amounts in the journal's own currency; the base amounts are what the running balance uses. */
+  transactionDebit: string;
+  transactionCredit: string;
   baseDebit: string;
   baseCredit: string;
   runningBalance: string;
@@ -117,6 +122,7 @@ export interface GLAccountLedgerEntry {
     transactionDate: string;
     reference: string | null;
     description: string;
+    transactionCurrency: string;
     baseCurrency: string;
   };
 }
@@ -2233,4 +2239,10 @@ export interface QueryTransactionsParams {
 
 export type TransactionsPageItem =
   | { kind: 'document'; document: AccountingTradeDocument }
-  | { kind: 'cashbook'; transaction: CashbookTransaction };
+  | { kind: 'cashbook'; transaction: CashbookTransaction }
+  /** A receipt or payment made against invoices or bills, with the ones it is applied to. */
+  | {
+      kind: 'settlement';
+      settlement: AccountingTradeSettlement;
+      linkedDocuments: { id: string; documentNumber: string }[];
+    };

@@ -17,6 +17,7 @@ import {
   AccountingTradeDocument,
   AccountingTradeDocumentPaymentState,
   AccountingTradeDocumentStatus,
+  AccountingTradeSettlement,
   CashbookTransaction,
   CashbookTransactionType,
   PaymentRequest,
@@ -35,6 +36,7 @@ import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
+import { TradeSettlementDetailPanel } from '@/components/organisms/accounting/panels/TradeSettlementDetailPanel';
 import { CashbookTransactionDetailPanel } from '@/components/organisms/accounting/panels/CashbookTransactionDetailPanel';
 import { useTabUsage } from '@/hooks/useTabUsage';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
@@ -144,13 +146,14 @@ function fmtAmount(amount: string, currency: string) {
  *  on kind for every field, only for the handful that genuinely differ. */
 interface UnifiedTransactionRow {
   id: string;
-  kind: 'document' | 'cashbook' | 'paymentRequest';
+  kind: 'document' | 'cashbook' | 'paymentRequest' | 'settlement';
   transactionNumber: string;
   date: string;
   entityLabel: string;
   /** Shown under the entity name, e.g. who raised a payment request. */
   entitySubLabel?: string;
-  /** The original invoice/bill a credit/debit note reduces, when it has one. */
+  /** The original invoice/bill a credit/debit note reduces, or the invoices/bills a receipt or
+   *  payment is applied to, when it has any. */
   linkedTo: string | null;
   subtotalAmount: string | null;
   taxAmount: string | null;
@@ -167,6 +170,7 @@ interface UnifiedTransactionRow {
   document?: AccountingTradeDocument;
   cashbook?: CashbookTransaction;
   paymentRequest?: PaymentRequest;
+  settlement?: AccountingTradeSettlement;
 }
 
 function toDocumentRow(
@@ -199,6 +203,38 @@ function toDocumentRow(
       : null,
     createdAt: doc.createdAt,
     document: doc,
+  };
+}
+
+/** A receipt or payment made against an invoice or bill, linked to what it settles the way a
+ *  credit or debit note is linked to its original. */
+function toSettlementRow(
+  settlement: AccountingTradeSettlement,
+  linkedDocuments: { documentNumber: string }[],
+): UnifiedTransactionRow {
+  const isReceipt = settlement.side === 'RECEIVABLE';
+  return {
+    id: settlement.id,
+    kind: 'settlement',
+    transactionNumber: settlement.settlementNumber,
+    date: settlement.settlementDate,
+    entityLabel: settlement.party.name,
+    linkedTo:
+      linkedDocuments.length > 0
+        ? linkedDocuments.map((document) => document.documentNumber).join(', ')
+        : null,
+    subtotalAmount: settlement.amount,
+    taxAmount: '0',
+    totalAmount: settlement.amount,
+    currency: settlement.currency,
+    typeLabel: isReceipt ? 'Receipt' : 'Payment',
+    typeColor: isReceipt ? 'green' : 'red',
+    filterSide: settlement.side,
+    status: settlement.status,
+    paymentStateLabel: null,
+    documentKey: null,
+    createdAt: settlement.createdAt,
+    settlement,
   };
 }
 
@@ -262,6 +298,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+  const [settlementTarget, setSettlementTarget] = useState<AccountingTradeSettlement | null>(null);
   const [cashbookDetailTarget, setCashbookDetailTarget] = useState<CashbookTransaction | null>(
     null,
   );
@@ -354,7 +391,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     const rows = (transactionsPage.data?.items ?? []).map((item) =>
       item.kind === 'document'
         ? toDocumentRow(item.document, documentKeyByTypeId)
-        : toCashbookRow(item.transaction),
+        : item.kind === 'settlement'
+          ? toSettlementRow(item.settlement, item.linkedDocuments)
+          : toCashbookRow(item.transaction),
     );
     return [...requestRows, ...rows];
   }, [transactionsPage.data, requestRows, documentKeyByTypeId]);
@@ -496,6 +535,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
                   {row.document!.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
                 </TableButton>
               ) : null
+            ) : row.kind === 'settlement' ? (
+              row.settlement!.status === 'DRAFT' ? (
+                <TableButton variant="green" onClick={() => setSettlementTarget(row.settlement!)}>
+                  Post
+                </TableButton>
+              ) : null
             ) : row.cashbook!.status === 'DRAFT' ? (
               <TableButton variant="green" onClick={() => setCashbookDetailTarget(row.cashbook!)}>
                 {cashbookActionLabel(row.cashbook!.direction)}
@@ -578,6 +623,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         onRowClick={(row) => {
           if (row.kind === 'paymentRequest') setRequestInvoiceId(row.paymentRequest!.invoiceId);
           else if (row.kind === 'document') setDetailTarget(row.document!);
+          else if (row.kind === 'settlement') setSettlementTarget(row.settlement!);
           else setCashbookDetailTarget(row.cashbook!);
         }}
         actionButton={
@@ -668,6 +714,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           setDetailTarget(null);
           setPaymentTarget(document);
         }}
+      />
+
+      <TradeSettlementDetailPanel
+        side={settlementTarget?.side ?? 'RECEIVABLE'}
+        settlement={settlementTarget}
+        onClose={() => setSettlementTarget(null)}
       />
 
       <DocumentPreviewPanel target={previewTarget} onClose={() => setPreviewTarget(null)} />
