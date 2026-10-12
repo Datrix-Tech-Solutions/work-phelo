@@ -363,6 +363,14 @@ enum ProjectActivityType {
   @@schema("hr")
 }
 
+enum RecruitmentVacancyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+
+  @@schema("hr")
+}
+
 // ── Branch ───────────────────────────────────────────────────────────────
 
 model Branch {
@@ -494,6 +502,7 @@ model Employee {
   managedProjects       Project[]                   @relation("ManagedProjects")
   projectMemberships    ProjectMember[]
   assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
+  recruitmentStageMoves RecruitmentStageHistory[]   @relation("RecruitmentStageChangedBy")
   offboarding           OffboardingRecord?
   resignation           ResignationRecord?
 
@@ -593,6 +602,153 @@ model ProjectActivity {
 
   @@index([tenantId, projectId, createdAt])
   @@index([tenantId, taskId])
+  @@schema("hr")
+}
+
+// ── Recruitment ───────────────────────────────────────────────────────────
+
+model RecruitmentVacancy {
+  id               String                   @id @default(uuid())
+  tenantId         String
+  title            String?
+  location         String?
+  jobType          EmploymentType?
+  description      String?
+  responsibilities String?
+  requirements     String?
+  salaryMin        Decimal?                 @db.Decimal(15, 2)
+  salaryMax        Decimal?                 @db.Decimal(15, 2)
+  salaryCurrency   String?
+  status           RecruitmentVacancyStatus @default(DRAFT)
+  createdByUserId  String?
+  updatedByUserId  String?
+  closedAt         DateTime?
+  closedByUserId   String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  applications RecruitmentApplication[]
+  questions    RecruitmentVacancyQuestion[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
+model RecruitmentVacancyQuestion {
+  id        String    @id @default(uuid())
+  tenantId  String
+  vacancyId String
+  question  String
+  required  Boolean   @default(false)
+  sortOrder Int
+  retiredAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  vacancy RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  answers RecruitmentApplicationAnswer[]
+
+  @@index([tenantId, vacancyId, retiredAt])
+  @@index([tenantId, sortOrder])
+  @@schema("hr")
+}
+
+model RecruitmentStage {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  normalizedName String
+  description    String?
+  sortOrder      Int
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  applications RecruitmentApplication[]
+  fromHistory  RecruitmentStageHistory[] @relation("RecruitmentPreviousStage")
+  toHistory    RecruitmentStageHistory[] @relation("RecruitmentNewStage")
+
+  @@unique([tenantId, normalizedName])
+  @@unique([tenantId, sortOrder])
+  @@index([tenantId, isDefault])
+  @@schema("hr")
+}
+
+model RecruitmentApplication {
+  id                     String   @id @default(uuid())
+  tenantId               String
+  vacancyId              String
+  currentStageId         String
+  firstName              String
+  lastName               String
+  email                  String
+  phone                  String?
+  professionalSummary    String?
+  skills                 String[] @default([])
+  education              String?
+  expectedSalary         Decimal? @db.Decimal(15, 2)
+  expectedSalaryCurrency String?
+  noticePeriod           String?
+  resumeUrl              String?
+  resumeFileName         String?
+  coverLetterUrl         String?
+  coverLetterFileName    String?
+  portfolioUrl           String?
+  githubUrl              String?
+  metadata               Json?
+  appliedAt              DateTime @default(now())
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  vacancy      RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  currentStage RecruitmentStage               @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
+  stageHistory RecruitmentStageHistory[]
+  answers      RecruitmentApplicationAnswer[]
+
+  @@index([tenantId, vacancyId])
+  @@index([tenantId, currentStageId])
+  @@index([tenantId, appliedAt])
+  @@index([tenantId, email])
+  @@schema("hr")
+}
+
+model RecruitmentApplicationAnswer {
+  id               String   @id @default(uuid())
+  tenantId         String
+  applicationId    String
+  questionId       String
+  questionSnapshot String
+  answer           String
+  createdAt        DateTime @default(now())
+
+  application RecruitmentApplication     @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  question    RecruitmentVacancyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([applicationId, questionId])
+  @@index([tenantId, applicationId])
+  @@index([tenantId, questionId])
+  @@schema("hr")
+}
+
+model RecruitmentStageHistory {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  applicationId       String
+  previousStageId     String?
+  newStageId          String
+  changedByUserId     String?
+  changedByEmployeeId String?
+  note                String?
+  changedAt           DateTime @default(now())
+
+  application       RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  previousStage     RecruitmentStage?      @relation("RecruitmentPreviousStage", fields: [previousStageId], references: [id], onDelete: Restrict)
+  newStage          RecruitmentStage       @relation("RecruitmentNewStage", fields: [newStageId], references: [id], onDelete: Restrict)
+  changedByEmployee Employee?              @relation("RecruitmentStageChangedBy", fields: [changedByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, applicationId, changedAt])
+  @@index([tenantId, newStageId])
   @@schema("hr")
 }
 

@@ -133,6 +133,24 @@ describe('ProxyController Reinsurance foundation', () => {
     expect(status).toHaveBeenCalledWith(401);
   });
 
+  it('makes only applicant-facing recruitment routes public', () => {
+    const controller = new ProxyController() as unknown as {
+      isPublicPath(path: string): boolean;
+    };
+
+    for (const path of [
+      '/api/v1/hr/recruitment/public/vacancies',
+      '/api/v1/hr/recruitment/public/vacancies/vacancy-1',
+      '/api/v1/hr/recruitment/public/vacancies/vacancy-1/applications',
+    ]) {
+      expect(controller.isPublicPath(path)).toBe(true);
+    }
+
+    expect(controller.isPublicPath('/api/v1/hr/recruitment/vacancies')).toBe(
+      false,
+    );
+  });
+
   it('makes dev Swagger docs public for deployed services', () => {
     const controller = new ProxyController() as unknown as {
       isPublicPath(path: string): boolean;
