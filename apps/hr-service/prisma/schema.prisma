@@ -371,6 +371,21 @@ enum RecruitmentVacancyStatus {
   @@schema("hr")
 }
 
+enum RecruitmentQuestionType {
+  TEXT
+  SINGLE_SELECT
+  MULTI_SELECT
+
+  @@schema("hr")
+}
+
+enum RecruitmentApplicationStatus {
+  DRAFT
+  SUBMITTED
+
+  @@schema("hr")
+}
+
 // ── Branch ───────────────────────────────────────────────────────────────
 
 model Branch {
@@ -636,15 +651,17 @@ model RecruitmentVacancy {
 }
 
 model RecruitmentVacancyQuestion {
-  id        String    @id @default(uuid())
+  id        String                  @id @default(uuid())
   tenantId  String
   vacancyId String
   question  String
-  required  Boolean   @default(false)
+  type      RecruitmentQuestionType @default(TEXT)
+  options   Json?
+  required  Boolean                 @default(false)
   sortOrder Int
   retiredAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
 
   vacancy RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
   answers RecruitmentApplicationAnswer[]
@@ -676,18 +693,27 @@ model RecruitmentStage {
 }
 
 model RecruitmentApplication {
-  id                     String   @id @default(uuid())
+  id                     String                       @id @default(uuid())
   tenantId               String
   vacancyId              String
-  currentStageId         String
-  firstName              String
-  lastName               String
-  email                  String
+  currentStageId         String?
+  status                 RecruitmentApplicationStatus @default(DRAFT)
+  accessTokenHash        String?                      @unique
+  submittedAt            DateTime?
+  firstName              String?
+  lastName               String?
+  email                  String?
   phone                  String?
+  country                String?
+  city                   String?
   professionalSummary    String?
-  skills                 String[] @default([])
+  skills                 String[]                     @default([])
   education              String?
-  expectedSalary         Decimal? @db.Decimal(15, 2)
+  yearsOfExperience      Int?
+  currentJobTitle        String?
+  currentEmployer        String?
+  highestEducationLevel  String?
+  expectedSalary         Decimal?                     @db.Decimal(15, 2)
   expectedSalaryCurrency String?
   noticePeriod           String?
   resumeUrl              String?
@@ -697,18 +723,21 @@ model RecruitmentApplication {
   portfolioUrl           String?
   githubUrl              String?
   metadata               Json?
-  appliedAt              DateTime @default(now())
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  appliedAt              DateTime                     @default(now())
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
 
   vacancy      RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
-  currentStage RecruitmentStage               @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
+  currentStage RecruitmentStage?              @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
   stageHistory RecruitmentStageHistory[]
   answers      RecruitmentApplicationAnswer[]
 
   @@index([tenantId, vacancyId])
   @@index([tenantId, currentStageId])
+  @@index([tenantId, status])
+  @@index([tenantId, vacancyId, status])
   @@index([tenantId, appliedAt])
+  @@index([tenantId, submittedAt])
   @@index([tenantId, email])
   @@schema("hr")
 }
@@ -720,6 +749,8 @@ model RecruitmentApplicationAnswer {
   questionId       String
   questionSnapshot String
   answer           String
+  answerText       String?
+  selectedOptions  String[] @default([])
   createdAt        DateTime @default(now())
 
   application RecruitmentApplication     @relation(fields: [applicationId], references: [id], onDelete: Restrict)

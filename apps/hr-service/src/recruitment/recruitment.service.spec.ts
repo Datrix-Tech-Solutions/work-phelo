@@ -8,6 +8,8 @@ import {
 import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import {
   EmploymentType,
+  RecruitmentApplicationStatus,
+  RecruitmentQuestionType,
   RecruitmentVacancyStatus,
 } from '../../prisma/generated/client';
 import { RecruitmentService } from './recruitment.service';
@@ -55,6 +57,7 @@ function createPrismaMock() {
       update: jest.fn(),
     },
     recruitmentApplicationAnswer: {
+      deleteMany: jest.fn(),
       createMany: jest.fn(),
     },
     recruitmentStageHistory: {
@@ -105,6 +108,8 @@ function question(overrides: Record<string, unknown> = {}) {
     tenantId: 'tenant-1',
     vacancyId: 'vacancy-1',
     question: 'Why are you interested in this role?',
+    type: RecruitmentQuestionType.TEXT,
+    options: null,
     required: true,
     sortOrder: 1,
     retiredAt: null,
@@ -134,14 +139,23 @@ function candidate(overrides: Record<string, unknown> = {}) {
     id: 'candidate-1',
     tenantId: 'tenant-1',
     vacancyId: 'vacancy-1',
+    status: RecruitmentApplicationStatus.SUBMITTED,
+    accessTokenHash: null,
+    submittedAt: new Date('2026-10-01T00:00:00Z'),
     currentStageId: 'stage-1',
     firstName: 'Ama',
     lastName: 'Mensah',
     email: 'ama@example.com',
     phone: null,
+    country: 'Ghana',
+    city: 'Accra',
     professionalSummary: null,
     skills: ['Payroll'],
     education: null,
+    yearsOfExperience: 3,
+    currentJobTitle: 'HR Officer',
+    currentEmployer: null,
+    highestEducationLevel: 'Bachelor Degree',
     expectedSalary: null,
     expectedSalaryCurrency: null,
     noticePeriod: null,
@@ -161,6 +175,40 @@ function candidate(overrides: Record<string, unknown> = {}) {
     _count: { stageHistory: 1 },
     ...overrides,
   };
+}
+
+function applicationDto(overrides: Record<string, unknown> = {}) {
+  return {
+    vacancyId: 'vacancy-1',
+    firstName: 'Ama',
+    lastName: 'Mensah',
+    email: 'ama@example.com',
+    phone: '+233201234567',
+    country: 'Ghana',
+    city: 'Accra',
+    yearsOfExperience: 3,
+    currentJobTitle: 'HR Officer',
+    highestEducationLevel: 'Bachelor Degree',
+    skills: ['Payroll'],
+    noticePeriod: 'One month',
+    ...overrides,
+  } as any;
+}
+
+function draftApplication(overrides: Record<string, unknown> = {}) {
+  return candidate({
+    status: RecruitmentApplicationStatus.DRAFT,
+    accessTokenHash: 'token-hash',
+    currentStageId: null,
+    currentStage: null,
+    submittedAt: null,
+    vacancy: vacancy({
+      questions: [],
+      _count: { applications: 0 },
+    }),
+    _count: { stageHistory: 0 },
+    ...overrides,
+  });
 }
 
 describe('RecruitmentService', () => {
@@ -183,7 +231,13 @@ describe('RecruitmentService', () => {
         expect.objectContaining({
           where: { tenantId: 'tenant-1' },
           include: expect.objectContaining({
-            _count: { select: { applications: true } },
+            _count: {
+              select: {
+                applications: {
+                  where: { status: RecruitmentApplicationStatus.SUBMITTED },
+                },
+              },
+            },
           }),
         }),
       );
@@ -628,6 +682,7 @@ describe('RecruitmentService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             tenantId: 'tenant-1',
+            status: RecruitmentApplicationStatus.SUBMITTED,
             vacancyId: 'vacancy-1',
             currentStageId: 'stage-1',
           }),
@@ -654,6 +709,8 @@ describe('RecruitmentService', () => {
               questionId: 'question-1',
               questionSnapshot: 'Why this role?',
               answer: 'I can help the team.',
+              answerText: 'I can help the team.',
+              selectedOptions: [],
               createdAt: new Date('2026-10-01T00:00:00Z'),
               question: question({
                 id: 'question-1',
@@ -694,7 +751,11 @@ describe('RecruitmentService', () => {
 
       expect(prisma.recruitmentApplication.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenantId: 'tenant-1', id: 'candidate-1' },
+          where: {
+            tenantId: 'tenant-1',
+            id: 'candidate-1',
+            status: RecruitmentApplicationStatus.SUBMITTED,
+          },
         }),
       );
       expect(result.resume).toEqual({
@@ -773,7 +834,11 @@ describe('RecruitmentService', () => {
 
       expect(prisma.recruitmentApplication.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tenantId: 'tenant-1', id: 'candidate-1' },
+          where: {
+            tenantId: 'tenant-1',
+            id: 'candidate-1',
+            status: RecruitmentApplicationStatus.SUBMITTED,
+          },
         }),
       );
       expect(prisma.recruitmentStageHistory.findMany).toHaveBeenCalledWith(
@@ -800,10 +865,9 @@ describe('RecruitmentService', () => {
       );
 
       await service.createApplication('tenant-1', user, {
-        vacancyId: 'vacancy-1',
-        firstName: 'Ama',
-        lastName: 'Mensah',
-        email: 'AMA@EXAMPLE.COM',
+        ...applicationDto({
+          email: 'AMA@EXAMPLE.COM',
+        }),
       });
 
       expect(prisma.recruitmentApplication.create).toHaveBeenCalledWith({
@@ -855,16 +919,14 @@ describe('RecruitmentService', () => {
       );
 
       await service.createApplication('tenant-1', user, {
-        vacancyId: 'vacancy-1',
-        firstName: 'Ama',
-        lastName: 'Mensah',
-        email: 'ama@example.com',
-        answers: [
-          {
-            questionId: 'question-1',
-            answer: ' This is a strong fit. ',
-          },
-        ],
+        ...applicationDto({
+          answers: [
+            {
+              questionId: 'question-1',
+              answer: ' This is a strong fit. ',
+            },
+          ],
+        }),
       });
 
       expect(prisma.$transaction).toHaveBeenCalled();
@@ -878,6 +940,8 @@ describe('RecruitmentService', () => {
             questionId: 'question-1',
             questionSnapshot: 'Why are you interested in this role?',
             answer: 'This is a strong fit.',
+            answerText: 'This is a strong fit.',
+            selectedOptions: [],
           }),
         ],
       });
@@ -894,10 +958,9 @@ describe('RecruitmentService', () => {
 
       await expect(
         service.createApplication('tenant-1', user, {
-          vacancyId: 'vacancy-1',
-          firstName: 'Ama',
-          lastName: 'Mensah',
-          email: 'ama@example.com',
+          ...applicationDto({
+            answers: [],
+          }),
         }),
       ).rejects.toThrow(BadRequestException);
 
@@ -915,11 +978,9 @@ describe('RecruitmentService', () => {
 
       await expect(
         service.createApplication('tenant-1', user, {
-          vacancyId: 'vacancy-1',
-          firstName: 'Ama',
-          lastName: 'Mensah',
-          email: 'ama@example.com',
-          answers: [{ questionId: 'question-other', answer: 'Nope' }],
+          ...applicationDto({
+            answers: [{ questionId: 'question-other', answer: 'Nope' }],
+          }),
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -935,16 +996,310 @@ describe('RecruitmentService', () => {
 
       await expect(
         service.createApplication('tenant-1', user, {
-          vacancyId: 'vacancy-1',
-          firstName: 'Ama',
-          lastName: 'Mensah',
-          email: 'ama@example.com',
-          answers: [
-            { questionId: 'question-1', answer: 'First' },
-            { questionId: 'question-1', answer: 'Second' },
-          ],
+          ...applicationDto({
+            answers: [
+              { questionId: 'question-1', answer: 'First' },
+              { questionId: 'question-1', answer: 'Second' },
+            ],
+          }),
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('starts public applications as drafts without stage history', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        questions: [],
+      });
+      prisma.recruitmentApplication.create.mockResolvedValue(
+        draftApplication({ id: 'application-1' }),
+      );
+      prisma.recruitmentApplicationAnswer.deleteMany.mockResolvedValue({
+        count: 0,
+      });
+      prisma.recruitmentApplication.findFirstOrThrow.mockResolvedValue(
+        draftApplication({ id: 'application-1' }),
+      );
+
+      const result = await service.createPublicApplication(
+        'tenant-1',
+        'vacancy-1',
+        { firstName: 'Ama' },
+      );
+
+      expect(result.accessToken).toEqual(expect.any(String));
+      expect(prisma.recruitmentApplication.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tenantId: 'tenant-1',
+          vacancyId: 'vacancy-1',
+          status: RecruitmentApplicationStatus.DRAFT,
+          accessTokenHash: expect.any(String),
+        }),
+      });
+      expect(prisma.recruitmentApplication.create).toHaveBeenCalledWith({
+        data: expect.not.objectContaining({
+          currentStageId: expect.any(String),
+        }),
+      });
+      expect(prisma.recruitmentStageHistory.create).not.toHaveBeenCalled();
+    });
+
+    it('does not allow draft access by id alone', async () => {
+      await expect(
+        service.getPublicApplication('application-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.recruitmentApplication.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('does not allow one draft token to access another application id', async () => {
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getPublicApplication(
+          'application-b',
+          'token-for-application-a',
+        ),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.recruitmentApplication.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'application-b',
+            accessTokenHash: expect.any(String),
+            status: RecruitmentApplicationStatus.DRAFT,
+          }),
+        }),
+      );
+    });
+
+    it('reviews draft completion without submitting it', async () => {
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(
+        draftApplication({
+          firstName: 'Ama',
+          lastName: null,
+          email: 'ama@example.com',
+          phone: '+233201234567',
+          country: 'Ghana',
+          city: 'Accra',
+          yearsOfExperience: 3,
+          currentJobTitle: 'HR Officer',
+          highestEducationLevel: 'Bachelor Degree',
+          skills: ['Payroll'],
+          noticePeriod: 'One month',
+          vacancy: vacancy({
+            questions: [question({ required: true })],
+            _count: { applications: 0 },
+          }),
+          answers: [],
+        }),
+      );
+
+      const result = await service.reviewPublicApplication(
+        'application-1',
+        'token',
+      );
+
+      expect(result.canSubmit).toBe(false);
+      expect(result.missing).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: 'lastName' }),
+          expect.objectContaining({ field: 'question:question-1' }),
+        ]),
+      );
+      expect(prisma.recruitmentApplication.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'application-1',
+            accessTokenHash: expect.any(String),
+            status: RecruitmentApplicationStatus.DRAFT,
+          }),
+        }),
+      );
+    });
+
+    it('submits a complete public draft and assigns the default stage atomically', async () => {
+      prisma.recruitmentApplication.findFirst
+        .mockResolvedValueOnce(
+          draftApplication({
+            ...applicationDto(),
+            id: 'application-1',
+            vacancy: vacancy({
+              questions: [question({ required: true })],
+              _count: { applications: 0 },
+            }),
+            answers: [
+              {
+                id: 'answer-1',
+                tenantId: 'tenant-1',
+                applicationId: 'application-1',
+                questionId: 'question-1',
+                questionSnapshot: 'Why are you interested in this role?',
+                answer: 'This is a strong fit.',
+                answerText: 'This is a strong fit.',
+                selectedOptions: [],
+                createdAt: new Date('2026-10-01T00:00:00Z'),
+                question: question(),
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(null);
+      prisma.recruitmentStage.findMany.mockResolvedValue([stage()]);
+      prisma.recruitmentStage.findFirst.mockResolvedValue(stage());
+      prisma.recruitmentApplication.update.mockResolvedValue({});
+      prisma.recruitmentStageHistory.create.mockResolvedValue({});
+      prisma.recruitmentApplication.findFirstOrThrow.mockResolvedValue(
+        candidate({ id: 'application-1', currentStageId: 'stage-1' }),
+      );
+
+      await service.submitPublicApplication('application-1', 'token');
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+        where: { id: 'application-1' },
+        data: expect.objectContaining({
+          status: RecruitmentApplicationStatus.SUBMITTED,
+          currentStageId: 'stage-1',
+          accessTokenHash: null,
+        }),
+      });
+      expect(prisma.recruitmentStageHistory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tenantId: 'tenant-1',
+          applicationId: 'application-1',
+          previousStageId: null,
+          newStageId: 'stage-1',
+        }),
+      });
+    });
+
+    it('rejects duplicate submitted applications for the same vacancy and email', async () => {
+      prisma.recruitmentApplication.findFirst
+        .mockResolvedValueOnce(
+          draftApplication({
+            ...applicationDto(),
+            id: 'application-1',
+          }),
+        )
+        .mockResolvedValueOnce({ id: 'existing-submission' });
+
+      await expect(
+        service.submitPublicApplication('application-1', 'token'),
+      ).rejects.toThrow(ConflictException);
+
+      expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('validates and snapshots single-select question answers', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        questions: [
+          question({
+            type: RecruitmentQuestionType.SINGLE_SELECT,
+            options: ['Yes', 'No'],
+            required: true,
+          }),
+        ],
+      });
+      prisma.recruitmentStage.findMany.mockResolvedValue([stage()]);
+      prisma.recruitmentStage.findFirst.mockResolvedValue(stage());
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.recruitmentApplication.create.mockResolvedValue(
+        candidate({ id: 'candidate-1' }),
+      );
+      prisma.recruitmentApplicationAnswer.createMany.mockResolvedValue({
+        count: 1,
+      });
+      prisma.recruitmentStageHistory.create.mockResolvedValue({});
+      prisma.recruitmentApplication.findFirstOrThrow.mockResolvedValue(
+        candidate({ id: 'candidate-1' }),
+      );
+
+      await service.createApplication(
+        'tenant-1',
+        user,
+        applicationDto({
+          answers: [{ questionId: 'question-1', selectedOptions: ['Yes'] }],
+        }),
+      );
+
+      expect(
+        prisma.recruitmentApplicationAnswer.createMany,
+      ).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            questionId: 'question-1',
+            answer: 'Yes',
+            answerText: null,
+            selectedOptions: ['Yes'],
+          }),
+        ],
+      });
+    });
+
+    it('rejects unconfigured select question options', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        questions: [
+          question({
+            type: RecruitmentQuestionType.MULTI_SELECT,
+            options: ['Payroll', 'Benefits'],
+            required: false,
+          }),
+        ],
+      });
+      prisma.recruitmentStage.findMany.mockResolvedValue([stage()]);
+      prisma.recruitmentStage.findFirst.mockResolvedValue(stage());
+      prisma.employee.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createApplication(
+          'tenant-1',
+          user,
+          applicationDto({
+            answers: [
+              {
+                questionId: 'question-1',
+                selectedOptions: ['Payroll', 'Unconfigured'],
+              },
+            ],
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.recruitmentApplication.create).not.toHaveBeenCalled();
+    });
+
+    it('allows optional questions to remain unanswered while saving drafts', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        questions: [
+          question({
+            type: RecruitmentQuestionType.SINGLE_SELECT,
+            options: ['Yes', 'No'],
+            required: false,
+          }),
+        ],
+      });
+      prisma.recruitmentApplication.create.mockResolvedValue(
+        draftApplication({ id: 'application-1' }),
+      );
+      prisma.recruitmentApplicationAnswer.deleteMany.mockResolvedValue({
+        count: 0,
+      });
+      prisma.recruitmentApplication.findFirstOrThrow.mockResolvedValue(
+        draftApplication({ id: 'application-1' }),
+      );
+
+      await service.createPublicApplication('tenant-1', 'vacancy-1', {
+        answers: [],
+      });
+
+      expect(prisma.recruitmentApplication.create).toHaveBeenCalled();
+      expect(
+        prisma.recruitmentApplicationAnswer.createMany,
+      ).not.toHaveBeenCalled();
     });
 
     it('rejects closed or draft vacancies for application submission', async () => {
@@ -952,10 +1307,7 @@ describe('RecruitmentService', () => {
 
       await expect(
         service.createApplication('tenant-1', user, {
-          vacancyId: 'vacancy-1',
-          firstName: 'Ama',
-          lastName: 'Mensah',
-          email: 'ama@example.com',
+          ...applicationDto(),
         }),
       ).rejects.toThrow(NotFoundException);
     });
@@ -971,10 +1323,7 @@ describe('RecruitmentService', () => {
 
       await expect(
         service.createApplication('tenant-1', user, {
-          vacancyId: 'vacancy-1',
-          firstName: 'Ama',
-          lastName: 'Mensah',
-          email: 'ama@example.com',
+          ...applicationDto(),
         }),
       ).rejects.toThrow(ConflictException);
     });
