@@ -323,6 +323,7 @@ export function TradeDocumentDetailPanel({
         await postPayable.mutateAsync(document.id);
       }
       toast.success(isCreditNote ? 'Credit note posted.' : 'Invoice posted.');
+      handleClose();
     } catch (err) {
       toast.error(extractError(err, 'Failed to post document'));
     }

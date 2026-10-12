@@ -179,6 +179,7 @@ export function TradeSettlementDetailPanel({
     try {
       await post.mutateAsync(settlement.id);
       toast.success(`${documentLabel} posted.`);
+      handleClose();
     } catch (err) {
       toast.error(extractError(err, `Failed to post ${documentLabel.toLowerCase()}`));
     }

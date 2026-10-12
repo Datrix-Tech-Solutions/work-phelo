@@ -1,39 +1,32 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, useWatch, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
-import { AccountingCashAccountKind, GLAccountCategory } from '@/types/accounting';
+import { AccountingCashAccountKind } from '@/types/accounting';
 import {
   useAccountingCurrencyOptions,
+  useCashAccounts,
   useCreateCashAccount,
-  useCreateGLAccount,
+  useGLAccounts,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
-interface FixedGroup {
-  accountType: GLAccountCategory;
-  classificationId: string;
-  groupId: string;
-  /** e.g. "Current Assets > Cash and Bank" */
-  label: string;
-}
-
 interface AddCashAndBankAccountPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Where the new leaf account is filed — always fixed for a Cash/Bank account,
-   *  never asked, since it always lives under Asset > Current Assets > Cash and Bank. */
-  fixedGroup?: FixedGroup;
 }
 
+/** Code of the seeded "Current Assets" classification — bank, cash and mobile money accounts
+ *  all sit under it. See STANDARD_ACCOUNT_HIERARCHY in accounting-master-data.service.ts. */
+const CURRENT_ASSETS_CLASSIFICATION_CODE = '1100';
+
 type FormValues = {
-  accountCode: string;
+  glAccountId: string;
   name: string;
   accountKind: AccountingCashAccountKind | '';
   currency: string;
@@ -44,7 +37,7 @@ type FormValues = {
 };
 
 const DEFAULTS: FormValues = {
-  accountCode: '',
+  glAccountId: '',
   name: '',
   accountKind: '',
   currency: '',
@@ -61,28 +54,41 @@ const KIND_OPTIONS: SearchSelectOption[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-/** One form that creates both halves of a Cash/Bank account at once: the leaf GL
- *  account (filed under the fixed Cash and Bank group) and the Cash Account record
- *  linked to it — so it's immediately usable for payments the moment it's saved,
- *  instead of a leaf account sitting incomplete until a separate step finishes it. */
-export function AddCashAndBankAccountPanel({
-  isOpen,
-  onClose,
-  fixedGroup,
-}: AddCashAndBankAccountPanelProps) {
+/** Creates a Cash/Bank account record and links it to an existing leaf account under Current
+ *  Assets. The leaf account is picked, not created here, so it doesn't matter which group it was
+ *  filed under — only that it is an active, posting-enabled account that nothing else is using. */
+export function AddCashAndBankAccountPanel({ isOpen, onClose }: AddCashAndBankAccountPanelProps) {
   const toast = useToast();
-  const { mutateAsync: createGLAccount, isPending: isCreatingGLAccount } = useCreateGLAccount();
-  const { mutateAsync: createCashAccount, isPending: isCreatingCashAccount } =
-    useCreateCashAccount();
-  const isPending = isCreatingGLAccount || isCreatingCashAccount;
+  const { mutateAsync: createCashAccount, isPending } = useCreateCashAccount();
   const { options: currencyOptions, isLoading: isLoadingCurrencies } =
     useAccountingCurrencyOptions();
+  const { data: glAccounts = [], isLoading: isLoadingGLAccounts } = useGLAccounts({
+    category: 'ASSET',
+  });
+  const { data: cashAccounts = [] } = useCashAccounts();
+
+  const glAccountOptions = useMemo<SearchSelectOption[]>(() => {
+    const linked = new Set(cashAccounts.map((c) => c.glAccountId));
+    const parents = new Set(glAccounts.map((g) => g.parentAccountId).filter(Boolean));
+    return glAccounts
+      .filter(
+        (g) =>
+          g.status === 'ACTIVE' &&
+          g.allowPosting &&
+          g.classification?.code === CURRENT_ASSETS_CLASSIFICATION_CODE &&
+          !parents.has(g.id) &&
+          !linked.has(g.id),
+      )
+      .map((g) => ({ value: g.id, label: `${g.code} – ${g.name}` }));
+  }, [glAccounts, cashAccounts]);
 
   const {
     register,
     handleSubmit,
     control,
     reset,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
@@ -98,26 +104,12 @@ export function AddCashAndBankAccountPanel({
   };
 
   const onSubmit = async (data: FormValues) => {
-    if (!fixedGroup) return;
-    let glAccountId: string;
-    try {
-      const glAccount = await createGLAccount({
-        code: data.accountCode,
-        name: data.name,
-        accountGroupId: fixedGroup.groupId,
-      });
-      glAccountId = glAccount.id;
-    } catch (err) {
-      toast.error(extractError(err, 'Failed to create account'));
-      return;
-    }
-
     try {
       await createCashAccount({
         name: data.name,
         accountKind: data.accountKind as AccountingCashAccountKind,
         currency: data.currency,
-        glAccountId,
+        glAccountId: data.glAccountId,
         bankName: data.bankName || undefined,
         accountNumber: data.accountNumber || undefined,
         branch: data.branch || undefined,
@@ -126,13 +118,7 @@ export function AddCashAndBankAccountPanel({
       toast.success('Cash/Bank account created successfully');
       handleClose();
     } catch (err) {
-      toast.error(
-        extractError(
-          err,
-          'The account was created but its cash/bank details could not be saved — find it in the list marked "Setup Required" to finish.',
-        ),
-      );
-      handleClose();
+      toast.error(extractError(err, 'Failed to create the cash/bank account'));
     }
   };
 
@@ -141,11 +127,7 @@ export function AddCashAndBankAccountPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title="Add Cash/Bank Account"
-      description={
-        fixedGroup
-          ? `Creates a new account under ${fixedGroup.label}, ready to use for payments.`
-          : undefined
-      }
+      description="Link a bank, cash or mobile money account to a leaf account under Current Assets so it can be used for payments and receipts."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -158,15 +140,35 @@ export function AddCashAndBankAccountPanel({
       }
     >
       <div className="flex flex-col gap-4">
-        {fixedGroup && <Input label="Account Group" readOnly value={fixedGroup.label} />}
-
-        <FormField
-          label="Account Code"
-          type="number"
-          registration={register('accountCode', { required: 'Account code is required' })}
-          error={errors.accountCode}
-          placeholder="e.g. 1101"
-        />
+        <div className="flex flex-col gap-1">
+          <Controller
+            name="glAccountId"
+            control={control}
+            rules={{ required: 'Choose the account to link' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Linked Account"
+                placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select a Current Assets account…'}
+                options={glAccountOptions}
+                value={field.value}
+                onChange={(value) => {
+                  field.onChange(value);
+                  // Start the name from the account's own name, unless one was already typed.
+                  if (!getValues('name')) {
+                    const picked = glAccounts.find((g) => g.id === value);
+                    if (picked) setValue('name', picked.name);
+                  }
+                }}
+                error={errors.glAccountId?.message}
+              />
+            )}
+          />
+          {!isLoadingGLAccounts && glAccountOptions.length === 0 && (
+            <span className="text-xs text-amber-700">
+              No free account under Current Assets. Create one in the Chart of Accounts first.
+            </span>
+          )}
+        </div>
 
         <FormField
           label="Account Name"
