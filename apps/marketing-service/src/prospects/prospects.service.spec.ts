@@ -1856,6 +1856,7 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-a',
           _max: { occurredAt: new Date('2026-10-01T10:30:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
       prisma.marketingCrmSettingOption.findMany.mockResolvedValueOnce([
@@ -2007,6 +2008,7 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-a',
           _max: { occurredAt: new Date('2026-10-01T10:30:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
 
@@ -2220,6 +2222,7 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-a',
           _max: { occurredAt: new Date('2026-09-30T10:00:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
 
@@ -2263,10 +2266,12 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-explicit',
           _max: { occurredAt: new Date('2026-09-29T10:00:00.000Z') },
+          _count: { _all: 1 },
         },
         {
           prospectId: 'prospect-default',
           _max: { occurredAt: new Date('2026-09-30T10:00:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
 
@@ -2393,6 +2398,7 @@ describe('ProspectsService', () => {
           _max: {
             occurredAt: new Date('2026-09-29T11:00:00.000Z'),
           },
+          _count: { _all: 3 },
         },
       ]);
       prisma.marketingPipelineStage.findMany.mockResolvedValue([
@@ -2533,6 +2539,7 @@ describe('ProspectsService', () => {
             },
             progress: 60,
             lastInteractionDate: new Date('2026-09-29T11:00:00.000Z'),
+            interactionCount: 3,
             expectedCloseDate: new Date('2026-10-15T00:00:00.000Z'),
             assignedUserId: 'user-1',
             assignedUserName: 'Ada Lovelace',

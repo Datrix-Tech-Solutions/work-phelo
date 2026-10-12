@@ -90,6 +90,11 @@ function row(overrides: Record<string, unknown> = {}) {
     driverEmployeeId: null,
     driverName: null,
     selfDriven: false,
+    preferredVehicleAssetId: null,
+    preferredVehicleName: null,
+    preferredDriverEmployeeId: null,
+    preferredDriverName: null,
+    preferredSelfDriven: false,
     startedAt: null,
     startedByUserId: null,
     startedByName: null,
@@ -2914,6 +2919,9 @@ describe('RequestsService', () => {
     it('returns the requester and everyone else as passengers', async () => {
       directory.list.mockResolvedValue([ama, kofi]);
       directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      fleet.listVehicles.mockResolvedValue([]);
+      officers.activeDrivers.mockResolvedValue([]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([]);
 
       const result = await service.formOptions(user());
 
@@ -2922,6 +2930,200 @@ describe('RequestsService', () => {
         department: 'Operations',
       });
       expect(result.employees).toEqual([kofi]);
+    });
+
+    it('offers usable vehicles and active transport officers to ask for', async () => {
+      directory.list.mockResolvedValue([ama, kofi]);
+      directory.resolve.mockResolvedValue({ person: ama, people: [] });
+      fleet.listVehicles.mockResolvedValue([
+        { id: 'v1', name: 'Hilux', assetNumber: 'VEH-1', status: 'AVAILABLE' },
+        { id: 'v2', name: 'Van', assetNumber: 'VEH-2', status: 'MAINTENANCE' },
+        { id: 'v3', name: 'Bus', assetNumber: 'VEH-3', status: 'RETIRED' },
+      ]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([
+        { assetId: 'v1', make: 'Toyota', model: 'Hilux' },
+      ]);
+      officers.activeDrivers.mockResolvedValue([kofi]);
+
+      const result = await service.formOptions(user());
+
+      expect(result.vehicles).toEqual([
+        { assetId: 'v1', name: 'Toyota Hilux', assetNumber: 'VEH-1' },
+      ]);
+      expect(result.drivers).toEqual([
+        { employeeId: 'e2', name: 'Kofi Boateng', department: null },
+      ]);
+    });
+  });
+
+  describe('requested vehicle and driver', () => {
+    const vehicle = {
+      id: 'v1',
+      name: 'Hilux',
+      assetNumber: 'VEH-1',
+      status: 'AVAILABLE',
+    };
+
+    beforeEach(() => {
+      directory.resolve.mockResolvedValue({ person: ama, people: [kofi] });
+      fleet.getVehicle.mockResolvedValue(vehicle);
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue({
+        make: 'Toyota',
+        model: 'Hilux',
+      });
+      prisma.marketingTransportRequest.create.mockResolvedValue(row());
+    });
+
+    it('stores the vehicle and driver the requester asked for', async () => {
+      await service.create(user(), {
+        ...createDto,
+        preferredVehicleAssetId: 'v1',
+        preferredDriverEmployeeId: 'e2',
+      });
+
+      expect(officers.assertActiveOfficer).toHaveBeenCalledWith(TENANT, 'e2');
+      expect(
+        callArg(prisma.marketingTransportRequest.create).data,
+      ).toMatchObject({
+        preferredVehicleAssetId: 'v1',
+        preferredVehicleName: 'Toyota Hilux',
+        preferredDriverEmployeeId: 'e2',
+        preferredDriverName: 'Kofi Boateng',
+        preferredSelfDriven: false,
+      });
+    });
+
+    it('stores a self-drive ask without a driver', async () => {
+      await service.create(user(), { ...createDto, preferredSelfDriven: true });
+
+      expect(
+        callArg(prisma.marketingTransportRequest.create).data,
+      ).toMatchObject({
+        preferredSelfDriven: true,
+        preferredDriverEmployeeId: null,
+      });
+      expect(officers.assertActiveOfficer).not.toHaveBeenCalled();
+    });
+
+    it('refuses a driver together with self-drive', async () => {
+      await expect(
+        service.create(user(), {
+          ...createDto,
+          preferredDriverEmployeeId: 'e2',
+          preferredSelfDriven: true,
+        }),
+      ).rejects.toThrow(/either a driver or self-driven/);
+      expect(prisma.marketingTransportRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a vehicle that is under maintenance', async () => {
+      fleet.getVehicle.mockResolvedValue({ ...vehicle, status: 'MAINTENANCE' });
+
+      await expect(
+        service.create(user(), { ...createDto, preferredVehicleAssetId: 'v1' }),
+      ).rejects.toThrow(/under maintenance/);
+    });
+
+    it('reports what was asked for on the response', async () => {
+      prisma.marketingTransportRequest.create.mockResolvedValue(
+        row({
+          preferredVehicleAssetId: 'v1',
+          preferredVehicleName: 'Toyota Hilux',
+          preferredDriverEmployeeId: 'e2',
+          preferredDriverName: 'Kofi Boateng',
+        }),
+      );
+
+      const result = await service.create(user(), {
+        ...createDto,
+        preferredVehicleAssetId: 'v1',
+        preferredDriverEmployeeId: 'e2',
+      });
+
+      expect(result.requested).toEqual({
+        vehicle: { assetId: 'v1', name: 'Toyota Hilux' },
+        driver: { employeeId: 'e2', name: 'Kofi Boateng' },
+        selfDriven: false,
+      });
+    });
+
+    it('reports nothing asked for as null', async () => {
+      const result = await service.create(user(), createDto);
+
+      expect(result.requested).toBeNull();
+    });
+  });
+
+  describe('availability', () => {
+    const hrVehicles = [
+      { id: 'v1', name: 'Hilux', assetNumber: 'VEH-1', status: 'AVAILABLE' },
+      { id: 'v2', name: 'Van', assetNumber: 'VEH-2', status: 'AVAILABLE' },
+    ];
+
+    function arrange(overlapping: unknown[] = []) {
+      fleet.listVehicles.mockResolvedValue(hrVehicles);
+      officers.activeDrivers.mockResolvedValue([
+        { employeeId: 'e1', name: 'Ama Mensah', department: null },
+        { employeeId: 'e2', name: 'Kofi Boateng', department: null },
+      ]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([]);
+      prisma.marketingTransportRequest.findMany
+        .mockResolvedValueOnce(overlapping)
+        .mockResolvedValueOnce([]);
+    }
+
+    it('flags what is booked without naming whose trip holds it', async () => {
+      arrange([
+        {
+          vehicleAssetId: 'v2',
+          driverEmployeeId: 'e2',
+          departureTime: '09:00',
+          returnTime: '12:00',
+          requesterName: 'Efua',
+        },
+      ]);
+
+      const result = await service.availability(user(), {
+        travelDate: future,
+        departureTime: '08:00',
+        returnTime: '17:00',
+      });
+
+      expect(
+        result.vehicles.map((v) => [v.assetId, v.available, v.unavailableKind]),
+      ).toEqual([
+        ['v1', true, null],
+        ['v2', false, 'BOOKED'],
+      ]);
+      expect(result.vehicles[1].unavailableReason).toBe('Booked for that time');
+      expect(JSON.stringify(result)).not.toContain('Efua');
+      expect(result.drivers[1].unavailableKind).toBe('BOOKED');
+    });
+
+    it('is checked for the date and times given, not an existing request', async () => {
+      arrange();
+
+      await service.availability(user(), {
+        travelDate: future,
+        departureTime: '08:00',
+      });
+
+      const [overlap] = prisma.marketingTransportRequest.findMany.mock
+        .calls as [{ where: Record<string, unknown> }][];
+      expect(overlap[0].where).toMatchObject({
+        tenantId: TENANT,
+        status: 'APPROVED',
+      });
+    });
+
+    it('rejects a return time before the departure', async () => {
+      await expect(
+        service.availability(user(), {
+          travelDate: future,
+          departureTime: '10:00',
+          returnTime: '09:00',
+        }),
+      ).rejects.toThrow();
     });
   });
 });
