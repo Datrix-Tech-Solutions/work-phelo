@@ -49,7 +49,10 @@ const SETTLEMENT_SIDE_CONFIG: Record<AccountingTradeSide, SettlementSideConfig> 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RawSettlement = Record<string, any>;
 
-function mapSettlement(raw: RawSettlement, side: AccountingTradeSide): AccountingTradeSettlement {
+export function mapSettlement(
+  raw: RawSettlement,
+  side: AccountingTradeSide,
+): AccountingTradeSettlement {
   const config = SETTLEMENT_SIDE_CONFIG[side];
   return {
     id: raw.id,

@@ -1,6 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { CASHBOOK_KEY, CASH_ACCOUNTS_KEY } from '@/hooks/accounting/useCashAccounts';
+import {
+  CASHBOOK_KEY,
+  CASH_ACCOUNTS_KEY,
+  useCashAccounts,
+} from '@/hooks/accounting/useCashAccounts';
+import { GL_ACCOUNTS_KEY } from '@/hooks/accounting/useGLAccounts';
+import { glAccountLedgerQuery, useGLAccountLedger } from '@/hooks/accounting/useGLAccountLedger';
 import { useFiscalYears } from '@/hooks/accounting/useFiscalPeriods';
 import type {
   CashbookTransaction,
@@ -39,22 +46,29 @@ function localDate(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function add(totals: Record<string, number>, currency: string, amount: string) {
-  totals[currency] = (totals[currency] ?? 0) + Number(amount);
+function add(totals: Record<string, number>, currency: string, amount: number) {
+  totals[currency] = (totals[currency] ?? 0) + amount;
 }
 
 /**
- * Cashbook is the authoritative cash posting path. The API intentionally has no
- * multi-currency aggregate endpoint, so this reads every posted transaction and
- * returns separate per-currency totals rather than applying an unapproved FX rate.
+ * Cash and Bank figures are read from the journal lines on the cash accounts' GL accounts, the
+ * same lines the General Ledger table lists. So they include everything that touches the account
+ * (receipts, payments, bill and invoice payments, transfers, and journals posted straight to it,
+ * such as an opening balance or capital) and always agree with the ledger. A debit is money in
+ * and a credit is money out. Amounts are in the journal's own currency, totalled per currency
+ * with no FX applied.
  *
  * Inflow/outflow are year-to-date, starting from the fiscal year that contains today rather
  * than the calendar year — a tenant whose fiscal year doesn't start in January should still
  * see "this year" mean their fiscal year. Falls back to 1 January if no fiscal year covers
  * today (e.g. none has been set up yet).
+ *
+ * Money moved between two of your own cash accounts is not an inflow or outflow of the business,
+ * so on the all-accounts view a journal that touches two cash accounts is left out.
  */
 export function useCashAndBankStats() {
   const { data: fiscalYears = [] } = useFiscalYears();
+  const { data: cashAccounts = [], isLoading: isLoadingAccounts } = useCashAccounts();
   const toDate = localDate(new Date());
   const currentYear = fiscalYears.find(
     (year) => year.startDate.slice(0, 10) <= toDate && toDate <= year.endDate.slice(0, 10),
@@ -63,47 +77,44 @@ export function useCashAndBankStats() {
     ? currentYear.startDate.slice(0, 10)
     : `${new Date().getFullYear()}-01-01`;
 
-  return useQuery({
-    queryKey: [...CASHBOOK_KEY, 'stats', fromDate, toDate],
-    queryFn: async (): Promise<CashAndBankStats> => {
-      const first = await api.get<PaginatedResult<CashbookTransaction>>(BASE, {
-        params: { status: 'POSTED', page: 1, limit: 100 },
-      });
-      const pages = await Promise.all(
-        Array.from({ length: Math.max(0, first.data.totalPages - 1) }, (_, index) =>
-          api.get<PaginatedResult<CashbookTransaction>>(BASE, {
-            params: { status: 'POSTED', page: index + 2, limit: 100 },
-          }),
-        ),
-      );
-      const transactions = [first.data, ...pages.map((page) => page.data)].flatMap(
-        (page) => page.items,
-      );
-      const stats: CashAndBankStats = {
-        netCashPosition: {},
-        inflowYtd: {},
-        outflowYtd: {},
-      };
-
-      for (const transaction of transactions) {
-        if (transaction.direction === 'TRANSFER') continue;
-        const isInflow = transaction.direction === 'INFLOW';
-        add(
-          stats.netCashPosition,
-          transaction.currency,
-          `${isInflow ? '' : '-'}${transaction.amount}`,
-        );
-        const transactionDate = transaction.transactionDate.slice(0, 10);
-        if (transactionDate < fromDate || transactionDate > toDate) continue;
-        add(
-          isInflow ? stats.inflowYtd : stats.outflowYtd,
-          transaction.currency,
-          transaction.amount,
-        );
-      }
-      return stats;
-    },
+  const glAccountIds = useMemo(
+    () => Array.from(new Set(cashAccounts.map((account) => account.glAccountId))),
+    [cashAccounts],
+  );
+  const ledgers = useQueries({
+    queries: glAccountIds.map((id) => glAccountLedgerQuery(id)),
+    combine: (results) => ({
+      isLoading: results.some((result) => result.isLoading),
+      entries: results.flatMap((result) => result.data?.entries ?? []),
+    }),
   });
+
+  const data = useMemo<CashAndBankStats | undefined>(() => {
+    if (isLoadingAccounts || ledgers.isLoading) return undefined;
+    // The cash accounts' own balances are the same journal lines, summed.
+    const stats: CashAndBankStats = { netCashPosition: {}, inflowYtd: {}, outflowYtd: {} };
+    for (const account of cashAccounts) {
+      add(stats.netCashPosition, account.currency, Number(account.balance));
+    }
+
+    const cashAccountsPerJournal = new Map<string, Set<string>>();
+    for (const entry of ledgers.entries) {
+      const accounts = cashAccountsPerJournal.get(entry.journalEntryId) ?? new Set<string>();
+      accounts.add(entry.glAccountId);
+      cashAccountsPerJournal.set(entry.journalEntryId, accounts);
+    }
+    for (const entry of ledgers.entries) {
+      if ((cashAccountsPerJournal.get(entry.journalEntryId)?.size ?? 0) > 1) continue;
+      const date = entry.journalEntry.transactionDate.slice(0, 10);
+      if (date < fromDate || date > toDate) continue;
+      const currency = entry.journalEntry.transactionCurrency;
+      add(stats.inflowYtd, currency, Number(entry.transactionDebit));
+      add(stats.outflowYtd, currency, Number(entry.transactionCredit));
+    }
+    return stats;
+  }, [cashAccounts, isLoadingAccounts, ledgers, fromDate, toDate]);
+
+  return { data, isLoading: isLoadingAccounts || ledgers.isLoading };
 }
 
 export interface CashAccountStats {
@@ -112,38 +123,24 @@ export interface CashAccountStats {
   net: Record<string, number>;
 }
 
-/** All-time inflow/outflow/net for one Cash/Bank account, computed the same way as
- *  useCashAndBankStats (per-currency, no FX guessing) — Cashbook has no per-account
- *  aggregate endpoint. */
-export function useCashAccountStats(cashAccountId: string | undefined) {
-  return useQuery({
-    queryKey: [...CASHBOOK_KEY, 'account-stats', cashAccountId],
-    queryFn: async (): Promise<CashAccountStats> => {
-      const first = await api.get<PaginatedResult<CashbookTransaction>>(BASE, {
-        params: { cashAccountId, status: 'POSTED', page: 1, limit: 100 },
-      });
-      const pages = await Promise.all(
-        Array.from({ length: Math.max(0, first.data.totalPages - 1) }, (_, index) =>
-          api.get<PaginatedResult<CashbookTransaction>>(BASE, {
-            params: { cashAccountId, status: 'POSTED', page: index + 2, limit: 100 },
-          }),
-        ),
-      );
-      const transactions = [first.data, ...pages.map((page) => page.data)].flatMap(
-        (page) => page.items,
-      );
-      const stats: CashAccountStats = { inflow: {}, outflow: {}, net: {} };
-
-      for (const transaction of transactions) {
-        if (transaction.direction === 'TRANSFER') continue;
-        const isInflow = transaction.direction === 'INFLOW';
-        add(isInflow ? stats.inflow : stats.outflow, transaction.currency, transaction.amount);
-        add(stats.net, transaction.currency, `${isInflow ? '' : '-'}${transaction.amount}`);
-      }
-      return stats;
-    },
-    enabled: !!cashAccountId,
-  });
+/** All-time inflow/outflow/net for one Cash/Bank account, from its GL account's journal lines —
+ *  the lines the General Ledger table under it lists, so the cards always agree with that table. */
+export function useCashAccountStats(glAccountId: string | undefined) {
+  const { data: ledger, isLoading } = useGLAccountLedger(glAccountId ?? '');
+  const data = useMemo<CashAccountStats | undefined>(() => {
+    if (!ledger) return undefined;
+    const stats: CashAccountStats = { inflow: {}, outflow: {}, net: {} };
+    for (const entry of ledger.entries) {
+      const currency = entry.journalEntry.transactionCurrency;
+      const debit = Number(entry.transactionDebit);
+      const credit = Number(entry.transactionCredit);
+      add(stats.inflow, currency, debit);
+      add(stats.outflow, currency, credit);
+      add(stats.net, currency, debit - credit);
+    }
+    return stats;
+  }, [ledger]);
+  return { data, isLoading: !!glAccountId && isLoading };
 }
 
 export function useCashbookTransaction(transactionId: string | undefined) {
@@ -162,6 +159,8 @@ function useInvalidateCashbook() {
   return () => {
     queryClient.invalidateQueries({ queryKey: CASHBOOK_KEY });
     queryClient.invalidateQueries({ queryKey: CASH_ACCOUNTS_KEY });
+    // The Cash and Bank figures are read from the ledger.
+    queryClient.invalidateQueries({ queryKey: GL_ACCOUNTS_KEY });
   };
 }
 

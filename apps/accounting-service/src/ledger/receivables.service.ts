@@ -751,6 +751,17 @@ export class ReceivablesService {
     return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
   }
 
+  /** The listed shape for specific receipts, in the order of `ids`. */
+  async listReceiptsByIds(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    const items = await this.prisma.accountingReceivableReceipt.findMany({
+      where: { tenantId, id: { in: ids } },
+      include: receivableReceiptInclude,
+    });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  }
+
   listInvoices(tenantId: string, query: QueryReceivableDocumentsDto) {
     return this.listDocuments(
       tenantId,

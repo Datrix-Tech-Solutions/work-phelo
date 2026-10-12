@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { mapDocument } from '@/hooks/accounting/useTradeDocuments';
+import { mapSettlement } from '@/hooks/accounting/useTradeSettlements';
 import type {
   AccountingTradeDocument,
   CashbookTransaction,
@@ -12,7 +13,7 @@ import type {
 export const TRANSACTIONS_PAGE_KEY = ['accounting', 'transactions-page'] as const;
 
 interface RawItem {
-  kind: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK';
+  kind: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK' | 'RECEIVABLE_RECEIPT' | 'PAYABLE_PAYMENT';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   record: Record<string, any>;
 }
@@ -31,14 +32,25 @@ export function useTransactionsPage(params: QueryTransactionsParams) {
         limit: number;
         totalPages: number;
       }>('/accounting/transactions', { params });
-      const items = res.data.items.map<TransactionsPageItem>((item) =>
-        item.kind === 'CASHBOOK'
-          ? { kind: 'cashbook', transaction: item.record as unknown as CashbookTransaction }
-          : {
-              kind: 'document',
-              document: mapDocument(item.record, item.kind) as AccountingTradeDocument,
-            },
-      );
+      const items = res.data.items.map<TransactionsPageItem>((item) => {
+        if (item.kind === 'CASHBOOK') {
+          return { kind: 'cashbook', transaction: item.record as unknown as CashbookTransaction };
+        }
+        if (item.kind === 'RECEIVABLE_RECEIPT' || item.kind === 'PAYABLE_PAYMENT') {
+          return {
+            kind: 'settlement',
+            settlement: mapSettlement(
+              item.record,
+              item.kind === 'RECEIVABLE_RECEIPT' ? 'RECEIVABLE' : 'PAYABLE',
+            ),
+            linkedDocuments: item.record.linkedDocuments ?? [],
+          };
+        }
+        return {
+          kind: 'document',
+          document: mapDocument(item.record, item.kind) as AccountingTradeDocument,
+        };
+      });
       return { ...res.data, items };
     },
   });

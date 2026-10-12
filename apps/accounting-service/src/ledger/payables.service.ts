@@ -723,6 +723,17 @@ export class PayablesService {
     return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
   }
 
+  /** The listed shape for specific payments, in the order of `ids`. */
+  async listPaymentsByIds(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    const items = await this.prisma.accountingPayablePayment.findMany({
+      where: { tenantId, id: { in: ids } },
+      include: payablePaymentInclude,
+    });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  }
+
   listBills(tenantId: string, query: QueryPayableDocumentsDto) {
     return this.listDocuments(
       tenantId,
