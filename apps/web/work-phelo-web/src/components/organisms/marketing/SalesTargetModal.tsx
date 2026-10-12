@@ -108,7 +108,7 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
       title={editing ? 'Edit Target' : 'New Target'}
       description={
         editing
-          ? `${editing.name ? `${editing.name} · ` : ''}${editing.userName ?? 'Sales rep'} · ${editing.productName ?? 'All products'} · ${formatDateRange(editing.startDate, editing.endDate)}`
+          ? `${editing.name ? `${editing.name} · ` : ''}${editing.userName ?? 'Sales rep'} · ${editing.productName ?? 'All products/services'} · ${formatDateRange(editing.startDate, editing.endDate)}`
           : 'Set what sales reps should bring in. Each rep chosen gets a target of the full amount, measured on the invoices raised for their clients in the period.'
       }
       width="max-w-lg"
@@ -148,8 +148,8 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
               error={errors.userIds}
             />
             <SearchSelect
-              label="Product (optional)"
-              placeholder={loadingProducts ? 'Loading...' : 'All products'}
+              label="Product/Service (optional)"
+              placeholder={loadingProducts ? 'Loading...' : 'All products/services'}
               options={productOptions}
               value={productId}
               onChange={(v) => setProductId(v)}

@@ -210,6 +210,17 @@ export function RequestDetailPanel({
             )}
           </Section>
 
+          {request.requested && !request.allocation && (
+            <Section title="Requested vehicle and driver">
+              <Field label="Vehicle">{request.requested.vehicle?.name ?? 'No preference'}</Field>
+              <Field label="Driver">
+                {request.requested.selfDriven
+                  ? `Self-driven (${request.requester.name})`
+                  : (request.requested.driver?.name ?? 'No preference')}
+              </Field>
+            </Section>
+          )}
+
           {(request.allocation || request.review) && (
             <Section title="Allocation">
               {request.allocation && (

@@ -17,7 +17,7 @@ export function ProductForm({ values, onChange, errors }: Props) {
   return (
     <div className="flex flex-col gap-(--field-stack-gap,0.75rem) pt-2">
       <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-        <label className="text-sm font-bold text-gray-900">Product Name</label>
+        <label className="text-sm font-bold text-gray-900">Product/Service Name</label>
         <input
           type="text"
           placeholder="e.g. Life Insurance"
@@ -32,7 +32,7 @@ export function ProductForm({ values, onChange, errors }: Props) {
         <label className="text-sm font-bold text-gray-900">Description</label>
         <textarea
           rows={4}
-          placeholder="Brief description of the product"
+          placeholder="Brief description of the product or service"
           value={values.description}
           onChange={(e) => onChange({ ...values, description: e.target.value })}
           className={inputClass(errors?.description) + ' resize-none'}

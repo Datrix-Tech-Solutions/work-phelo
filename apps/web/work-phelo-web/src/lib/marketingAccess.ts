@@ -19,6 +19,10 @@ export const MARKETING_OPEN_PAGES: readonly string[] = ['requests'];
  */
 export const MARKETING_PAGE_TABS: Record<string, Record<string, string[]>> = {
   campaigns: { main: ['marketing.campaigns:VIEW'] },
+  'campaign-management': {
+    domains: ['marketing.domains:VIEW'],
+    'sms-senders': ['marketing.sms-sender-identities:VIEW', 'marketing.sms-wallet:VIEW'],
+  },
   'fleet-management': { main: ['marketing.fleet:VIEW'] },
   'transport-officers': {
     details: ['marketing.transport-officers:VIEW'],
@@ -30,8 +34,6 @@ export const MARKETING_PAGE_TABS: Record<string, Record<string, string[]>> = {
     'decision-maker': ['marketing.crm-settings:VIEW', 'marketing.decision-makers:VIEW'],
     'source-type': ['marketing.crm-settings:VIEW', 'marketing.source-types:VIEW'],
     'interaction-medium': ['marketing.crm-settings:VIEW', 'marketing.interaction-media:VIEW'],
-    domains: ['marketing.domains:VIEW'],
-    'sms-senders': ['marketing.sms-sender-identities:VIEW', 'marketing.sms-wallet:VIEW'],
     'prospect-business-type': ['marketing.crm-settings:VIEW', 'marketing.business-types:VIEW'],
   },
   'user-management': {

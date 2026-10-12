@@ -1,9 +1,12 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -18,8 +21,11 @@ import {
 import {
   EmploymentType,
   RecruitmentQuestionType,
+  RecruitmentSalaryType,
   RecruitmentVacancyStatus,
+  WorkMode,
 } from '../../../prisma/generated/client';
+import { RECRUITMENT_EDUCATION_LEVEL_CODES } from '../vacancy-requirements';
 
 export class RecruitmentVacancyQuestionDto {
   @ApiPropertyOptional({ description: 'Existing question UUID when updating' })
@@ -34,8 +40,10 @@ export class RecruitmentVacancyQuestionDto {
   question!: string;
 
   @ApiPropertyOptional({
+    description:
+      'How the question is answered. YES_NO implies the options Yes and No; MULTIPLE_CHOICE, CHECKBOXES and DROPDOWN require options.',
     enum: RecruitmentQuestionType,
-    default: RecruitmentQuestionType.TEXT,
+    default: RecruitmentQuestionType.SHORT_ANSWER,
   })
   @IsOptional()
   @IsEnum(RecruitmentQuestionType)
@@ -43,7 +51,7 @@ export class RecruitmentVacancyQuestionDto {
 
   @ApiPropertyOptional({
     description:
-      'Allowed option labels for SINGLE_SELECT or MULTI_SELECT questions',
+      'Allowed option labels for MULTIPLE_CHOICE, CHECKBOXES and DROPDOWN questions',
     type: [String],
   })
   @IsOptional()
@@ -66,6 +74,121 @@ export class RecruitmentVacancyQuestionDto {
   sortOrder?: number;
 }
 
+export class RecruitmentEducationRequirementDto {
+  @ApiProperty({
+    description: 'Accepted education levels',
+    type: [String],
+    enum: RECRUITMENT_EDUCATION_LEVEL_CODES,
+  })
+  @IsArray()
+  @ArrayMaxSize(RECRUITMENT_EDUCATION_LEVEL_CODES.length)
+  @IsIn(RECRUITMENT_EDUCATION_LEVEL_CODES, { each: true })
+  levels!: string[];
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+}
+
+export class RecruitmentExperienceRequirementDto {
+  @ApiPropertyOptional({ minimum: 0, maximum: 60 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  minYears?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 60 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  maxYears?: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+}
+
+export class RecruitmentListRequirementDto {
+  @ApiProperty({ type: [String], example: ['Excel', 'Payroll'] })
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(120, { each: true })
+  items!: string[];
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+}
+
+export class RecruitmentDocumentRequirementsDto {
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  resume?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  coverLetter?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  portfolio?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  github?: boolean;
+}
+
+export class RecruitmentVacancyDetailsDto {
+  @ApiPropertyOptional({ type: RecruitmentEducationRequirementDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecruitmentEducationRequirementDto)
+  education?: RecruitmentEducationRequirementDto;
+
+  @ApiPropertyOptional({ type: RecruitmentExperienceRequirementDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecruitmentExperienceRequirementDto)
+  experience?: RecruitmentExperienceRequirementDto;
+
+  @ApiPropertyOptional({ type: RecruitmentListRequirementDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecruitmentListRequirementDto)
+  skills?: RecruitmentListRequirementDto;
+
+  @ApiPropertyOptional({ type: RecruitmentListRequirementDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecruitmentListRequirementDto)
+  languages?: RecruitmentListRequirementDto;
+
+  @ApiPropertyOptional({ type: RecruitmentListRequirementDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecruitmentListRequirementDto)
+  certificates?: RecruitmentListRequirementDto;
+
+  @ApiPropertyOptional({ type: RecruitmentDocumentRequirementsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecruitmentDocumentRequirementsDto)
+  documents?: RecruitmentDocumentRequirementsDto;
+}
+
 export class CreateRecruitmentVacancyDto {
   @ApiPropertyOptional({
     description:
@@ -78,7 +201,7 @@ export class CreateRecruitmentVacancyDto {
   @IsString()
   @MinLength(2)
   @MaxLength(160)
-  title?: string;
+  title?: string | null;
 
   @ApiPropertyOptional({
     description:
@@ -91,7 +214,58 @@ export class CreateRecruitmentVacancyDto {
   @IsString()
   @MinLength(2)
   @MaxLength(160)
-  location?: string;
+  location?: string | null;
+
+  @ApiPropertyOptional({ description: 'City of the role', maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  city?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Department the role belongs to; null clears it',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Branch the role is based at; null clears it',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string | null;
+
+  @ApiPropertyOptional({ enum: WorkMode, example: WorkMode.HYBRID })
+  @IsOptional()
+  @IsEnum(WorkMode)
+  workMode?: WorkMode;
+
+  @ApiPropertyOptional({
+    description: 'Number of open positions',
+    minimum: 1,
+    maximum: 1000,
+    default: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  vacancies?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Last day applications are accepted (YYYY-MM-DD); null clears it',
+    example: '2026-11-15',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  closingDate?: string | null;
 
   @ApiPropertyOptional({
     description:
@@ -104,37 +278,75 @@ export class CreateRecruitmentVacancyDto {
   jobType?: EmploymentType;
 
   @ApiPropertyOptional({
+    description: 'Job summary, as plain text. Required before OPEN status.',
+    maxLength: 8000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  description?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Key responsibilities, as plain text',
+    maxLength: 8000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  responsibilities?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Perks and benefits, as plain text',
+    maxLength: 8000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  perksAndBenefits?: string | null;
+
+  @ApiPropertyOptional({
     description:
-      'Public vacancy overview/description. Required before OPEN status.',
-    minLength: 10,
-    maxLength: 8000,
+      'Structured requirements. When provided, `requirements` is generated from it unless sent explicitly; null clears it.',
+    type: RecruitmentVacancyDetailsDto,
+    nullable: true,
   })
   @IsOptional()
-  @IsString()
-  @MinLength(10)
-  @MaxLength(8000)
-  description?: string;
+  @ValidateNested()
+  @Type(() => RecruitmentVacancyDetailsDto)
+  details?: RecruitmentVacancyDetailsDto | null;
 
   @ApiPropertyOptional({
-    description: 'Public vacancy responsibilities',
-    maxLength: 8000,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(8000)
-  responsibilities?: string;
-
-  @ApiPropertyOptional({
-    description: 'Public vacancy requirements or qualifications',
+    description:
+      'Plain-text requirements shown on the public posting. Generated from `details` when omitted.',
     maxLength: 8000,
   })
   @IsOptional()
   @IsString()
   @MaxLength(8000)
-  requirements?: string;
+  requirements?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Minimum salary where the tenant chooses to publish a range',
+    description:
+      'How the salary is presented. FIXED uses salaryAmount, RANGE uses salaryMin and salaryMax, NEGOTIABLE and NON_DISCLOSED carry no amount. Inferred from the amounts when omitted.',
+    enum: RecruitmentSalaryType,
+  })
+  @IsOptional()
+  @IsEnum(RecruitmentSalaryType)
+  salaryType?: RecruitmentSalaryType;
+
+  @ApiPropertyOptional({
+    description: 'Salary when salaryType is FIXED',
+    minimum: 0,
+    example: 7000,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  salaryAmount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Minimum salary when salaryType is RANGE',
     minimum: 0,
     example: 5000,
   })
@@ -145,7 +357,7 @@ export class CreateRecruitmentVacancyDto {
   salaryMin?: number;
 
   @ApiPropertyOptional({
-    description: 'Maximum salary where the tenant chooses to publish a range',
+    description: 'Maximum salary when salaryType is RANGE',
     minimum: 0,
     example: 9000,
   })

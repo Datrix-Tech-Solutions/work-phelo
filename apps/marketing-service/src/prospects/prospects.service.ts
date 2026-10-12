@@ -755,6 +755,7 @@ export class ProspectsService {
           by: ['prospectId'],
           where: { tenantId: user.tenantId, prospectId: { in: prospectIds } },
           _max: { occurredAt: true },
+          _count: { _all: true },
         }),
         this.prisma.marketingPipelineStage.findMany({
           where: {
@@ -797,6 +798,13 @@ export class ProspectsService {
       latestInteractions.map((interaction) => [
         interaction.prospectId,
         interaction._max.occurredAt,
+      ]),
+    );
+
+    const interactionCountByProspect = new Map(
+      latestInteractions.map((interaction) => [
+        interaction.prospectId,
+        interaction._count._all,
       ]),
     );
 
@@ -849,6 +857,8 @@ export class ProspectsService {
         },
         progress: stage?.probability ?? 0,
         lastInteractionDate: interactionByProspect.get(prospect.id) ?? null,
+        // Follow-ups are the interactions recorded against the prospect.
+        interactionCount: interactionCountByProspect.get(prospect.id) ?? 0,
         expectedCloseDate: this.earliestDate(
           prospectProducts.map((product) => product.expectedCloseDate),
         ),

@@ -92,7 +92,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     tags: [
       { key: 'manage_crm_configuration', label: 'Manage CRM Configuration' },
       { key: 'manage_pipelines', label: 'Manage Pipelines' },
-      { key: 'manage_products', label: 'Manage Products' },
+      { key: 'manage_products', label: 'Manage Products/Services' },
       { key: 'manage_decision_makers', label: 'Manage Decision Makers' },
       { key: 'manage_source_types', label: 'Manage Source Types' },
       { key: 'manage_interaction_types', label: 'Manage Interaction Types' },

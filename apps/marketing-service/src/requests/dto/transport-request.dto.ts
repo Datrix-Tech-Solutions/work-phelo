@@ -128,6 +128,31 @@ export class CreateTransportRequestDto {
   @IsUUID('all', { each: true })
   passengerIds?: string[];
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'HR asset ID of the vehicle the requester would like. A starting point only; the approver decides.',
+  })
+  @IsOptional()
+  @IsUUID()
+  preferredVehicleAssetId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'HR employee ID of the transport officer the requester would like to drive. Cannot be combined with preferredSelfDriven.',
+  })
+  @IsOptional()
+  @IsUUID()
+  preferredDriverEmployeeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'True when the requester wants to drive themselves.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  preferredSelfDriven?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(trimOnly)
@@ -193,6 +218,32 @@ export class UpdateTransportRequestDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   passengerIds?: string[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description: 'The vehicle the requester would like; null clears it.',
+  })
+  @IsOptional()
+  @IsUUID()
+  preferredVehicleAssetId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The transport officer the requester would like to drive; null clears it.',
+  })
+  @IsOptional()
+  @IsUUID()
+  preferredDriverEmployeeId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'True when the requester wants to drive themselves.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  preferredSelfDriven?: boolean;
 
   @ApiPropertyOptional({
     nullable: true,
@@ -377,6 +428,24 @@ export class AllocationOptionsQueryDto {
   @IsOptional()
   @Matches(TIME_PATTERN, { message: 'departureTime must be in HH:mm format' })
   departureTime?: string;
+
+  @ApiPropertyOptional({ example: '17:00' })
+  @IsOptional()
+  @Matches(TIME_PATTERN, { message: 'returnTime must be in HH:mm format' })
+  returnTime?: string;
+}
+
+export class AvailabilityQueryDto {
+  @ApiProperty({
+    example: '2026-10-20',
+    description: 'Travel date (YYYY-MM-DD).',
+  })
+  @Matches(DATE_PATTERN, { message: 'travelDate must be in YYYY-MM-DD format' })
+  travelDate!: string;
+
+  @ApiProperty({ example: '08:30', description: 'Departure time (24h HH:mm).' })
+  @Matches(TIME_PATTERN, { message: 'departureTime must be in HH:mm format' })
+  departureTime!: string;
 
   @ApiPropertyOptional({ example: '17:00' })
   @IsOptional()

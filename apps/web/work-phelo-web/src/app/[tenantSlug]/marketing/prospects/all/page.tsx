@@ -32,6 +32,7 @@ function toRow(item: ProspectListItem): Prospect {
     salesStageProgress: item.salesStage.probability,
     decisionMaker: item.primaryContact?.decisionMaker?.name ?? '',
     lastInteraction: item.lastInteractionDate ?? '',
+    interactionCount: item.interactionCount ?? 0,
     assignedTo: item.assignedUserName ?? '',
   };
 }

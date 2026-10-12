@@ -19,6 +19,7 @@ import {
   useUpdateProspectingSetting,
 } from '@/hooks/marketing/useProspectingSettings';
 import { useToast } from '@/hooks/useToast';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: InteractionMediumFields = { name: '', description: '' };
@@ -42,6 +43,18 @@ export default function InteractionMediumPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<InteractionMediumFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<InteractionMediumFields>>({});
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop;
+  // Continue clears the form for the next entry.
+  const entry = useMultiEntryPanel({
+    isOpen: panelOpen,
+    onStop: () => setPanelOpen(false),
+    onContinue: () => {
+      setForm(EMPTY_FORM);
+      setErrors({});
+    },
+  });
+
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [inUseMessage, setInUseMessage] = useState<string | null>(null);
 
@@ -91,7 +104,10 @@ export default function InteractionMediumPage() {
         {
           onSuccess: () => {
             toast.success('Interaction medium added');
-            setPanelOpen(false);
+            entry.finishSave(
+              { title: 'Interaction Medium Added!', message: `${name} has been added.` },
+              () => setPanelOpen(false),
+            );
           },
           onError: (error) =>
             toast.error(apiErrorMessage(error, 'Failed to add interaction medium')),
@@ -175,6 +191,7 @@ export default function InteractionMediumPage() {
       <SidePanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
+        {...(panelMode === 'add' ? entry.panelProps : {})}
         title={panelMode === 'add' ? 'Add Interaction Medium' : 'Edit Interaction Medium'}
         footer={
           <div className="flex items-center justify-end gap-3">

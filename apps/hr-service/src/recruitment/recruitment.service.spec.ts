@@ -10,6 +10,7 @@ import {
   EmploymentType,
   RecruitmentApplicationStatus,
   RecruitmentQuestionType,
+  RecruitmentSalaryType,
   RecruitmentVacancyStatus,
 } from '../../prisma/generated/client';
 import { RecruitmentService } from './recruitment.service';
@@ -68,6 +69,12 @@ function createPrismaMock() {
     employee: {
       findFirst: jest.fn(),
     },
+    department: {
+      findFirst: jest.fn(),
+    },
+    branch: {
+      findFirst: jest.fn(),
+    },
     $transaction: jest.fn((input: any) => {
       if (Array.isArray(input)) return Promise.all(input);
       return input(prisma);
@@ -81,11 +88,23 @@ function vacancy(overrides: Record<string, unknown> = {}) {
     id: 'vacancy-1',
     tenantId: 'tenant-1',
     title: 'HR Officer',
+    departmentId: null,
+    branchId: null,
+    department: null,
+    branch: null,
     location: 'Accra',
+    city: null,
     jobType: EmploymentType.FULL_TIME,
+    workMode: null,
+    vacancies: 1,
+    closingDate: null,
     description: 'Support HR operations for the business.',
     responsibilities: null,
+    perksAndBenefits: null,
     requirements: null,
+    details: null,
+    salaryType: RecruitmentSalaryType.NON_DISCLOSED,
+    salaryAmount: null,
     salaryMin: null,
     salaryMax: null,
     salaryCurrency: null,
@@ -108,7 +127,7 @@ function question(overrides: Record<string, unknown> = {}) {
     tenantId: 'tenant-1',
     vacancyId: 'vacancy-1',
     question: 'Why are you interested in this role?',
-    type: RecruitmentQuestionType.TEXT,
+    type: RecruitmentQuestionType.SHORT_ANSWER,
     options: null,
     required: true,
     sortOrder: 1,
@@ -460,6 +479,232 @@ describe('RecruitmentService', () => {
     });
   });
 
+  describe('vacancy form fields', () => {
+    beforeEach(() => {
+      prisma.recruitmentVacancy.create.mockResolvedValue(vacancy());
+      prisma.recruitmentVacancy.findFirstOrThrow.mockResolvedValue(vacancy());
+      prisma.recruitmentVacancyQuestion.findMany.mockResolvedValue([]);
+      prisma.recruitmentVacancyQuestion.create.mockResolvedValue(question());
+    });
+
+    function createdData() {
+      return prisma.recruitmentVacancy.create.mock.calls[0][0].data;
+    }
+
+    it('stores a fixed salary as a single amount', async () => {
+      await service.createVacancy('tenant-1', user, {
+        title: 'HR Officer',
+        salaryType: RecruitmentSalaryType.FIXED,
+        salaryAmount: 7000,
+        salaryCurrency: 'ghs',
+      });
+
+      expect(createdData()).toEqual(
+        expect.objectContaining({
+          salaryType: RecruitmentSalaryType.FIXED,
+          salaryCurrency: 'GHS',
+        }),
+      );
+      expect(createdData().salaryAmount.toNumber()).toBe(7000);
+      expect(createdData().salaryMin).toBeUndefined();
+      expect(createdData().salaryMax).toBeUndefined();
+    });
+
+    it('requires both ends of a salary range and keeps them ordered', async () => {
+      await expect(
+        service.createVacancy('tenant-1', user, {
+          title: 'HR Officer',
+          salaryType: RecruitmentSalaryType.RANGE,
+          salaryMin: 5000,
+          salaryCurrency: 'GHS',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createVacancy('tenant-1', user, {
+          title: 'HR Officer',
+          salaryType: RecruitmentSalaryType.RANGE,
+          salaryMin: 9000,
+          salaryMax: 5000,
+          salaryCurrency: 'GHS',
+        }),
+      ).rejects.toThrow('salaryMax cannot be lower than salaryMin');
+    });
+
+    it('carries no amount for negotiable or non-disclosed salaries', async () => {
+      await service.createVacancy('tenant-1', user, {
+        title: 'HR Officer',
+        salaryType: RecruitmentSalaryType.NEGOTIABLE,
+        salaryMin: 5000,
+        salaryMax: 9000,
+        salaryCurrency: 'GHS',
+      });
+
+      expect(createdData().salaryType).toBe(RecruitmentSalaryType.NEGOTIABLE);
+      expect(createdData().salaryMin).toBeUndefined();
+      expect(createdData().salaryMax).toBeUndefined();
+      expect(createdData().salaryCurrency).toBeUndefined();
+    });
+
+    it('infers a salary range when only amounts are sent', async () => {
+      await service.createVacancy('tenant-1', user, {
+        title: 'HR Officer',
+        salaryMin: 5000,
+        salaryMax: 9000,
+        salaryCurrency: 'GHS',
+      });
+
+      expect(createdData().salaryType).toBe(RecruitmentSalaryType.RANGE);
+    });
+
+    it('stores structured requirements and generates the public requirements text', async () => {
+      await service.createVacancy('tenant-1', user, {
+        title: 'HR Officer',
+        details: {
+          education: { levels: ['HND', 'BACHELORS'], required: true },
+          experience: { minYears: 2, maxYears: 5 },
+          skills: { items: ['Payroll', 'payroll ', 'Excel'], required: false },
+          documents: { resume: true, coverLetter: true },
+        },
+      });
+
+      expect(createdData().details).toEqual({
+        education: { levels: ['HND', 'BACHELORS'], required: true },
+        experience: { minYears: 2, maxYears: 5, required: false },
+        skills: { items: ['Payroll', 'payroll', 'Excel'], required: false },
+        documents: {
+          resume: true,
+          coverLetter: true,
+          portfolio: false,
+          github: false,
+        },
+      });
+      expect(createdData().requirements).toBe(
+        [
+          "Education: Higher National Diploma (HND), Bachelor's Degree (required)",
+          'Experience: 2 - 5 years',
+          'Skills: Payroll, payroll, Excel',
+        ].join('\n'),
+      );
+    });
+
+    it('rejects a maximum experience below the minimum', async () => {
+      await expect(
+        service.createVacancy('tenant-1', user, {
+          title: 'HR Officer',
+          details: { experience: { minYears: 5, maxYears: 2 } },
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a department outside the tenant', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createVacancy('tenant-1', user, {
+          title: 'HR Officer',
+          departmentId: '8d6b2d6a-70d9-4f6e-9a3c-0d2f7f1d6a11',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: 'tenant-1' }),
+        }),
+      );
+    });
+
+    it('stores department, branch, work mode, vacancies, city and closing date', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: 'dept-1' });
+      prisma.branch.findFirst.mockResolvedValue({ id: 'branch-1' });
+      const closing = new Date(Date.now() + 7 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+
+      await service.createVacancy('tenant-1', user, {
+        title: 'HR Officer',
+        departmentId: 'dept-1',
+        branchId: 'branch-1',
+        workMode: 'HYBRID',
+        vacancies: 3,
+        city: 'Accra',
+        closingDate: closing,
+        perksAndBenefits: 'Health insurance',
+      } as any);
+
+      expect(createdData()).toEqual(
+        expect.objectContaining({
+          departmentId: 'dept-1',
+          branchId: 'branch-1',
+          workMode: 'HYBRID',
+          vacancies: 3,
+          city: 'Accra',
+          perksAndBenefits: 'Health insurance',
+          closingDate: new Date(`${closing}T00:00:00.000Z`),
+        }),
+      );
+    });
+
+    it('rejects a closing date in the past', async () => {
+      await expect(
+        service.createVacancy('tenant-1', user, {
+          title: 'HR Officer',
+          closingDate: '2020-01-01',
+        }),
+      ).rejects.toThrow('closingDate cannot be in the past');
+    });
+
+    it('fixes Yes / No questions to the options Yes and No', async () => {
+      await service.createVacancy('tenant-1', user, {
+        title: 'HR Officer',
+        questions: [
+          {
+            question: 'Can you work weekends?',
+            type: RecruitmentQuestionType.YES_NO,
+            options: ['Maybe'],
+          },
+        ],
+      });
+
+      expect(prisma.recruitmentVacancyQuestion.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: RecruitmentQuestionType.YES_NO,
+          options: ['Yes', 'No'],
+        }),
+      });
+    });
+
+    it('stores short answer and paragraph questions without options', async () => {
+      await service.createVacancy('tenant-1', user, {
+        title: 'HR Officer',
+        questions: [
+          {
+            question: 'Tell us about yourself',
+            type: RecruitmentQuestionType.PARAGRAPH,
+            options: ['ignored'],
+          },
+        ],
+      });
+
+      expect(
+        prisma.recruitmentVacancyQuestion.create.mock.calls[0][0].data.type,
+      ).toBe(RecruitmentQuestionType.PARAGRAPH);
+    });
+
+    it('requires options for multiple choice, checkboxes and dropdown questions', async () => {
+      for (const type of [
+        RecruitmentQuestionType.MULTIPLE_CHOICE,
+        RecruitmentQuestionType.CHECKBOXES,
+        RecruitmentQuestionType.DROPDOWN,
+      ]) {
+        await expect(
+          service.createVacancy('tenant-1', user, {
+            title: 'HR Officer',
+            questions: [{ question: 'Pick one', type }],
+          }),
+        ).rejects.toThrow(BadRequestException);
+      }
+    });
+  });
+
   describe('public vacancies', () => {
     it('lists only open vacancies for the requested tenant', async () => {
       prisma.recruitmentVacancy.findMany.mockResolvedValue([
@@ -507,6 +752,10 @@ describe('RecruitmentService', () => {
             tenantId: 'tenant-1',
             id: 'vacancy-1',
             status: RecruitmentVacancyStatus.OPEN,
+            OR: [
+              { closingDate: null },
+              { closingDate: { gte: expect.any(Date) } },
+            ],
           },
         }),
       );
@@ -1196,7 +1445,7 @@ describe('RecruitmentService', () => {
         id: 'vacancy-1',
         questions: [
           question({
-            type: RecruitmentQuestionType.SINGLE_SELECT,
+            type: RecruitmentQuestionType.MULTIPLE_CHOICE,
             options: ['Yes', 'No'],
             required: true,
           }),
@@ -1243,7 +1492,7 @@ describe('RecruitmentService', () => {
         id: 'vacancy-1',
         questions: [
           question({
-            type: RecruitmentQuestionType.MULTI_SELECT,
+            type: RecruitmentQuestionType.CHECKBOXES,
             options: ['Payroll', 'Benefits'],
             required: false,
           }),
@@ -1276,7 +1525,7 @@ describe('RecruitmentService', () => {
         id: 'vacancy-1',
         questions: [
           question({
-            type: RecruitmentQuestionType.SINGLE_SELECT,
+            type: RecruitmentQuestionType.MULTIPLE_CHOICE,
             options: ['Yes', 'No'],
             required: false,
           }),

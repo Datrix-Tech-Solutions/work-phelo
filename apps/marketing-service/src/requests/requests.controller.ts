@@ -32,6 +32,7 @@ import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.per
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import {
   AllocationOptionsQueryDto,
+  AvailabilityQueryDto,
   ApproveTransportRequestDto,
   CompleteTransportRequestDto,
   CreateTransportRequestDto,
@@ -106,6 +107,20 @@ export class RequestsController {
     @Req() request: AuthedRequest,
   ) {
     return this.service.destinationOptions(request.user, query);
+  }
+
+  @Get('availability')
+  // Open to everyone, like form-options: a requester sees which vehicles and drivers are free.
+  @ApiOperation({
+    summary: 'Vehicles and drivers free for a date and times',
+    description:
+      'Each is flagged unavailable when under maintenance, still out on an overdue trip, or allocated to an overlapping approved trip. A hint for the request form; the approver decides the allocation.',
+  })
+  availability(
+    @Query() query: AvailabilityQueryDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.availability(request.user, query);
   }
 
   @Get(':id/allocation-options')

@@ -72,7 +72,7 @@ export function ProductServiceForm({
   const columns: InlineTableColumn[] = [
     {
       key: 'product',
-      label: 'Product',
+      label: 'Product/Service',
       width: 'minmax(150px, 1fr)',
       renderField: (i) => (
         <SearchSelect
@@ -81,7 +81,7 @@ export function ProductServiceForm({
           value={rows[i].productType}
           onChange={(v) => update(i, 'productType', v)}
           emptyState={buildCreateOptionEmptyState(
-            'product',
+            'product/service',
             createProduct,
             (id) => update(i, 'productType', id),
             toast,
@@ -171,8 +171,8 @@ export function ProductServiceForm({
 
   return (
     <InlineTable
-      title="Products / Services"
-      addLabel="Add Product"
+      title="Products/Services"
+      addLabel="Add Product/Service"
       columns={columns}
       fieldIds={rows.map((r) => r.id)}
       onAddRow={() => onChange([...rows, emptyRow()])}

@@ -20,6 +20,7 @@ import {
   useUpdatePipelineStage,
 } from '@/hooks/marketing/usePipelineStages';
 import { useToast } from '@/hooks/useToast';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: SalesPipelineStageFields = { name: '', probability: '' };
@@ -51,6 +52,17 @@ export default function SalesPipelinePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SalesPipelineStageFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<SalesPipelineStageFields>>({});
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop;
+  // Continue clears the form for the next entry.
+  const entry = useMultiEntryPanel({
+    isOpen: modalOpen,
+    onStop: () => setModalOpen(false),
+    onContinue: () => {
+      setForm(EMPTY_FORM);
+      setErrors({});
+    },
+  });
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [inUseMessage, setInUseMessage] = useState<string | null>(null);
@@ -102,7 +114,9 @@ export default function SalesPipelinePage() {
         {
           onSuccess: () => {
             toast.success('Stage added');
-            setModalOpen(false);
+            entry.finishSave({ title: 'Stage Added!', message: `${name} has been added.` }, () =>
+              setModalOpen(false),
+            );
           },
           onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add stage')),
         },
@@ -198,6 +212,7 @@ export default function SalesPipelinePage() {
       <SidePanel
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        {...(modalMode === 'add' ? entry.panelProps : {})}
         title={modalMode === 'add' ? 'Add Stage' : 'Edit Stage'}
         footer={
           <div className="flex items-center justify-end gap-3">

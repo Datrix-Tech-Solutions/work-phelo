@@ -13,18 +13,12 @@ import {
 } from '@/hooks/marketing/useRequests';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
-import { formatTravelDate, formatWindow } from '@/lib/requestOptions';
+import { ALLOCATION_BLOCK_TAGS, formatTravelDate, formatWindow } from '@/lib/requestOptions';
 import { inputClass } from '@/lib/utils';
-import type { AllocationBlock, TransportRequest } from '@/types/marketing';
+import type { TransportRequest } from '@/types/marketing';
 
 const textareaClass =
   'w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand resize-none';
-
-const BLOCK_TAGS: Record<AllocationBlock, string> = {
-  MAINTENANCE: 'Under maintenance',
-  OVERDUE: 'On a trip',
-  BOOKED: 'Booked',
-};
 
 const todayIso = () => {
   const now = new Date();
@@ -64,17 +58,27 @@ function ApproveForm({
   const isReschedule = mode === 'reschedule';
   const isPending = approve.isPending || reschedule.isPending;
 
-  // Rescheduling starts from how the trip is allocated now.
+  // Rescheduling starts from how the trip is allocated now; approving starts from what the
+  // requester asked for, which the approver can keep or change.
   const current = isReschedule ? request.allocation : null;
+  const asked = isReschedule ? null : request.requested;
   const [travelDate, setTravelDate] = useState(request.travelDate);
   const [departureTime, setDepartureTime] = useState(request.departureTime);
   // Blank means no planned return time, which is allowed.
   const [returnTime, setReturnTime] = useState(request.returnTime ?? '');
-  const [vehicleAssetId, setVehicleAssetId] = useState(current?.vehicle.assetId ?? '');
-  const [driverEmployeeId, setDriverEmployeeId] = useState(
-    current && !current.driver.selfDriven ? (current.driver.employeeId ?? '') : '',
+  const [vehicleAssetId, setVehicleAssetId] = useState(
+    current?.vehicle.assetId ?? asked?.vehicle?.assetId ?? '',
   );
-  const [selfDriven, setSelfDriven] = useState(current?.driver.selfDriven ?? false);
+  const [driverEmployeeId, setDriverEmployeeId] = useState(
+    current
+      ? current.driver.selfDriven
+        ? ''
+        : (current.driver.employeeId ?? '')
+      : (asked?.driver?.employeeId ?? ''),
+  );
+  const [selfDriven, setSelfDriven] = useState(
+    current?.driver.selfDriven ?? asked?.selfDriven ?? false,
+  );
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<{
     date?: string;
@@ -108,7 +112,7 @@ function ApproveForm({
               ? v.assetNumber
               : `${v.assetNumber} · ${v.unavailableReason}`,
           disabled: !v.available,
-          tag: v.unavailableKind ? BLOCK_TAGS[v.unavailableKind] : undefined,
+          tag: v.unavailableKind ? ALLOCATION_BLOCK_TAGS[v.unavailableKind] : undefined,
         }))
         .sort((a, b) => Number(a.disabled) - Number(b.disabled)),
     [options],
@@ -121,7 +125,7 @@ function ApproveForm({
           label: d.name,
           sublabel: [d.department, d.unavailableReason].filter(Boolean).join(' · ') || undefined,
           disabled: !d.available,
-          tag: d.unavailableKind ? BLOCK_TAGS[d.unavailableKind] : undefined,
+          tag: d.unavailableKind ? ALLOCATION_BLOCK_TAGS[d.unavailableKind] : undefined,
         }))
         .sort((a, b) => Number(a.disabled) - Number(b.disabled)),
     [options],
@@ -134,6 +138,16 @@ function ApproveForm({
   const pickedDriver = driverOptions.some((o) => o.value === driverEmployeeId && !o.disabled)
     ? driverEmployeeId
     : '';
+
+  // The requester's choice, when it can't be kept (booked, in maintenance, no longer an officer).
+  const askedVehicleLost =
+    !!asked?.vehicle && !!options && vehicleAssetId === asked.vehicle.assetId && !pickedVehicle;
+  const askedDriverLost =
+    !!asked?.driver &&
+    !!options &&
+    !selfDriven &&
+    driverEmployeeId === asked.driver.employeeId &&
+    !pickedDriver;
 
   function handleSubmit() {
     const next: typeof errors = {};
@@ -217,6 +231,27 @@ function ApproveForm({
           </div>
         </div>
 
+        {asked && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+            <p className="font-semibold text-gray-900">{request.requester.name} asked for</p>
+            <p className="mt-0.5">
+              {[
+                asked.vehicle ? `Vehicle: ${asked.vehicle.name ?? 'Unknown vehicle'}` : null,
+                asked.selfDriven
+                  ? 'Driving themselves'
+                  : asked.driver
+                    ? `Driver: ${asked.driver.name ?? 'Unknown driver'}`
+                    : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+            <p className="mt-1 text-gray-500">
+              Filled in below. Keep it or change it before approving.
+            </p>
+          </div>
+        )}
+
         {isReschedule && (
           <>
             <DatePicker
@@ -259,6 +294,12 @@ function ApproveForm({
           onChange={setVehicleAssetId}
           error={errors.vehicle}
         />
+        {askedVehicleLost && (
+          <p className="text-xs text-amber-600 -mt-2">
+            The requested vehicle ({asked?.vehicle?.name}) isn&apos;t available for this trip. Pick
+            another.
+          </p>
+        )}
 
         <ToggleRow
           label="Self-driven"
@@ -283,6 +324,12 @@ function ApproveForm({
               onChange={setDriverEmployeeId}
               error={errors.driver}
             />
+            {askedDriverLost && (
+              <p className="text-xs text-amber-600 -mt-2">
+                The requested driver ({asked?.driver?.name}) isn&apos;t available for this trip.
+                Pick another, or mark it self-driven.
+              </p>
+            )}
             {options && options.drivers.length === 0 && (
               <p className="text-xs text-amber-600 -mt-2">
                 No transport officers yet. Add drivers under Transport Officers, or mark the trip as

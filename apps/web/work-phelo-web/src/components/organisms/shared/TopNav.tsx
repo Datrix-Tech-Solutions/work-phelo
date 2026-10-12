@@ -31,6 +31,8 @@ export interface NavTab {
   key: string;
   label: string;
   href: string;
+  /** Overrides the pathname match, for a tab that spans several routes. */
+  active?: boolean;
 }
 
 interface TopNavProps {
@@ -49,7 +51,8 @@ function NavTabs({ tabs }: { tabs: NavTab[] }) {
   return (
     <div className="self-stretch flex items-end gap-1">
       {tabs.map((tab) => {
-        const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
+        const isActive =
+          tab.active ?? (pathname === tab.href || pathname.startsWith(tab.href + '/'));
         return (
           <Link
             key={tab.key}

@@ -12,8 +12,9 @@ import {
   Wallet,
   LayoutDashboard,
   FileBarChart,
-  // Trophy,
-  // CalendarRange,
+  Trophy,
+  CalendarRange,
+  FolderKanban,
 } from 'lucide-react';
 
 /* ── Icons ── */
@@ -24,8 +25,9 @@ const TeamIcon = () => <Users className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
 const ReportsIcon = () => <FileBarChart className="w-5 h-5" />;
 const PayrollIcon = () => <Wallet className="w-5 h-5" />;
-// const AppraisalIcon = () => <Trophy className="w-5 h-5" />;
-// const LeaveIcon = () => <CalendarRange className="w-5 h-5" />;
+const AppraisalIcon = () => <Trophy className="w-5 h-5" />;
+const LeaveIcon = () => <CalendarRange className="w-5 h-5" />;
+const ProjectsIcon = () => <FolderKanban className="w-5 h-5" />;
 const HrIcon = () => <Users className="w-5 h-5" />;
 const AccountingIcon = () => <DollarSign className="w-5 h-5" />;
 const OperationsIcon = () => <Handshake className="w-5 h-5" />;
@@ -76,9 +78,9 @@ export const HR_NAV_GROUPS: NavGroup[] = [
     items: [
       {
         key: 'recruitment',
-        label: 'Recruitment',
+        label: 'Hiring',
         icon: <RecruitmentIcon />,
-        href: '/recruitment',
+        href: 'recruitment',
         enabled: true,
         active: true,
       },
@@ -91,6 +93,30 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         active: true,
       },
       {
+        key: 'appraisal',
+        label: 'Performance',
+        icon: <AppraisalIcon />,
+        href: 'appraisal',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'leave',
+        label: 'Leave Management',
+        icon: <LeaveIcon />,
+        href: 'leave',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'projects',
+        label: 'Project Management',
+        icon: <ProjectsIcon />,
+        href: 'projects',
+        enabled: true,
+        active: true,
+      },
+      {
         key: 'reports',
         label: 'Reports',
         icon: <ReportsIcon />,
@@ -98,14 +124,6 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
-      // {
-      //   key: 'appraisal',
-      //   label: 'Performance',
-      //   icon: <AppraisalIcon />,
-      //   href: 'appraisal',
-      //   enabled: true,
-      //   active: true,
-      // },
       {
         key: 'management',
         label: 'HR Settings',
@@ -154,4 +172,13 @@ export const HR_NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+];
+
+/** HR_NAV_GROUPS entries that show as top-nav tabs inside HR (each opens its own layout and sidebar). */
+export const HR_TAB_KEYS: readonly string[] = [
+  'recruitment',
+  'payroll',
+  'appraisal',
+  'leave',
+  'projects',
 ];

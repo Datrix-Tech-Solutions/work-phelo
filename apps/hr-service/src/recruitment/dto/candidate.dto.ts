@@ -113,7 +113,7 @@ export class RecruitmentApplicationAnswerDto {
 
   @ApiPropertyOptional({
     description:
-      'Selected option labels for SINGLE_SELECT or MULTI_SELECT questions',
+      'Selected option labels for YES_NO, MULTIPLE_CHOICE, CHECKBOXES and DROPDOWN questions',
     type: [String],
   })
   @IsOptional()

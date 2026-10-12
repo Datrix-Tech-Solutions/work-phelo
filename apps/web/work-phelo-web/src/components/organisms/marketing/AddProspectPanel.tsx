@@ -153,7 +153,7 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
     const hasRevenue = values.productIds.some((id) =>
       Number.isFinite(parseFloat(detailFor(id).expectedRevenue)),
     );
-    if (!hasRevenue) next.products = 'Add at least one product with an expected revenue.';
+    if (!hasRevenue) next.products = 'Add at least one product/service with an expected revenue.';
     if (!values.pipelineStageId) next.stage = 'Pipeline stage is required.';
     if (values.location.lat == null || values.location.lng == null)
       next.location = 'Select a location on the map or from search.';
@@ -347,12 +347,12 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
           />
         </div>
 
-        <SectionTitle>Products &amp; Services</SectionTitle>
+        <SectionTitle>Products/Services</SectionTitle>
 
         <div className="grid grid-cols-[3fr_2fr] gap-4">
           <MultiSelect
-            label="Products / Services"
-            placeholder="Select products or services"
+            label="Products/Services"
+            placeholder="Select products/services"
             options={productOptions}
             value={values.productIds}
             onChange={(v) => set('productIds', v)}
@@ -368,7 +368,7 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
           values.productIds.map((id) => (
             <ClientProductDetails
               key={id}
-              name={productOptions.find((o) => o.value === id)?.label ?? 'Product'}
+              name={productOptions.find((o) => o.value === id)?.label ?? 'Product/Service'}
               value={detailFor(id)}
               onChange={(detail) => setProductDetails((prev) => ({ ...prev, [id]: detail }))}
             />

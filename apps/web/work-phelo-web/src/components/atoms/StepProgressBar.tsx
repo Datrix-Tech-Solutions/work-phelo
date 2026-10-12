@@ -1,18 +1,20 @@
 'use client';
 
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cardClass, cn } from '@/lib/utils';
 
 interface StepProgressBarProps {
   steps: string[];
   currentStep: number; // 0-indexed
+  /** Renders on the app's standard card surface instead of a plain white box. */
+  card?: boolean;
 }
 
-export function StepProgressBar({ steps, currentStep }: StepProgressBarProps) {
+export function StepProgressBar({ steps, currentStep, card = false }: StepProgressBarProps) {
   const progressPct = ((currentStep + 1) / steps.length) * 100;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200">
+    <div className={card ? cardClass() : 'bg-white rounded-xl border border-gray-200'}>
       {/* Mobile — compact pill */}
       <div className="md:hidden px-5 py-4 flex flex-col gap-2.5">
         <div className="flex items-center justify-between">

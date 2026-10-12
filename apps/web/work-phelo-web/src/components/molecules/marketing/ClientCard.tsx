@@ -19,7 +19,7 @@ export function ClientCard({ client, onClick }: { client: ClientListItem; onClic
       }
       details={[
         {
-          label: 'Products',
+          label: 'Products/Services',
           value:
             client.products.length === 0
               ? '—'

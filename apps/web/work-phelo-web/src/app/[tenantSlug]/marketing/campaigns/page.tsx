@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CampaignsTable } from '@/components/molecules/marketing/CampaignsTable';
+import { CampaignStatsRow } from '@/components/molecules/marketing/CampaignStatsRow';
 import { CampaignDetailPanel } from '@/components/organisms/marketing/CampaignDetailPanel';
 import { AddCampaignPanel, CampaignForm } from '@/components/organisms/marketing/AddCampaignPanel';
 import {
@@ -152,7 +153,8 @@ export default function CampaignsPage() {
 
   return (
     <>
-      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto')}>
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col gap-4')}>
+        <CampaignStatsRow />
         <CampaignsTable
           data={data?.data ?? []}
           isLoading={isLoading}

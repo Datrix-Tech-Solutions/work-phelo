@@ -316,12 +316,12 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           />
         </div>
 
-        <SectionTitle>Products &amp; Services</SectionTitle>
+        <SectionTitle>Products/Services</SectionTitle>
 
         <div className="grid grid-cols-[3fr_2fr] gap-4">
           <MultiSelect
-            label="Products / Services"
-            placeholder="Select products or services"
+            label="Products/Services"
+            placeholder="Select products/services"
             options={productOptions}
             value={values.productIds}
             onChange={(v) => {
@@ -343,7 +343,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           values.productIds.map((id) => (
             <ClientProductDetails
               key={id}
-              name={productOptions.find((o) => o.value === id)?.label ?? 'Product'}
+              name={productOptions.find((o) => o.value === id)?.label ?? 'Product/Service'}
               value={productDetails[id] ?? EMPTY_PRODUCT_DETAIL}
               onChange={(detail) => setProductDetails((prev) => ({ ...prev, [id]: detail }))}
             />

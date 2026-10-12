@@ -1,4 +1,9 @@
-import type { TransportPurpose, TransportRequestStatus, VehicleCondition } from '@/types/marketing';
+import type {
+  AllocationBlock,
+  TransportPurpose,
+  TransportRequestStatus,
+  VehicleCondition,
+} from '@/types/marketing';
 
 export const REQUEST_STATUS_BADGES: Record<
   TransportRequestStatus,
@@ -94,3 +99,10 @@ export function formatWindow(departureTime: string, returnTime: string | null): 
     ? `${formatClock(departureTime)} – ${formatClock(returnTime)}`
     : `${formatClock(departureTime)} · no return time`;
 }
+
+/** Why a vehicle or driver can't be picked for a trip's date and times. */
+export const ALLOCATION_BLOCK_TAGS: Record<AllocationBlock, string> = {
+  MAINTENANCE: 'Under maintenance',
+  OVERDUE: 'On a trip',
+  BOOKED: 'Booked',
+};

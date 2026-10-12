@@ -59,10 +59,10 @@ export function AddClientProductModal({
       },
       {
         onSuccess: () => {
-          toast.success('Product added');
+          toast.success('Product/service added');
           onClose();
         },
-        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add product')),
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add product/service')),
       },
     );
   }
@@ -71,7 +71,7 @@ export function AddClientProductModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add Product / Service"
+      title="Add Product/Service"
       description={`${clientName} — it starts as pending.`}
       footer={
         <div className="flex justify-end gap-3">
@@ -91,8 +91,8 @@ export function AddClientProductModal({
     >
       <div className="flex flex-col gap-4">
         <SearchSelect
-          label="Product / Service"
-          placeholder={isLoading ? 'Loading products...' : 'Select product or service'}
+          label="Product/Service"
+          placeholder={isLoading ? 'Loading products/services...' : 'Select product/service'}
           options={options}
           value={productId}
           onChange={setProductId}

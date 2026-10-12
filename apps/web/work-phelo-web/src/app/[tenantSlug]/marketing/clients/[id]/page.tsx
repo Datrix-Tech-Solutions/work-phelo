@@ -145,7 +145,7 @@ export default function ClientDetailPage() {
   const menuItems = [
     ...(canEdit
       ? [
-          { label: 'Add Product', onClick: () => setAddingProduct(true) },
+          { label: 'Add Product/Service', onClick: () => setAddingProduct(true) },
           { label: 'Edit Company Details', onClick: () => setEditingCompany(true) },
           { label: 'Change Location', onClick: () => setChangingLocation(true) },
           { label: 'Edit Primary Contact', onClick: () => setEditingContact(true) },
@@ -206,7 +206,7 @@ export default function ClientDetailPage() {
           />
           <DetailField label="Achieved Commission" value={formatMoney(totalAchievedCommission)} />
           <DetailField
-            label="Products"
+            label="Products/Services"
             value={
               client.products.length === 0
                 ? '—'
@@ -222,7 +222,7 @@ export default function ClientDetailPage() {
 
       <TabBar
         tabs={[
-          { key: 'products', label: 'Products / Services' },
+          { key: 'products', label: 'Products/Services' },
           { key: 'interactions', label: 'Follow-ups' },
           ...(canViewBilling ? [{ key: 'transactions', label: 'Transaction History' }] : []),
         ]}
@@ -239,7 +239,7 @@ export default function ClientDetailPage() {
               achievedRevenue={achievedByProduct.get(product.product.id)}
             />
           )}
-          emptyMessage="No products on record"
+          emptyMessage="No products/services on record"
           currentPage={1}
           totalPages={0}
           onPageChange={() => {}}
@@ -352,7 +352,7 @@ export default function ClientDetailPage() {
         <ConfirmDeleteProspectModal
           title="Delete Client"
           name={client.companyName}
-          consequence="removes its contacts and products, and the interactions recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
+          consequence="removes its contacts and products/services, and the interactions recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
           isDeleting={deleteClient.isPending}
           onConfirm={handleDelete}
           onCancel={() => setConfirmingDelete(false)}

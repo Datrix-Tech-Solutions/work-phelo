@@ -228,7 +228,7 @@ export class RecruitmentPublicController {
   @ApiOperation({
     summary: 'Save public application question answers',
     description:
-      'Replaces draft question answers for this application. TEXT answers use answer; SINGLE_SELECT and MULTI_SELECT answers use selectedOptions.',
+      'Replaces draft question answers for this application. SHORT_ANSWER and PARAGRAPH answers use answer; YES_NO, MULTIPLE_CHOICE, CHECKBOXES and DROPDOWN answers use selectedOptions.',
   })
   @ApiParam({
     name: 'applicationId',

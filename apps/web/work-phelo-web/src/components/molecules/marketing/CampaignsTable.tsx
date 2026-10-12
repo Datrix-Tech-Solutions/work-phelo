@@ -11,7 +11,7 @@ export const CAMPAIGN_STATUS_MAP: Record<
   { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }
 > = {
   DRAFT: { label: 'Draft', variant: 'neutral' },
-  PENDING_DISPATCH: { label: 'Pending Dispatch', variant: 'warning' },
+  PENDING_DISPATCH: { label: 'Pendingn', variant: 'warning' },
   SCHEDULED: { label: 'Scheduled', variant: 'info' },
   QUEUED: { label: 'Queued', variant: 'info' },
   SENDING: { label: 'Sending', variant: 'info' },

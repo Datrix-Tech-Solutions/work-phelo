@@ -10,6 +10,7 @@ import {
   Prisma,
   RecruitmentApplicationStatus,
   RecruitmentQuestionType,
+  RecruitmentSalaryType,
   RecruitmentVacancyStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -31,6 +32,11 @@ import {
   RecruitmentVacancyQuestionDto,
   UpdateRecruitmentVacancyDto,
 } from './dto/vacancy.dto';
+import {
+  DEFAULT_RECRUITMENT_QUESTION_TYPE,
+  questionBehaviour,
+} from './question-types';
+import { renderRequirementsText, VacancyDetails } from './vacancy-requirements';
 
 const DEFAULT_RECRUITMENT_STAGES = [
   'Applied',
@@ -58,6 +64,8 @@ const RECRUITMENT_CANDIDATE_INCLUDE = {
 const RECRUITMENT_PUBLIC_APPLICATION_INCLUDE = {
   vacancy: {
     include: {
+      department: { select: { id: true, name: true } },
+      branch: { select: { id: true, name: true } },
       questions: {
         where: { retiredAt: null },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -73,6 +81,8 @@ const RECRUITMENT_PUBLIC_APPLICATION_INCLUDE = {
 } satisfies Prisma.RecruitmentApplicationInclude;
 
 const RECRUITMENT_VACANCY_INCLUDE = {
+  department: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true } },
   questions: {
     where: { retiredAt: null },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -133,7 +143,14 @@ export class RecruitmentService {
     user: RequestUser,
     dto: CreateRecruitmentVacancyDto,
   ) {
-    this.validateSalaryRange(dto.salaryMin, dto.salaryMax);
+    const salary = this.resolveSalary(null, dto);
+    const details = this.normalizeDetails(dto.details);
+    const closingDate = this.parseClosingDate(dto.closingDate);
+    await this.assertDepartmentAndBranch(
+      tenantId,
+      dto.departmentId,
+      dto.branchId,
+    );
     if (dto.status === RecruitmentVacancyStatus.OPEN) {
       this.assertPublishable(dto);
     }
@@ -143,14 +160,24 @@ export class RecruitmentService {
         data: {
           tenantId,
           title: this.optionalTrim(dto.title),
+          departmentId: dto.departmentId ?? undefined,
+          branchId: dto.branchId ?? undefined,
           location: this.optionalTrim(dto.location),
+          city: this.optionalTrim(dto.city),
           jobType: dto.jobType,
+          workMode: dto.workMode,
+          vacancies: dto.vacancies,
+          closingDate: closingDate ?? undefined,
           description: this.optionalTrim(dto.description),
           responsibilities: this.optionalTrim(dto.responsibilities),
-          requirements: this.optionalTrim(dto.requirements),
-          salaryMin: this.toDecimal(dto.salaryMin),
-          salaryMax: this.toDecimal(dto.salaryMax),
-          salaryCurrency: this.optionalTrim(dto.salaryCurrency)?.toUpperCase(),
+          perksAndBenefits: this.optionalTrim(dto.perksAndBenefits),
+          requirements: this.resolveRequirements(dto.requirements, details),
+          details: (details ?? undefined) as Prisma.InputJsonValue | undefined,
+          salaryType: salary.salaryType,
+          salaryAmount: this.toDecimal(salary.salaryAmount),
+          salaryMin: this.toDecimal(salary.salaryMin),
+          salaryMax: this.toDecimal(salary.salaryMax),
+          salaryCurrency: salary.salaryCurrency ?? undefined,
           status: dto.status ?? RecruitmentVacancyStatus.DRAFT,
           createdByUserId: user.id,
           updatedByUserId: user.id,
@@ -188,7 +215,7 @@ export class RecruitmentService {
     const tenantId = this.requirePublicTenantId(query.tenantId);
     const where: Prisma.RecruitmentVacancyWhereInput = {
       tenantId,
-      status: RecruitmentVacancyStatus.OPEN,
+      ...this.acceptingApplicationsWhere(),
       ...(query.search?.trim()
         ? {
             OR: [
@@ -227,7 +254,7 @@ export class RecruitmentService {
       where: {
         tenantId: publicTenantId,
         id: vacancyId,
-        status: RecruitmentVacancyStatus.OPEN,
+        ...this.acceptingApplicationsWhere(),
       },
       include: RECRUITMENT_VACANCY_INCLUDE,
     });
@@ -246,9 +273,25 @@ export class RecruitmentService {
     });
     if (!existing) throw new NotFoundException('Recruitment vacancy not found');
 
-    this.validateSalaryRange(
-      dto.salaryMin ?? this.decimalToNumber(existing.salaryMin),
-      dto.salaryMax ?? this.decimalToNumber(existing.salaryMax),
+    const salaryTouched =
+      dto.salaryType !== undefined ||
+      dto.salaryAmount !== undefined ||
+      dto.salaryMin !== undefined ||
+      dto.salaryMax !== undefined ||
+      dto.salaryCurrency !== undefined;
+    const salary = salaryTouched ? this.resolveSalary(existing, dto) : null;
+    const details =
+      dto.details === undefined
+        ? undefined
+        : this.normalizeDetails(dto.details);
+    const closingDate =
+      dto.closingDate === undefined
+        ? undefined
+        : this.parseClosingDate(dto.closingDate);
+    await this.assertDepartmentAndBranch(
+      tenantId,
+      dto.departmentId,
+      dto.branchId,
     );
 
     const next = {
@@ -266,32 +309,59 @@ export class RecruitmentService {
         where: { id: vacancyId },
         data: {
           ...(dto.title !== undefined
-            ? { title: this.optionalTrim(dto.title) }
+            ? { title: this.optionalTrim(dto.title) ?? null }
             : {}),
           ...(dto.location !== undefined
-            ? { location: this.optionalTrim(dto.location) }
+            ? { location: this.optionalTrim(dto.location) ?? null }
             : {}),
           ...(dto.jobType !== undefined ? { jobType: dto.jobType } : {}),
           ...(dto.description !== undefined
-            ? { description: this.optionalTrim(dto.description) }
+            ? { description: this.optionalTrim(dto.description) ?? null }
             : {}),
           ...(dto.responsibilities !== undefined
-            ? { responsibilities: this.optionalTrim(dto.responsibilities) }
+            ? {
+                responsibilities:
+                  this.optionalTrim(dto.responsibilities) ?? null,
+              }
+            : {}),
+          ...(dto.perksAndBenefits !== undefined
+            ? {
+                perksAndBenefits:
+                  this.optionalTrim(dto.perksAndBenefits) ?? null,
+              }
+            : {}),
+          ...(dto.city !== undefined
+            ? { city: this.optionalTrim(dto.city) ?? null }
+            : {}),
+          ...(dto.departmentId !== undefined
+            ? { departmentId: dto.departmentId }
+            : {}),
+          ...(dto.branchId !== undefined ? { branchId: dto.branchId } : {}),
+          ...(dto.workMode !== undefined ? { workMode: dto.workMode } : {}),
+          ...(dto.vacancies !== undefined ? { vacancies: dto.vacancies } : {}),
+          ...(closingDate !== undefined ? { closingDate } : {}),
+          ...(details !== undefined
+            ? {
+                details: (details ?? Prisma.JsonNull) as
+                  | Prisma.InputJsonValue
+                  | typeof Prisma.JsonNull,
+              }
             : {}),
           ...(dto.requirements !== undefined
-            ? { requirements: this.optionalTrim(dto.requirements) }
-            : {}),
-          ...(dto.salaryMin !== undefined
-            ? { salaryMin: this.toDecimal(dto.salaryMin) }
-            : {}),
-          ...(dto.salaryMax !== undefined
-            ? { salaryMax: this.toDecimal(dto.salaryMax) }
-            : {}),
-          ...(dto.salaryCurrency !== undefined
+            ? { requirements: this.optionalTrim(dto.requirements) ?? null }
+            : details
+              ? {
+                  requirements:
+                    this.resolveRequirements(undefined, details) ?? null,
+                }
+              : {}),
+          ...(salary
             ? {
-                salaryCurrency: this.optionalTrim(
-                  dto.salaryCurrency,
-                )?.toUpperCase(),
+                salaryType: salary.salaryType,
+                salaryAmount: this.toDecimal(salary.salaryAmount) ?? null,
+                salaryMin: this.toDecimal(salary.salaryMin) ?? null,
+                salaryMax: this.toDecimal(salary.salaryMax) ?? null,
+                salaryCurrency: salary.salaryCurrency,
               }
             : {}),
           ...(dto.status !== undefined ? { status: dto.status } : {}),
@@ -594,7 +664,7 @@ export class RecruitmentService {
       where: {
         tenantId,
         id: vacancyId,
-        status: RecruitmentVacancyStatus.OPEN,
+        ...this.acceptingApplicationsWhere(),
       },
       include: {
         questions: {
@@ -704,7 +774,7 @@ export class RecruitmentService {
       where: {
         tenantId: publicTenantId,
         id: vacancyId,
-        status: RecruitmentVacancyStatus.OPEN,
+        ...this.acceptingApplicationsWhere(),
       },
       include: {
         questions: {
@@ -954,7 +1024,7 @@ export class RecruitmentService {
     for (const [index, question] of questions.entries()) {
       const questionText = question.question.trim();
       const sortOrder = question.sortOrder ?? index + 1;
-      const type = question.type ?? RecruitmentQuestionType.TEXT;
+      const type = question.type ?? DEFAULT_RECRUITMENT_QUESTION_TYPE;
       const options = this.normalizeQuestionOptions(type, question.options);
       if (question.id) {
         if (!existingIds.has(question.id)) {
@@ -1031,7 +1101,10 @@ export class RecruitmentService {
     if (!application) {
       throw new NotFoundException('Recruitment application not found');
     }
-    if (application.vacancy.status !== RecruitmentVacancyStatus.OPEN) {
+    if (
+      application.vacancy.status !== RecruitmentVacancyStatus.OPEN ||
+      this.isPastClosingDate(application.vacancy.closingDate)
+    ) {
       throw new ConflictException('Recruitment vacancy is no longer open');
     }
     return application;
@@ -1213,9 +1286,12 @@ export class RecruitmentService {
           'Answer references an invalid recruitment vacancy question',
         );
       }
-      const questionType = question.type ?? RecruitmentQuestionType.TEXT;
-      const options = this.readQuestionOptions(question.options);
-      if (questionType === RecruitmentQuestionType.TEXT) {
+      const behaviour = questionBehaviour(question.type);
+      const options =
+        behaviour.kind === 'select' && behaviour.fixedOptions
+          ? [...behaviour.fixedOptions]
+          : this.readQuestionOptions(question.options);
+      if (behaviour.kind === 'text') {
         const value = answer.answer?.trim();
         if (!value) {
           if (requireRequiredAnswers || question.required) {
@@ -1247,12 +1323,9 @@ export class RecruitmentService {
         }
         continue;
       }
-      if (
-        questionType === RecruitmentQuestionType.SINGLE_SELECT &&
-        selectedOptions.length !== 1
-      ) {
+      if (!behaviour.multiple && selectedOptions.length !== 1) {
         throw new BadRequestException(
-          'Single-select recruitment questions require exactly one option',
+          'This recruitment question accepts exactly one option',
         );
       }
       const invalidOption = selectedOptions.find(
@@ -1386,9 +1459,8 @@ export class RecruitmentService {
     for (const question of questions) {
       if (!question.required) continue;
       const answer = answersByQuestionId.get(question.id);
-      const questionType = question.type ?? RecruitmentQuestionType.TEXT;
       const hasAnswer =
-        questionType === RecruitmentQuestionType.TEXT
+        questionBehaviour(question.type).kind === 'text'
           ? Boolean(answer?.answerText?.trim() || answer?.answer?.trim())
           : Boolean(answer?.selectedOptions?.length);
       if (!hasAnswer) {
@@ -1491,6 +1563,8 @@ export class RecruitmentService {
   ) {
     return {
       ...vacancy,
+      closingDate: this.dateOnly(vacancy.closingDate),
+      salaryAmount: this.decimalToNumber(vacancy.salaryAmount),
       salaryMin: this.decimalToNumber(vacancy.salaryMin),
       salaryMax: this.decimalToNumber(vacancy.salaryMax),
       applicantCount: vacancy._count.applications,
@@ -1506,11 +1580,21 @@ export class RecruitmentService {
       id: vacancy.id,
       tenantId: vacancy.tenantId,
       title: vacancy.title,
+      department: vacancy.department?.name ?? null,
+      branch: vacancy.branch?.name ?? null,
       location: vacancy.location,
+      city: vacancy.city,
       jobType: vacancy.jobType,
+      workMode: vacancy.workMode,
+      vacancies: vacancy.vacancies,
+      closingDate: this.dateOnly(vacancy.closingDate),
       description: vacancy.description,
       responsibilities: vacancy.responsibilities,
+      perksAndBenefits: vacancy.perksAndBenefits,
       requirements: vacancy.requirements,
+      details: vacancy.details,
+      salaryType: vacancy.salaryType,
+      salaryAmount: this.decimalToNumber(vacancy.salaryAmount),
       salaryMin: this.decimalToNumber(vacancy.salaryMin),
       salaryMax: this.decimalToNumber(vacancy.salaryMax),
       salaryCurrency: vacancy.salaryCurrency,
@@ -1634,18 +1718,243 @@ export class RecruitmentService {
     }
   }
 
-  private validateSalaryRange(min?: number | null, max?: number | null) {
+  /**
+   * Works out the salary columns for a vacancy from the request and, on update, the stored values.
+   * FIXED keeps only salaryAmount, RANGE keeps min/max, and NEGOTIABLE / NON_DISCLOSED keep no amount.
+   * When salaryType is omitted it is inferred from the amounts, so older callers keep working.
+   */
+  private resolveSalary(
+    existing: {
+      salaryType: RecruitmentSalaryType;
+      salaryAmount: Prisma.Decimal | null;
+      salaryMin: Prisma.Decimal | null;
+      salaryMax: Prisma.Decimal | null;
+      salaryCurrency: string | null;
+    } | null,
+    dto: {
+      salaryType?: RecruitmentSalaryType;
+      salaryAmount?: number;
+      salaryMin?: number;
+      salaryMax?: number;
+      salaryCurrency?: string;
+    },
+  ) {
+    const amount =
+      dto.salaryAmount ?? this.decimalToNumber(existing?.salaryAmount) ?? null;
+    const min =
+      dto.salaryMin ?? this.decimalToNumber(existing?.salaryMin) ?? null;
+    const max =
+      dto.salaryMax ?? this.decimalToNumber(existing?.salaryMax) ?? null;
+    const currency =
+      this.optionalTrim(dto.salaryCurrency)?.toUpperCase() ??
+      existing?.salaryCurrency ??
+      null;
+
+    let salaryType = dto.salaryType;
+    if (!salaryType) {
+      if (dto.salaryAmount !== undefined) {
+        salaryType = RecruitmentSalaryType.FIXED;
+      } else if (dto.salaryMin !== undefined || dto.salaryMax !== undefined) {
+        salaryType = RecruitmentSalaryType.RANGE;
+      } else {
+        salaryType =
+          existing?.salaryType ?? RecruitmentSalaryType.NON_DISCLOSED;
+      }
+    }
+
     if (
-      min !== undefined &&
-      max !== undefined &&
-      min !== null &&
-      max !== null
+      salaryType === RecruitmentSalaryType.NEGOTIABLE ||
+      salaryType === RecruitmentSalaryType.NON_DISCLOSED
     ) {
-      if (max < min) {
+      return {
+        salaryType,
+        salaryAmount: null,
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: null,
+      };
+    }
+
+    if (!currency) {
+      throw new BadRequestException(
+        'salaryCurrency is required when a salary amount is set',
+      );
+    }
+
+    if (salaryType === RecruitmentSalaryType.FIXED) {
+      if (amount === null || amount <= 0) {
         throw new BadRequestException(
-          'salaryMax cannot be lower than salaryMin',
+          'salaryAmount is required for a fixed salary',
         );
       }
+      return {
+        salaryType,
+        salaryAmount: amount,
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: currency,
+      };
+    }
+
+    if (min === null || max === null) {
+      throw new BadRequestException(
+        'salaryMin and salaryMax are required for a salary range',
+      );
+    }
+    if (max < min) {
+      throw new BadRequestException('salaryMax cannot be lower than salaryMin');
+    }
+    return {
+      salaryType,
+      salaryAmount: null,
+      salaryMin: min,
+      salaryMax: max,
+      salaryCurrency: currency,
+    };
+  }
+
+  /** Structured requirements as stored: empty lists and empty sections are dropped. */
+  private normalizeDetails(
+    input?: {
+      education?: { levels: string[]; required?: boolean };
+      experience?: { minYears?: number; maxYears?: number; required?: boolean };
+      skills?: { items: string[]; required?: boolean };
+      languages?: { items: string[]; required?: boolean };
+      certificates?: { items: string[]; required?: boolean };
+      documents?: {
+        resume?: boolean;
+        coverLetter?: boolean;
+        portfolio?: boolean;
+        github?: boolean;
+      };
+    } | null,
+  ): VacancyDetails | null {
+    if (!input) return null;
+    const details: VacancyDetails = {};
+
+    const levels = [...new Set(input.education?.levels ?? [])];
+    if (input.education && levels.length > 0) {
+      details.education = {
+        levels,
+        required: input.education.required ?? false,
+      };
+    }
+
+    const experience = input.experience;
+    if (
+      experience &&
+      (experience.minYears !== undefined || experience.maxYears !== undefined)
+    ) {
+      if (
+        experience.minYears !== undefined &&
+        experience.maxYears !== undefined &&
+        experience.maxYears < experience.minYears
+      ) {
+        throw new BadRequestException(
+          'Maximum years of experience cannot be lower than the minimum',
+        );
+      }
+      details.experience = {
+        ...(experience.minYears !== undefined
+          ? { minYears: experience.minYears }
+          : {}),
+        ...(experience.maxYears !== undefined
+          ? { maxYears: experience.maxYears }
+          : {}),
+        required: experience.required ?? false,
+      };
+    }
+
+    const lists = ['skills', 'languages', 'certificates'] as const;
+    for (const key of lists) {
+      const requirement = input[key];
+      if (!requirement) continue;
+      const items = [
+        ...new Set(
+          requirement.items.map((item) => item.trim()).filter(Boolean),
+        ),
+      ];
+      if (items.length > 0) {
+        details[key] = { items, required: requirement.required ?? false };
+      }
+    }
+
+    if (input.documents) {
+      details.documents = {
+        resume: input.documents.resume ?? true,
+        coverLetter: input.documents.coverLetter ?? false,
+        portfolio: input.documents.portfolio ?? false,
+        github: input.documents.github ?? false,
+      };
+    }
+
+    return Object.keys(details).length > 0 ? details : null;
+  }
+
+  /** The public `requirements` text: what was sent, otherwise generated from the structured details. */
+  private resolveRequirements(
+    requirements: string | null | undefined,
+    details: VacancyDetails | null,
+  ) {
+    const explicit = this.optionalTrim(requirements);
+    if (explicit) return explicit;
+    if (!details) return undefined;
+    return this.optionalTrim(renderRequirementsText(details));
+  }
+
+  /** `YYYY-MM-DD` to a UTC date; null clears. A closing date cannot be in the past. */
+  private parseClosingDate(value?: string | null) {
+    if (value === undefined || value === null) return value ?? null;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('closingDate must be a valid date');
+    }
+    if (date < this.startOfTodayUtc()) {
+      throw new BadRequestException('closingDate cannot be in the past');
+    }
+    return date;
+  }
+
+  private startOfTodayUtc() {
+    const now = new Date();
+    return new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+  }
+
+  private isPastClosingDate(closingDate?: Date | null) {
+    return !!closingDate && closingDate < this.startOfTodayUtc();
+  }
+
+  /** Open, and not past its closing date: the vacancies applicants can see and apply to. */
+  private acceptingApplicationsWhere(): Prisma.RecruitmentVacancyWhereInput {
+    return {
+      status: RecruitmentVacancyStatus.OPEN,
+      OR: [
+        { closingDate: null },
+        { closingDate: { gte: this.startOfTodayUtc() } },
+      ],
+    };
+  }
+
+  private async assertDepartmentAndBranch(
+    tenantId: string,
+    departmentId?: string | null,
+    branchId?: string | null,
+  ) {
+    if (departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: departmentId, tenantId },
+        select: { id: true },
+      });
+      if (!department) throw new NotFoundException('Department not found');
+    }
+    if (branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: branchId, tenantId },
+        select: { id: true },
+      });
+      if (!branch) throw new NotFoundException('Branch not found');
     }
   }
 
@@ -1665,8 +1974,12 @@ export class RecruitmentService {
     type: RecruitmentQuestionType,
     options?: string[],
   ) {
-    if (type === RecruitmentQuestionType.TEXT) {
+    const behaviour = questionBehaviour(type);
+    if (behaviour.kind === 'text') {
       return Prisma.JsonNull;
+    }
+    if (behaviour.fixedOptions) {
+      return [...behaviour.fixedOptions];
     }
     const normalized = [
       ...new Set(options?.map((option) => option.trim()).filter(Boolean) ?? []),
@@ -1702,6 +2015,10 @@ export class RecruitmentService {
   private optionalTrim(value?: string | null) {
     const trimmed = value?.trim();
     return trimmed ? trimmed : undefined;
+  }
+
+  private dateOnly(value?: Date | null) {
+    return value ? value.toISOString().slice(0, 10) : null;
   }
 
   private toDecimal(value?: number | null) {

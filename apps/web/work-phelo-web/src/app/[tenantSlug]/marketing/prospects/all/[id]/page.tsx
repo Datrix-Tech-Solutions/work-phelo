@@ -187,7 +187,7 @@ export default function ProspectDetailPage() {
           </Button>
           <ProspectManageMenu
             items={[
-              { label: 'Manage Products', onClick: () => setEditingProducts(true) },
+              { label: 'Manage Products/Services', onClick: () => setEditingProducts(true) },
               { label: 'Edit Company Details', onClick: () => setEditingCompany(true) },
               { label: 'Change Location', onClick: () => setChangingLocation(true) },
               { label: 'Edit Primary Contact', onClick: () => setEditingContact(true) },
@@ -214,6 +214,7 @@ export default function ProspectDetailPage() {
           <DetailField label="Primary Contact Email" value={primaryContact?.email} />
           <DetailField label="Date Created" value={formatDate(prospect.createdAt)} />
           <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
+          <DetailField label="Follow-ups" value={String(prospect.interactions.length)} />
           <DetailField label="Total Expected" value={formatMoney(prospect.totalExpectedValue)} />
           {/* <DetailField label="Total Achieved" value={formatMoney(prospect.totalAchievedValue)} /> */}
           <div className="col-span-2 flex flex-col gap-1.5">
@@ -227,7 +228,7 @@ export default function ProspectDetailPage() {
 
       <TabBar
         tabs={[
-          { key: 'products', label: 'Products / Services' },
+          { key: 'products', label: 'Products/Services' },
           { key: 'interactions', label: 'Follow ups' },
           // { key: 'follow-ups', label: 'Follow-ups' },
         ]}
@@ -239,7 +240,7 @@ export default function ProspectDetailPage() {
         <DataCardGrid
           data={prospect.products}
           renderCard={(product) => <ProspectProductCard product={product} />}
-          emptyMessage="No products on record"
+          emptyMessage="No products/services on record"
           currentPage={1}
           totalPages={0}
           onPageChange={() => {}}

@@ -52,6 +52,7 @@ describe('RequestsController authorization contract', () => {
       [
         'list',
         'formOptions',
+        'availability',
         'destinationOptions',
         'findOne',
         'allocationOptions',

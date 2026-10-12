@@ -143,8 +143,8 @@ export function ClientBillingFields({
       />
       {productOptions.length > 0 && (
         <SearchSelect
-          label="Product / Service (optional)"
-          placeholder="Which product is this for?"
+          label="Product/Service (optional)"
+          placeholder="Which product/service is this for?"
           options={productOptions}
           value={values.productId}
           onChange={(id) => onChange({ ...values, productId: id })}
