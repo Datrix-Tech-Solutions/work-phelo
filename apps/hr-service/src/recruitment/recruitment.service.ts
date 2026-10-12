@@ -4,15 +4,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash, randomBytes } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   Prisma,
+  RecruitmentApplicationStatus,
+  RecruitmentQuestionType,
   RecruitmentVacancyStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
+  UpdateRecruitmentApplicationAnswersDto,
+  UpdateRecruitmentApplicationBasicInfoDto,
+  UpdateRecruitmentApplicationProfessionalInfoDto,
 } from './dto/candidate.dto';
 import {
   CreateRecruitmentStageDto,
@@ -49,12 +55,35 @@ const RECRUITMENT_CANDIDATE_INCLUDE = {
   _count: { select: { stageHistory: true } },
 } satisfies Prisma.RecruitmentApplicationInclude;
 
+const RECRUITMENT_PUBLIC_APPLICATION_INCLUDE = {
+  vacancy: {
+    include: {
+      questions: {
+        where: { retiredAt: null },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      },
+    },
+  },
+  currentStage: true,
+  answers: {
+    include: { question: true },
+    orderBy: { createdAt: 'asc' },
+  },
+  _count: { select: { stageHistory: true } },
+} satisfies Prisma.RecruitmentApplicationInclude;
+
 const RECRUITMENT_VACANCY_INCLUDE = {
   questions: {
     where: { retiredAt: null },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
   },
-  _count: { select: { applications: true } },
+  _count: {
+    select: {
+      applications: {
+        where: { status: RecruitmentApplicationStatus.SUBMITTED },
+      },
+    },
+  },
 } satisfies Prisma.RecruitmentVacancyInclude;
 
 @Injectable()
@@ -446,7 +475,11 @@ export class RecruitmentService {
 
   async getCandidate(tenantId: string, candidateId: string) {
     const candidate = await this.prisma.recruitmentApplication.findFirst({
-      where: { tenantId, id: candidateId },
+      where: {
+        tenantId,
+        id: candidateId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+      },
       include: RECRUITMENT_CANDIDATE_INCLUDE,
     });
     if (!candidate)
@@ -456,7 +489,11 @@ export class RecruitmentService {
 
   async getCandidateDocuments(tenantId: string, candidateId: string) {
     const candidate = await this.prisma.recruitmentApplication.findFirst({
-      where: { tenantId, id: candidateId },
+      where: {
+        tenantId,
+        id: candidateId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+      },
       select: {
         id: true,
         tenantId: true,
@@ -487,7 +524,11 @@ export class RecruitmentService {
     });
 
     const candidate = await this.prisma.recruitmentApplication.findFirst({
-      where: { tenantId, id: candidateId },
+      where: {
+        tenantId,
+        id: candidateId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+      },
       select: { id: true, currentStageId: true },
     });
     if (!candidate)
@@ -564,6 +605,12 @@ export class RecruitmentService {
     });
     if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
 
+    this.assertApplicationComplete(dto, vacancy.questions);
+    await this.assertNoSubmittedDuplicate(
+      tenantId,
+      vacancyId,
+      dto.email?.trim().toLowerCase(),
+    );
     const initialStage = await this.getDefaultStage(tenantId);
     const actorEmployee = user
       ? await this.prisma.employee.findFirst({
@@ -571,22 +618,36 @@ export class RecruitmentService {
           select: { id: true },
         })
       : null;
-    const answers = this.validateApplicationAnswers(vacancy.questions, dto);
+    const answers = this.validateApplicationAnswers(
+      vacancy.questions,
+      dto.answers ?? [],
+      true,
+    );
+    const now = new Date();
 
     return this.prisma.$transaction(async (tx) => {
       const application = await tx.recruitmentApplication.create({
         data: {
           tenantId,
           vacancyId,
+          status: RecruitmentApplicationStatus.SUBMITTED,
           currentStageId: initialStage.id,
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-          email: dto.email.trim().toLowerCase(),
+          submittedAt: now,
+          appliedAt: now,
+          firstName: dto.firstName?.trim(),
+          lastName: dto.lastName?.trim(),
+          email: dto.email?.trim().toLowerCase(),
           phone: this.optionalTrim(dto.phone),
+          country: this.optionalTrim(dto.country),
+          city: this.optionalTrim(dto.city),
           professionalSummary: this.optionalTrim(dto.professionalSummary),
           skills:
             dto.skills?.map((skill) => skill.trim()).filter(Boolean) ?? [],
           education: this.optionalTrim(dto.education),
+          yearsOfExperience: dto.yearsOfExperience,
+          currentJobTitle: this.optionalTrim(dto.currentJobTitle),
+          currentEmployer: this.optionalTrim(dto.currentEmployer),
+          highestEducationLevel: this.optionalTrim(dto.highestEducationLevel),
           expectedSalary: this.toDecimal(dto.expectedSalary),
           expectedSalaryCurrency: this.optionalTrim(
             dto.expectedSalaryCurrency,
@@ -608,6 +669,8 @@ export class RecruitmentService {
             questionId: answer.questionId,
             questionSnapshot: answer.questionSnapshot,
             answer: answer.answer,
+            answerText: answer.answerText,
+            selectedOptions: answer.selectedOptions,
           })),
         });
       }
@@ -636,9 +699,200 @@ export class RecruitmentService {
     vacancyId: string,
     dto: CreateRecruitmentApplicationDto,
   ) {
-    return this.createApplication(this.requirePublicTenantId(tenantId), null, {
-      ...dto,
-      vacancyId,
+    const publicTenantId = this.requirePublicTenantId(tenantId);
+    const vacancy = await this.prisma.recruitmentVacancy.findFirst({
+      where: {
+        tenantId: publicTenantId,
+        id: vacancyId,
+        status: RecruitmentVacancyStatus.OPEN,
+      },
+      include: {
+        questions: {
+          where: { retiredAt: null },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
+      },
+    });
+    if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
+
+    const accessToken = this.createAccessToken();
+    const answers = this.validateApplicationAnswers(
+      vacancy.questions,
+      dto.answers ?? [],
+      false,
+    );
+    const application = await this.prisma.$transaction(async (tx) => {
+      const draft = await tx.recruitmentApplication.create({
+        data: {
+          tenantId: publicTenantId,
+          vacancyId,
+          status: RecruitmentApplicationStatus.DRAFT,
+          accessTokenHash: this.hashAccessToken(accessToken),
+          ...this.basicInfoData(dto),
+          ...this.professionalInfoData(dto),
+        },
+      });
+      await this.replaceApplicationAnswers(
+        tx,
+        publicTenantId,
+        draft.id,
+        answers,
+      );
+      return tx.recruitmentApplication.findFirstOrThrow({
+        where: { tenantId: publicTenantId, id: draft.id },
+        include: RECRUITMENT_PUBLIC_APPLICATION_INCLUDE,
+      });
+    });
+
+    return {
+      application: this.serializePublicApplication(application),
+      accessToken,
+    };
+  }
+
+  async getPublicApplication(applicationId: string, accessToken?: string) {
+    const application = await this.getDraftApplicationByToken(
+      applicationId,
+      accessToken,
+    );
+    return this.serializePublicApplication(application);
+  }
+
+  async updatePublicApplicationBasicInfo(
+    applicationId: string,
+    accessToken: string | undefined,
+    dto: UpdateRecruitmentApplicationBasicInfoDto,
+  ) {
+    const draft = await this.getDraftApplicationByToken(
+      applicationId,
+      accessToken,
+    );
+    const updated = await this.prisma.recruitmentApplication.update({
+      where: { id: draft.id },
+      data: this.basicInfoData(dto),
+      include: RECRUITMENT_PUBLIC_APPLICATION_INCLUDE,
+    });
+    return this.serializePublicApplication(updated);
+  }
+
+  async updatePublicApplicationProfessionalInfo(
+    applicationId: string,
+    accessToken: string | undefined,
+    dto: UpdateRecruitmentApplicationProfessionalInfoDto,
+  ) {
+    const draft = await this.getDraftApplicationByToken(
+      applicationId,
+      accessToken,
+    );
+    const updated = await this.prisma.recruitmentApplication.update({
+      where: { id: draft.id },
+      data: this.professionalInfoData(dto),
+      include: RECRUITMENT_PUBLIC_APPLICATION_INCLUDE,
+    });
+    return this.serializePublicApplication(updated);
+  }
+
+  async updatePublicApplicationAnswers(
+    applicationId: string,
+    accessToken: string | undefined,
+    dto: UpdateRecruitmentApplicationAnswersDto,
+  ) {
+    const draft = await this.getDraftApplicationByToken(
+      applicationId,
+      accessToken,
+    );
+    const answers = this.validateApplicationAnswers(
+      draft.vacancy.questions,
+      dto.answers,
+      false,
+    );
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.replaceApplicationAnswers(
+        tx,
+        draft.tenantId,
+        draft.id,
+        answers,
+      );
+      return tx.recruitmentApplication.findFirstOrThrow({
+        where: { tenantId: draft.tenantId, id: draft.id },
+        include: RECRUITMENT_PUBLIC_APPLICATION_INCLUDE,
+      });
+    });
+    return this.serializePublicApplication(updated);
+  }
+
+  async reviewPublicApplication(applicationId: string, accessToken?: string) {
+    const draft = await this.getDraftApplicationByToken(
+      applicationId,
+      accessToken,
+    );
+    const missing = this.applicationMissingFields(
+      draft,
+      draft.vacancy.questions,
+    );
+    return {
+      application: this.serializePublicApplication(draft),
+      canSubmit: missing.length === 0,
+      missing,
+    };
+  }
+
+  async submitPublicApplication(applicationId: string, accessToken?: string) {
+    const draft = await this.getDraftApplicationByToken(
+      applicationId,
+      accessToken,
+    );
+    const missing = this.applicationMissingFields(
+      draft,
+      draft.vacancy.questions,
+    );
+    if (missing.length > 0) {
+      throw new BadRequestException({
+        message: 'Recruitment application is incomplete',
+        missing,
+      });
+    }
+    await this.assertNoSubmittedDuplicate(
+      draft.tenantId,
+      draft.vacancyId,
+      draft.email?.trim().toLowerCase(),
+      draft.id,
+    );
+    const initialStage = await this.getDefaultStage(draft.tenantId);
+    const now = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.recruitmentApplication.update({
+        where: { id: draft.id },
+        data: {
+          status: RecruitmentApplicationStatus.SUBMITTED,
+          currentStageId: initialStage.id,
+          submittedAt: now,
+          appliedAt: now,
+          accessTokenHash: null,
+        },
+      });
+      await tx.recruitmentStageHistory.create({
+        data: {
+          tenantId: draft.tenantId,
+          applicationId: draft.id,
+          previousStageId: null,
+          newStageId: initialStage.id,
+          changedByUserId: null,
+          changedByEmployeeId: null,
+          note: 'Initial application stage',
+        },
+      });
+
+      const submitted = await tx.recruitmentApplication.findFirstOrThrow({
+        where: {
+          tenantId: draft.tenantId,
+          id: draft.id,
+          status: RecruitmentApplicationStatus.SUBMITTED,
+        },
+        include: RECRUITMENT_CANDIDATE_INCLUDE,
+      });
+      return this.serializeCandidate(submitted);
     });
   }
 
@@ -700,6 +954,8 @@ export class RecruitmentService {
     for (const [index, question] of questions.entries()) {
       const questionText = question.question.trim();
       const sortOrder = question.sortOrder ?? index + 1;
+      const type = question.type ?? RecruitmentQuestionType.TEXT;
+      const options = this.normalizeQuestionOptions(type, question.options);
       if (question.id) {
         if (!existingIds.has(question.id)) {
           throw new NotFoundException('Recruitment vacancy question not found');
@@ -714,6 +970,8 @@ export class RecruitmentService {
           where: { id: question.id },
           data: {
             question: questionText,
+            type,
+            options,
             required: question.required ?? false,
             sortOrder,
             retiredAt: null,
@@ -727,6 +985,8 @@ export class RecruitmentService {
           tenantId,
           vacancyId,
           question: questionText,
+          type,
+          options,
           required: question.required ?? false,
           sortOrder,
         },
@@ -749,23 +1009,195 @@ export class RecruitmentService {
     }
   }
 
+  private async getDraftApplicationByToken(
+    applicationId: string,
+    accessToken?: string,
+  ) {
+    const tokenHash = accessToken
+      ? this.hashAccessToken(accessToken)
+      : undefined;
+    if (!tokenHash) {
+      throw new NotFoundException('Recruitment application not found');
+    }
+
+    const application = await this.prisma.recruitmentApplication.findFirst({
+      where: {
+        id: applicationId,
+        accessTokenHash: tokenHash,
+        status: RecruitmentApplicationStatus.DRAFT,
+      },
+      include: RECRUITMENT_PUBLIC_APPLICATION_INCLUDE,
+    });
+    if (!application) {
+      throw new NotFoundException('Recruitment application not found');
+    }
+    if (application.vacancy.status !== RecruitmentVacancyStatus.OPEN) {
+      throw new ConflictException('Recruitment vacancy is no longer open');
+    }
+    return application;
+  }
+
+  private basicInfoData(dto: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    country?: string;
+    city?: string;
+  }) {
+    return {
+      ...(dto.firstName !== undefined
+        ? { firstName: this.optionalTrim(dto.firstName) }
+        : {}),
+      ...(dto.lastName !== undefined
+        ? { lastName: this.optionalTrim(dto.lastName) }
+        : {}),
+      ...(dto.email !== undefined
+        ? { email: this.optionalTrim(dto.email)?.toLowerCase() }
+        : {}),
+      ...(dto.phone !== undefined
+        ? { phone: this.optionalTrim(dto.phone) }
+        : {}),
+      ...(dto.country !== undefined
+        ? { country: this.optionalTrim(dto.country) }
+        : {}),
+      ...(dto.city !== undefined ? { city: this.optionalTrim(dto.city) } : {}),
+    };
+  }
+
+  private professionalInfoData(dto: {
+    professionalSummary?: string;
+    skills?: string[];
+    education?: string;
+    yearsOfExperience?: number;
+    currentJobTitle?: string;
+    currentEmployer?: string;
+    highestEducationLevel?: string;
+    expectedSalary?: number;
+    expectedSalaryCurrency?: string;
+    noticePeriod?: string;
+    resumeUrl?: string;
+    resumeFileName?: string;
+    coverLetterUrl?: string;
+    coverLetterFileName?: string;
+    portfolioUrl?: string;
+    githubUrl?: string;
+  }) {
+    return {
+      ...(dto.professionalSummary !== undefined
+        ? { professionalSummary: this.optionalTrim(dto.professionalSummary) }
+        : {}),
+      ...(dto.skills !== undefined
+        ? {
+            skills: dto.skills.map((skill) => skill.trim()).filter(Boolean),
+          }
+        : {}),
+      ...(dto.education !== undefined
+        ? { education: this.optionalTrim(dto.education) }
+        : {}),
+      ...(dto.yearsOfExperience !== undefined
+        ? { yearsOfExperience: dto.yearsOfExperience }
+        : {}),
+      ...(dto.currentJobTitle !== undefined
+        ? { currentJobTitle: this.optionalTrim(dto.currentJobTitle) }
+        : {}),
+      ...(dto.currentEmployer !== undefined
+        ? { currentEmployer: this.optionalTrim(dto.currentEmployer) }
+        : {}),
+      ...(dto.highestEducationLevel !== undefined
+        ? {
+            highestEducationLevel: this.optionalTrim(dto.highestEducationLevel),
+          }
+        : {}),
+      ...(dto.expectedSalary !== undefined
+        ? { expectedSalary: this.toDecimal(dto.expectedSalary) }
+        : {}),
+      ...(dto.expectedSalaryCurrency !== undefined
+        ? {
+            expectedSalaryCurrency: this.optionalTrim(
+              dto.expectedSalaryCurrency,
+            )?.toUpperCase(),
+          }
+        : {}),
+      ...(dto.noticePeriod !== undefined
+        ? { noticePeriod: this.optionalTrim(dto.noticePeriod) }
+        : {}),
+      ...(dto.resumeUrl !== undefined
+        ? { resumeUrl: this.optionalTrim(dto.resumeUrl) }
+        : {}),
+      ...(dto.resumeFileName !== undefined
+        ? { resumeFileName: this.optionalTrim(dto.resumeFileName) }
+        : {}),
+      ...(dto.coverLetterUrl !== undefined
+        ? { coverLetterUrl: this.optionalTrim(dto.coverLetterUrl) }
+        : {}),
+      ...(dto.coverLetterFileName !== undefined
+        ? { coverLetterFileName: this.optionalTrim(dto.coverLetterFileName) }
+        : {}),
+      ...(dto.portfolioUrl !== undefined
+        ? { portfolioUrl: this.optionalTrim(dto.portfolioUrl) }
+        : {}),
+      ...(dto.githubUrl !== undefined
+        ? { githubUrl: this.optionalTrim(dto.githubUrl) }
+        : {}),
+    };
+  }
+
+  private async replaceApplicationAnswers(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    applicationId: string,
+    answers: Array<{
+      questionId: string;
+      questionSnapshot: string;
+      answer: string;
+      answerText: string | null;
+      selectedOptions: string[];
+    }>,
+  ) {
+    await tx.recruitmentApplicationAnswer.deleteMany({
+      where: { tenantId, applicationId },
+    });
+    if (answers.length === 0) return;
+
+    await tx.recruitmentApplicationAnswer.createMany({
+      data: answers.map((answer) => ({
+        tenantId,
+        applicationId,
+        questionId: answer.questionId,
+        questionSnapshot: answer.questionSnapshot,
+        answer: answer.answer,
+        answerText: answer.answerText,
+        selectedOptions: answer.selectedOptions,
+      })),
+    });
+  }
+
   private validateApplicationAnswers(
     questions: Array<{
       id: string;
       question: string;
+      type: RecruitmentQuestionType;
+      options: Prisma.JsonValue | null;
       required: boolean;
     }>,
-    dto: CreateRecruitmentApplicationDto,
+    answers: Array<{
+      questionId: string;
+      answer?: string;
+      selectedOptions?: string[];
+    }>,
+    requireRequiredAnswers: boolean,
   ) {
     const activeQuestions = new Map(
       questions.map((question) => [question.id, question]),
     );
-    const answers = dto.answers ?? [];
     const seen = new Set<string>();
     const normalizedAnswers: Array<{
       questionId: string;
       questionSnapshot: string;
       answer: string;
+      answerText: string | null;
+      selectedOptions: string[];
     }> = [];
 
     for (const answer of answers) {
@@ -781,16 +1213,62 @@ export class RecruitmentService {
           'Answer references an invalid recruitment vacancy question',
         );
       }
-      const value = answer.answer.trim();
-      if (!value) {
+      const questionType = question.type ?? RecruitmentQuestionType.TEXT;
+      const options = this.readQuestionOptions(question.options);
+      if (questionType === RecruitmentQuestionType.TEXT) {
+        const value = answer.answer?.trim();
+        if (!value) {
+          if (requireRequiredAnswers || question.required) {
+            throw new BadRequestException(
+              'Recruitment vacancy question answers cannot be empty',
+            );
+          }
+          continue;
+        }
+        normalizedAnswers.push({
+          questionId: answer.questionId,
+          questionSnapshot: question.question,
+          answer: value,
+          answerText: value,
+          selectedOptions: [],
+        });
+        continue;
+      }
+
+      const selectedOptions =
+        answer.selectedOptions
+          ?.map((option) => option.trim())
+          .filter(Boolean) ?? [];
+      if (selectedOptions.length === 0) {
+        if (requireRequiredAnswers || question.required) {
+          throw new BadRequestException(
+            'Recruitment vacancy question selections cannot be empty',
+          );
+        }
+        continue;
+      }
+      if (
+        questionType === RecruitmentQuestionType.SINGLE_SELECT &&
+        selectedOptions.length !== 1
+      ) {
         throw new BadRequestException(
-          'Recruitment vacancy question answers cannot be empty',
+          'Single-select recruitment questions require exactly one option',
+        );
+      }
+      const invalidOption = selectedOptions.find(
+        (option) => !options.includes(option),
+      );
+      if (invalidOption) {
+        throw new BadRequestException(
+          'Answer references an invalid recruitment vacancy question option',
         );
       }
       normalizedAnswers.push({
         questionId: answer.questionId,
         questionSnapshot: question.question,
-        answer: value,
+        answer: selectedOptions.join(', '),
+        answerText: null,
+        selectedOptions,
       });
     }
 
@@ -800,13 +1278,154 @@ export class RecruitmentService {
     const missingRequired = questions.some(
       (question) => question.required && !answeredIds.has(question.id),
     );
-    if (missingRequired) {
+    if (requireRequiredAnswers && missingRequired) {
       throw new BadRequestException(
         'Required recruitment vacancy questions must be answered',
       );
     }
 
     return normalizedAnswers;
+  }
+
+  private assertApplicationComplete(
+    dto: CreateRecruitmentApplicationDto,
+    questions: Array<{
+      id: string;
+      question: string;
+      type: RecruitmentQuestionType;
+      options: Prisma.JsonValue | null;
+      required: boolean;
+    }>,
+  ) {
+    const missing = this.applicationMissingFields(
+      {
+        ...dto,
+        answers: (dto.answers ?? []).map((answer) => ({
+          questionId: answer.questionId,
+          answer: answer.answer ?? '',
+          answerText: answer.answer ?? null,
+          selectedOptions: answer.selectedOptions ?? [],
+        })),
+      },
+      questions,
+    );
+    if (missing.length > 0) {
+      throw new BadRequestException({
+        message: 'Recruitment application is incomplete',
+        missing,
+      });
+    }
+  }
+
+  private applicationMissingFields(
+    application: {
+      firstName?: string | null;
+      lastName?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      country?: string | null;
+      city?: string | null;
+      yearsOfExperience?: number | null;
+      currentJobTitle?: string | null;
+      highestEducationLevel?: string | null;
+      skills?: string[];
+      noticePeriod?: string | null;
+      answers?: Array<{
+        questionId: string;
+        answer?: string | null;
+        answerText?: string | null;
+        selectedOptions?: string[];
+      }>;
+    },
+    questions: Array<{
+      id: string;
+      question: string;
+      type: RecruitmentQuestionType;
+      options: Prisma.JsonValue | null;
+      required: boolean;
+    }>,
+  ) {
+    const missing: Array<{ field: string; label: string }> = [];
+    const requiredTextFields: Array<
+      [string, string, string | null | undefined]
+    > = [
+      ['firstName', 'First name', application.firstName],
+      ['lastName', 'Last name', application.lastName],
+      ['email', 'Email', application.email],
+      ['phone', 'Phone', application.phone],
+      ['country', 'Country', application.country],
+      ['city', 'City', application.city],
+      ['currentJobTitle', 'Current job title', application.currentJobTitle],
+      [
+        'highestEducationLevel',
+        'Highest education level',
+        application.highestEducationLevel,
+      ],
+      ['noticePeriod', 'Notice period', application.noticePeriod],
+    ];
+
+    for (const [field, label, value] of requiredTextFields) {
+      if (!value?.trim()) missing.push({ field, label });
+    }
+    if (
+      application.yearsOfExperience === undefined ||
+      application.yearsOfExperience === null
+    ) {
+      missing.push({
+        field: 'yearsOfExperience',
+        label: 'Years of experience',
+      });
+    }
+    if (!application.skills || application.skills.length === 0) {
+      missing.push({ field: 'skills', label: 'Skills' });
+    }
+
+    const answersByQuestionId = new Map(
+      (application.answers ?? []).map((answer) => [answer.questionId, answer]),
+    );
+    for (const question of questions) {
+      if (!question.required) continue;
+      const answer = answersByQuestionId.get(question.id);
+      const questionType = question.type ?? RecruitmentQuestionType.TEXT;
+      const hasAnswer =
+        questionType === RecruitmentQuestionType.TEXT
+          ? Boolean(answer?.answerText?.trim() || answer?.answer?.trim())
+          : Boolean(answer?.selectedOptions?.length);
+      if (!hasAnswer) {
+        missing.push({
+          field: `question:${question.id}`,
+          label: question.question,
+        });
+      }
+    }
+
+    return missing;
+  }
+
+  private async assertNoSubmittedDuplicate(
+    tenantId: string,
+    vacancyId: string,
+    email?: string,
+    excludingApplicationId?: string,
+  ) {
+    if (!email) return;
+    const existing = await this.prisma.recruitmentApplication.findFirst({
+      where: {
+        tenantId,
+        vacancyId,
+        email,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+        ...(excludingApplicationId
+          ? { id: { not: excludingApplicationId } }
+          : {}),
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'A submitted application already exists for this vacancy and email',
+      );
+    }
   }
 
   private async getStageOrThrow(tenantId: string, stageId: string) {
@@ -849,6 +1468,7 @@ export class RecruitmentService {
     const search = query.search?.trim();
     return {
       tenantId,
+      status: RecruitmentApplicationStatus.SUBMITTED,
       ...(query.vacancyId ? { vacancyId: query.vacancyId } : {}),
       ...(query.stageId ? { currentStageId: query.stageId } : {}),
       ...(Object.keys(appliedAt).length > 0 ? { appliedAt } : {}),
@@ -900,6 +1520,8 @@ export class RecruitmentService {
       questions: vacancy.questions.map((question) => ({
         id: question.id,
         question: question.question,
+        type: question.type,
+        options: this.readQuestionOptions(question.options),
         required: question.required,
         sortOrder: question.sortOrder,
       })),
@@ -911,8 +1533,9 @@ export class RecruitmentService {
       include: typeof RECRUITMENT_CANDIDATE_INCLUDE;
     }>,
   ) {
+    const { accessTokenHash: _accessTokenHash, ...safeCandidate } = candidate;
     return {
-      ...candidate,
+      ...safeCandidate,
       expectedSalary: this.decimalToNumber(candidate.expectedSalary),
       vacancy: {
         ...candidate.vacancy,
@@ -925,9 +1548,39 @@ export class RecruitmentService {
         question: answer.questionSnapshot,
         currentQuestion: answer.question.question,
         answer: answer.answer,
+        answerText: answer.answerText,
+        selectedOptions: answer.selectedOptions,
         createdAt: answer.createdAt,
       })),
       documents: this.serializeCandidateDocuments(candidate),
+    };
+  }
+
+  private serializePublicApplication(
+    application: Prisma.RecruitmentApplicationGetPayload<{
+      include: typeof RECRUITMENT_PUBLIC_APPLICATION_INCLUDE;
+    }>,
+  ) {
+    const { accessTokenHash: _accessTokenHash, ...safeApplication } =
+      application;
+    return {
+      ...safeApplication,
+      expectedSalary: this.decimalToNumber(application.expectedSalary),
+      vacancy: this.serializePublicVacancy({
+        ...application.vacancy,
+        _count: { applications: 0 },
+      }),
+      answers: application.answers.map((answer) => ({
+        id: answer.id,
+        questionId: answer.questionId,
+        question: answer.questionSnapshot,
+        currentQuestion: answer.question.question,
+        answer: answer.answer,
+        answerText: answer.answerText,
+        selectedOptions: answer.selectedOptions,
+        createdAt: answer.createdAt,
+      })),
+      documents: this.serializeCandidateDocuments(application),
     };
   }
 
@@ -1006,6 +1659,44 @@ export class RecruitmentService {
 
   private normalizeName(value: string) {
     return value.trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  private normalizeQuestionOptions(
+    type: RecruitmentQuestionType,
+    options?: string[],
+  ) {
+    if (type === RecruitmentQuestionType.TEXT) {
+      return Prisma.JsonNull;
+    }
+    const normalized = [
+      ...new Set(options?.map((option) => option.trim()).filter(Boolean) ?? []),
+    ];
+    if (normalized.length === 0) {
+      throw new BadRequestException(
+        'Selectable recruitment questions require at least one option',
+      );
+    }
+    if (normalized.length > 50) {
+      throw new BadRequestException(
+        'Recruitment vacancy questions cannot have more than 50 options',
+      );
+    }
+    return normalized;
+  }
+
+  private readQuestionOptions(options: Prisma.JsonValue | null) {
+    if (!Array.isArray(options)) return [];
+    return options.filter(
+      (option): option is string => typeof option === 'string',
+    );
+  }
+
+  private createAccessToken() {
+    return randomBytes(32).toString('base64url');
+  }
+
+  private hashAccessToken(accessToken: string) {
+    return createHash('sha256').update(accessToken).digest('hex');
   }
 
   private optionalTrim(value?: string | null) {
