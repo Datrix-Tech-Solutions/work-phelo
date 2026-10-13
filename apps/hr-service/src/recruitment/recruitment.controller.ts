@@ -429,6 +429,27 @@ export class RecruitmentController {
     );
   }
 
+  @Post('vacancies/:vacancyId/reopen')
+  @ApiTags('HR Recruitment - Vacancies')
+  @RequirePermissions(Permission.CLOSE_RECRUITMENT_VACANCY)
+  @ApiOperation({
+    summary: 'Reopen a closed recruitment vacancy',
+    description:
+      'Returns a CLOSED vacancy to OPEN so it accepts applications again. Fails if the closing date has passed.',
+  })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  @ApiOkResponse({ description: 'Recruitment vacancy reopened' })
+  reopenVacancy(
+    @Param('vacancyId') vacancyId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.reopenVacancy(
+      req.user.tenantId,
+      req.user,
+      vacancyId,
+    );
+  }
+
   @Post('vacancies/:vacancyId/close')
   @ApiTags('HR Recruitment - Vacancies')
   @RequirePermissions(Permission.CLOSE_RECRUITMENT_VACANCY)

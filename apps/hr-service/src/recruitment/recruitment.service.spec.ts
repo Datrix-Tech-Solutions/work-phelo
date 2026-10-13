@@ -516,6 +516,62 @@ describe('RecruitmentService', () => {
     });
   });
 
+  describe('reopening vacancies', () => {
+    it('reopens a closed vacancy and clears the close details', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue(
+        vacancy({ status: RecruitmentVacancyStatus.CLOSED }),
+      );
+      prisma.recruitmentVacancy.update.mockResolvedValue(
+        vacancy({ status: RecruitmentVacancyStatus.OPEN }),
+      );
+
+      const result = await service.reopenVacancy('tenant-1', user, 'vacancy-1');
+
+      expect(prisma.recruitmentVacancy.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: RecruitmentVacancyStatus.OPEN,
+            closedAt: null,
+            closedByUserId: null,
+          }),
+        }),
+      );
+      expect(result.status).toBe(RecruitmentVacancyStatus.OPEN);
+    });
+
+    it('only reopens closed vacancies', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue(
+        vacancy({ status: RecruitmentVacancyStatus.DRAFT }),
+      );
+
+      await expect(
+        service.reopenVacancy('tenant-1', user, 'vacancy-1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.recruitmentVacancy.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses to reopen after the closing date', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue(
+        vacancy({
+          status: RecruitmentVacancyStatus.CLOSED,
+          closingDate: new Date('2020-01-01'),
+        }),
+      );
+
+      await expect(
+        service.reopenVacancy('tenant-1', user, 'vacancy-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('does not disclose another tenant vacancy', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.reopenVacancy('tenant-1', user, 'vacancy-9'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('vacancy form fields', () => {
     beforeEach(() => {
       prisma.recruitmentVacancy.create.mockResolvedValue(vacancy());
