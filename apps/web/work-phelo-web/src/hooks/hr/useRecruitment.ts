@@ -72,6 +72,31 @@ export function useUpdateJobOpening() {
   });
 }
 
+/** Moves a draft opening to OPEN. The API checks the fields a public posting needs. */
+export function usePublishJobOpening() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.patch<RecruitmentVacancy>(`/hr/recruitment/vacancies/${id}`, {
+        status: 'OPEN',
+      });
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: VACANCIES_KEY }),
+  });
+}
+
+export function useReopenJobOpening() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<RecruitmentVacancy>(`/hr/recruitment/vacancies/${id}/reopen`);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: VACANCIES_KEY }),
+  });
+}
+
 export function useCloseJobOpening() {
   const queryClient = useQueryClient();
   return useMutation({

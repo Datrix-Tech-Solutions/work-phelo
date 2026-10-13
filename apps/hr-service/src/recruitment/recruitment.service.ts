@@ -454,6 +454,35 @@ export class RecruitmentService {
     return this.serializeVacancy(vacancy);
   }
 
+  /** Puts a closed vacancy back on the board. Applications and stage history are untouched. */
+  async reopenVacancy(tenantId: string, user: RequestUser, vacancyId: string) {
+    const existing = await this.prisma.recruitmentVacancy.findFirst({
+      where: { tenantId, id: vacancyId },
+    });
+    if (!existing) throw new NotFoundException('Recruitment vacancy not found');
+    if (existing.status !== RecruitmentVacancyStatus.CLOSED) {
+      throw new ConflictException('Only closed vacancies can be reopened');
+    }
+    this.assertPublishable(existing);
+    if (existing.closingDate && existing.closingDate < this.startOfTodayUtc()) {
+      throw new BadRequestException(
+        'The closing date has passed. Update the closing date before reopening',
+      );
+    }
+
+    const vacancy = await this.prisma.recruitmentVacancy.update({
+      where: { id: vacancyId },
+      data: {
+        status: RecruitmentVacancyStatus.OPEN,
+        closedAt: null,
+        closedByUserId: null,
+        updatedByUserId: user.id,
+      },
+      include: RECRUITMENT_VACANCY_INCLUDE,
+    });
+    return this.serializeVacancy(vacancy);
+  }
+
   async closeVacancy(tenantId: string, user: RequestUser, vacancyId: string) {
     await this.getVacancy(tenantId, vacancyId);
     const vacancy = await this.prisma.recruitmentVacancy.update({

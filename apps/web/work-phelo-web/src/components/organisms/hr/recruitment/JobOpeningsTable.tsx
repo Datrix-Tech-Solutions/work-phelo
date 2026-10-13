@@ -9,7 +9,12 @@ import { Button } from '@/components/atoms/Button';
 import { Badge, BadgeProps } from '@/components/atoms/Badge';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { useCloseJobOpening, useJobOpenings } from '@/hooks/hr/useRecruitment';
+import {
+  useCloseJobOpening,
+  useJobOpenings,
+  usePublishJobOpening,
+  useReopenJobOpening,
+} from '@/hooks/hr/useRecruitment';
 import { Permission } from '@/lib/permissionMap';
 import { formatDate } from '@/lib/formatters';
 import { extractError } from '@/lib/extractError';
@@ -43,6 +48,8 @@ export function JobOpeningsTable() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [closeTarget, setCloseTarget] = useState<RecruitmentVacancy | null>(null);
+  const [publishTarget, setPublishTarget] = useState<RecruitmentVacancy | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<RecruitmentVacancy | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -51,6 +58,8 @@ export function JobOpeningsTable() {
 
   const { data, isLoading } = useJobOpenings({ search: debouncedSearch, page, limit: PAGE_SIZE });
   const { mutate: closeJobOpening, isPending: isClosing } = useCloseJobOpening();
+  const { mutate: publishJobOpening, isPending: isPublishing } = usePublishJobOpening();
+  const { mutate: reopenJobOpening, isPending: isReopening } = useReopenJobOpening();
 
   const openings = data?.items ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.meta.total ?? 0) / PAGE_SIZE));
@@ -118,10 +127,38 @@ export function JobOpeningsTable() {
     ...(canUpdate
       ? [{ label: 'Edit', onClick: () => router.push(`${basePath}/${row.id}/edit`) }]
       : []),
+    ...(canUpdate && row.status === 'DRAFT'
+      ? [{ label: 'Publish', onClick: () => setPublishTarget(row) }]
+      : []),
+    ...(canClose && row.status === 'CLOSED'
+      ? [{ label: 'Reopen', onClick: () => setReopenTarget(row) }]
+      : []),
     ...(canClose && row.status !== 'CLOSED'
       ? [{ label: 'Close', danger: true, onClick: () => setCloseTarget(row) }]
       : []),
   ];
+
+  const confirmPublish = () => {
+    if (!publishTarget) return;
+    publishJobOpening(publishTarget.id, {
+      onSuccess: () => {
+        toast.success('Job opening published');
+        setPublishTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to publish job opening')),
+    });
+  };
+
+  const confirmReopen = () => {
+    if (!reopenTarget) return;
+    reopenJobOpening(reopenTarget.id, {
+      onSuccess: () => {
+        toast.success('Job opening reopened');
+        setReopenTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to reopen job opening')),
+    });
+  };
 
   const confirmClose = () => {
     if (!closeTarget) return;
@@ -159,6 +196,40 @@ export function JobOpeningsTable() {
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
+      />
+
+      <Modal
+        isOpen={!!publishTarget}
+        onClose={() => setPublishTarget(null)}
+        title="Publish Job Opening"
+        description={`Publish "${publishTarget?.title ?? 'this job opening'}"? It will appear on the public job board and start accepting applications.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setPublishTarget(null)}>
+              Cancel
+            </Button>
+            <Button isLoading={isPublishing} loadingText="Publishing…" onClick={confirmPublish}>
+              Publish
+            </Button>
+          </div>
+        }
+      />
+
+      <Modal
+        isOpen={!!reopenTarget}
+        onClose={() => setReopenTarget(null)}
+        title="Reopen Job Opening"
+        description={`Reopen "${reopenTarget?.title ?? 'this job opening'}"? It will appear on the public job board and accept applications again.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setReopenTarget(null)}>
+              Cancel
+            </Button>
+            <Button isLoading={isReopening} loadingText="Reopening…" onClick={confirmReopen}>
+              Reopen
+            </Button>
+          </div>
+        }
       />
 
       <Modal
