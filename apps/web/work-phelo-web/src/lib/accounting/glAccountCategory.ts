@@ -1,6 +1,5 @@
 import { GLAccountCategory } from '@/types/accounting';
 
-
 export type GLAccountCategoryChipColor =
   | 'red'
   | 'green'

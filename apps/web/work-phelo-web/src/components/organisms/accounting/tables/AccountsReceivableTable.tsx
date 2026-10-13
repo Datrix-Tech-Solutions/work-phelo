@@ -15,6 +15,8 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtDate(iso: string | null) {
@@ -100,7 +102,14 @@ export function AccountsReceivableTable() {
         key: 'status',
         label: 'Status',
         width: '120px',
-        render: (row) => <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />,
+        render: (row) => (
+          <div className="flex flex-col items-start gap-0.5">
+            <Badge label={row.status} variant={STATUS_VARIANT[row.status]} />
+            {row.pendingPaymentRequestCount > 0 && (
+              <span className="text-xs font-semibold text-amber-600">Payment requested</span>
+            )}
+          </div>
+        ),
       },
     ],
     [],

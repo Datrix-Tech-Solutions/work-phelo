@@ -6,6 +6,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { cn } from '@/lib/utils';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 interface Props {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function AssignProjectMemberPanel({
   onAssign,
   isAssigning,
 }: Props) {
+  const labels = useProjectLabels();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -74,7 +76,7 @@ export function AssignProjectMemberPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title="Assign Member"
-      description="Select one or more employees to add to this project."
+      description={`Select one or more employees to add to this ${labels.singularLower}.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isAssigning}>

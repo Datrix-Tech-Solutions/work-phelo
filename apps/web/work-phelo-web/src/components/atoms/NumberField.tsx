@@ -14,6 +14,11 @@ interface NumberFieldProps {
   label?: string;
   error?: string;
   disabled?: boolean;
+  /** Accessible name for a field that has no visible label of its own. */
+  ariaLabel?: string;
+  /** Decimal places shown once blurred, and typed at most. 0 gives a whole-number field
+   * (e.g. an odometer reading). Defaults to 2. */
+  decimals?: number;
 }
 
 /** Text input that shows raw digits while focused and a thousands-formatted,
@@ -22,11 +27,13 @@ export function NumberField({
   value,
   onChange,
   onBlur,
-  placeholder = '0.00',
+  decimals = 2,
+  placeholder = decimals > 0 ? `0.${'0'.repeat(decimals)}` : '0',
   className,
   label,
   error,
   disabled,
+  ariaLabel,
 }: NumberFieldProps) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
   const [focused, setFocused] = useState(false);
@@ -41,14 +48,14 @@ export function NumberField({
     focused || local === ''
       ? local
       : Number(local).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
         });
 
   const input = (
     <input
       type="text"
-      inputMode="decimal"
+      inputMode={decimals > 0 ? 'decimal' : 'numeric'}
       value={displayValue}
       placeholder={placeholder}
       onFocus={() => setFocused(true)}
@@ -57,11 +64,12 @@ export function NumberField({
         onBlur?.(local === '' ? 0 : Number(local));
       }}
       onChange={(e) => {
-        const raw = e.target.value.replace(/[^0-9.]/g, '');
+        const raw = e.target.value.replace(decimals > 0 ? /[^0-9.]/g : /[^0-9]/g, '');
         setLocal(raw);
         onChange(raw === '' ? 0 : Number(raw));
       }}
       disabled={disabled}
+      aria-label={ariaLabel}
       className={inputClass(error, cn(label ? 'w-full' : 'w-28 py-1.5', className))}
     />
   );

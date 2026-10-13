@@ -9,6 +9,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   PERMISSION_TAG_GROUPS,
   PERMISSION_TAG_MAPPING,
+  useTagLabel,
   buildPermissionResources,
   inferTagsFromResources,
 } from '@/components/molecules/roles/PermissionTagSelector';
@@ -45,6 +46,7 @@ function AssignPermissionPanelInner({
   userId,
 }: AssignPermissionPanelProps) {
   const toast = useToast();
+  const tagLabel = useTagLabel();
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
@@ -169,7 +171,7 @@ function AssignPermissionPanelInner({
                     key={tag.key}
                     className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-sm font-medium bg-brand/10 text-brand border border-brand/20"
                   >
-                    {tag.label}
+                    {tagLabel(tag)}
                     <button
                       type="button"
                       onClick={() => handleRevokeTag(tag.key)}
@@ -240,7 +242,7 @@ function AssignPermissionPanelInner({
                       isGranted && 'cursor-default',
                     )}
                   >
-                    {tag.label}
+                    {tagLabel(tag)}
                   </button>
                 );
               })}

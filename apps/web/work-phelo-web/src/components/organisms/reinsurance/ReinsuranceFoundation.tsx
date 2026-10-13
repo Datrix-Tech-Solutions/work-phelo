@@ -2,10 +2,7 @@
 
 import { useState } from 'react';
 import { Period } from '@/components/atoms/PeriodToggle';
-import {
-  DashboardView,
-  // DashboardViewToggle
-} from '@/components/atoms/DashboardViewToggle';
+import { DashboardView, DashboardViewToggle } from '@/components/atoms/DashboardViewToggle';
 import { DashboardFiltersBar } from '@/components/molecules/reinsurance/DashboardFiltersBar';
 import { KpiStatsRow } from '@/components/molecules/reinsurance/stats/KpiStatsRow';
 import { PremiumTrendCard } from '@/components/molecules/reinsurance/PremiumTrendCard';
@@ -21,10 +18,7 @@ export default function ReinsuranceFoundation() {
   const [currency, setCurrency] = useState('');
   const [period, setPeriod] = useState<Period>('monthly');
   const [year, setYear] = useState(new Date().getFullYear());
-  const [
-    view,
-    // setView
-  ] = useState<DashboardView>('general');
+  const [view, setView] = useState<DashboardView>('general');
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
@@ -38,7 +32,7 @@ export default function ReinsuranceFoundation() {
           onYearChange={setYear}
           showCurrency={view === 'detailed'}
         />
-        {/* <DashboardViewToggle value={view} onChange={setView} /> */}
+        <DashboardViewToggle value={view} onChange={setView} />
       </div>
 
       {view === 'general' ? (

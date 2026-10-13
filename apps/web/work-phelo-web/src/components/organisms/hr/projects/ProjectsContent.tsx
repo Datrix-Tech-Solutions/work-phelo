@@ -21,6 +21,7 @@ import { Permission } from '@/lib/permissionMap';
 import { CreateProjectDto } from '@/types/hr';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 const PAGE_SIZE = 12;
 
@@ -29,11 +30,13 @@ interface Props {
 }
 
 function ConfirmDeleteModal({
+  singular,
   projectName,
   isDeleting,
   onConfirm,
   onCancel,
 }: {
+  singular: string;
   projectName: string;
   isDeleting: boolean;
   onConfirm: () => void;
@@ -48,7 +51,7 @@ function ConfirmDeleteModal({
             <AlertTriangle className="w-5 h-5 text-red-600" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900">Delete Project</p>
+            <p className="text-sm font-semibold text-gray-900">Delete {singular}</p>
             <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone.</p>
           </div>
         </div>
@@ -77,6 +80,7 @@ function ConfirmDeleteModal({
 export function ProjectsContent({ tenantSlug }: Props) {
   const router = useRouter();
   const toast = useToastStore((s) => s.addToast);
+  const labels = useProjectLabels();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -150,7 +154,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
 
   return (
     <>
-      <ProjectStatsRow isLoading={isLoading} {...metrics} />
+      <ProjectStatsRow isLoading={isLoading} {...metrics} labels={labels} />
 
       <DataCardGrid
         data={pagedProjects}
@@ -159,7 +163,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
         renderSkeleton={() => (
           <div className="w-full h-52 rounded-card bg-gray-100 animate-pulse" />
         )}
-        searchPlaceholder="Search by project name or manager…"
+        searchPlaceholder={`Search by ${labels.singularLower} name or manager…`}
         searchValue={search}
         onSearch={(q) => {
           setSearch(q);
@@ -167,7 +171,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
         }}
         actionButton={
           canManageProjects
-            ? { label: 'New Project', onClick: () => setPanelOpen(true) }
+            ? { label: `New ${labels.singular}`, onClick: () => setPanelOpen(true) }
             : undefined
         }
         extraFilters={
@@ -181,7 +185,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
             onClear={clearFilters}
           />
         }
-        emptyMessage="No projects found"
+        emptyMessage={`No ${labels.pluralLower} found`}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -210,6 +214,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
 
       {deleteTarget && (
         <ConfirmDeleteModal
+          singular={labels.singular}
           projectName={deleteTarget.name}
           isDeleting={archiveProject.isPending}
           onConfirm={handleDeleteConfirm}

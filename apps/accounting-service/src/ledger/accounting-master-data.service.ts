@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { runFiscalPeriodCloseChecks } from './fiscal-period-close-check';
 import { fiscalYearName, summarizeFiscalYear } from './fiscal-year';
 import {
+  BulkDeleteAccountsDto,
   BulkImportAccountsDto,
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
@@ -1007,6 +1008,7 @@ export class AccountingMasterDataService {
           code: dto.code,
           name: dto.name,
           category: dto.category,
+          description: this.optional(dto.description),
           displayOrder: dto.displayOrder ?? 0,
           isSystemTemplate: dto.isSystemTemplate ?? false,
           cashFlowCategory: dto.cashFlowCategory,
@@ -1069,6 +1071,9 @@ export class AccountingMasterDataService {
           ...(dto.code ? { code: dto.code } : {}),
           ...(dto.name ? { name: dto.name } : {}),
           ...(dto.category ? { category: dto.category } : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optional(dto.description) }
+            : {}),
           ...(dto.displayOrder !== undefined
             ? { displayOrder: dto.displayOrder }
             : {}),
@@ -1221,6 +1226,7 @@ export class AccountingMasterDataService {
           classificationId: dto.classificationId,
           code: dto.code,
           name: dto.name,
+          description: this.optional(dto.description),
           displayOrder: dto.displayOrder ?? 0,
           cashFlowCategory: dto.cashFlowCategory,
           createdByUserId: user.id,
@@ -1256,6 +1262,122 @@ export class AccountingMasterDataService {
    *  them. Rows whose code already exists for the tenant are treated as a no-op — the
    *  existing record's id is reused to resolve any row elsewhere in the file that
    *  references it. */
+  /**
+   * GL accounts that are safe to delete: nothing references them (journal lines, posting
+   * and transaction rules, cash accounts, entities, documents, budgets, payroll mappings…)
+   * and every child account is itself unused, so a whole unused branch is cleared in one go.
+   * Mirrors what `deleteGLAccount` would accept, plus the foreign keys that would stop it.
+   */
+  async listUnusedGLAccounts(tenantId: string) {
+    const unreferenced = await this.prisma.gLAccount.findMany({
+      where: {
+        tenantId,
+        journalLines: { none: {} },
+        payrollAccountMappings: { none: {} },
+        postingRuleLines: { none: {} },
+        transactionRuleLines: { none: {} },
+        subledgers: { none: {} },
+        cashAccounts: { none: {} },
+        cashbookOffsets: { none: {} },
+        receivableOffsets: { none: {} },
+        receivableArAccounts: { none: {} },
+        receivableReceiptArAccounts: { none: {} },
+        payableOffsets: { none: {} },
+        payableApAccounts: { none: {} },
+        payablePaymentApAccounts: { none: {} },
+        budgetLines: { none: {} },
+        recurringLines: { none: {} },
+        sourceLedgerEntries: { none: {} },
+      },
+      include: this.glAccountHierarchyInclude(),
+      orderBy: { code: 'asc' },
+    });
+
+    // An account only qualifies if all of its children do too. Children outside the
+    // unreferenced set are used, so they pin their parent.
+    const candidateIds = new Set(unreferenced.map((a) => a.id));
+    const allParents = await this.prisma.gLAccount.findMany({
+      where: { tenantId, parentAccountId: { not: null } },
+      select: { id: true, parentAccountId: true },
+    });
+    const childrenOf = new Map<string, string[]>();
+    for (const { id, parentAccountId } of allParents) {
+      if (!parentAccountId) continue;
+      childrenOf.set(parentAccountId, [
+        ...(childrenOf.get(parentAccountId) ?? []),
+        id,
+      ]);
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const id of [...candidateIds]) {
+        const children = childrenOf.get(id) ?? [];
+        if (children.some((childId) => !candidateIds.has(childId))) {
+          candidateIds.delete(id);
+          changed = true;
+        }
+      }
+    }
+
+    return unreferenced
+      .filter((account) => candidateIds.has(account.id))
+      .map((account) => this.withAccountHierarchy(account));
+  }
+
+  async bulkDeleteGLAccounts(user: RequestUser, dto: BulkDeleteAccountsDto) {
+    // Recomputed now, not trusted from the earlier preview: an account may have been used
+    // since the dialog was opened.
+    const unused = await this.listUnusedGLAccounts(user.tenantId);
+    const unusedById = new Map(unused.map((a) => [a.id, a]));
+    const requested = [...new Set(dto.accountIds)];
+
+    const results: {
+      id: string;
+      code?: string;
+      status: 'deleted' | 'skipped' | 'failed';
+      message?: string;
+    }[] = [];
+    const toDelete = requested.filter((id) => unusedById.has(id));
+    for (const id of requested) {
+      if (!unusedById.has(id)) {
+        results.push({
+          id,
+          status: 'skipped',
+          message: 'No longer unused (or not found) — left in place',
+        });
+      }
+    }
+
+    // Deepest first so a parent goes after the children that pinned it.
+    const depth = (id: string): number => {
+      let d = 0;
+      let current = unusedById.get(id)?.parentAccountId;
+      while (current) {
+        d += 1;
+        current = unusedById.get(current)?.parentAccountId ?? null;
+      }
+      return d;
+    };
+    toDelete.sort((a, b) => depth(b) - depth(a));
+
+    for (const id of toDelete) {
+      const code = unusedById.get(id)?.code;
+      try {
+        await this.deleteGLAccount(user, id);
+        results.push({ id, code, status: 'deleted' });
+      } catch (error) {
+        results.push({
+          id,
+          code,
+          status: 'failed',
+          message: this.bulkImportErrorMessage(error),
+        });
+      }
+    }
+    return { results };
+  }
+
   async bulkImportAccounts(user: RequestUser, dto: BulkImportAccountsDto) {
     const tenantId = user.tenantId;
 
@@ -1454,6 +1576,9 @@ export class AccountingMasterDataService {
             : {}),
           ...(dto.code ? { code: dto.code } : {}),
           ...(dto.name ? { name: dto.name } : {}),
+          ...(dto.description !== undefined
+            ? { description: this.optional(dto.description) }
+            : {}),
           ...(dto.displayOrder !== undefined
             ? { displayOrder: dto.displayOrder }
             : {}),
@@ -1640,6 +1765,7 @@ export class AccountingMasterDataService {
           description: this.optional(dto.description),
           postsToCashbook: dto.postsToCashbook ?? false,
           isLinked: dto.isLinked ?? false,
+          usesQuantityPrice: dto.usesQuantityPrice ?? true,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -1715,6 +1841,9 @@ export class AccountingMasterDataService {
             ? { postsToCashbook: dto.postsToCashbook }
             : {}),
           ...(dto.isLinked !== undefined ? { isLinked: dto.isLinked } : {}),
+          ...(dto.usesQuantityPrice !== undefined
+            ? { usesQuantityPrice: dto.usesQuantityPrice }
+            : {}),
           updatedByUserId: user.id,
         },
       });
@@ -1782,6 +1911,7 @@ export class AccountingMasterDataService {
     description: string | null;
     postsToCashbook: boolean;
     isLinked: boolean;
+    usesQuantityPrice: boolean;
     createdAt: Date;
     rule?: { lines: unknown[] } | null;
   }) {
@@ -1797,6 +1927,7 @@ export class AccountingMasterDataService {
       description: transactionType.description,
       postsToCashbook: transactionType.postsToCashbook,
       isLinked: transactionType.isLinked,
+      usesQuantityPrice: transactionType.usesQuantityPrice,
       createdAt: transactionType.createdAt.toISOString(),
       rulesCount: transactionType.rule?.lines.length ?? 0,
     };
@@ -2032,6 +2163,73 @@ export class AccountingMasterDataService {
     await this.recordAudit(
       user,
       'GL_ACCOUNT_DEACTIVATE',
+      'GLAccount',
+      updated.id,
+      { status: updated.status, allowPosting: updated.allowPosting },
+    );
+    return updated;
+  }
+
+  /** Puts a deactivated account back in use. It can only come back under a classification,
+   *  parent account and account that are themselves active — otherwise it would be live inside
+   *  something that is switched off. Posting is restored too (deactivating turns it off), except
+   *  for a summary account with child accounts, which never takes postings. */
+  async activateGLAccount(user: RequestUser, accountId: string) {
+    const account = await this.findGLAccount(user.tenantId, accountId);
+    if (account.status === RecordStatus.ACTIVE) return account;
+
+    const [classification, group, parent, childCount] = await Promise.all([
+      account.classificationId
+        ? this.prisma.accountClassification.findFirst({
+            where: { id: account.classificationId, tenantId: user.tenantId },
+            select: { isActive: true, name: true },
+          })
+        : null,
+      account.accountGroupId
+        ? this.prisma.accountGroup.findFirst({
+            where: { id: account.accountGroupId, tenantId: user.tenantId },
+            select: { isActive: true, name: true },
+          })
+        : null,
+      account.parentAccountId
+        ? this.prisma.gLAccount.findFirst({
+            where: { id: account.parentAccountId, tenantId: user.tenantId },
+            select: { status: true, name: true },
+          })
+        : null,
+      this.prisma.gLAccount.count({
+        where: { tenantId: user.tenantId, parentAccountId: account.id },
+      }),
+    ]);
+    if (classification && !classification.isActive) {
+      throw new ConflictException(
+        `Reactivate the classification "${classification.name}" first`,
+      );
+    }
+    if (group && !group.isActive) {
+      throw new ConflictException(
+        `Reactivate the parent account "${group.name}" first`,
+      );
+    }
+    if (parent && parent.status !== RecordStatus.ACTIVE) {
+      throw new ConflictException(
+        `Reactivate the account "${parent.name}" first`,
+      );
+    }
+
+    const updated = await this.prisma.gLAccount.update({
+      where: {
+        id_tenantId: { id: account.id, tenantId: user.tenantId },
+      },
+      data: {
+        status: RecordStatus.ACTIVE,
+        allowPosting: childCount === 0,
+        updatedByUserId: user.id,
+      },
+    });
+    await this.recordAudit(
+      user,
+      'GL_ACCOUNT_ACTIVATE',
       'GLAccount',
       updated.id,
       { status: updated.status, allowPosting: updated.allowPosting },
@@ -2388,6 +2586,109 @@ export class AccountingMasterDataService {
     } catch (error) {
       this.rethrowUnique(error, 'Subledger account already exists');
     }
+  }
+
+  /**
+   * The entity another module's record is represented by in Accounting, created the first time it
+   * is needed and found again after that. Matched by the record's reference alone, so a later
+   * change of entity type never produces a second entity. Once created it belongs to Accounting:
+   * its name is not kept in step with the module's record.
+   *
+   * Its code follows the entity convention - the type's ID prefix and the next number, e.g.
+   * MKC-0007 - the same as an entity added by hand.
+   */
+  async ensureSourceEntity(
+    actorUserId: string,
+    input: {
+      tenantId: string;
+      type: string;
+      externalRef: string;
+      name: string;
+    },
+  ) {
+    const externalRef = this.requiredExternalRef(input.externalRef);
+    const name = this.requiredName(input.name);
+    const entityType = await this.assertEntityType(input.tenantId, input.type);
+
+    const find = () =>
+      this.prisma.subledgerAccount.findFirst({
+        where: { tenantId: input.tenantId, externalRef },
+      });
+    const existing = await find();
+    if (existing) {
+      if (existing.status !== RecordStatus.ACTIVE) {
+        throw new ConflictException(
+          "This record's entity is inactive and must be reactivated in Accounting first",
+        );
+      }
+      return existing;
+    }
+
+    const prefix = this.entityCodePrefix(entityType);
+    // Two entities created at the same moment can pick the same number; the one that loses just
+    // takes the next.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = await this.nextEntityCode(input.tenantId, prefix);
+      try {
+        return await this.prisma.subledgerAccount.create({
+          data: {
+            tenantId: input.tenantId,
+            code,
+            name,
+            type: entityType.name,
+            externalRef,
+            createdByUserId: actorUserId,
+            updatedByUserId: actorUserId,
+          },
+        });
+      } catch (error) {
+        const raced = await find();
+        if (raced) return raced;
+        if (
+          !(
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2002'
+          )
+        ) {
+          throw error;
+        }
+      }
+    }
+    throw new ConflictException(
+      'Could not allocate an entity code. Please try again.',
+    );
+  }
+
+  /** The type's own ID prefix (e.g. SUP); a type without one falls back to the start of its name. */
+  private entityCodePrefix(entityType: { code: string | null; name: string }) {
+    const own = entityType.code?.trim();
+    if (own) return own;
+    return (
+      entityType.name
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 3) || 'ENT'
+    );
+  }
+
+  /** The prefix and one more than the highest number already used with it, e.g. SUP-0007. */
+  private async nextEntityCode(tenantId: string, prefix: string) {
+    const used = await this.prisma.subledgerAccount.findMany({
+      where: {
+        tenantId,
+        code: { startsWith: `${prefix}-`, mode: 'insensitive' },
+      },
+      select: { code: true },
+    });
+    const pattern = new RegExp(
+      `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`,
+      'i',
+    );
+    const highest = used.reduce((max, entity) => {
+      const match = pattern.exec(entity.code);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `${prefix}-${String(highest + 1).padStart(4, '0')}`;
   }
 
   async findFiscalPeriod(tenantId: string, id: string) {

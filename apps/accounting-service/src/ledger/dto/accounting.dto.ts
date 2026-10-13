@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -7,6 +8,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsNumber,
   IsObject,
   IsOptional,
@@ -292,6 +294,15 @@ export class CreateTransactionTypeDto {
   @IsOptional()
   @IsBoolean()
   isLinked?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'When true the New Transaction form asks for quantity × unit price and derives the amount; when false it takes a straight amount.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  usesQuantityPrice?: boolean;
 }
 
 export class UpdateTransactionTypeDto extends PartialType(
@@ -470,6 +481,13 @@ export class CreateAccountClassificationDto {
   @IsEnum(GLAccountCategory)
   category!: GLAccountCategory;
 
+  @ApiPropertyOptional({ example: 'Cash, bank and short-term receivables' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
   @ApiPropertyOptional({ example: 10 })
   @IsOptional()
   @Type(() => Number)
@@ -517,6 +535,13 @@ export class CreateAccountGroupDto {
   @IsString()
   @MaxLength(160)
   name!: string;
+
+  @ApiPropertyOptional({ example: 'Cash, bank and short-term receivables' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
 
   @ApiPropertyOptional({ example: 10 })
   @IsOptional()
@@ -663,6 +688,19 @@ export class BulkImportAccountsDto {
   @ValidateNested({ each: true })
   @Type(() => BulkImportGLAccountDto)
   accounts!: BulkImportGLAccountDto[];
+}
+
+export class BulkDeleteAccountsDto {
+  @ApiProperty({
+    type: [String],
+    description:
+      'IDs of unused GL accounts to delete, as returned by GET accounts/unused.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(1000)
+  @IsUUID('all', { each: true })
+  accountIds!: string[];
 }
 
 export class CreateCostCentreDto {
@@ -1029,6 +1067,26 @@ export class UpdateDraftJournalDto {
   @ValidateNested({ each: true })
   @Type(() => JournalLineDto)
   lines?: JournalLineDto[];
+}
+
+/** Edits to a posted journal while its period is open. The reason is kept in the entry's history. */
+export class EditPostedJournalDto extends UpdateDraftJournalDto {
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** Why a posted entry is being voided. Kept on the entry and shown in the archive. */
+export class VoidEntryDto {
+  @ApiProperty({ example: 'Posted to the wrong account', maxLength: 500 })
+  @Transform(trimmed)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason!: string;
 }
 
 export class ReverseJournalDto {

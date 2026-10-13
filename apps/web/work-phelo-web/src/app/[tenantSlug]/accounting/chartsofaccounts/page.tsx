@@ -19,6 +19,7 @@ import { GLAccountListPanel } from '@/components/organisms/accounting/GLAccountL
 import { ChartOfAccountsBreadcrumb } from '@/components/molecules/accounting/ChartOfAccountsBreadcrumb';
 import { ChartOfAccountsToolbar } from '@/components/molecules/accounting/ChartOfAccountsToolbar';
 import { SeedHierarchyDialog } from '@/components/molecules/accounting/SeedHierarchyDialog';
+import { ClearUnusedAccountsDialog } from '@/components/organisms/accounting/ClearUnusedAccountsDialog';
 import { BulkImportGLAccountsDialog } from '@/components/organisms/accounting/BulkImportGLAccountsDialog';
 import { getScopedAccounts, getScopeTitle } from '@/lib/accounting/chartOfAccountsScope';
 import { buildAccountBalanceMap } from '@/lib/accounting/glAccountBalance';
@@ -51,6 +52,7 @@ export default function ChartOfAccountsPage() {
   const [scope, setScope] = useState<AccountScope>({ kind: 'all' });
   const [seedDialogOpen, setSeedDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [clearUnusedOpen, setClearUnusedOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{
     kind: 'classification' | 'group';
     id: string;
@@ -187,6 +189,7 @@ export default function ChartOfAccountsPage() {
               status={status}
               onStatusChange={setStatus}
               onImport={() => setImportDialogOpen(true)}
+              onClearUnused={() => setClearUnusedOpen(true)}
               registerActions={[
                 {
                   label: 'Classification',
@@ -327,6 +330,11 @@ export default function ChartOfAccountsPage() {
         onConfirm={seedStandardHierarchy}
         isPending={seedHierarchy.isPending}
       />
+      <ClearUnusedAccountsDialog
+        isOpen={clearUnusedOpen}
+        onClose={() => setClearUnusedOpen(false)}
+      />
+
       <BulkImportGLAccountsDialog
         isOpen={importDialogOpen}
         onClose={() => setImportDialogOpen(false)}

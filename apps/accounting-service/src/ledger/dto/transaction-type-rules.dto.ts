@@ -12,10 +12,15 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { PostingDirection } from '../../../prisma/generated/client';
+import {
+  GLAccountCategory,
+  PostingDirection,
+  RuleLineSettlementKind,
+} from '../../../prisma/generated/client';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -55,6 +60,28 @@ export class CreateTaxTypeDto {
   @IsOptional()
   @IsDateString()
   effectiveTo?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Default account on the payables side: input tax on a bill, or tax withheld when paying a vendor. Null clears it.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  payableAccountId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Default account on the receivables side: output tax on an invoice, or tax withheld by a customer. Null clears it.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  receivableAccountId?: string | null;
 }
 
 export class UpdateTaxTypeDto extends PartialType(CreateTaxTypeDto) {
@@ -64,14 +91,64 @@ export class UpdateTaxTypeDto extends PartialType(CreateTaxTypeDto) {
   isActive?: boolean;
 }
 
+export class RuleLineScopeDto {
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Narrows the category to one classification. Omit to allow the whole category.',
+  })
+  @IsOptional()
+  @IsUUID()
+  classificationId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Narrows it to one specific posting account (inside the category / classification).',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
+}
+
 export class TransactionTypeRuleLineDto {
   @ApiProperty({ enum: PostingDirection })
   @IsEnum(PostingDirection)
   direction!: PostingDirection;
 
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'A fixed account. Omit on a Receivable/Payable main line that is scoped instead ' +
+      '(`scopes`) — either a fixed account or at least one scope is required.',
+  })
+  @IsOptional()
   @IsUUID()
-  accountId!: string;
+  accountId?: string;
+
+  @ApiPropertyOptional({
+    type: [RuleLineScopeDto],
+    description:
+      'Main line only: the categories / classifications the user picks one account from on the form. Several may be listed; the account may come from any of them.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RuleLineScopeDto)
+  scopes?: RuleLineScopeDto[];
+
+  @ApiPropertyOptional({
+    enum: RuleLineSettlementKind,
+    description:
+      "Marks a line that applies when the bill/invoice is settled rather than when it is raised. A DEDUCTION reduces the cash that moves (discount, withholding tax); a CHARGE adds to it (bank charge). Needs a fixed account, and its side is fixed by the type's category.",
+  })
+  @IsOptional()
+  @IsEnum(RuleLineSettlementKind)
+  settlementKind?: RuleLineSettlementKind;
 
   @ApiPropertyOptional({
     format: 'uuid',

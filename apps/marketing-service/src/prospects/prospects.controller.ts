@@ -78,7 +78,8 @@ export class ProspectsController {
   constructor(private readonly service: ProspectsService) {}
 
   @Get()
-  @RequireAnyPermission(MarketingCrmSettingsPermission.PROSPECTS_VIEW)
+  // Visible to its assignee without a permission: the service scopes the result to the caller's
+  // own records unless they hold the tenant-wide one.
   @ApiOperation({
     summary: 'List marketing prospects',
     description:
@@ -93,10 +94,8 @@ export class ProspectsController {
   }
 
   @Get(':prospectId/interactions')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW,
-    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW_ALL,
-  )
+  // Visible to its assignee without a permission: the service scopes the result to the caller's
+  // own records unless they hold the tenant-wide one.
   @ApiOperation({
     summary: 'List marketing prospect interaction history',
     description:
@@ -113,10 +112,8 @@ export class ProspectsController {
   }
 
   @Post(':prospectId/interactions')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE,
-    MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Record a marketing prospect interaction',
     description:
@@ -135,10 +132,8 @@ export class ProspectsController {
   }
 
   @Get(':prospectId/follow-ups')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW,
-    MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW_ALL,
-  )
+  // Visible to its assignee without a permission: the service scopes the result to the caller's
+  // own records unless they hold the tenant-wide one.
   @ApiOperation({
     summary: 'List marketing prospect follow-up history',
     description:
@@ -155,10 +150,8 @@ export class ProspectsController {
   }
 
   @Post(':prospectId/follow-ups')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE,
-    MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Schedule an explicit marketing prospect follow-up',
     description:
@@ -177,7 +170,8 @@ export class ProspectsController {
   }
 
   @Get(':id')
-  @RequireAnyPermission(MarketingCrmSettingsPermission.PROSPECTS_VIEW)
+  // Visible to its assignee without a permission: the service scopes the result to the caller's
+  // own records unless they hold the tenant-wide one.
   @ApiOperation({
     summary: 'Get marketing prospect details',
     description:
@@ -194,10 +188,8 @@ export class ProspectsController {
   }
 
   @Patch(':id')
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.PROSPECTS_EDIT,
-    MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Update a marketing prospect',
     description:
@@ -217,10 +209,8 @@ export class ProspectsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireAnyPermission(
-    MarketingCrmSettingsPermission.PROSPECTS_DELETE,
-    MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Delete a marketing prospect',
     description:

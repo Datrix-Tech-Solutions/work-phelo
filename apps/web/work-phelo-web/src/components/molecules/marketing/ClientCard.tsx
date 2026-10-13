@@ -14,18 +14,19 @@ export function ClientCard({ client, onClick }: { client: ClientListItem; onClic
       subtitle={client.businessType?.name}
       statusChip={
         client.isBillable
-          ? { label: 'Billable', color: 'green' }
-          : { label: 'Non-billable', color: 'gray' }
+          ? { label: 'Billed', color: 'green' }
+          : { label: 'Not billed', color: 'gray' }
       }
       details={[
         {
-          label: 'Products',
+          label: 'Products/Services',
           value:
             client.products.length === 0
               ? '—'
               : `${client.products.length} (${purchased} purchased)`,
         },
         { label: 'Achieved Revenue', value: formatMoney(client.achievedRevenue) },
+        { label: 'Assigned To', value: client.assignedUserName ?? '—' },
       ]}
       contactPerson={contact?.name}
       email={contact?.email ?? '—'}

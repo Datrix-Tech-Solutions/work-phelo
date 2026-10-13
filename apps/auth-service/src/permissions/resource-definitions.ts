@@ -33,6 +33,32 @@ export const RESOURCES = [
   { name: 'branches', module: 'HR', description: 'Branch locations' },
   { name: 'hr-settings', module: 'HR', description: 'HR workspace settings' },
   {
+    name: 'hr.dashboard',
+    module: 'HR',
+    description:
+      'Organisation-wide HR dashboard (headcount, attendance, leave, pending actions)',
+  },
+  {
+    name: 'hr.reports',
+    module: 'HR',
+    description: 'HR report builder and saved reports',
+  },
+  {
+    name: 'recruitment.vacancies',
+    module: 'HR',
+    description: 'Recruitment job vacancy setup and publication',
+  },
+  {
+    name: 'recruitment.candidates',
+    module: 'HR',
+    description: 'Recruitment candidate applications and stage movement',
+  },
+  {
+    name: 'recruitment.stages',
+    module: 'HR',
+    description: 'Tenant recruitment pipeline stage configuration',
+  },
+  {
     name: 'leave',
     module: 'HR',
     description: 'Company-wide leave requests and approvals',
@@ -230,6 +256,27 @@ export const RESOURCES = [
     description: 'Tenant-wide Marketing client list visibility',
   },
   {
+    name: 'marketing.clients.billing',
+    module: 'MARKETING',
+    description: 'Raise and review client billing transactions in Accounting',
+  },
+  {
+    name: 'marketing.dashboard',
+    module: 'MARKETING',
+    description: 'General (organisation-wide) Marketing dashboard',
+  },
+  {
+    name: 'marketing.targets',
+    module: 'MARKETING',
+    description: 'Set and review sales rep revenue targets',
+  },
+  {
+    name: 'marketing.targets.all',
+    module: 'MARKETING',
+    description:
+      'Tenant-wide view of every sales rep target and their progress',
+  },
+  {
     name: 'marketing.prospects.interactions',
     module: 'MARKETING',
     description: 'Marketing prospect interaction history records',
@@ -253,6 +300,58 @@ export const RESOURCES = [
     name: 'marketing.fleet',
     module: 'MARKETING',
     description: 'Marketing fleet vehicles linked to HR vehicle assets',
+  },
+  {
+    name: 'marketing.requests',
+    module: 'MARKETING',
+    description:
+      'Marketing transport requests the user raised: create, edit while pending, cancel',
+  },
+  {
+    name: 'marketing.requests.all',
+    module: 'MARKETING',
+    description:
+      'Tenant-wide Marketing transport request visibility and approval',
+  },
+  {
+    name: 'marketing.appointments.all',
+    module: 'MARKETING',
+    description:
+      'Tenant-wide Marketing appointment visibility, booking on behalf of other marketers, and approval',
+  },
+  {
+    name: 'marketing.transport-officers',
+    module: 'MARKETING',
+    description:
+      'Marketing transport officers (drivers) added from the employee list',
+  },
+  {
+    name: 'marketing.campaigns',
+    module: 'MARKETING',
+    description:
+      'Marketing SMS and email campaigns to prospects by business type',
+  },
+  {
+    name: 'marketing.sms-sender-identities',
+    module: 'MARKETING',
+    description: 'Tenant SMS sender identities used by Marketing campaigns',
+  },
+  {
+    name: 'marketing.domains',
+    module: 'MARKETING',
+    description:
+      'Tenant business domains used for communication identity verification',
+  },
+  {
+    name: 'marketing.sms-wallet',
+    module: 'MARKETING',
+    description: 'Tenant SMS credit wallet balance and ledger visibility',
+  },
+  {
+    name: 'marketing.sms-credits',
+    module: 'MARKETING',
+    description:
+      'Administrative SMS credit adjustments for Marketing campaigns',
   },
 
   {

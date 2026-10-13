@@ -1,8 +1,8 @@
 'use client';
 
-import { use, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { usePermission } from '@/hooks/hr/usePermission';
+import { useRedirectWhenDenied } from '@/hooks/hr/useRedirectWhenDenied';
 import { Permission } from '@/lib/permissionMap';
 import { PayrollHistoryTab } from '@/components/organisms/hr/payroll/PayrollHistoryTab';
 import { pageHeader, pageContent } from '@/lib/layout';
@@ -13,16 +13,14 @@ export default function PayrollHistoryPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
-  const router = useRouter();
   const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
   const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
   const canViewHistory = canManagePayroll || canApprovePayroll;
 
-  useEffect(() => {
-    if (canManagePayroll === false && canApprovePayroll === false) {
-      router.replace(`/${tenantSlug}/hr/payroll`);
-    }
-  }, [canManagePayroll, canApprovePayroll, tenantSlug, router]);
+  useRedirectWhenDenied(
+    canManagePayroll === false && canApprovePayroll === false,
+    `/${tenantSlug}/hr/payroll`,
+  );
 
   if (!canViewHistory) return null;
 

@@ -32,10 +32,7 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import {
-  RequireAnyPermission,
-  RequirePermissions,
-} from '../auth/decorators/permissions.decorator';
+import { RequireAnyPermission } from '../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
@@ -60,18 +57,8 @@ import { CreateProspectInteractionDto } from '../prospects/dto/create-prospect-i
 import { ProspectDetailInteractionDto } from '../prospects/dto/prospect-response.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
-const {
-  CLIENTS_VIEW,
-  CLIENTS_CREATE,
-  CLIENTS_EDIT,
-  CLIENTS_EDIT_ALL,
-  CLIENTS_DELETE,
-  CLIENTS_DELETE_ALL,
-  PROSPECTS_EDIT,
-  PROSPECTS_EDIT_ALL,
-  PROSPECT_INTERACTIONS_CREATE,
-  PROSPECT_INTERACTIONS_CREATE_ALL,
-} = MarketingCrmSettingsPermission;
+const { CLIENTS_CREATE, CLIENTS_DELETE, CLIENTS_DELETE_ALL } =
+  MarketingCrmSettingsPermission;
 
 @Controller('clients')
 @ApiTags('Marketing - Clients')
@@ -93,7 +80,8 @@ export class ClientsController {
   constructor(private readonly service: ClientsService) {}
 
   @Get()
-  @RequireAnyPermission(CLIENTS_VIEW)
+  // Visible to its assignee without a permission: the service scopes the result to the caller's
+  // own records unless they hold the tenant-wide one.
   @ApiOperation({
     summary: 'List marketing clients',
     description:
@@ -124,7 +112,8 @@ export class ClientsController {
   }
 
   @Post(':id/products')
-  @RequireAnyPermission(CLIENTS_EDIT, CLIENTS_EDIT_ALL)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Add a product or service to a client',
     description:
@@ -144,10 +133,8 @@ export class ClientsController {
   }
 
   @Post(':id/interactions')
-  @RequireAnyPermission(
-    PROSPECT_INTERACTIONS_CREATE,
-    PROSPECT_INTERACTIONS_CREATE_ALL,
-  )
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Record a client follow-up (interaction)',
     description:
@@ -166,7 +153,8 @@ export class ClientsController {
   }
 
   @Get(':id')
-  @RequireAnyPermission(CLIENTS_VIEW)
+  // Visible to its assignee without a permission: the service scopes the result to the caller's
+  // own records unless they hold the tenant-wide one.
   @ApiOperation({
     summary: 'Get marketing client details',
     description:
@@ -183,7 +171,8 @@ export class ClientsController {
   }
 
   @Patch(':id')
-  @RequireAnyPermission(CLIENTS_EDIT, CLIENTS_EDIT_ALL)
+  // Open to the record's assignee: the service scopes it to the caller's own records unless they
+  // hold the matching tenant-wide permission.
   @ApiOperation({
     summary: 'Update a marketing client',
     description:
@@ -240,8 +229,7 @@ export class ProspectConversionController {
   constructor(private readonly service: ClientsService) {}
 
   @Post(':prospectId/convert')
-  @RequirePermissions(CLIENTS_CREATE)
-  @RequireAnyPermission(PROSPECTS_EDIT, PROSPECTS_EDIT_ALL)
+  // Open to the prospect's assignee: converting is managing their own prospect.
   @ApiOperation({
     summary: 'Convert a prospect to a client',
     description:

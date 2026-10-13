@@ -1,499 +1,355 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Pencil } from 'lucide-react';
-import { usePayrollSettings, useUpdatePayrollSettings } from '@/hooks';
-import { cn } from '@/lib/utils';
-import { SectionCard } from '@/components/molecules/shared/sectionCard';
-import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Skeleton } from '@/components/atoms/Skeleton';
 import { TypeChip } from '@/components/atoms/TypeChip';
-import { GLAccountCategory, SeedPayrollAccountsResult } from '@/types/accounting';
-import { GL_ACCOUNT_CATEGORY_CHIP_COLOR } from '@/lib/accounting/glAccountCategory';
+import { SectionCard } from '@/components/molecules/shared/sectionCard';
+import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { useLinkSourceType, useUnlinkSourceType } from '@/hooks';
 import { useGLAccounts } from '@/hooks/accounting/useGLAccounts';
-import { useSeedPayrollAccounts } from '@/hooks/accounting/usePayrollIntegration';
+import {
+  useCreatePayrollRoleAccount,
+  usePayrollSetup,
+  useSeedPayrollAccounts,
+  useSetPayrollAccountMapping,
+  useUpdatePayrollAccountingSettings,
+} from '@/hooks/accounting/usePayrollIntegration';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import { GL_ACCOUNT_CATEGORY_CHIP_COLOR } from '@/lib/accounting/glAccountCategory';
+import type {
+  GLAccount,
+  PayrollAccountRoleSetup,
+  PayrollNotReadyReason,
+  SourceTypeDefinition,
+} from '@/types/accounting';
 
-interface PayrollAccountRow {
-  key: string;
-  name: string;
-  kind: 'account';
-  category: GLAccountCategory;
-  groupCode: string;
-  groupName: string;
-  code: string;
-  status: 'created' | 'existing' | 'not-created';
-}
-
-interface PayrollTransactionTypeRow {
-  key: string;
-  name: string;
-  kind: 'transactionType';
-  code: string;
-  status: 'created' | 'existing' | 'not-created';
-}
-
-type PayrollSeedRow = PayrollAccountRow | PayrollTransactionTypeRow;
-
-// Must match the backend's WAGE_PAYMENT_TYPE_KEY/NAME exactly (`payroll-integration.service.ts`)
-// — a "Wage Payment" transaction type (category PAYABLE), linked to the HR/Payroll source, so
-// it's usable on New Transaction without a rule: its offset account/amount come from picking
-// one of the source's open items instead of a preconfigured rule line.
-const WAGE_PAYMENT_TYPE_KEY = 'wage-payment-transaction-type';
-const WAGE_PAYMENT_TYPE_NAME = 'Wage Payment';
-
-const CATEGORY_LABELS: Record<GLAccountCategory, string> = {
+const CATEGORY_LABELS = {
   ASSET: 'Asset',
   LIABILITY: 'Liability',
   EQUITY: 'Equity',
   REVENUE: 'Revenue',
   EXPENSE: 'Expense',
-};
+} as const;
 
-// Keys must match the backend's canonical list exactly (`PAYROLL_ACCOUNT_GROUPS` in
-// apps/accounting-service/src/ledger/payroll-integration.service.ts) — the seed request
-// matches request items back to its own definitions by `key`, never by code.
-const PAYROLL_ACCOUNT_GROUPS: {
-  preferredGroupCode: string;
-  groupName: string;
-  category: GLAccountCategory;
-  children: { key: string; name: string }[];
-}[] = [
+// What the shortcut creates. The names are the standard ones, so accounts made by an earlier run
+// are found rather than duplicated. Anything not listed here is left out.
+const STANDARD_ITEMS: { key: string; name: string; include: boolean }[] = [
+  { key: 'salaries-wages-expense', name: 'Salaries and Wages Expense', include: true },
   {
-    preferredGroupCode: '1130',
-    groupName: 'Staff Advances / Employee Loans',
-    category: 'ASSET',
-    children: [
-      { key: 'staff-advances-receivable', name: 'Staff Advances Receivable' },
-      { key: 'employee-loans-receivable', name: 'Employee Loans Receivable' },
-    ],
+    key: 'employer-social-security-expense',
+    name: 'Employer Social Security Contribution Expense',
+    include: true,
   },
+  { key: 'net-pay-payable', name: 'Net Pay Payable', include: true },
+  { key: 'income-tax-payable', name: 'Income Tax Payable', include: true },
+  { key: 'social-security-payable', name: 'Social Security Payable', include: true },
+  { key: 'statutory-pension-payable', name: 'Statutory Pension Payable', include: true },
+  { key: 'other-deductions-payable', name: 'Other Deductions Payable', include: true },
+  { key: 'wage-payment-transaction-type', name: 'Wage Payment', include: true },
+  { key: 'staff-advances-receivable', name: 'Staff Advances Receivable', include: false },
+  { key: 'employee-loans-receivable', name: 'Employee Loans Receivable', include: false },
   {
-    preferredGroupCode: '2120',
-    groupName: 'Payroll Liabilities',
-    category: 'LIABILITY',
-    children: [
-      { key: 'net-pay-payable', name: 'Net Pay Payable' },
-      { key: 'income-tax-payable', name: 'Income Tax Payable' },
-      { key: 'social-security-payable', name: 'Social Security Payable' },
-      { key: 'statutory-pension-payable', name: 'Statutory Pension Payable' },
-    ],
-  },
-  {
-    preferredGroupCode: '5120',
-    groupName: 'Payroll Expense',
-    category: 'EXPENSE',
-    children: [
-      { key: 'salaries-wages-expense', name: 'Salaries and Wages Expense' },
-      {
-        key: 'employer-social-security-expense',
-        name: 'Employer Social Security Contribution Expense',
-      },
-      { key: 'employer-pension-expense', name: 'Employer Pension Contribution Expense' },
-    ],
+    key: 'employer-pension-expense',
+    name: 'Employer Pension Contribution Expense',
+    include: false,
   },
 ];
 
-// Mirrors the backend's codeBand — band width is the code's trailing zeros (e.g. 1130 ->
-// width 10, band 1130-1139; 1100 -> width 100, band 1100-1199). Used here only to *preview*
-// a likely code before the tenant has actually created anything — the backend recomputes
-// this itself and is the authority on the real code.
-function codeBandWidth(code: number): number {
-  let width = 1;
-  while (width < 1000 && code % (width * 10) === 0) width *= 10;
-  return width;
-}
+const NOT_READY_MESSAGES: Record<PayrollNotReadyReason, string> = {
+  NOT_LINKED: 'Payroll is not linked, so payroll runs do not post to Accounting.',
+  NO_BASE_CURRENCY: 'Set the base currency in Accounting configuration first.',
+  ACCOUNTS_MISSING: 'Choose the accounts below that are still missing.',
+};
 
-function findAvailableGroupCode(
-  preferredGroupCode: number,
-  childCount: number,
-  usedCodes: Set<number>,
-): number {
-  const width = codeBandWidth(preferredGroupCode);
-  const maxShift = width * 9;
-  for (let shift = 0; shift <= maxShift; shift += width) {
-    const groupCode = preferredGroupCode + shift;
-    const bandFree = [
-      groupCode,
-      ...Array.from({ length: childCount }, (_, i) => groupCode + i + 1),
-    ].every((code) => !usedCodes.has(code));
-    if (bandFree) return groupCode;
-  }
-  return preferredGroupCode;
-}
+function RoleRow({
+  role,
+  accounts,
+  linked,
+}: {
+  role: PayrollAccountRoleSetup;
+  accounts: GLAccount[];
+  linked: boolean;
+}) {
+  const toast = useToast();
+  const setMapping = useSetPayrollAccountMapping();
+  const createAccount = useCreatePayrollRoleAccount();
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
 
-function buildPayrollAccountRows(
-  existingGlAccounts: {
-    code: string;
-    name: string;
-    accountGroup: { code: string; name: string } | null;
-  }[],
-  nameOverrides: Record<string, string>,
-  seedResult: SeedPayrollAccountsResult | null,
-): PayrollAccountRow[] {
-  const seedByKey = new Map((seedResult?.accounts ?? []).map((a) => [a.key, a]));
-  const usedCodes = new Set(existingGlAccounts.map((a) => Number(a.code)));
-  const existingByGroupAndName = new Map(
-    existingGlAccounts
-      .filter((a) => a.accountGroup)
-      .map((a) => [`${a.accountGroup!.name}::${a.name.trim().toLowerCase()}`, a] as const),
+  const options = useMemo(
+    () =>
+      accounts
+        .filter((a) => a.category === role.category && a.allowPosting)
+        .map((a) => ({ value: a.id, label: `${a.code} — ${a.name}` })),
+    [accounts, role.category],
   );
 
-  return PAYROLL_ACCOUNT_GROUPS.flatMap((groupTemplate) => {
-    const knownGroup = existingGlAccounts.find(
-      (a) => a.accountGroup?.name === groupTemplate.groupName,
-    )?.accountGroup;
-    const groupCode =
-      knownGroup?.code ??
-      String(
-        findAvailableGroupCode(
-          Number(groupTemplate.preferredGroupCode),
-          groupTemplate.children.length,
-          usedCodes,
-        ),
+  const handleChange = async (glAccountId: string) => {
+    try {
+      await setMapping.mutateAsync({ role: role.key, glAccountId: glAccountId || null });
+      toast.success(
+        glAccountId ? `${role.label} account saved. Applies to future payroll runs.` : 'Cleared.',
       );
-
-    return groupTemplate.children.map((child, i) => {
-      const displayName = nameOverrides[child.key] ?? child.name;
-      const seeded = seedByKey.get(child.key);
-      if (seeded) {
-        return {
-          key: child.key,
-          name: seeded.name,
-          kind: 'account' as const,
-          category: groupTemplate.category,
-          groupCode,
-          groupName: groupTemplate.groupName,
-          code: seeded.code || String(Number(groupCode) + i + 1),
-          status: seeded.status === 'excluded' ? 'not-created' : seeded.status,
-        };
-      }
-      const reconciled =
-        existingByGroupAndName.get(
-          `${groupTemplate.groupName}::${displayName.trim().toLowerCase()}`,
-        ) ??
-        existingByGroupAndName.get(
-          `${groupTemplate.groupName}::${child.name.trim().toLowerCase()}`,
-        );
-      if (reconciled) {
-        return {
-          key: child.key,
-          name: reconciled.name,
-          kind: 'account' as const,
-          category: groupTemplate.category,
-          groupCode,
-          groupName: groupTemplate.groupName,
-          code: reconciled.code,
-          status: 'existing' as const,
-        };
-      }
-      return {
-        key: child.key,
-        name: displayName,
-        kind: 'account' as const,
-        category: groupTemplate.category,
-        groupCode,
-        groupName: groupTemplate.groupName,
-        code: String(Number(groupCode) + i + 1),
-        status: 'not-created' as const,
-      };
-    });
-  });
-}
-
-function buildWagePaymentTypeRow(
-  nameOverrides: Record<string, string>,
-  seedResult: SeedPayrollAccountsResult | null,
-): PayrollTransactionTypeRow {
-  const displayName = nameOverrides[WAGE_PAYMENT_TYPE_KEY] ?? WAGE_PAYMENT_TYPE_NAME;
-  const seeded = seedResult?.accounts.find((a) => a.key === WAGE_PAYMENT_TYPE_KEY);
-  if (seeded) {
-    return {
-      key: WAGE_PAYMENT_TYPE_KEY,
-      name: seeded.name,
-      kind: 'transactionType',
-      code: seeded.code,
-      status: seeded.status === 'excluded' ? 'not-created' : seeded.status,
-    };
-  }
-  return {
-    key: WAGE_PAYMENT_TYPE_KEY,
-    name: displayName,
-    kind: 'transactionType',
-    code: '—',
-    status: 'not-created',
+    } catch (err) {
+      toast.error(extractError(err, 'Could not save the account'));
+    }
   };
-}
 
-/** The payroll module's own accounting integration setup — the toggle, the GL account seed
- *  list, and the posting-behavior toggle. Rendered both from Payroll Settings (its own
- *  module) and from Accounting's Source Types "Manage" panel (in place, without navigating
- *  away), per the Source Types page's own promise to surface each module's setup here. */
-export function PayrollAccountingSetup() {
-  const { data: payrollSettings } = usePayrollSettings();
-  const updatePayrollSettings = useUpdatePayrollSettings();
-  const linkedToAccounting = payrollSettings?.linkedToAccounting ?? false;
-  const autoPostOnApproval = payrollSettings?.autoPostOnApproval ?? false;
+  const handleCreate = async () => {
+    try {
+      await createAccount.mutateAsync({ role: role.key, name: newName.trim() || undefined });
+      toast.success(`Account created and chosen for ${role.label}.`);
+      setCreating(false);
+      setNewName('');
+    } catch (err) {
+      toast.error(extractError(err, 'Could not create the account'));
+    }
+  };
 
-  function handleLinkedToAccountingChange(value: boolean) {
-    updatePayrollSettings.mutate({
-      linkedToAccounting: value,
-      // Turning integration off must also turn off auto-post, since the
-      // backend rejects auto-post being enabled while unlinked.
-      ...(value ? {} : { autoPostOnApproval: false }),
-    });
-  }
-
-  function handleAutoPostOnApprovalChange(value: boolean) {
-    updatePayrollSettings.mutate({ autoPostOnApproval: value });
-  }
-
-  const [isEditingSelection, setIsEditingSelection] = useState(false);
-  const [excludedKeys, setExcludedKeys] = useState<Set<string>>(new Set());
-  // Keyed by the account's stable key — codes are never user-editable, only the name.
-  const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
-  const [seedResult, setSeedResult] = useState<SeedPayrollAccountsResult | null>(null);
-
-  const { data: existingGlAccounts = [] } = useGLAccounts();
-  const seedPayrollAccounts = useSeedPayrollAccounts();
-
-  const payrollSeedRows: PayrollSeedRow[] = useMemo(
-    () => [
-      ...buildPayrollAccountRows(existingGlAccounts, nameOverrides, seedResult),
-      buildWagePaymentTypeRow(nameOverrides, seedResult),
-    ],
-    [existingGlAccounts, nameOverrides, seedResult],
-  );
-
-  const pendingAccounts = payrollSeedRows.filter(
-    (row) => !excludedKeys.has(row.key) && row.status === 'not-created',
-  );
-  const createdCount = payrollSeedRows.filter((row) => row.status !== 'not-created').length;
-  // Only what's still actionable is worth showing — a row that's already created or matched
-  // an existing account has nothing left to do, so it drops off the list entirely rather than
-  // sitting there with a "Created" badge forever.
-  const visibleRows = payrollSeedRows.filter((row) => row.status === 'not-created');
-  const allCreated = visibleRows.length === 0;
-  // A transaction type is a different kind of thing from a GL account — grouped separately
-  // so it never reads as if it were one.
-  const visibleAccountRows = visibleRows.filter(
-    (row): row is PayrollAccountRow => row.kind === 'account',
-  );
-  const visibleTransactionTypeRows = visibleRows.filter(
-    (row): row is PayrollTransactionTypeRow => row.kind === 'transactionType',
-  );
-
-  function toggleExcluded(key: string) {
-    setExcludedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
-  function handleNameChange(key: string, name: string) {
-    setNameOverrides((prev) => ({ ...prev, [key]: name }));
-  }
-
-  function handleCreateAccounts() {
-    seedPayrollAccounts.mutate(
-      {
-        items: payrollSeedRows.map((row) => ({
-          key: row.key,
-          name: row.name,
-          include: !excludedKeys.has(row.key),
-        })),
-      },
-      { onSuccess: (result) => setSeedResult(result) },
-    );
-  }
-
-  function renderRow(row: PayrollSeedRow) {
-    const isExcluded = excludedKeys.has(row.key);
-    return (
-      <div
-        key={row.key}
-        className={cn('flex items-center justify-between gap-3 py-2', isExcluded && 'opacity-50')}
-      >
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {isEditingSelection && (
-            <input
-              type="checkbox"
-              checked={!isExcluded}
-              onChange={() => toggleExcluded(row.key)}
-              className="w-4 h-4 rounded accent-brand shrink-0"
+  return (
+    <div className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-gray-900">{role.label}</span>
+            <TypeChip
+              label={CATEGORY_LABELS[role.category]}
+              color={GL_ACCOUNT_CATEGORY_CHIP_COLOR[role.category]}
             />
-          )}
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 font-mono text-xs text-gray-500 shrink-0">
-            {row.code}
-          </span>
-          {isEditingSelection ? (
-            <Input
-              value={nameOverrides[row.key] ?? row.name}
-              onChange={(e) => handleNameChange(row.key, e.target.value)}
-              className="px-2 py-1 text-sm max-w-xs"
-            />
-          ) : (
-            <span className="text-sm font-medium text-gray-900 truncate">{row.name}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {row.kind === 'account' ? (
-            <>
-              <TypeChip
-                label={CATEGORY_LABELS[row.category]}
-                color={GL_ACCOUNT_CATEGORY_CHIP_COLOR[row.category]}
-              />
-              <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">
-                {row.groupCode} — {row.groupName}
-              </span>
-            </>
-          ) : (
-            <TypeChip label="Transaction Type" color="teal" />
-          )}
-          <Badge
-            label={isExcluded ? 'Excluded' : 'Not created'}
-            variant={isExcluded ? 'warning' : 'neutral'}
-          />
+            {role.core ? (
+              <Badge label="REQUIRED" variant={role.account ? 'success' : 'warning'} />
+            ) : (
+              <Badge label="IF NEEDED" variant="neutral" />
+            )}
+          </div>
+          <span className="text-xs text-gray-500">{role.description}</span>
         </div>
       </div>
-    );
+
+      <SearchSelect
+        placeholder={`Choose the ${CATEGORY_LABELS[role.category].toLowerCase()} account…`}
+        options={options}
+        value={role.account?.id ?? ''}
+        onChange={handleChange}
+        disabled={setMapping.isPending || createAccount.isPending}
+        emptyState={() => (
+          <p className="px-3 py-2 text-xs text-gray-500">
+            No {CATEGORY_LABELS[role.category].toLowerCase()} account found. Use &quot;New
+            account&quot; below.
+          </p>
+        )}
+      />
+
+      {role.openItemCount > 0 && (
+        <p className="text-xs text-amber-600">
+          {role.openItemCount} unpaid item{role.openItemCount === 1 ? '' : 's'} already raised
+          {role.openItemCount === 1 ? ' stays' : ' stay'} on the previous account. Only future
+          payroll runs use a new choice.
+        </p>
+      )}
+      {linked && role.core && !role.account && (
+        <p className="text-xs text-red-600">
+          Payroll is linked, so approving a payroll run is blocked until this is chosen.
+        </p>
+      )}
+
+      {creating ? (
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={`Name (default: ${role.label})`}
+              className="px-2 py-1 text-sm"
+            />
+          </div>
+          <Button
+            size="sm"
+            onClick={handleCreate}
+            isLoading={createAccount.isPending}
+            loadingText="Creating…"
+          >
+            Create
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div>
+          <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
+            New account
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Payroll's set-up, owned by Accounting: which of the tenant's own accounts handles each payroll
+ * function, whether payroll is linked, and how it is posted. HR has no accounting settings - its
+ * approve screen just asks Accounting whether this payroll will be posted.
+ */
+export function PayrollAccountingSetup({ sourceType }: { sourceType: SourceTypeDefinition }) {
+  const toast = useToast();
+  const { data: setup, isLoading, isError } = usePayrollSetup();
+  const { data: accounts = [] } = useGLAccounts({ status: 'ACTIVE' });
+  const link = useLinkSourceType();
+  const unlink = useUnlinkSourceType();
+  const updateSettings = useUpdatePayrollAccountingSettings();
+  const seed = useSeedPayrollAccounts();
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+  if (isError || !setup) {
+    return <p className="text-sm text-red-500">The payroll set-up could not be loaded.</p>;
   }
+
+  const missingCore = setup.roles.filter((r) => r.core && !r.account);
+  const everyRoleChosen = setup.roles.every((r) => r.account);
+
+  const handleLinkToggle = async () => {
+    try {
+      if (setup.linked) {
+        await unlink.mutateAsync(sourceType.id);
+        toast.success('Payroll unlinked. Payroll runs no longer post to Accounting.');
+      } else {
+        await link.mutateAsync(sourceType.id);
+        toast.success('Payroll linked. New payroll runs will post to Accounting.');
+      }
+    } catch (err) {
+      toast.error(extractError(err, setup.linked ? 'Could not unlink' : 'Could not link'));
+    }
+  };
+
+  const handleSeed = async () => {
+    try {
+      await seed.mutateAsync({ items: STANDARD_ITEMS });
+      toast.success('Standard payroll accounts created and chosen where nothing was chosen yet.');
+    } catch (err) {
+      toast.error(extractError(err, 'Could not create the standard accounts'));
+    }
+  };
+
+  const handleAutoPost = async (value: boolean) => {
+    try {
+      await updateSettings.mutateAsync(value);
+    } catch (err) {
+      toast.error(extractError(err, 'Could not save the posting setting'));
+    }
+  };
+
+  const unlinkBlocked = setup.linked && setup.openLiabilityCount > 0;
+  const linkBlocked = !setup.linked && !setup.readyToLink;
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionCard title="Accounting Integration">
-        <ToggleRow
-          label="Link Payroll to Accounting"
-          description="When enabled, approved payroll runs post a draft journal entry to the general ledger for accountant review."
-          enabled={linkedToAccounting}
-          onChange={handleLinkedToAccountingChange}
-        />
+      <SectionCard
+        title="Link Payroll"
+        headerAction={
+          <Badge
+            label={setup.linked ? (setup.ready ? 'LINKED' : 'LINKED, NOT READY') : 'NOT LINKED'}
+            variant={setup.linked ? (setup.ready ? 'success' : 'warning') : 'neutral'}
+          />
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-gray-600">
+            {setup.linked
+              ? 'Approved payroll runs post to Accounting, and are settled here. HR users see this when they approve a run.'
+              : 'Payroll runs on its own until you link it. Once linked, runs approved from then on post an accrual to Accounting. Runs already approved are not changed.'}
+          </p>
+          {!setup.linked && setup.reason && setup.reason !== 'NOT_LINKED' && (
+            <p className="text-xs text-amber-600">
+              {NOT_READY_MESSAGES[setup.reason]}
+              {setup.reason === 'ACCOUNTS_MISSING' &&
+                ` Missing: ${missingCore.map((r) => r.label).join(', ')}.`}
+            </p>
+          )}
+          {setup.linked && !setup.ready && (
+            <p className="text-xs text-red-600">
+              Approving payroll is blocked until these are chosen:{' '}
+              {missingCore.map((r) => r.label).join(', ')}.
+            </p>
+          )}
+          {unlinkBlocked && (
+            <p className="text-xs text-amber-600">
+              {setup.openLiabilityCount} payroll liabilit
+              {setup.openLiabilityCount === 1 ? 'y is' : 'ies are'} still unpaid, so payroll cannot
+              be unlinked yet. Settle them from the Source Ledger first.
+            </p>
+          )}
+          <div>
+            <Button
+              size="sm"
+              variant={setup.linked ? 'outline' : 'primary'}
+              onClick={handleLinkToggle}
+              isLoading={link.isPending || unlink.isPending}
+              loadingText={setup.linked ? 'Unlinking…' : 'Linking…'}
+              disabled={unlinkBlocked || linkBlocked}
+            >
+              {setup.linked ? 'Unlink payroll' : 'Link payroll'}
+            </Button>
+          </div>
+        </div>
       </SectionCard>
 
-      {/* Payroll Accounts and Transaction Types are seeded together by one backend call (a
-          transaction type can reference an account it seeds in the same request), so both
-          sections' actions drive the same shared handler/state — they're just grouped into
-          their own section because a transaction type isn't a kind of account. A future
-          third kind of setup item gets its own section the same way. */}
       <SectionCard
         title="Payroll Accounts"
-        className={visibleAccountRows.length === 0 ? undefined : 'h-96 flex flex-col'}
-        contentClassName={
-          visibleAccountRows.length === 0 ? undefined : 'flex-1 min-h-0 overflow-y-auto'
-        }
         headerAction={
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<Pencil className="w-4 h-4" />}
-              onClick={() => setIsEditingSelection((v) => !v)}
-              disabled={!linkedToAccounting || allCreated}
-            >
-              {isEditingSelection ? 'Done' : 'Edit'}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCreateAccounts}
-              isLoading={seedPayrollAccounts.isPending}
-              loadingText="Creating…"
-              disabled={!linkedToAccounting || pendingAccounts.length === 0}
-            >
-              {pendingAccounts.length > 0
-                ? 'Create Selected'
-                : createdCount > 0
-                  ? 'All Created'
-                  : 'All Excluded'}
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSeed}
+            isLoading={seed.isPending}
+            loadingText="Creating…"
+            disabled={everyRoleChosen && !!setup.wagePaymentType}
+          >
+            Create standard accounts
+          </Button>
         }
       >
-        <div
-          className={cn('flex flex-col', !linkedToAccounting && 'opacity-50 pointer-events-none')}
-        >
-          <p className="text-sm text-gray-500 mb-4">
-            Default GL accounts used to post payroll accruals — staff advances/loans, payroll
-            liabilities per obligation type, and payroll expense.
-          </p>
-          {visibleAccountRows.length === 0 ? (
-            <p className="text-sm text-emerald-600 font-medium py-4 text-center">
-              All payroll accounts have been created.
-            </p>
-          ) : (
-            <div className="flex flex-col divide-y divide-gray-100">
-              {visibleAccountRows.map(renderRow)}
-            </div>
-          )}
+        <p className="mb-4 text-sm text-gray-500">
+          Choose which of your accounts handles each payroll function, or create one for it. The
+          standard-accounts shortcut fills in only what is not chosen yet.
+        </p>
+        <div className="flex flex-col divide-y divide-gray-100">
+          {setup.roles.map((role) => (
+            <RoleRow key={role.key} role={role} accounts={accounts} linked={setup.linked} />
+          ))}
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="Transaction Types"
-        headerAction={
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<Pencil className="w-4 h-4" />}
-              onClick={() => setIsEditingSelection((v) => !v)}
-              disabled={!linkedToAccounting || allCreated}
-            >
-              {isEditingSelection ? 'Done' : 'Edit'}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCreateAccounts}
-              isLoading={seedPayrollAccounts.isPending}
-              loadingText="Creating…"
-              disabled={!linkedToAccounting || pendingAccounts.length === 0}
-            >
-              {pendingAccounts.length > 0
-                ? 'Create Selected'
-                : createdCount > 0
-                  ? 'All Created'
-                  : 'All Excluded'}
-            </Button>
-          </div>
-        }
-      >
-        <div
-          className={cn('flex flex-col', !linkedToAccounting && 'opacity-50 pointer-events-none')}
-        >
-          <p className="text-sm text-gray-500 mb-4">
-            A &quot;Wage Payment&quot; transaction type, linked to the HR/Payroll source, for
-            settling payroll liabilities from New Transaction.
-          </p>
-          {visibleTransactionTypeRows.length === 0 ? (
-            <p className="text-sm text-emerald-600 font-medium py-4 text-center">
-              All payroll transaction types have been created.
-            </p>
-          ) : (
-            <div className="flex flex-col divide-y divide-gray-100">
-              {visibleTransactionTypeRows.map(renderRow)}
-            </div>
-          )}
-        </div>
+      <SectionCard title="Settling Payroll">
+        <p className="text-sm text-gray-500">
+          Net pay, income tax and the other payroll liabilities are paid from the Source Ledger, or
+          from New Transaction with a payment type linked to this source.
+        </p>
+        <p className="mt-2 text-xs text-gray-500">
+          {setup.wagePaymentType
+            ? `Payment type: ${setup.wagePaymentType.name} (${setup.wagePaymentType.code}).`
+            : 'No payment type is linked to Payroll yet. The standard-accounts shortcut creates a "Wage Payment" type, or link one of your own in Transaction Types.'}
+        </p>
       </SectionCard>
 
       <SectionCard title="Posting Behavior">
-        <div className={cn(!linkedToAccounting && 'opacity-50 pointer-events-none')}>
-          <ToggleRow
-            label="Auto-post on approval"
-            description="Post the accrual journal entry straight to the ledger when a payroll run is approved, skipping manual review on the Journal Entries page."
-            enabled={autoPostOnApproval}
-            onChange={handleAutoPostOnApprovalChange}
-          />
-          <p className="text-sm text-gray-500 mt-4">
-            {autoPostOnApproval
-              ? 'Payroll accruals will post directly to the ledger on approval, one journal entry per approved payroll run.'
-              : 'Payroll accruals post as a draft journal entry on approval, one per approved payroll run.'}
-          </p>
-        </div>
+        <ToggleRow
+          label="Auto-post on approval"
+          description="Post the accrual journal straight to the ledger when a payroll run is approved, skipping manual review on the Journal Entries page."
+          enabled={setup.autoPostOnApproval}
+          onChange={handleAutoPost}
+          disabled={updateSettings.isPending}
+        />
+        <p className="mt-4 text-sm text-gray-500">
+          {setup.autoPostOnApproval
+            ? 'Payroll accruals post directly to the ledger on approval, one journal entry per approved run.'
+            : 'Payroll accruals are saved as a draft journal entry on approval, one per approved run, for you to review and post.'}
+        </p>
       </SectionCard>
     </div>
   );

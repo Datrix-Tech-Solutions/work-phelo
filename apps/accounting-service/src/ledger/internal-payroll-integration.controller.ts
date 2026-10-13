@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -25,15 +26,40 @@ import {
 } from '../auth/guards/internal-service-auth.guard';
 import {
   PostPayrollAccrualDto,
+  PostPayrollRoleAccrualDto,
   QueryPayrollSettlementStatusDto,
 } from './dto/payroll-integration.dto';
 import { PayrollIntegrationService } from './payroll-integration.service';
+import { PayrollSetupService } from './payroll-setup.service';
+import { registeredModuleFor } from './source-transactions/source-registry';
 
 @ApiTags('Internal Accounting Payroll Integration')
 @Controller('internal/payroll-integration')
 @UseGuards(InternalServiceAuthGuard)
 export class InternalPayrollIntegrationController {
-  constructor(private readonly service: PayrollIntegrationService) {}
+  constructor(
+    private readonly service: PayrollIntegrationService,
+    private readonly setup: PayrollSetupService,
+  ) {}
+
+  @Get('status')
+  @ApiOperation({
+    summary: 'Whether payroll is linked to Accounting and ready to post',
+    description:
+      'Asked by payroll when a run is about to be approved. Not linked means payroll runs on its own; linked but not ready lists the payroll accounts still to be chosen.',
+  })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.service, required: true })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.timestamp, required: true })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.signature, required: true })
+  @ApiOkResponse({ description: 'Link and readiness status.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid service credentials.' })
+  getStatus(
+    @Req() request: AuthenticatedInternalRequest,
+    @Query() query: QueryPayrollSettlementStatusDto,
+  ) {
+    this.assertCaller(request);
+    return this.setup.getStatus(query.tenantId);
+  }
 
   @Post('post-accrual')
   @ApiOperation({
@@ -71,7 +97,58 @@ export class InternalPayrollIntegrationController {
     @Req() request: AuthenticatedInternalRequest,
     @Body() dto: PostPayrollAccrualDto,
   ) {
-    return this.service.postAccrual(request.internalServiceName, dto);
+    this.assertCaller(request);
+    if (!request.internalActingUserId) {
+      throw new ForbiddenException(
+        'A signed request that names the acting user is required to post a payroll accrual.',
+      );
+    }
+    return this.service.postAccrual(
+      request.internalServiceName,
+      request.internalActingUserId,
+      dto,
+    );
+  }
+
+  @Post('post-role-accrual')
+  @ApiOperation({
+    summary:
+      'Post (or draft) the accrual of a payroll run made with payroll configurations',
+    description:
+      'Same as post-accrual, but the run arrives already totalled by role (pay, income tax, ' +
+      'social security, pension, other deductions). Idempotent per payrollRunId.',
+  })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.service, required: true })
+  @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.timestamp, required: true })
+  @ApiHeader({
+    name: INTERNAL_SERVICE_AUTH_HEADERS.signature,
+    required: true,
+    description:
+      'Hex HMAC-SHA256 of service:timestamp:POST:/internal/payroll-integration/post-role-accrual.',
+  })
+  @ApiCreatedResponse({
+    description: 'The created (or already-existing) journal entry.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'An account is not chosen for a role the run has an amount for, or no open fiscal period covers the date.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid service credentials.' })
+  postRoleAccrual(
+    @Req() request: AuthenticatedInternalRequest,
+    @Body() dto: PostPayrollRoleAccrualDto,
+  ) {
+    this.assertCaller(request);
+    if (!request.internalActingUserId) {
+      throw new ForbiddenException(
+        'A signed request that names the acting user is required to post a payroll accrual.',
+      );
+    }
+    return this.service.postRoleAccrual(
+      request.internalServiceName,
+      request.internalActingUserId,
+      dto,
+    );
   }
 
   @Get(':payrollRunId/settlement-status')
@@ -85,9 +162,21 @@ export class InternalPayrollIntegrationController {
   @ApiOkResponse({ description: 'Settlement status for each liability line.' })
   @ApiUnauthorizedResponse({ description: 'Invalid service credentials.' })
   getSettlementStatus(
+    @Req() request: AuthenticatedInternalRequest,
     @Param('payrollRunId', ParseUUIDPipe) payrollRunId: string,
     @Query() query: QueryPayrollSettlementStatusDto,
   ) {
+    this.assertCaller(request);
     return this.service.getSettlementStatus(query.tenantId, payrollRunId);
+  }
+
+  /** The allow-list admits any trusted service, so payroll's routes are pinned to its own. */
+  private assertCaller(request: AuthenticatedInternalRequest) {
+    const registration = registeredModuleFor('HR');
+    if (request.internalServiceName !== registration?.serviceName) {
+      throw new ForbiddenException(
+        `Only ${registration?.serviceName ?? 'hr-service'} may call payroll integration routes.`,
+      );
+    }
   }
 }

@@ -7,10 +7,10 @@ import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
 import { useDeleteProspect, useProspect, useProspects } from '@/hooks/marketing/useProspects';
 import { AllProspectsTable, Prospect } from '@/components/molecules/marketing/AllProspectsTable';
 import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
+import { AddProspectPanel } from '@/components/organisms/marketing/AddProspectPanel';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { useToast } from '@/hooks/useToast';
-import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { apiErrorMessage } from '@/lib/apiError';
 import { pageContent } from '@/lib/layout';
 import { formatMoney } from '@/lib/formatMoney';
@@ -32,6 +32,8 @@ function toRow(item: ProspectListItem): Prospect {
     salesStageProgress: item.salesStage.probability,
     decisionMaker: item.primaryContact?.decisionMaker?.name ?? '',
     lastInteraction: item.lastInteractionDate ?? '',
+    interactionCount: item.interactionCount ?? 0,
+    assignedTo: item.assignedUserName ?? '',
   };
 }
 
@@ -45,8 +47,8 @@ export default function AllProspectsPage() {
   const [pendingDelete, setPendingDelete] = useState<Prospect | null>(null);
   const [stageProspect, setStageProspect] = useState<Prospect | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const toast = useToast();
-  const canCreateClient = usePermissionRule('marketing.clients:CREATE');
   const deleteProspect = useDeleteProspect();
 
   const { data, isLoading, isError } = useProspects({
@@ -109,8 +111,8 @@ export default function AllProspectsPage() {
         onEdit={(row) => router.push(`/${tenantSlug}/marketing/prospects/all/${row.id}/edit`)}
         onUpdateStage={setStageProspect}
         onDelete={setPendingDelete}
-        onConvertToClient={canCreateClient ? (row) => setConvertingId(row.id) : undefined}
-        onAdd={() => router.push(`/${tenantSlug}/marketing/prospects/all/new`)}
+        onConvertToClient={(row) => setConvertingId(row.id)}
+        onAdd={() => setPanelOpen(true)}
         stageOptions={stageOptions}
         stageFilter={stageFilter}
         onStageFilter={(id) => {
@@ -119,6 +121,7 @@ export default function AllProspectsPage() {
         }}
         isLoading={isLoading}
       />
+      <AddProspectPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
       {convertingId && convertingProspect && (
         <ConvertToClientModal
           prospect={convertingProspect}

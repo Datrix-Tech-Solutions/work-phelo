@@ -10,6 +10,7 @@ import {
   MarketingProspectFollowUpStatus,
   Prisma,
 } from '../../prisma/generated/client';
+import { AssigneesService } from '../assignees/assignees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateProspectDto,
@@ -77,7 +78,10 @@ type ProspectInteractionWithParticipants = {
 
 @Injectable()
 export class ProspectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly assignees: AssigneesService,
+  ) {}
 
   async findOne(user: RequestUser, id: string) {
     return this.findProspectDetail(user, id, this.canViewAllProspects(user));
@@ -122,6 +126,10 @@ export class ProspectsService {
     });
 
     if (!prospect) throw new NotFoundException('Prospect not found');
+    const assignedUserName = await this.assignees.nameFor(
+      user.tenantId,
+      prospect.assignedUserId,
+    );
 
     const [stage, settings] = await Promise.all([
       this.prisma.marketingPipelineStage.findFirst({
@@ -169,6 +177,7 @@ export class ProspectsService {
           )
         : null,
       assignedUserId: prospect.assignedUserId,
+      assignedUserName,
       clientId: prospect.client?.id ?? null,
       location: {
         label: prospect.locationLabel,
@@ -244,11 +253,20 @@ export class ProspectsService {
     if (!existing) throw new NotFoundException('Prospect not found');
 
     await this.assertUpdateReferences(user.tenantId, dto, existing);
+    const newAssignee = await this.assignees.forUpdate(
+      user,
+      'prospect',
+      existing.assignedUserId,
+      dto.assignedUserId,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.marketingProspect.update({
         where: { id: existing.id },
-        data: this.toProspectUpdateData(user, dto),
+        data: {
+          ...this.toProspectUpdateData(user, dto),
+          ...(newAssignee ? { assignedUserId: newAssignee } : {}),
+        },
       });
 
       if (dto.primaryContact !== undefined) {
@@ -260,7 +278,8 @@ export class ProspectsService {
       }
     });
 
-    return this.findProspectDetail(user, id, canEditAll);
+    // Someone who just handed a record on can still see the result of their edit.
+    return this.findProspectDetail(user, id, canEditAll || !!newAssignee);
   }
 
   async remove(user: RequestUser, id: string): Promise<void> {
@@ -736,6 +755,7 @@ export class ProspectsService {
           by: ['prospectId'],
           where: { tenantId: user.tenantId, prospectId: { in: prospectIds } },
           _max: { occurredAt: true },
+          _count: { _all: true },
         }),
         this.prisma.marketingPipelineStage.findMany({
           where: {
@@ -779,6 +799,18 @@ export class ProspectsService {
         interaction.prospectId,
         interaction._max.occurredAt,
       ]),
+    );
+
+    const interactionCountByProspect = new Map(
+      latestInteractions.map((interaction) => [
+        interaction.prospectId,
+        interaction._count._all,
+      ]),
+    );
+
+    const assigneeNames = await this.assignees.namesFor(
+      user.tenantId,
+      prospects.map((prospect) => prospect.assignedUserId),
     );
 
     const data = prospects.map((prospect) => {
@@ -825,10 +857,13 @@ export class ProspectsService {
         },
         progress: stage?.probability ?? 0,
         lastInteractionDate: interactionByProspect.get(prospect.id) ?? null,
+        // Follow-ups are the interactions recorded against the prospect.
+        interactionCount: interactionCountByProspect.get(prospect.id) ?? 0,
         expectedCloseDate: this.earliestDate(
           prospectProducts.map((product) => product.expectedCloseDate),
         ),
         assignedUserId: prospect.assignedUserId,
+        assignedUserName: assigneeNames.get(prospect.assignedUserId) ?? null,
         createdAt: prospect.createdAt,
       };
     });
@@ -842,6 +877,11 @@ export class ProspectsService {
   async create(user: RequestUser, dto: CreateProspectDto) {
     this.assertUniqueProducts(dto.products);
     await this.assertReferences(user.tenantId, dto);
+    const assignedUserId = await this.assignees.forCreate(
+      user,
+      'prospect',
+      dto.assignedUserId,
+    );
 
     return this.prisma.$transaction((tx) => {
       return tx.marketingProspect.create({
@@ -852,7 +892,7 @@ export class ProspectsService {
           businessTypeId: dto.businessTypeId ?? null,
           sourceTypeId: dto.sourceTypeId ?? null,
           pipelineStageId: dto.pipelineStageId,
-          assignedUserId: user.id,
+          assignedUserId,
           locationLabel: this.formatText(dto.location.label),
           latitude: dto.location.latitude,
           longitude: dto.location.longitude,
@@ -1105,8 +1145,8 @@ export class ProspectsService {
     return this.formatText(value).toLocaleLowerCase();
   }
 
-  private formatOptionalText(value: string | undefined): string | null {
-    if (value === undefined) return null;
+  private formatOptionalText(value: string | null | undefined): string | null {
+    if (value === undefined || value === null) return null;
     const normalized = this.formatText(value);
     return normalized.length > 0 ? normalized : null;
   }

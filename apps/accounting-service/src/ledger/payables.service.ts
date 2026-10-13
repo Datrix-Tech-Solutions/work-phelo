@@ -11,7 +11,6 @@ import {
   AccountingPayableStatus,
   FiscalPeriodStatus,
   GLAccountCategory,
-  JournalStatus,
   PostingDirection,
   Prisma,
   RecordStatus,
@@ -20,9 +19,13 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { agingBucket, partyAging } from './aging.util';
 import { CashbookService } from './cashbook.service';
-import { CreateJournalDto } from './dto/accounting.dto';
+import { CreateJournalDto, VoidEntryDto } from './dto/accounting.dto';
 import { CreateCashbookPaymentDto } from './dto/cashbook.dto';
 import {
+  EditPayableBillDto,
+  EditPayableNoteDto,
+  EditPayablePaymentDto,
+  RestorePayableBillDto,
   CreatePayableBillDto,
   CreatePayableCreditNoteDto,
   CreatePayablePaymentDto,
@@ -34,10 +37,22 @@ import {
   ReversePayableAllocationDto,
   ReversePayableDto,
 } from './dto/payables.dto';
+import { QueryTradeSummaryDto } from './dto/trade-summary.dto';
 import { JournalsService } from './journals.service';
-import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
+import { normalizeDocumentLines } from './document-lines';
+import { settlementEntryLines } from './cashbook-lines.util';
+import {
+  BreakdownEntry,
+  buildFormBreakdown,
+  FormAdjustment,
+  FormTax,
+} from './document-adjustments';
+import { resolveMainLineAccount } from './rule-account-scope';
 
 const zero = new Prisma.Decimal(0);
+/** Marks an allocation released because its payment or credit note was voided, so a restore can re-apply it. */
+const RELEASED_BY_VOID = 'VOIDED_WITH_SOURCE';
+const RESTORED_AFTER_VOID = 'VOIDED_WITH_SOURCE_RESTORED';
 // SubledgerAccount (the generic Entity behind every customer/vendor) doesn't carry a
 // payment-terms field the way the old AccountingVendor master record did — fall back to
 // the same 30-day default that record always used unless the bill sets an explicit due date.
@@ -58,6 +73,13 @@ const payableDocumentInclude = {
   },
   offsetGlAccount: { select: { id: true, code: true, name: true } },
   costCentre: { select: { id: true, code: true, name: true } },
+  lines: {
+    orderBy: { sequence: 'asc' as const },
+    include: {
+      glAccount: { select: { id: true, code: true, name: true } },
+      costCentre: { select: { id: true, code: true, name: true } },
+    },
+  },
   apAccount: { select: { id: true, code: true, name: true } },
   postedJournalEntry: {
     select: { id: true, journalNumber: true, status: true, postedAt: true },
@@ -86,6 +108,15 @@ const payablePaymentInclude = {
       reference: true,
       postedJournalEntryId: true,
       reversalJournalEntryId: true,
+      reversalTransaction: {
+        select: {
+          id: true,
+          status: true,
+          reference: true,
+          transactionNumber: true,
+          transactionDate: true,
+        },
+      },
     },
   },
 } satisfies Prisma.AccountingPayablePaymentInclude;
@@ -103,7 +134,8 @@ export class PayablesService {
     private readonly journals: JournalsService,
   ) {}
 
-  async summary(tenantId: string) {
+  async summary(tenantId: string, window: QueryTradeSummaryDto = {}) {
+    const raisedWindow = this.summaryWindow(window);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today);
@@ -116,7 +148,13 @@ export class PayablesService {
           documentType: AccountingPayableDocumentType.BILL,
           status: AccountingPayableStatus.POSTED,
         },
-        select: { id: true, totalAmount: true, currency: true, dueDate: true },
+        select: {
+          id: true,
+          totalAmount: true,
+          currency: true,
+          dueDate: true,
+          documentDate: true,
+        },
       }),
       this.prisma.accountingPayableAllocation.findMany({
         where: { tenantId, reversedAt: null },
@@ -138,6 +176,7 @@ export class PayablesService {
         (applied.get(allocation.billId) ?? zero).plus(allocation.amount),
       );
     const outstanding = new Map<string, Prisma.Decimal>();
+    const raised = new Map<string, Prisma.Decimal>();
     let overdueInvoices = 0;
     let dueThisWeek = 0;
     for (const bill of bills) {
@@ -147,6 +186,16 @@ export class PayablesService {
         bill.currency,
         (outstanding.get(bill.currency) ?? zero).plus(balance),
       );
+      if (
+        raisedWindow &&
+        bill.documentDate >= raisedWindow.from &&
+        bill.documentDate < raisedWindow.to
+      ) {
+        raised.set(
+          bill.currency,
+          (raised.get(bill.currency) ?? zero).plus(balance),
+        );
+      }
       if (bill.dueDate && bill.dueDate < today) overdueInvoices += 1;
       if (bill.dueDate && bill.dueDate >= today && bill.dueDate <= weekEnd)
         dueThisWeek += 1;
@@ -166,11 +215,20 @@ export class PayablesService {
     });
     return {
       outstandingByCurrency: this.summaryTotals(outstanding),
+      raisedInPeriodByCurrency: this.summaryTotals(raised),
       overdueInvoices,
       dueThisWeek,
       pendingApproval,
       paidMtdByCurrency: this.summaryTotals(paid),
     };
+  }
+
+  /** [from, to) from the inclusive first and last day, or null when either is missing. */
+  private summaryWindow(window: QueryTradeSummaryDto) {
+    if (!window.fromDate || !window.toDate) return null;
+    const from = new Date(window.fromDate);
+    const to = new Date(new Date(window.toDate).getTime() + 86_400_000);
+    return { from, to };
   }
 
   private summaryTotals(totals: Map<string, Prisma.Decimal>) {
@@ -288,21 +346,26 @@ export class PayablesService {
     return date;
   }
 
-  async createBill(user: RequestUser, dto: CreatePayableBillDto) {
+  /**
+   * Everything a bill form decides - the vendor, items, taxes and accounts - worked out and
+   * checked, without writing anything. Creating a bill and editing a posted one share it, so
+   * both hold a bill to exactly the same rules.
+   */
+  private async prepareBill(user: RequestUser, dto: CreatePayableBillDto) {
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
-      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertVendorCurrency(vendor.currency, dto.currency);
-    assertQuantityPriceMatchesAmount(dto);
 
-    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const { lines: itemLines, subtotal: subtotalAmount } =
+      await this.resolveDocumentLines(user.tenantId, dto);
     const {
       apAccountId,
-      offsetGlAccountId,
       taxAmount,
       taxBreakdown,
+      netAdjustment,
+      lineAccounts,
       transactionTypeCode,
     } = await this.resolveRulePosting(
       user.tenantId,
@@ -310,46 +373,78 @@ export class PayablesService {
       TransactionTypeCategory.PAYABLE,
       subtotalAmount,
       dto.selectedTaxTypeIds,
+      false,
+      {
+        lineAccountIds: itemLines.map((line) => line.glAccountId),
+        taxes: dto.taxes,
+        adjustments: dto.adjustments,
+        documentDate: dto.documentDate,
+      },
     );
-    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
-    const totalAmount = subtotalAmount.plus(taxAmount);
+    for (const accountId of new Set(lineAccounts)) {
+      await this.assertPostingOffsetAccount(user.tenantId, accountId);
+    }
+    // Taxes and charges add to what is owed; deductions take away from it.
+    const totalAmount = subtotalAmount.plus(taxAmount).plus(netAdjustment);
+    if (totalAmount.lessThanOrEqualTo(0)) {
+      throw new BadRequestException(
+        'The deductions leave nothing owed — the total must be above zero',
+      );
+    }
+    return {
+      transactionTypeCode,
+      lineWrites: this.documentLineWrites(itemLines, lineAccounts),
+      totalAmount,
+      fields: {
+        vendorId: vendor.id,
+        documentDate: new Date(dto.documentDate),
+        dueDate: new Date(
+          dto.dueDate ??
+            this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
+        ),
+        currency: dto.currency,
+        exchangeRate: dto.exchangeRate,
+        subtotalAmount,
+        // A single item keeps its quantity × price on the document; with several, each line
+        // carries its own.
+        quantity: itemLines.length === 1 ? itemLines[0].quantity : undefined,
+        unitPrice: itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
+        taxAmount,
+        totalAmount,
+        description: this.optional(dto.description),
+        externalReference: this.optional(dto.externalReference),
+        offsetGlAccountId: lineAccounts[0],
+        costCentreId:
+          itemLines.length === 1
+            ? this.optional(itemLines[0].costCentreId)
+            : null,
+        apAccountId,
+        transactionTypeId: dto.transactionTypeId,
+        taxBreakdown,
+      },
+    };
+  }
 
+  async createBill(user: RequestUser, dto: CreatePayableBillDto) {
+    const prepared = await this.prepareBill(user, dto);
     const document = await this.withDocumentNumberLock(
       user.tenantId,
-      `bill:${transactionTypeCode}`,
+      `bill:${prepared.transactionTypeCode}`,
       async (tx) => {
         const documentNumber = await this.nextRuleDocumentNumber(
           tx,
           user.tenantId,
-          transactionTypeCode,
+          prepared.transactionTypeCode,
         );
         return tx.accountingPayableDocument.create({
           data: {
             tenantId: user.tenantId,
-            vendorId: vendor.id,
             documentType: AccountingPayableDocumentType.BILL,
             documentNumber,
-            documentDate: new Date(dto.documentDate),
-            dueDate: new Date(
-              dto.dueDate ??
-                this.addDays(dto.documentDate, DEFAULT_PAYMENT_TERMS_DAYS),
-            ),
-            currency: dto.currency,
-            exchangeRate: dto.exchangeRate,
-            subtotalAmount,
-            quantity: dto.quantity,
-            unitPrice: dto.unitPrice,
-            taxAmount,
-            totalAmount,
-            description: this.optional(dto.description),
-            externalReference: this.optional(dto.externalReference),
+            ...prepared.fields,
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId,
-            costCentreId: this.optional(dto.costCentreId),
-            apAccountId,
-            transactionTypeId: dto.transactionTypeId,
-            taxBreakdown,
+            lines: { create: prepared.lineWrites },
             createdByUserId: user.id,
             updatedByUserId: user.id,
           },
@@ -362,7 +457,10 @@ export class PayablesService {
       'PAYABLE_BILL_CREATED',
       'AccountingPayableDocument',
       document.id,
-      { documentNumber: document.documentNumber, totalAmount },
+      {
+        documentNumber: document.documentNumber,
+        totalAmount: prepared.totalAmount,
+      },
     );
     return document;
   }
@@ -376,6 +474,10 @@ export class PayablesService {
         'offsetGlAccountId and apAccountId are required unless a transactionTypeId is given',
       );
     }
+    if (dto.amount === undefined) {
+      throw new BadRequestException('amount is required');
+    }
+    const manualAmount = dto.amount;
     const { offsetGlAccountId, apAccountId } = dto;
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
@@ -408,15 +510,17 @@ export class PayablesService {
         user.tenantId,
         bill.id,
       );
-      if (new Prisma.Decimal(dto.amount).greaterThan(outstanding)) {
+      if (new Prisma.Decimal(manualAmount).greaterThan(outstanding)) {
         throw new ConflictException(
           'Bill-specific vendor credit cannot exceed bill outstanding balance',
         );
       }
     }
 
-    const { subtotalAmount, taxAmount, totalAmount } =
-      this.documentAmounts(dto);
+    const { subtotalAmount, taxAmount, totalAmount } = this.documentAmounts({
+      ...dto,
+      amount: manualAmount,
+    });
     const document = await this.withDocumentNumberLock(
       user.tenantId,
       'APC',
@@ -474,22 +578,22 @@ export class PayablesService {
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
       this.assertActiveCurrency(user.tenantId, dto.currency),
-      this.assertActiveCostCentre(user.tenantId, dto.costCentreId),
     ]);
     this.assertVendorCurrency(vendor.currency, dto.currency);
-    assertQuantityPriceMatchesAmount(dto);
     if (!dto.originalBillId) {
       throw new BadRequestException(
         'A linked transaction must reference an original bill',
       );
     }
 
-    const subtotalAmount = new Prisma.Decimal(dto.amount);
+    const { lines: itemLines, subtotal: subtotalAmount } =
+      await this.resolveDocumentLines(user.tenantId, dto);
     const {
       apAccountId,
-      offsetGlAccountId,
       taxAmount,
       taxBreakdown,
+      netAdjustment,
+      lineAccounts,
       transactionTypeCode,
     } = await this.resolveRulePosting(
       user.tenantId,
@@ -498,9 +602,23 @@ export class PayablesService {
       subtotalAmount,
       dto.selectedTaxTypeIds,
       true,
+      {
+        lineAccountIds: itemLines.map((line) => line.glAccountId),
+        taxes: dto.taxes,
+        adjustments: dto.adjustments,
+        documentDate: dto.documentDate,
+      },
     );
-    await this.assertPostingOffsetAccount(user.tenantId, offsetGlAccountId);
-    const totalAmount = subtotalAmount.plus(taxAmount);
+    for (const accountId of new Set(lineAccounts)) {
+      await this.assertPostingOffsetAccount(user.tenantId, accountId);
+    }
+    // Taxes and charges add to what is owed; deductions take away from it.
+    const totalAmount = subtotalAmount.plus(taxAmount).plus(netAdjustment);
+    if (totalAmount.lessThanOrEqualTo(0)) {
+      throw new BadRequestException(
+        'The deductions leave nothing owed — the total must be above zero',
+      );
+    }
 
     const original = await this.getDocumentForTenant(
       user.tenantId,
@@ -554,16 +672,24 @@ export class PayablesService {
             currency: dto.currency,
             exchangeRate: dto.exchangeRate,
             subtotalAmount,
-            quantity: dto.quantity,
-            unitPrice: dto.unitPrice,
+            // A single item keeps its quantity × price on the document; with several, each line
+            // carries its own.
+            quantity:
+              itemLines.length === 1 ? itemLines[0].quantity : undefined,
+            unitPrice:
+              itemLines.length === 1 ? itemLines[0].unitPrice : undefined,
             taxAmount,
             totalAmount,
             description: this.optional(dto.description),
             externalReference: this.optional(dto.externalReference),
             sourceModule: this.optional(dto.sourceModule),
             sourceRecordId: this.optional(dto.sourceRecordId),
-            offsetGlAccountId,
-            costCentreId: this.optional(dto.costCentreId),
+            offsetGlAccountId: lineAccounts[0],
+            costCentreId:
+              itemLines.length === 1
+                ? this.optional(itemLines[0].costCentreId)
+                : null,
+            lines: { create: this.documentLineWrites(itemLines, lineAccounts) },
             apAccountId,
             transactionTypeId,
             taxBreakdown,
@@ -583,6 +709,29 @@ export class PayablesService {
       { documentNumber: document.documentNumber, totalAmount },
     );
     return document;
+  }
+
+  /** The listed shape (with payment state) for specific documents, in the order of `ids`. */
+  async listDocumentsByIds(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    const items = await this.prisma.accountingPayableDocument.findMany({
+      where: { tenantId, id: { in: ids } },
+      include: payableDocumentInclude,
+    });
+    const withState = await this.attachPaymentStates(tenantId, items);
+    const byId = new Map(withState.map((item) => [item.id, item]));
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  }
+
+  /** The listed shape for specific payments, in the order of `ids`. */
+  async listPaymentsByIds(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    const items = await this.prisma.accountingPayablePayment.findMany({
+      where: { tenantId, id: { in: ids } },
+      include: payablePaymentInclude,
+    });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
   }
 
   listBills(tenantId: string, query: QueryPayableDocumentsDto) {
@@ -632,28 +781,6 @@ export class PayablesService {
     );
   }
 
-  async reverseBill(user: RequestUser, billId: string, dto: ReversePayableDto) {
-    return this.reverseDocument(
-      user,
-      billId,
-      AccountingPayableDocumentType.BILL,
-      dto,
-    );
-  }
-
-  async reverseCreditNote(
-    user: RequestUser,
-    creditNoteId: string,
-    dto: ReversePayableDto,
-  ) {
-    return this.reverseDocument(
-      user,
-      creditNoteId,
-      AccountingPayableDocumentType.CREDIT_NOTE,
-      dto,
-    );
-  }
-
   async createPayment(user: RequestUser, dto: CreatePayablePaymentDto) {
     const [vendor] = await Promise.all([
       this.resolveVendor(user.tenantId, dto.vendorId),
@@ -668,9 +795,22 @@ export class PayablesService {
       throw new BadRequestException('The bill must be posted');
     }
 
+    // Deductions and charges taken at settlement make the cash differ from the amount settled:
+    // the entry then posts the amount to Trade Payable plus each adjustment, and its own
+    // amount is the net cash that actually leaves the bank. The payment keeps the amount
+    // settled, which is what gets allocated to the bill.
+    const adjustments = dto.adjustments ?? [];
     const cashbookDto: CreateCashbookPaymentDto = {
       cashAccountId: dto.cashAccountId,
-      amount: dto.amount,
+      ...(adjustments.length
+        ? {
+            lines: settlementEntryLines({
+              controlAccountId: bill.apAccountId,
+              amount: dto.amount,
+              adjustments,
+            }),
+          }
+        : { amount: dto.amount, offsetGlAccountId: bill.apAccountId }),
       currency: dto.currency,
       transactionDate: dto.paymentDate,
       settlementMethod: dto.settlementMethod,
@@ -679,7 +819,6 @@ export class PayablesService {
       counterpartyId: vendor.id,
       externalReference: dto.externalReference,
       description: dto.description ?? `Payment to ${vendor.name}`,
-      offsetGlAccountId: bill.apAccountId,
       offsetSubledgerAccountId: vendor.id,
       sourceModule: dto.sourceModule ?? 'ACCOUNTING',
       sourceRecordId: dto.sourceRecordId ?? 'AP_PAYMENT_PENDING',
@@ -748,7 +887,8 @@ export class PayablesService {
     const where: Prisma.AccountingPayablePaymentWhereInput = {
       tenantId,
       ...(query.vendorId ? { vendorId: query.vendorId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      // Voided entries live in the archive; they only show when asked for by status.
+      status: query.status ?? { not: AccountingPayableStatus.VOIDED },
       ...(query.currency ? { currency: query.currency } : {}),
       ...(query.cashAccountId
         ? { cashbookTransaction: { cashAccountId: query.cashAccountId } }
@@ -831,6 +971,71 @@ export class PayablesService {
       });
       return updated;
     });
+  }
+
+  /**
+   * Takes a payment's reversal back: the reversing cash entry is voided and the payment is posted
+   * again. Its allocations stay released; it is applied again with Allocate.
+   */
+  async voidPaymentReversal(
+    user: RequestUser,
+    paymentId: string,
+    dto: VoidEntryDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status !== AccountingPayableStatus.REVERSED) {
+        throw new ConflictException(
+          'Only a reversed payment has a reversal to void',
+        );
+      }
+      const reversal = await tx.cashbookTransaction.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          reversalOfTransactionId: payment.cashbookTransactionId,
+        },
+        select: { id: true },
+      });
+      if (!reversal) {
+        throw new ConflictException('The reversal entry could not be found');
+      }
+      await this.cashbook.voidInTransaction(tx, user, reversal.id, dto, true);
+      // The reversing entry is an internal part of this payment, not something to list in the archive.
+      await tx.cashbookTransaction.updateMany({
+        where: { id: reversal.id, tenantId: user.tenantId },
+        data: {
+          archiveDeletedAt: new Date(),
+          archiveDeletedByUserId: user.id,
+        },
+      });
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingPayableStatus.POSTED,
+          reversedAt: null,
+          reversedByUserId: null,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_REVERSAL_VOIDED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: {
+            reason: dto.reason,
+            voidedReversalTransactionId: reversal.id,
+          },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
   }
 
   async reversePayment(
@@ -1158,104 +1363,223 @@ export class PayablesService {
     });
   }
 
-  private async reverseDocument(
+  // ---- Changing posted documents and payments (while their period is open) ----
+
+  /** Loads a posted or voided document for a void, edit or restore. Another module's documents change there. */
+  private async loadChangeableDocument(
+    tx: TransactionClient,
+    tenantId: string,
+    documentId: string,
+    documentType: AccountingPayableDocumentType,
+  ) {
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "accounting"."AccountingPayableDocument"
+      WHERE "tenantId" = ${tenantId} AND "id" = ${documentId}
+      FOR UPDATE
+    `;
+    const document = await tx.accountingPayableDocument.findFirst({
+      where: { id: documentId, tenantId, documentType },
+      include: payableDocumentInclude,
+    });
+    if (!document) throw new NotFoundException('Payable document not found');
+    if (document.sourceModule && document.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        'This document was raised by another module and changes there.',
+      );
+    }
+    if (!document.postedJournalEntryId) {
+      throw new ConflictException(
+        'This document has no posted journal to change',
+      );
+    }
+    return document;
+  }
+
+  /** A bill with payments or credit notes against it must have those voided first. */
+  private async assertBillUntouched(
+    tx: TransactionClient,
+    tenantId: string,
+    billId: string,
+  ) {
+    const [applied, creditNotes] = await Promise.all([
+      tx.accountingPayableAllocation.count({
+        where: { tenantId, billId, reversedAt: null },
+      }),
+      tx.accountingPayableDocument.count({
+        where: {
+          tenantId,
+          originalBillId: billId,
+          status: AccountingPayableStatus.POSTED,
+        },
+      }),
+    ]);
+    if (applied > 0 || creditNotes > 0) {
+      throw new ConflictException(
+        'This bill has payments or credit notes against it. Void those first.',
+      );
+    }
+  }
+
+  private async releaseAllocations(
+    tx: TransactionClient,
+    user: RequestUser,
+    where: { paymentId?: string; creditNoteId?: string },
+  ) {
+    await tx.accountingPayableAllocation.updateMany({
+      where: { tenantId: user.tenantId, reversedAt: null, ...where },
+      data: {
+        reversedAt: new Date(),
+        reversedByUserId: user.id,
+        reversalReason: RELEASED_BY_VOID,
+      },
+    });
+  }
+
+  /** Rewrites the document's journal from its current fields, keeping the journal's number. */
+  private async rewriteDocumentJournal(
+    tx: TransactionClient,
+    user: RequestUser,
+    documentId: string,
+  ) {
+    const fresh = await tx.accountingPayableDocument.findUniqueOrThrow({
+      where: { id_tenantId: { id: documentId, tenantId: user.tenantId } },
+      include: payableDocumentInclude,
+    });
+    const period = await this.resolveOpenPeriod(
+      tx,
+      user.tenantId,
+      fresh.documentDate,
+    );
+    await this.journals.rewriteSystemJournalInTransaction(
+      tx,
+      user,
+      fresh.postedJournalEntryId as string,
+      this.documentJournalDto(fresh, period.id),
+    );
+  }
+
+  private documentSnapshot(document: PayableDocument) {
+    return {
+      documentNumber: document.documentNumber,
+      vendorId: document.vendorId,
+      documentDate: document.documentDate.toISOString(),
+      currency: document.currency,
+      totalAmount: document.totalAmount.toString(),
+      description: document.description,
+    };
+  }
+
+  /** Rewrites a bill from the whole form again, keeping its number (and so its type). */
+  private async replaceBillInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: PayableDocument,
+    dto: CreatePayableBillDto,
+  ) {
+    if (dto.transactionTypeId !== document.transactionTypeId) {
+      throw new BadRequestException(
+        'The transaction type cannot change. Void this bill and raise a new one instead.',
+      );
+    }
+    const prepared = await this.prepareBill(user, dto);
+    await tx.accountingPayableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        ...prepared.fields,
+        quantity: prepared.fields.quantity ?? null,
+        unitPrice: prepared.fields.unitPrice ?? null,
+        exchangeRate: prepared.fields.exchangeRate ?? null,
+        updatedByUserId: user.id,
+        lines: { deleteMany: {}, create: prepared.lineWrites },
+      },
+    });
+    await this.rewriteDocumentJournal(tx, user, document.id);
+  }
+
+  private async updateNoteInTransaction(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: PayableDocument,
+    dto: EditPayableNoteDto,
+  ) {
+    const { reason: _reason, ...changes } = dto;
+    void _reason;
+    if (Object.keys(changes).length === 0) return;
+    await tx.accountingPayableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        updatedByUserId: user.id,
+        ...(changes.documentDate !== undefined
+          ? { documentDate: new Date(changes.documentDate) }
+          : {}),
+        ...(changes.exchangeRate !== undefined
+          ? { exchangeRate: changes.exchangeRate }
+          : {}),
+        ...(changes.description !== undefined
+          ? { description: this.optional(changes.description) }
+          : {}),
+        ...(changes.externalReference !== undefined
+          ? { externalReference: this.optional(changes.externalReference) }
+          : {}),
+      },
+    });
+    await this.rewriteDocumentJournal(tx, user, document.id);
+  }
+
+  private findDocumentFresh(
     user: RequestUser,
     documentId: string,
     documentType: AccountingPayableDocumentType,
-    dto: ReversePayableDto,
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      const document = await tx.accountingPayableDocument.findFirst({
-        where: { id: documentId, tenantId: user.tenantId, documentType },
-        include: payableDocumentInclude,
-      });
-      if (!document) throw new NotFoundException('Payable document not found');
-      if (document.status !== AccountingPayableStatus.POSTED) {
-        throw new ConflictException(
-          'Only posted payable documents can be reversed',
-        );
-      }
-      const activeAllocations = await tx.accountingPayableAllocation.count({
-        where: {
-          tenantId: user.tenantId,
-          reversedAt: null,
-          OR:
-            document.documentType === AccountingPayableDocumentType.BILL
-              ? [{ billId: document.id }]
-              : [{ creditNoteId: document.id }],
-        },
-      });
-      if (activeAllocations > 0) {
-        throw new ConflictException(
-          'Reverse active allocations before reversing this payable document',
-        );
-      }
-      if (!document.postedJournalEntryId) {
-        throw new ConflictException(
-          'Posted payable document is missing its journal',
-        );
-      }
-      const reversalDate = new Date(dto.reversalDate);
-      const period = await this.resolveOpenPeriod(
+    return documentType === AccountingPayableDocumentType.BILL
+      ? this.getBill(user, documentId)
+      : this.getCreditNote(user, documentId);
+  }
+
+  /**
+   * Takes a posted bill or credit note out of the books with its journal. A bill with
+   * payments or credit notes against it must wait until those are voided; a credit note lets go
+   * of what it was applied to.
+   */
+  private async voidDocument(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingPayableDocumentType,
+    dto: VoidEntryDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
         tx,
         user.tenantId,
-        reversalDate,
+        documentId,
+        documentType,
       );
-      const originalJournal = await tx.journalEntry.findFirst({
-        where: {
-          id: document.postedJournalEntryId,
-          tenantId: user.tenantId,
-          status: JournalStatus.POSTED,
-        },
-        include: { lines: { orderBy: { lineNumber: 'asc' } } },
-      });
-      if (!originalJournal) {
+      if (document.status === AccountingPayableStatus.REVERSED) {
         throw new ConflictException(
-          'Original posted payable journal is not available for reversal',
+          'This document has been reversed and cannot be voided.',
         );
       }
-      const reversalJournal = await this.journals.createPostedInTransaction(
+      if (document.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted documents can be voided');
+      }
+      if (documentType === AccountingPayableDocumentType.BILL) {
+        await this.assertBillUntouched(tx, user.tenantId, document.id);
+      } else {
+        await this.releaseAllocations(tx, user, { creditNoteId: document.id });
+      }
+      await this.journals.voidSystemJournalInTransaction(
         tx,
         user,
-        {
-          transactionDate: reversalDate.toISOString(),
-          fiscalPeriodId: period.id,
-          transactionCurrency: originalJournal.transactionCurrency,
-          exchangeRate: Number(originalJournal.exchangeRate.toString()),
-          reference: `REVERSAL-${document.documentNumber}`,
-          description: `Payable reversal of ${document.documentNumber}: ${dto.reason}`,
-          idempotencyKey: `payable:${document.id}:reversal:v1`,
-          sourceModule: 'ACCOUNTING',
-          sourceRecordType: 'PAYABLE_DOCUMENT_REVERSAL',
-          sourceRecordId: document.id,
-          lines: originalJournal.lines.map((line) => ({
-            glAccountId: line.glAccountId,
-            subledgerAccountId: line.subledgerAccountId ?? undefined,
-            costCentreId: line.costCentreId ?? undefined,
-            description: line.description ?? undefined,
-            debit: Number(line.transactionCredit.toString()),
-            credit: Number(line.transactionDebit.toString()),
-          })),
-        },
+        document.postedJournalEntryId as string,
+        dto.reason,
       );
-      await tx.journalEntry.update({
-        where: {
-          id_tenantId: { id: originalJournal.id, tenantId: user.tenantId },
-        },
-        data: {
-          status: JournalStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-      });
       await tx.accountingPayableDocument.update({
         where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
         data: {
-          status: AccountingPayableStatus.REVERSED,
-          reversedAt: new Date(),
-          reversedByUserId: user.id,
-          reversalJournalEntryId: reversalJournal.id,
+          status: AccountingPayableStatus.VOIDED,
+          voidedAt: new Date(),
+          voidedByUserId: user.id,
+          voidReason: dto.reason,
           updatedByUserId: user.id,
         },
       });
@@ -1263,20 +1587,463 @@ export class PayablesService {
         data: {
           tenantId: user.tenantId,
           actorUserId: user.id,
-          action:
-            document.documentType === AccountingPayableDocumentType.BILL
-              ? 'PAYABLE_BILL_REVERSED'
-              : 'PAYABLE_CREDIT_NOTE_REVERSED',
+          action: 'PAYABLE_DOCUMENT_VOIDED',
           entityType: 'AccountingPayableDocument',
           entityId: document.id,
-          changedFields: { reversalJournalEntryId: reversalJournal.id },
+          changedFields: {
+            reason: dto.reason,
+            documentNumber: document.documentNumber,
+          },
         },
       });
-      return tx.accountingPayableDocument.findUniqueOrThrow({
-        where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
-        include: payableDocumentInclude,
+    });
+    return this.findDocumentFresh(user, documentId, documentType);
+  }
+
+  voidBill(user: RequestUser, billId: string, dto: VoidEntryDto) {
+    return this.voidDocument(
+      user,
+      billId,
+      AccountingPayableDocumentType.BILL,
+      dto,
+    );
+  }
+
+  voidCreditNote(user: RequestUser, creditNoteId: string, dto: VoidEntryDto) {
+    return this.voidDocument(
+      user,
+      creditNoteId,
+      AccountingPayableDocumentType.CREDIT_NOTE,
+      dto,
+    );
+  }
+
+  /** Edits a posted bill in place: the whole form again, same number. */
+  async editPostedBill(
+    user: RequestUser,
+    billId: string,
+    dto: EditPayableBillDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        billId,
+        AccountingPayableDocumentType.BILL,
+      );
+      if (document.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException(
+          document.status === AccountingPayableStatus.REVERSED
+            ? 'This bill has been reversed and cannot be edited.'
+            : 'Only posted bills can be edited',
+        );
+      }
+      await this.assertBillUntouched(tx, user.tenantId, document.id);
+      await this.replaceBillInTransaction(tx, user, document, dto.bill);
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_BILL_POSTED_EDITED',
+          entityType: 'AccountingPayableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: this.documentSnapshot(document),
+          },
+        },
       });
     });
+    return this.getBill(user, billId);
+  }
+
+  /** Edits what a posted credit note allows (its amount stays, as it is applied against a bill). */
+  async editPostedCreditNote(
+    user: RequestUser,
+    creditNoteId: string,
+    dto: EditPayableNoteDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        creditNoteId,
+        AccountingPayableDocumentType.CREDIT_NOTE,
+      );
+      if (document.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted credit notes can be edited');
+      }
+      await this.updateNoteInTransaction(tx, user, document, dto);
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_CREDIT_NOTE_POSTED_EDITED',
+          entityType: 'AccountingPayableDocument',
+          entityId: document.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: this.documentSnapshot(document),
+          },
+        },
+      });
+    });
+    return this.getCreditNote(user, creditNoteId);
+  }
+
+  /** Brings a voided bill back under its own number, with corrections if the form was changed. */
+  async restoreBill(
+    user: RequestUser,
+    billId: string,
+    dto: RestorePayableBillDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        billId,
+        AccountingPayableDocumentType.BILL,
+      );
+      if (document.status !== AccountingPayableStatus.VOIDED) {
+        throw new ConflictException('Only voided bills can be restored');
+      }
+      if (dto.bill) {
+        await this.replaceBillInTransaction(tx, user, document, dto.bill);
+      }
+      await this.journals.reinstateSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+      );
+      await this.markDocumentRestored(tx, user, document);
+    });
+    return this.getBill(user, billId);
+  }
+
+  /** Brings a voided credit note back, applying it to its bill again when it was raised against one. */
+  async restoreCreditNote(
+    user: RequestUser,
+    creditNoteId: string,
+    dto: EditPayableNoteDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const document = await this.loadChangeableDocument(
+        tx,
+        user.tenantId,
+        creditNoteId,
+        AccountingPayableDocumentType.CREDIT_NOTE,
+      );
+      if (document.status !== AccountingPayableStatus.VOIDED) {
+        throw new ConflictException('Only voided credit notes can be restored');
+      }
+      if (document.originalBillId) {
+        const bill = await tx.accountingPayableDocument.findFirst({
+          where: { id: document.originalBillId, tenantId: user.tenantId },
+          select: { status: true, documentNumber: true },
+        });
+        if (bill?.status !== AccountingPayableStatus.POSTED) {
+          throw new ConflictException(
+            `Restore bill ${bill?.documentNumber ?? ''} before this credit note`.trim(),
+          );
+        }
+      }
+      await this.updateNoteInTransaction(tx, user, document, dto);
+      await this.journals.reinstateSystemJournalInTransaction(
+        tx,
+        user,
+        document.postedJournalEntryId as string,
+      );
+      await this.markDocumentRestored(tx, user, document);
+      await this.reapplyReleasedAllocations(tx, user, {
+        creditNoteId: document.id,
+        sourceType: AccountingPayableAllocationSource.CREDIT_NOTE,
+        expectedApAccountId: document.apAccountId,
+      });
+    });
+    return this.getCreditNote(user, creditNoteId);
+  }
+
+  /** Applies a restored payment or credit note to the bills it was released from by the void. */
+  private async reapplyReleasedAllocations(
+    tx: TransactionClient,
+    user: RequestUser,
+    input: {
+      paymentId?: string;
+      creditNoteId?: string;
+      sourceType: AccountingPayableAllocationSource;
+      expectedApAccountId: string;
+    },
+  ) {
+    const released = await tx.accountingPayableAllocation.findMany({
+      where: {
+        tenantId: user.tenantId,
+        reversalReason: RELEASED_BY_VOID,
+        ...(input.paymentId ? { paymentId: input.paymentId } : {}),
+        ...(input.creditNoteId ? { creditNoteId: input.creditNoteId } : {}),
+      },
+    });
+    for (const allocation of released) {
+      try {
+        await this.createAllocation(tx, user, {
+          vendorId: allocation.vendorId,
+          billId: allocation.billId,
+          paymentId: input.paymentId,
+          creditNoteId: input.creditNoteId,
+          sourceType: input.sourceType,
+          amount: allocation.amount,
+          currency: allocation.currency,
+          expectedApAccountId: input.expectedApAccountId,
+        });
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          throw new ConflictException(
+            'The bill this was applied to is voided. Restore the bill first.',
+          );
+        }
+        throw error;
+      }
+      await tx.accountingPayableAllocation.update({
+        where: { id_tenantId: { id: allocation.id, tenantId: user.tenantId } },
+        data: { reversalReason: RESTORED_AFTER_VOID },
+      });
+    }
+  }
+
+  private async markDocumentRestored(
+    tx: TransactionClient,
+    user: RequestUser,
+    document: PayableDocument,
+  ) {
+    await tx.accountingPayableDocument.update({
+      where: { id_tenantId: { id: document.id, tenantId: user.tenantId } },
+      data: {
+        status: AccountingPayableStatus.POSTED,
+        voidedAt: null,
+        voidedByUserId: null,
+        voidReason: null,
+        updatedByUserId: user.id,
+      },
+    });
+    await tx.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: 'PAYABLE_DOCUMENT_RESTORED',
+        entityType: 'AccountingPayableDocument',
+        entityId: document.id,
+        changedFields: { before: this.documentSnapshot(document) },
+      },
+    });
+  }
+
+  private paymentCashbookEdit(dto: EditPayablePaymentDto) {
+    return {
+      ...(dto.paymentDate !== undefined
+        ? { transactionDate: dto.paymentDate }
+        : {}),
+      ...(dto.cashAccountId !== undefined
+        ? { cashAccountId: dto.cashAccountId }
+        : {}),
+      ...(dto.settlementMethod !== undefined
+        ? { settlementMethod: dto.settlementMethod }
+        : {}),
+      ...(dto.reference !== undefined ? { reference: dto.reference } : {}),
+      ...(dto.externalReference !== undefined
+        ? { externalReference: dto.externalReference }
+        : {}),
+      ...(dto.description !== undefined
+        ? { description: dto.description }
+        : {}),
+      ...(dto.reason !== undefined ? { reason: dto.reason } : {}),
+    };
+  }
+
+  private paymentFieldEdit(dto: EditPayablePaymentDto) {
+    return {
+      ...(dto.paymentDate !== undefined
+        ? { paymentDate: new Date(dto.paymentDate) }
+        : {}),
+      ...(dto.reference !== undefined
+        ? { reference: this.optional(dto.reference) }
+        : {}),
+      ...(dto.description !== undefined
+        ? { description: this.optional(dto.description) }
+        : {}),
+      ...(dto.externalReference !== undefined
+        ? { externalReference: this.optional(dto.externalReference) }
+        : {}),
+    };
+  }
+
+  private async loadChangeablePayment(
+    tx: TransactionClient,
+    tenantId: string,
+    paymentId: string,
+  ) {
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "accounting"."AccountingPayablePayment"
+      WHERE "tenantId" = ${tenantId} AND "id" = ${paymentId}
+      FOR UPDATE
+    `;
+    const payment = await tx.accountingPayablePayment.findFirst({
+      where: { id: paymentId, tenantId },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.sourceModule && payment.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        'This payment was raised by another module and changes there.',
+      );
+    }
+    return payment;
+  }
+
+  /** Voids a posted payment with its cashbook entry and lets go of the bills it was applied to. */
+  async voidPayment(user: RequestUser, paymentId: string, dto: VoidEntryDto) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status === AccountingPayableStatus.REVERSED) {
+        throw new ConflictException(
+          'This payment has been reversed and cannot be voided.',
+        );
+      }
+      if (payment.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted payments can be voided');
+      }
+      await this.releaseAllocations(tx, user, { paymentId: payment.id });
+      await this.cashbook.voidInTransaction(
+        tx,
+        user,
+        payment.cashbookTransactionId,
+        dto,
+        true,
+      );
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: {
+          status: AccountingPayableStatus.VOIDED,
+          voidedAt: new Date(),
+          voidedByUserId: user.id,
+          voidReason: dto.reason,
+          updatedByUserId: user.id,
+        },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_VOIDED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: {
+            reason: dto.reason,
+            paymentNumber: payment.paymentNumber,
+          },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
+  }
+
+  async editPostedPayment(
+    user: RequestUser,
+    paymentId: string,
+    dto: EditPayablePaymentDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status !== AccountingPayableStatus.POSTED) {
+        throw new ConflictException('Only posted payments can be edited');
+      }
+      await this.cashbook.editInTransaction(
+        tx,
+        user,
+        payment.cashbookTransactionId,
+        this.paymentCashbookEdit(dto),
+        true,
+      );
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: { ...this.paymentFieldEdit(dto), updatedByUserId: user.id },
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_POSTED_EDITED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: {
+            reason: dto.reason ?? null,
+            before: {
+              paymentDate: payment.paymentDate.toISOString(),
+              reference: payment.reference,
+              description: payment.description,
+            },
+          },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
+  }
+
+  /** Brings a voided payment back and applies it to the bills it was applied to before. */
+  async restorePayment(
+    user: RequestUser,
+    paymentId: string,
+    dto: EditPayablePaymentDto,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await this.loadChangeablePayment(
+        tx,
+        user.tenantId,
+        paymentId,
+      );
+      if (payment.status !== AccountingPayableStatus.VOIDED) {
+        throw new ConflictException('Only voided payments can be restored');
+      }
+      await this.cashbook.restoreInTransaction(
+        tx,
+        user,
+        payment.cashbookTransactionId,
+        this.paymentCashbookEdit(dto),
+        true,
+      );
+      await tx.accountingPayablePayment.update({
+        where: { id_tenantId: { id: payment.id, tenantId: user.tenantId } },
+        data: {
+          ...this.paymentFieldEdit(dto),
+          status: AccountingPayableStatus.POSTED,
+          voidedAt: null,
+          voidedByUserId: null,
+          voidReason: null,
+          updatedByUserId: user.id,
+        },
+      });
+      await this.reapplyReleasedAllocations(tx, user, {
+        paymentId: payment.id,
+        sourceType: AccountingPayableAllocationSource.PAYMENT,
+        expectedApAccountId: payment.apAccountId,
+      });
+      await tx.accountingAuditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          actorUserId: user.id,
+          action: 'PAYABLE_PAYMENT_RESTORED',
+          entityType: 'AccountingPayablePayment',
+          entityId: payment.id,
+          changedFields: { paymentNumber: payment.paymentNumber },
+        },
+      });
+    });
+    return this.getPayment(user, paymentId);
   }
 
   private async createAllocation(
@@ -1422,28 +2189,47 @@ export class PayablesService {
     // A resolved rule splits tax onto its own account(s), leaving the offset line at just
     // the subtotal; a document with no breakdown (a credit note, or one predating rules)
     // keeps the old behavior of lumping the full total onto the offset line.
-    const offsetLines = taxBreakdown.length
-      ? [
-          {
-            glAccountId: document.offsetGlAccountId,
-            costCentreId: document.costCentreId ?? undefined,
-            description,
-            ...debitCredit(offsetDirection, subtotalAmount),
-          },
-          ...taxBreakdown.map((t) => ({
-            glAccountId: t.glAccountId,
-            description: `${description} — tax`,
-            ...debitCredit(t.direction ?? offsetDirection, t.amount),
-          })),
-        ]
-      : [
-          {
-            glAccountId: document.offsetGlAccountId,
-            costCentreId: document.costCentreId ?? undefined,
-            description,
-            ...debitCredit(offsetDirection, totalAmount),
-          },
-        ];
+    // One line per item, each to its own account and cost centre. A document made before items
+    // existed has none, and posts its single offset account for the subtotal.
+    const itemLines = (document.lines ?? []).map((item) => ({
+      glAccountId: item.glAccountId,
+      costCentreId: item.costCentreId ?? undefined,
+      description: item.description ?? description,
+      ...debitCredit(offsetDirection, Number(item.amount.toString())),
+    }));
+    const offsetLines =
+      taxBreakdown.length || itemLines.length > 0
+        ? [
+            ...(itemLines.length > 0
+              ? itemLines
+              : [
+                  {
+                    glAccountId: document.offsetGlAccountId,
+                    costCentreId: document.costCentreId ?? undefined,
+                    description,
+                    ...debitCredit(offsetDirection, subtotalAmount),
+                  },
+                ]),
+            ...taxBreakdown.map((t) => ({
+              glAccountId: t.glAccountId,
+              description: `${description} — ${
+                t.kind === 'DEDUCTION'
+                  ? 'deduction'
+                  : t.kind === 'CHARGE'
+                    ? 'charge'
+                    : 'tax'
+              }${t.description ? ` (${t.description})` : ''}`,
+              ...debitCredit(t.direction ?? offsetDirection, t.amount),
+            })),
+          ]
+        : [
+            {
+              glAccountId: document.offsetGlAccountId,
+              costCentreId: document.costCentreId ?? undefined,
+              description,
+              ...debitCredit(offsetDirection, totalAmount),
+            },
+          ];
 
     const lines = isBill ? [...offsetLines, apLine] : [apLine, ...offsetLines];
     return {
@@ -1474,7 +2260,8 @@ export class PayablesService {
       tenantId,
       documentType,
       ...(query.vendorId ? { vendorId: query.vendorId } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      // Voided entries live in the archive; they only show when asked for by status.
+      status: query.status ?? { not: AccountingPayableStatus.VOIDED },
       ...(query.currency ? { currency: query.currency } : {}),
       ...(query.fromDate || query.toDate
         ? {
@@ -1639,7 +2426,79 @@ export class PayablesService {
     };
   }
 
+  /** The debit notes applied to a bill, with the transaction type each was raised under, so the
+   *  payment screen can say what reduced the balance and by how much. */
+  private async appliedCreditNoteDetails(tenantId: string, billId: string) {
+    const allocations = await this.prisma.accountingPayableAllocation.findMany({
+      where: {
+        tenantId,
+        billId,
+        sourceType: AccountingPayableAllocationSource.CREDIT_NOTE,
+        reversedAt: null,
+      },
+      include: {
+        creditNote: {
+          select: { documentNumber: true, transactionTypeId: true },
+        },
+      },
+      orderBy: { allocatedAt: 'asc' },
+    });
+    const typeIds = [
+      ...new Set(
+        allocations.flatMap((a) =>
+          a.creditNote?.transactionTypeId
+            ? [a.creditNote.transactionTypeId]
+            : [],
+        ),
+      ),
+    ];
+    const types = typeIds.length
+      ? await this.prisma.transactionType.findMany({
+          where: { tenantId, id: { in: typeIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const nameById = new Map(types.map((type) => [type.id, type.name]));
+    return allocations.map((allocation) => ({
+      allocationId: allocation.id,
+      creditNoteId: allocation.creditNoteId,
+      documentNumber: allocation.creditNote?.documentNumber ?? null,
+      transactionType: allocation.creditNote?.transactionTypeId
+        ? (nameById.get(allocation.creditNote.transactionTypeId) ?? null)
+        : null,
+      amount: this.money(allocation.amount),
+    }));
+  }
+
+  /** The payments applied to a bill, so each can be opened (and voided) from the bill. */
+  private async appliedSettlementDetails(tenantId: string, billId: string) {
+    const allocations = await this.prisma.accountingPayableAllocation.findMany({
+      where: {
+        tenantId,
+        billId,
+        sourceType: AccountingPayableAllocationSource.PAYMENT,
+        reversedAt: null,
+      },
+      include: { payment: { select: { paymentNumber: true } } },
+      orderBy: { allocatedAt: 'asc' },
+    });
+    return allocations.map((allocation) => ({
+      allocationId: allocation.id,
+      settlementId: allocation.paymentId,
+      settlementNumber: allocation.payment?.paymentNumber ?? null,
+      amount: this.money(allocation.amount),
+    }));
+  }
+
   private async billBalanceFromDocument(document: PayableDocument) {
+    const appliedNotes = await this.appliedCreditNoteDetails(
+      document.tenantId,
+      document.id,
+    );
+    const appliedSettlementDetails = await this.appliedSettlementDetails(
+      document.tenantId,
+      document.id,
+    );
     const [paymentApplied, creditApplied] = await Promise.all([
       this.sumAllocations(document.tenantId, {
         billId: document.id,
@@ -1660,6 +2519,8 @@ export class PayablesService {
       originalAmount: this.money(document.totalAmount),
       appliedPayments: this.money(paymentApplied),
       appliedCreditNotes: this.money(creditApplied),
+      appliedNotes,
+      appliedSettlementDetails,
       outstandingAmount: this.money(outstanding),
       paymentState: this.paymentState(document, outstanding, paymentApplied),
     };
@@ -1814,16 +2675,25 @@ export class PayablesService {
     subtotal: Prisma.Decimal,
     selectedTaxTypeIds: string[] | undefined,
     expectLinked = false,
+    options: {
+      offsetGlAccountId?: string;
+      /** One account pick per item on the document (a fixed rule account needs none). */
+      lineAccountIds?: (string | undefined)[];
+      taxOnly?: boolean;
+      /** Taxes, deductions and charges added on the form (as opposed to the rule's own). */
+      taxes?: FormTax[];
+      adjustments?: FormAdjustment[];
+      documentDate?: string;
+    } = {},
   ): Promise<{
     apAccountId: string;
     offsetGlAccountId: string;
     taxAmount: Prisma.Decimal;
-    taxBreakdown: {
-      glAccountId: string;
-      taxTypeId: string;
-      amount: string;
-      direction: PostingDirection;
-    }[];
+    taxBreakdown: BreakdownEntry[];
+    /** Charges less deductions: what the form's adjustments add to (or take from) the total. */
+    netAdjustment: Prisma.Decimal;
+    /** The account each item posts to, in order. */
+    lineAccounts: string[];
     transactionTypeCode: string;
   }> {
     const transactionType = await this.prisma.transactionType.findFirst({
@@ -1848,7 +2718,7 @@ export class PayablesService {
 
     const rule = await this.prisma.transactionTypeRule.findFirst({
       where: { tenantId, transactionTypeId },
-      include: { lines: { include: { taxType: true } } },
+      include: { lines: { include: { taxType: true, scopes: true } } },
     });
     if (!rule) {
       throw new BadRequestException(
@@ -1867,7 +2737,9 @@ export class PayablesService {
     // The auto-balance (AP) line is never a tax line — checking direction alone isn't
     // enough, since a deduction can be configured with that same direction (e.g. a
     // withholding tax credited on a bill, same as the AP line itself).
-    const apLine = rule.lines.find(
+    // Settlement lines apply when the document is paid, never when it is raised.
+    const documentLines = rule.lines.filter((l) => !l.settlementKind);
+    const apLine = documentLines.find(
       (l) => l.direction === autoBalanceDirection && !l.taxTypeId,
     );
     if (!apLine) {
@@ -1875,7 +2747,7 @@ export class PayablesService {
         "This transaction type's rule has no Payable line configured",
       );
     }
-    const explicitLines = rule.lines.filter((l) => l.id !== apLine.id);
+    const explicitLines = documentLines.filter((l) => l.id !== apLine.id);
     const mainLine = explicitLines.find((l) => !l.taxTypeId);
     if (!mainLine) {
       throw new ConflictException(
@@ -1883,29 +2755,79 @@ export class PayablesService {
       );
     }
 
+    if (!apLine.accountId) {
+      throw new ConflictException(
+        "This transaction type's rule has no fixed control account configured",
+      );
+    }
+    const controlAccountId = apLine.accountId;
+    // A scoped main line (the user picks the account) is resolved against the scope; the
+    // tax-only path keeps the accounts the draft already holds, so it needs no pick.
+    const picks = options.lineAccountIds ?? [options.offsetGlAccountId];
+    const lineAccounts: string[] = [];
+    if (options.taxOnly) {
+      lineAccounts.push(mainLine.accountId ?? '');
+    } else {
+      // Every item must sit inside the rule's scope (or be the rule's one fixed account).
+      for (const pick of picks) {
+        lineAccounts.push(
+          await resolveMainLineAccount(this.prisma, tenantId, mainLine, pick, [
+            controlAccountId,
+            ...explicitLines.flatMap((l) => (l.accountId ? [l.accountId] : [])),
+          ]),
+        );
+      }
+    }
+    const offsetGlAccountId = lineAccounts[0];
+
     const selected = new Set(selectedTaxTypeIds ?? []);
-    const taxBreakdown = explicitLines
-      .filter((l) => l.taxTypeId && selected.has(l.taxTypeId))
+    const taxBreakdown: BreakdownEntry[] = explicitLines
+      .filter((l) => l.taxTypeId && l.accountId && selected.has(l.taxTypeId))
       .map((line) => {
         const rate = new Prisma.Decimal(line.taxType!.rate);
         const amount = subtotal.times(rate).dividedBy(100).toDecimalPlaces(2);
         return {
-          glAccountId: line.accountId,
+          glAccountId: line.accountId!,
           taxTypeId: line.taxTypeId!,
           amount: amount.toString(),
           direction: line.direction,
+          kind: 'TAX' as const,
+          description: line.taxType!.name,
         };
       });
-    const taxAmount = taxBreakdown.reduce(
-      (sum, t) => sum.plus(new Prisma.Decimal(t.amount)),
-      new Prisma.Decimal(0),
-    );
+    // Taxes, deductions and charges added on the form. A tax or charge goes on the main line's
+    // side and a deduction on the control side, so they add to or take from what is owed.
+    const form = options.taxOnly
+      ? null
+      : await buildFormBreakdown(this.prisma, tenantId, {
+          subtotal,
+          documentDate: options.documentDate,
+          mainSide:
+            autoBalanceDirection === PostingDirection.DR
+              ? PostingDirection.CR
+              : PostingDirection.DR,
+          controlSide: autoBalanceDirection,
+          taxes: options.taxes,
+          adjustments: options.adjustments,
+          excludeAccountIds: [controlAccountId, offsetGlAccountId].filter(
+            Boolean,
+          ),
+        });
+    taxBreakdown.push(...(form?.entries ?? []));
+    const taxAmount = taxBreakdown
+      .filter((t) => t.kind === 'TAX')
+      .reduce(
+        (sum, t) => sum.plus(new Prisma.Decimal(t.amount)),
+        new Prisma.Decimal(0),
+      );
 
     return {
-      apAccountId: apLine.accountId,
-      offsetGlAccountId: mainLine.accountId,
+      apAccountId: controlAccountId,
+      offsetGlAccountId,
       taxAmount,
       taxBreakdown,
+      netAdjustment: form?.netAdjustment ?? new Prisma.Decimal(0),
+      lineAccounts,
       transactionTypeCode: transactionType.code,
     };
   }
@@ -1917,6 +2839,9 @@ export class PayablesService {
     /** Null for documents created before tax lines carried their own direction —
      *  documentJournalDto falls back to the offset line's direction for those. */
     direction: PostingDirection | null;
+    /** Absent on documents made before deductions and charges existed — those are all taxes. */
+    kind: 'TAX' | 'DEDUCTION' | 'CHARGE';
+    description: string | null;
   }[] {
     if (!Array.isArray(value)) return [];
     return value.flatMap((entry) => {
@@ -1940,6 +2865,12 @@ export class PayablesService {
           taxTypeId: typeof entry.taxTypeId === 'string' ? entry.taxTypeId : '',
           amount: Number(entry.amount),
           direction,
+          kind:
+            entry.kind === 'DEDUCTION' || entry.kind === 'CHARGE'
+              ? entry.kind
+              : ('TAX' as const),
+          description:
+            typeof entry.description === 'string' ? entry.description : null,
         },
       ];
     });
@@ -2027,6 +2958,7 @@ export class PayablesService {
     outstanding: Prisma.Decimal,
     paidApplied?: Prisma.Decimal,
   ) {
+    if (document.status === AccountingPayableStatus.VOIDED) return 'VOIDED';
     if (document.status === AccountingPayableStatus.REVERSED) return 'REVERSED';
     if (document.status === AccountingPayableStatus.DRAFT) return 'DRAFT';
     if (outstanding.lte(0)) return 'PAID';
@@ -2101,6 +3033,40 @@ export class PayablesService {
 
   /** The optional department tag — when given, it must be an active cost centre of this
    *  tenant. Checked at creation for early feedback; posting re-validates it. */
+  /** The items on a bill, invoice or note — normalised from `lines`, or from the single `amount`
+   *  of an older request — with each cost centre checked. */
+  private async resolveDocumentLines(
+    tenantId: string,
+    dto: Parameters<typeof normalizeDocumentLines>[0],
+  ) {
+    const result = normalizeDocumentLines(dto);
+    for (const costCentreId of new Set(
+      result.lines.flatMap((line) =>
+        line.costCentreId ? [line.costCentreId] : [],
+      ),
+    )) {
+      await this.assertActiveCostCentre(tenantId, costCentreId);
+    }
+    return result;
+  }
+
+  // Nested under `lines: { create: [...] }` — tenantId comes from the parent document through the
+  // composite FK, so it must not be passed here.
+  private documentLineWrites(
+    items: ReturnType<typeof normalizeDocumentLines>['lines'],
+    accountIds: string[],
+  ) {
+    return items.map((item, index) => ({
+      sequence: index + 1,
+      glAccountId: accountIds[index],
+      amount: item.amount,
+      quantity: item.quantity ?? null,
+      unitPrice: item.unitPrice ?? null,
+      description: this.optional(item.description),
+      costCentreId: this.optional(item.costCentreId),
+    }));
+  }
+
   private async assertActiveCostCentre(
     tenantId: string,
     costCentreId: string | undefined,
@@ -2130,6 +3096,78 @@ export class PayablesService {
     const date = new Date(value);
     date.setHours(23, 59, 59, 999);
     return date;
+  }
+
+  /** Throws a draft bill or credit note away. Posted ones are immutable and stay. */
+  private async deleteDraftDocument(
+    user: RequestUser,
+    documentId: string,
+    documentType: AccountingPayableDocumentType,
+    label: string,
+  ) {
+    const document = await this.prisma.accountingPayableDocument.findFirst({
+      where: { id: documentId, tenantId: user.tenantId, documentType },
+      select: {
+        id: true,
+        status: true,
+        sourceModule: true,
+        documentNumber: true,
+      },
+    });
+    if (!document) throw new NotFoundException(`${label} not found`);
+    if (document.status !== AccountingPayableStatus.DRAFT) {
+      throw new ConflictException(`Only draft ${label}s can be deleted`);
+    }
+    if (document.sourceModule && document.sourceModule !== 'ACCOUNTING') {
+      throw new ConflictException(
+        `This ${label} was raised by another module - reject it instead`,
+      );
+    }
+    try {
+      const removed = await this.prisma.accountingPayableDocument.deleteMany({
+        where: {
+          id: document.id,
+          tenantId: user.tenantId,
+          status: AccountingPayableStatus.DRAFT,
+        },
+      });
+      if (removed.count !== 1) {
+        throw new ConflictException(
+          `The ${label} was changed by another request`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      throw new ConflictException(
+        `This ${label} is referenced elsewhere and cannot be deleted`,
+      );
+    }
+    await this.recordAudit(
+      user,
+      'PAYABLE_DRAFT_DELETED',
+      'AccountingPayableDocument',
+      document.id,
+      { documentNumber: document.documentNumber },
+    );
+    return { id: document.id, deleted: true };
+  }
+
+  deleteDraftBill(user: RequestUser, id: string) {
+    return this.deleteDraftDocument(
+      user,
+      id,
+      AccountingPayableDocumentType.BILL,
+      'bill',
+    );
+  }
+
+  deleteDraftCreditNote(user: RequestUser, id: string) {
+    return this.deleteDraftDocument(
+      user,
+      id,
+      AccountingPayableDocumentType.CREDIT_NOTE,
+      'credit note',
+    );
   }
 
   private async recordAudit(

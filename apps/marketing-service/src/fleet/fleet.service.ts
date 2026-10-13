@@ -1,16 +1,24 @@
 import {
-  BadGatewayException,
   BadRequestException,
-  HttpException,
+  ConflictException,
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { InternalServiceClientError } from '@work-phelo/internal-auth';
 import { RequestUser } from '@work-phelo/types';
 import { MarketingFleetVehicle } from '../../prisma/generated/client';
+import { callHr } from '../hr/call-hr';
 import { PrismaService } from '../prisma/prisma.service';
+import { TransportOfficersService } from '../transport-officers/transport-officers.service';
+import { TripHistoryQueryDto } from '../trips/dto/trip-history-query.dto';
+import { strongestState } from '../trips/trip-schedule';
+import {
+  ScheduledTrip,
+  TripScheduleService,
+  tripsForVehicle,
+} from '../trips/trip-schedule.service';
 import {
   CreateFleetVehicleDto,
+  FleetStatus,
   QueryFleetVehiclesDto,
   SettableFleetStatus,
   UpdateFleetVehicleDto,
@@ -18,6 +26,10 @@ import {
 import { HrFleetClient, HrVehicleAsset } from './hr-fleet.client';
 
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
+const ON_TRIP_MESSAGE =
+  'This vehicle is on a trip right now. Try again once it is back.';
+/** How many booked/on-route trips a vehicle row carries. */
+const MAX_TRIPS_PER_ROW = 10;
 const MAINTENANCE_WITH_DRIVER_MESSAGE =
   'A vehicle in maintenance cannot be assigned a driver';
 const DETAIL_FIELDS = [
@@ -28,6 +40,10 @@ const DETAIL_FIELDS = [
   'fuelType',
   'currentMileage',
 ] as const;
+/** Everything but mileage must be present the first time details are saved. */
+const REQUIRED_DETAIL_FIELDS = DETAIL_FIELDS.filter(
+  (key) => key !== 'currentMileage',
+);
 
 type FleetDetails = Pick<MarketingFleetVehicle, (typeof DETAIL_FIELDS)[number]>;
 
@@ -43,6 +59,8 @@ export class FleetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hr: HrFleetClient,
+    private readonly officers: TransportOfficersService,
+    private readonly trips: TripScheduleService,
   ) {}
 
   async list(user: RequestUser, query: QueryFleetVehiclesDto = {}) {
@@ -50,16 +68,23 @@ export class FleetService {
     const limit = query.limit ?? 20;
     const search = query.search?.toLowerCase();
 
-    const [assets, details] = await Promise.all([
+    const [assets, details, trips] = await Promise.all([
       this.callHr(() => this.hr.listVehicles(user.tenantId)),
       this.prisma.marketingFleetVehicle.findMany({
         where: { tenantId: user.tenantId },
       }),
+      this.trips.activeTrips(user.tenantId),
     ]);
     const detailsByAsset = new Map(details.map((row) => [row.assetId, row]));
 
     const rows = assets
-      .map((asset) => this.toRow(asset, detailsByAsset.get(asset.id)))
+      .map((asset) =>
+        this.toRow(
+          asset,
+          detailsByAsset.get(asset.id),
+          tripsForVehicle(trips, asset.id),
+        ),
+      )
       .filter((row) => {
         if (query.status && row.status !== query.status) return false;
         if (query.branchId && row.branch?.id !== query.branchId) return false;
@@ -89,20 +114,48 @@ export class FleetService {
     };
   }
 
-  options(user: RequestUser) {
-    return this.callHr(() => this.hr.getOptions(user.tenantId));
+  /** Branches come from HR; drivers are the tenant's active transport officers. */
+  async options(user: RequestUser) {
+    const [hrOptions, drivers] = await Promise.all([
+      this.callHr(() => this.hr.getOptions(user.tenantId)),
+      this.officers.activeDrivers(user.tenantId),
+    ]);
+    return {
+      branches: hrOptions.branches,
+      drivers: drivers.map((driver) => ({
+        id: driver.employeeId,
+        name: driver.name,
+      })),
+    };
+  }
+
+  /** Completed trips this vehicle has been on, most recent first. */
+  tripHistory(user: RequestUser, assetId: string, query: TripHistoryQueryDto) {
+    return this.trips.completedTrips(
+      user.tenantId,
+      { vehicleAssetId: assetId },
+      query.page,
+      query.limit,
+    );
   }
 
   async findOne(user: RequestUser, assetId: string) {
     const asset = await this.callHr(() =>
       this.hr.getVehicle(user.tenantId, assetId),
     );
-    return this.toRow(asset, await this.findDetails(user.tenantId, assetId));
+    return this.rowFor(user.tenantId, asset);
   }
 
   async create(user: RequestUser, dto: CreateFleetVehicleDto) {
     if (dto.status === 'MAINTENANCE' && dto.assignedDriverId) {
       throw new BadRequestException(MAINTENANCE_WITH_DRIVER_MESSAGE);
+    }
+
+    if (dto.assignedDriverId) {
+      await this.officers.assertActiveOfficer(
+        user.tenantId,
+        dto.assignedDriverId,
+      );
     }
 
     const asset = await this.callHr(() =>
@@ -145,7 +198,10 @@ export class FleetService {
       );
     }
 
-    return { ...this.toRow(current, details), warnings };
+    return {
+      ...(await this.rowFor(user.tenantId, current, details)),
+      warnings,
+    };
   }
 
   async update(user: RequestUser, assetId: string, dto: UpdateFleetVehicleDto) {
@@ -160,7 +216,9 @@ export class FleetService {
     const existing = await this.findDetails(user.tenantId, assetId);
 
     if (!existing) {
-      const missing = DETAIL_FIELDS.filter((key) => detailPatch[key] == null);
+      const missing = REQUIRED_DETAIL_FIELDS.filter(
+        (key) => detailPatch[key] == null,
+      );
       if (Object.keys(detailPatch).length && missing.length) {
         throw new BadRequestException(
           `Fleet details are incomplete: ${missing.join(', ')} required`,
@@ -202,7 +260,7 @@ export class FleetService {
       });
     }
 
-    return this.toRow(current, details);
+    return this.rowFor(user.tenantId, current, details);
   }
 
   async setStatus(
@@ -210,24 +268,27 @@ export class FleetService {
     assetId: string,
     status: SettableFleetStatus,
   ) {
+    if (status !== 'AVAILABLE')
+      await this.assertNotOnTrip(user.tenantId, assetId);
     const asset = await this.callHr(() =>
       this.hr.setStatus(user.tenantId, assetId, status),
     );
-    return this.toRow(asset, await this.findDetails(user.tenantId, assetId));
+    return this.rowFor(user.tenantId, asset);
   }
 
   async assignDriver(user: RequestUser, assetId: string, employeeId: string) {
+    await this.officers.assertActiveOfficer(user.tenantId, employeeId);
     const asset = await this.callHr(() =>
       this.hr.assignDriver(user.tenantId, assetId, employeeId),
     );
-    return this.toRow(asset, await this.findDetails(user.tenantId, assetId));
+    return this.rowFor(user.tenantId, asset);
   }
 
   async unassignDriver(user: RequestUser, assetId: string) {
     const asset = await this.callHr(() =>
       this.hr.unassignDriver(user.tenantId, assetId),
     );
-    return this.toRow(asset, await this.findDetails(user.tenantId, assetId));
+    return this.rowFor(user.tenantId, asset);
   }
 
   /**
@@ -240,6 +301,7 @@ export class FleetService {
       this.hr.getVehicle(user.tenantId, assetId),
     );
     if (asset.status === 'RETIRED') return { success: true };
+    await this.assertNotOnTrip(user.tenantId, assetId);
 
     if (asset.assignedEmployeeId) {
       await this.callHr(() => this.hr.unassignDriver(user.tenantId, assetId));
@@ -270,7 +332,48 @@ export class FleetService {
     return picked;
   }
 
-  private toRow(asset: HrVehicleAsset, details?: FleetDetails | null) {
+  /** Builds a vehicle row, loading just this vehicle's trips (and details unless given). */
+  private async rowFor(
+    tenantId: string,
+    asset: HrVehicleAsset,
+    details?: FleetDetails | null,
+  ) {
+    const [resolvedDetails, trips] = await Promise.all([
+      details === undefined ? this.findDetails(tenantId, asset.id) : details,
+      this.trips.activeTrips(tenantId, { vehicleAssetIds: [asset.id] }),
+    ]);
+    return this.toRow(asset, resolvedDetails, trips);
+  }
+
+  /** A vehicle that is out on a trip can't be sent to maintenance or retired. */
+  private async assertNotOnTrip(tenantId: string, assetId: string) {
+    const trips = await this.trips.activeTrips(tenantId, {
+      vehicleAssetIds: [assetId],
+    });
+    if (trips.some((trip) => trip.state === 'ON_ROUTE')) {
+      throw new ConflictException(ON_TRIP_MESSAGE);
+    }
+  }
+
+  /**
+   * Fleet status is about the vehicle's availability, not its driver: retired and
+   * maintenance come from HR, then a trip in progress means on route and a trip
+   * still to come means booked. HR's own "assigned" (a driver is attached) does
+   * not make a vehicle unavailable.
+   */
+  private deriveStatus(
+    hrStatus: HrVehicleAsset['status'],
+    trips: ScheduledTrip[],
+  ): FleetStatus {
+    if (hrStatus === 'RETIRED' || hrStatus === 'MAINTENANCE') return hrStatus;
+    return strongestState(trips.map((trip) => trip.state)) ?? 'AVAILABLE';
+  }
+
+  private toRow(
+    asset: HrVehicleAsset,
+    details: FleetDetails | null | undefined,
+    trips: ScheduledTrip[],
+  ) {
     return {
       assetId: asset.id,
       assetNumber: asset.assetNumber,
@@ -290,7 +393,22 @@ export class FleetService {
             name: asset.assignedEmployeeName ?? null,
           }
         : null,
-      status: asset.status,
+      status: this.deriveStatus(asset.status, trips),
+      // Raw HR state, so the UI knows whether maintenance can be cleared, etc.
+      hrStatus: asset.status,
+      trips: trips.slice(0, MAX_TRIPS_PER_ROW).map((trip) => ({
+        requestId: trip.requestId,
+        state: trip.state,
+        overdue: trip.overdue,
+        travelDate: trip.travelDate,
+        departureTime: trip.departureTime,
+        returnTime: trip.returnTime,
+        destination: trip.destination,
+        requesterName: trip.requesterName,
+        driverName: trip.driver?.name ?? null,
+        selfDriven: trip.selfDriven,
+      })),
+      tripCount: trips.length,
       needsFleetDetails: !details,
       createdAt: asset.createdAt,
     };
@@ -313,24 +431,11 @@ export class FleetService {
     }
   }
 
-  /** Passes HR validation errors through; hides outages and service-auth problems. */
-  private async callHr<T>(action: () => Promise<T>): Promise<T> {
-    try {
-      return await action();
-    } catch (error) {
-      if (!(error instanceof InternalServiceClientError)) throw error;
-      const status = error.statusCode;
-      const passThrough =
-        status !== undefined &&
-        status >= 400 &&
-        status < 500 &&
-        ![401, 403, 408, 429].includes(status);
-      if (passThrough) throw new HttpException(error.message, status);
-
-      this.logger.error(`hr-service call failed: ${error.message}`);
-      throw new BadGatewayException(
-        'Fleet vehicles are temporarily unavailable. Please try again.',
-      );
-    }
+  private callHr<T>(action: () => Promise<T>): Promise<T> {
+    return callHr(
+      this.logger,
+      action,
+      'Fleet vehicles are temporarily unavailable. Please try again.',
+    );
   }
 }

@@ -28,7 +28,7 @@ export default function CashAccountDetailPage({
   const { tenantSlug, cashAccountId } = use(params);
 
   const { data: account, isLoading } = useCashAccount(cashAccountId);
-  const { data: stats, isLoading: isLoadingStats } = useCashAccountStats(cashAccountId);
+  const { data: stats, isLoading: isLoadingStats } = useCashAccountStats(account?.glAccountId);
   const base = `/${tenantSlug}/accounting/cashandbank`;
 
   return (

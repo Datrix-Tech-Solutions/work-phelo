@@ -2,12 +2,25 @@
 
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSelect';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { BillingSection } from '@/components/organisms/marketing/BillingSection';
+import {
+  ClientBillingErrors,
+  ClientBillingValues,
+  EMPTY_BILLING,
+  resolveEntityTypeId,
+  toBillingInput,
+  validateBilling,
+} from '@/components/molecules/marketing/ClientBillingFields';
 import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
-import { useUpdateClient } from '@/hooks/marketing/useClients';
+import {
+  useBillingOptions,
+  useRaiseClientBilling,
+  useUpdateClient,
+} from '@/hooks/marketing/useClients';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 
@@ -16,7 +29,13 @@ interface Props {
   clientName: string;
   currentBusinessTypeId: string;
   currentSourceTypeId: string;
-  currentBillable: boolean;
+  /** The user it is assigned to now. */
+  currentAssignedUserId: string;
+  currentAssignedUserName?: string | null;
+  /** The client's entity type in Accounting, once it has an entity. */
+  currentEntityTypeId: string | null;
+  /** The client's products a billing transaction can be tagged to. */
+  productOptions: { value: string; label: string }[];
   isOpen: boolean;
   onClose: () => void;
 }
@@ -26,12 +45,19 @@ export function EditClientCompanyModal({
   clientName,
   currentBusinessTypeId,
   currentSourceTypeId,
-  currentBillable,
+  currentAssignedUserId,
+  currentAssignedUserName,
+  currentEntityTypeId,
+  productOptions,
   isOpen,
   onClose,
 }: Props) {
   const toast = useToast();
   const updateClient = useUpdateClient(clientId);
+  const raiseBilling = useRaiseClientBilling(clientId);
+  const { data: billingOptions } = useBillingOptions();
+  // One id per open form, so trying Save again after a failure never sends a second transaction.
+  const [submissionId] = useState(() => crypto.randomUUID());
   const { data: businessTypes = [], isLoading: loadingBusiness } =
     useProspectingSettings('business-types');
   const { data: sourceTypes = [], isLoading: loadingSource } =
@@ -39,7 +65,10 @@ export function EditClientCompanyModal({
   const [companyName, setCompanyName] = useState(clientName);
   const [businessTypeId, setBusinessTypeId] = useState(currentBusinessTypeId);
   const [sourceTypeId, setSourceTypeId] = useState(currentSourceTypeId);
-  const [billable, setBillable] = useState(currentBillable);
+  const [assignedUserId, setAssignedUserId] = useState(currentAssignedUserId);
+  const [raiseTransaction, setRaiseTransaction] = useState(false);
+  const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
+  const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
 
   const businessOptions = useMemo(
     () => businessTypes.map((t) => ({ value: t.id, label: t.name })),
@@ -54,24 +83,64 @@ export function EditClientCompanyModal({
     trimmedName !== clientName ||
     businessTypeId !== currentBusinessTypeId ||
     sourceTypeId !== currentSourceTypeId ||
-    billable !== currentBillable;
+    assignedUserId !== currentAssignedUserId ||
+    raiseTransaction;
 
-  function handleSave() {
-    updateClient.mutate(
-      {
-        companyName: trimmedName,
-        businessTypeId: businessTypeId || null,
-        sourceTypeId: sourceTypeId || null,
-        isBillable: billable,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Company details updated');
-          onClose();
-        },
-        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update company details')),
-      },
+  const isPending = updateClient.isPending || raiseBilling.isPending;
+  // Billed is never edited directly: raising a transaction makes the client Billed.
+  const switchingOn = raiseTransaction;
+
+  async function handleSave() {
+    if (switchingOn) {
+      if (!billingOptions) return;
+      const next = validateBilling(billing, billingOptions, currentEntityTypeId);
+      setBillingErrors(next);
+      if (Object.keys(next).length > 0) return;
+    }
+
+    try {
+      const detailsChanged =
+        trimmedName !== clientName ||
+        businessTypeId !== currentBusinessTypeId ||
+        sourceTypeId !== currentSourceTypeId ||
+        assignedUserId !== currentAssignedUserId;
+      if (detailsChanged) {
+        await updateClient.mutateAsync({
+          companyName: trimmedName,
+          businessTypeId: businessTypeId || null,
+          sourceTypeId: sourceTypeId || null,
+          ...(assignedUserId !== currentAssignedUserId ? { assignedUserId } : {}),
+        });
+      }
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to update company details'));
+      return;
+    }
+
+    if (switchingOn && billingOptions) {
+      try {
+        const input = toBillingInput(billing, billingOptions, currentEntityTypeId);
+        await raiseBilling.mutateAsync({
+          submissionId,
+          ...(currentEntityTypeId
+            ? {}
+            : { entityTypeId: resolveEntityTypeId(billing, billingOptions, null) }),
+          transactionTypeId: input.transactionTypeId,
+          amount: input.amount,
+          ...(input.description ? { description: input.description } : {}),
+          ...(input.productId ? { productId: input.productId } : {}),
+        });
+      } catch (error) {
+        // The company details above are already saved; only the transaction needs another try.
+        toast.error(apiErrorMessage(error, 'Failed to send the transaction'));
+        return;
+      }
+    }
+
+    toast.success(
+      switchingOn ? 'Company details updated and transaction sent' : 'Company details updated',
     );
+    onClose();
   }
 
   return (
@@ -82,13 +151,13 @@ export function EditClientCompanyModal({
       description={clientName}
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose} disabled={updateClient.isPending}>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
           <Button
             onClick={handleSave}
             disabled={!trimmedName || !changed}
-            isLoading={updateClient.isPending}
+            isLoading={isPending}
             loadingText="Saving…"
           >
             Save
@@ -118,11 +187,20 @@ export function EditClientCompanyModal({
           onChange={setSourceTypeId}
           disabled={loadingSource}
         />
-        <ToggleRow
-          label="Billable"
-          description="Mark this client as billable."
-          enabled={billable}
-          onChange={setBillable}
+        <AssignedToSelect
+          record="client"
+          currentName={currentAssignedUserName}
+          value={assignedUserId}
+          onChange={(id) => setAssignedUserId(id || currentAssignedUserId)}
+        />
+        <BillingSection
+          enabled={raiseTransaction}
+          onEnabledChange={setRaiseTransaction}
+          values={billing}
+          onValuesChange={setBilling}
+          errors={billingErrors}
+          productOptions={productOptions}
+          lockedEntityTypeId={currentEntityTypeId}
         />
       </div>
     </Modal>

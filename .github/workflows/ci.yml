@@ -39,6 +39,9 @@ jobs:
       - name: RBAC alignment
         run: npm run check-rbac
 
+      - name: Payroll engine copies
+        run: npm run check-payroll-engine
+
   lint:
     runs-on: ubuntu-latest
     steps:

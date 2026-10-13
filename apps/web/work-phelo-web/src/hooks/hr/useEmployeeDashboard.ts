@@ -1,6 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { UpcomingBirthday } from '@/types/hr';
+import {
+  DepartmentDistribution,
+  PendingActions,
+  RecentActivityEvent,
+  UpcomingBirthday,
+} from '@/types/hr';
 
 export function useEmployeeDashboard() {
   return useQuery({
@@ -12,14 +17,18 @@ export function useEmployeeDashboard() {
 export function useDepartmentDistribution() {
   return useQuery({
     queryKey: ['dashboard-dept-distribution'],
-    queryFn: () => api.get('/hr/dashboard/department-distribution').then((r) => r.data),
+    queryFn: () =>
+      api.get<DepartmentDistribution>('/hr/dashboard/department-distribution').then((r) => r.data),
   });
 }
 
 export function useRecentActivity() {
   return useQuery({
     queryKey: ['dashboard-recent-activity'],
-    queryFn: () => api.get('/hr/dashboard/recent-activity').then((r) => r.data),
+    queryFn: () =>
+      api
+        .get<{ activity: RecentActivityEvent[] }>('/hr/dashboard/recent-activity')
+        .then((r) => r.data),
   });
 }
 
@@ -37,5 +46,12 @@ export function useRecentlyAdded() {
   return useQuery({
     queryKey: ['dashboard-recently-added'],
     queryFn: () => api.get('/hr/dashboard/recently-added').then((r) => r.data),
+  });
+}
+
+export function usePendingActions() {
+  return useQuery({
+    queryKey: ['dashboard-pending-actions'],
+    queryFn: () => api.get<PendingActions>('/hr/dashboard/pending-actions').then((r) => r.data),
   });
 }

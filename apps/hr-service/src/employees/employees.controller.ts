@@ -25,7 +25,13 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { DocumentType } from '../../prisma/generated/client';
 import { EmployeesService } from './employees.service';
+import { DriverLicenceService } from './driver-licence.service';
+import {
+  CreateDriverLicenceDto,
+  UpdateDriverLicenceDto,
+} from './dto/driver-licence.dto';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { BulkImportEmployeesDto } from './dto/bulk-import-employees.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -67,7 +73,10 @@ import {
 @RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class EmployeesController {
-  constructor(private readonly employeesService: EmployeesService) {}
+  constructor(
+    private readonly employeesService: EmployeesService,
+    private readonly driverLicences: DriverLicenceService,
+  ) {}
 
   private assertEmployeeOptionsAccess(user: RequestUser) {
     assertHrAccess(
@@ -218,6 +227,83 @@ export class EmployeesController {
       req.user.tenantId,
       req.user.id,
     );
+  }
+
+  @Get('me/driver-licence')
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
+  @ApiOperation({
+    summary:
+      "The logged-in user's driver's licence and whether it lets them drive",
+  })
+  async myDriverLicence(@Req() req: Request & { user: RequestUser }) {
+    const employeeId = await this.driverLicences.employeeIdForUser(
+      req.user.tenantId,
+      req.user.id,
+    );
+    return this.driverLicences.get(req.user.tenantId, employeeId);
+  }
+
+  @Post('me/driver-licence/image')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: "Upload an image of the logged-in user's driver's licence",
+  })
+  async uploadMyDriverLicenceImage(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    const employeeId = await this.driverLicences.employeeIdForUser(
+      req.user.tenantId,
+      req.user.id,
+    );
+    return this.employeesService.uploadDocument(
+      req.user.tenantId,
+      employeeId,
+      { type: DocumentType.DRIVER_LICENCE },
+      file,
+      req.user,
+    );
+  }
+
+  @Post('me/driver-licence')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
+  @ApiOperation({
+    summary:
+      "Add the logged-in user's driver's licence details (needs the image uploaded first)",
+  })
+  async createMyDriverLicence(
+    @Body() dto: CreateDriverLicenceDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    const employeeId = await this.driverLicences.employeeIdForUser(
+      req.user.tenantId,
+      req.user.id,
+    );
+    return this.driverLicences.create(req.user.tenantId, employeeId, dto);
+  }
+
+  @Patch('me/driver-licence')
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
+  @ApiOperation({
+    summary: "Update the logged-in user's driver's licence details",
+  })
+  async updateMyDriverLicence(
+    @Body() dto: UpdateDriverLicenceDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    const employeeId = await this.driverLicences.employeeIdForUser(
+      req.user.tenantId,
+      req.user.id,
+    );
+    return this.driverLicences.update(req.user.tenantId, employeeId, dto);
   }
 
   @Get(':id')
@@ -653,5 +739,46 @@ export class EmployeesController {
       id,
       documentId,
     );
+  }
+
+  @Get(':id/driver-licence')
+  @RequirePermissions(Permission.MANAGE_DOCUMENTS)
+  @ApiOperation({
+    summary: "An employee's driver's licence and whether it lets them drive",
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  getDriverLicence(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.driverLicences.get(req.user.tenantId, id);
+  }
+
+  @Post(':id/driver-licence')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.MANAGE_DOCUMENTS)
+  @ApiOperation({
+    summary:
+      "Add an employee's driver's licence details (needs the image uploaded first)",
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  createDriverLicence(
+    @Param('id') id: string,
+    @Body() dto: CreateDriverLicenceDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.driverLicences.create(req.user.tenantId, id, dto);
+  }
+
+  @Patch(':id/driver-licence')
+  @RequirePermissions(Permission.MANAGE_DOCUMENTS)
+  @ApiOperation({ summary: "Update an employee's driver's licence details" })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  updateDriverLicence(
+    @Param('id') id: string,
+    @Body() dto: UpdateDriverLicenceDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.driverLicences.update(req.user.tenantId, id, dto);
   }
 }

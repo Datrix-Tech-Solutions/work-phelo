@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { TableButton } from '@/components/atoms/TableButton';
+import { CancelLeaveModal } from '@/components/organisms/dashboard/CancelLeaveModal';
 import { formatDateRange } from '@/lib/formatters';
 import type { LeaveRequest } from '@/types/hr';
 
@@ -42,48 +45,62 @@ function LeaveStatusBadge({ status }: { status: string }) {
 }
 
 export function MyLeavePanel({ isOpen, onClose, onRequestLeave, requests }: MyLeavePanelProps) {
+  const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
+
   return (
-    <SidePanel
-      isOpen={isOpen}
-      onClose={onClose}
-      title="My Leave"
-      description="Your leave request history."
-      width="sm:w-[480px]"
-      footer={
-        <div className="flex justify-end">
-          <Button
-            onClick={() => {
-              onClose();
-              onRequestLeave();
-            }}
-          >
-            Request Leave
-          </Button>
-        </div>
-      }
-    >
-      {requests.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
-          <p className="text-sm text-gray-400">No leave requests yet</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {requests.map((r) => (
-            <div
-              key={r.id}
-              className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+    <>
+      <SidePanel
+        isOpen={isOpen}
+        onClose={onClose}
+        title="My Leave"
+        description="Your leave request history."
+        width="sm:w-[480px]"
+        footer={
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                onClose();
+                onRequestLeave();
+              }}
             >
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{r.leaveTypeName ?? 'Leave'}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {formatDateRange(r.startDate, r.endDate)}
-                </p>
+              Request Leave
+            </Button>
+          </div>
+        }
+      >
+        {requests.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+            <p className="text-sm text-gray-400">No leave requests yet</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {requests.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {r.leaveTypeName ?? 'Leave'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {formatDateRange(r.startDate, r.endDate)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <LeaveStatusBadge status={r.status} />
+                  {r.status === 'PENDING' && (
+                    <TableButton variant="red" onClick={() => setCancelTarget(r)}>
+                      Cancel
+                    </TableButton>
+                  )}
+                </div>
               </div>
-              <LeaveStatusBadge status={r.status} />
-            </div>
-          ))}
-        </div>
-      )}
-    </SidePanel>
+            ))}
+          </div>
+        )}
+      </SidePanel>
+      <CancelLeaveModal request={cancelTarget} onClose={() => setCancelTarget(null)} />
+    </>
   );
 }

@@ -104,6 +104,14 @@ export class InternalUpdateVehicleAssetDto extends InternalTenantDto {
   @IsOptional()
   @IsUUID()
   branchId?: string | null;
+
+  @ApiPropertyOptional({
+    enum: AssetCondition,
+    description: 'The vehicle condition recorded after a trip',
+  })
+  @IsOptional()
+  @IsEnum(AssetCondition)
+  condition?: AssetCondition;
 }
 
 export class InternalVehicleStatusDto extends InternalTenantDto {

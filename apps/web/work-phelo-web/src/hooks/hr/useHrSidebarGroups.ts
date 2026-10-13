@@ -1,26 +1,23 @@
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
-import { HR_NAV_GROUPS } from '@/config/hr-nav';
+import type { NavTab } from '@/components/organisms/shared/TopNav';
+import { HR_NAV_GROUPS, HR_TAB_KEYS } from '@/config/hr-nav';
 import { useAuthStore } from '@/store/auth.store';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useTeamAppraisals } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
 
 /**
- * Builds HR's sidebar groups (Home, Profile, My Team, Modules), resolved to
- * real tenant-scoped hrefs and filtered by permission/enabled-module access.
- *
- * `currentModuleKey` is whichever module the sidebar is being rendered for —
- * `'hr'` when it's HR's own full sidebar, or the module you're currently
- * browsing (e.g. `'accounting'`) when this is the parked HR rail shown
- * alongside another module's sidebar. Either way, the module matching
- * `currentModuleKey` is left out of the Modules list, since you're already
- * looking at it.
+ * Which HR nav entries the current user can reach, keyed by nav item key. Shared by the sidebar and
+ * the top-nav tabs so both agree on what shows.
  */
-export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string): NavGroup[] {
+export function useHrNavAccess(): Record<string, boolean> {
   const user = useAuthStore((s) => s.user);
   const isTenantAdmin = user?.role === 'TENANT_ADMIN';
 
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
+  const canViewHrDashboard = usePermission(Permission.VIEW_HR_DASHBOARD);
+  const canViewHrReports = usePermission(Permission.VIEW_HR_REPORTS);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   // Operations' landing page (reinsurance dashboard) redirects back to /modules
   // for anyone lacking this permission — so a user without it shouldn't see
@@ -49,35 +46,93 @@ export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string)
   const canManageLeaveTypes = usePermission(Permission.MANAGE_LEAVE_TYPES);
   const canAccessLeave = canApproveLeave || isTenantAdmin || canManageLeaveTypes;
 
+  // Recruitment is an HR section (not a separate tenant module), so it's gated by its own
+  // permissions rather than moduleConfig — which the backend still reports as locked.
+  const canReadRecruitmentVacancies = usePermission(Permission.READ_RECRUITMENT_VACANCIES);
+  const canReadRecruitmentCandidates = usePermission(Permission.READ_RECRUITMENT_CANDIDATES);
+  const canAccessRecruitment = canReadRecruitmentVacancies || canReadRecruitmentCandidates;
+
   const moduleConfig = user?.moduleConfig ?? {};
 
   const navAccess: Record<string, boolean> = {
     // The dashboard is a self-service "my" view (my leave, my payslips, clock in/out) —
     // not relevant for a tenant admin, so it's hidden for that role.
     dashboard: !isTenantAdmin,
+    // The organisation dashboard needs its own permission.
+    'hr-dashboard': canViewHrDashboard,
+    // Reports has its own permission, separate from the dashboard's.
+    reports: canViewHrReports,
     profile: canReadOwnProfile,
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,
     payroll: canAccessPayroll,
     appraisal: canAccessAppraisal,
+    // Projects is a per-tenant feature flag rather than a permission.
+    projects: !!user?.featureConfig?.hr?.projects,
     accounting: moduleConfig.accounting ?? false,
     operations: (moduleConfig.operations ?? false) && canViewReinsuranceDashboard,
     marketing: moduleConfig.marketing ?? false,
-    recruitment: moduleConfig.recruitment ?? false,
+    recruitment: canAccessRecruitment,
   };
+
+  return navAccess;
+}
+
+/**
+ * Builds HR's sidebar groups (Home, Profile, My Team, Modules), resolved to
+ * real tenant-scoped hrefs and filtered by permission/enabled-module access.
+ *
+ * `currentModuleKey` is whichever module the sidebar is being rendered for —
+ * `'hr'` when it's HR's own full sidebar, or the module you're currently
+ * browsing (e.g. `'accounting'`) when this is the parked HR rail shown
+ * alongside another module's sidebar. Either way, the module matching
+ * `currentModuleKey` is left out of the Modules list, since you're already
+ * looking at it.
+ */
+export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string): NavGroup[] {
+  const navAccess = useHrNavAccess();
 
   const resolveHref = (href: string) =>
     href.startsWith('/') ? `/${tenantSlug}${href}` : `/${tenantSlug}/hr${href ? `/${href}` : ''}`;
 
-  return HR_NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items
-      .filter((item) => item.key !== currentModuleKey)
-      .map((item) => ({
-        ...item,
-        href: resolveHref(item.href),
-        enabled: item.enabled !== false && (navAccess[item.key] ?? true),
-        active: true,
-      })),
-  }));
+  // Reports and HR Settings belong to HR itself, so the parked rail in another module leaves the
+  // Management group out entirely.
+  const isHrChrome = currentModuleKey === 'hr';
+
+  return HR_NAV_GROUPS.filter((group) => isHrChrome || group.label !== 'Management').map(
+    (group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => item.key !== currentModuleKey)
+        // The section entries are top-nav tabs of HR (see useHrTabs), never part of the sidebar or rail.
+        .filter((item) => !HR_TAB_KEYS.includes(item.key))
+        .map((item) => ({
+          ...item,
+          href: resolveHref(item.href),
+          enabled: item.enabled !== false && (navAccess[item.key] ?? true),
+          active: true,
+        })),
+    }),
+  );
+}
+
+/**
+ * The top-nav tabs for HR's own chrome: the section entries (Hiring, Payroll, Performance, Leave
+ * Management, Project Management) that used to sit in the sidebar's Management group, in the same order
+ * and under the same access rules. Each opens its section's own layout.
+ */
+export function useHrTabs(tenantSlug: string): NavTab[] {
+  const navAccess = useHrNavAccess();
+  const projectLabels = useProjectLabels();
+  return HR_NAV_GROUPS.flatMap((group) => group.items)
+    .filter(
+      (item) =>
+        HR_TAB_KEYS.includes(item.key) && item.enabled !== false && (navAccess[item.key] ?? true),
+    )
+    .map((item) => ({
+      key: item.key,
+      // Projects carries the company's own name for it (set by the super admin).
+      label: item.key === 'projects' ? projectLabels.management : item.label,
+      href: `/${tenantSlug}/hr/${item.href}`,
+    }));
 }

@@ -9,12 +9,20 @@ interface RequestLeaveCardProps {
   /** The employee's Annual Leave balance — the card's stats reflect this one type only. */
   annualBalance?: LeaveBalance;
   onRequestLeave: () => void;
+  /** Number of the employee's requests still awaiting a decision (any leave type). */
+  pendingRequestCount?: number;
+  onViewPending?: () => void;
 }
 
 // Teal — same identity as the "Apply for Leave" quick action.
 const ACCENT = '#0d9488';
 
-export function RequestLeaveCard({ annualBalance, onRequestLeave }: RequestLeaveCardProps) {
+export function RequestLeaveCard({
+  annualBalance,
+  onRequestLeave,
+  pendingRequestCount = 0,
+  onViewPending,
+}: RequestLeaveCardProps) {
   const entitled = annualBalance?.entitled ?? 0;
   const used = annualBalance?.used ?? 0;
   const remaining = annualBalance?.remaining ?? 0;
@@ -73,9 +81,16 @@ export function RequestLeaveCard({ annualBalance, onRequestLeave }: RequestLeave
       )}
 
       {/* Action */}
-      <Button variant="primary" onClick={onRequestLeave} className="w-full">
-        Request leave
-      </Button>
+      <div className="flex gap-3">
+        {pendingRequestCount > 0 && (
+          <Button variant="secondary" onClick={onViewPending} className="flex-1">
+            Pending requests ({pendingRequestCount})
+          </Button>
+        )}
+        <Button variant="primary" onClick={onRequestLeave} className="flex-1">
+          Request leave
+        </Button>
+      </div>
     </div>
   );
 }

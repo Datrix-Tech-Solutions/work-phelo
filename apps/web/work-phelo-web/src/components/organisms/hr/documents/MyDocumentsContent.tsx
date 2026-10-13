@@ -4,6 +4,9 @@ import { useMemo, useState } from 'react';
 import { DocumentFoldersRail } from '@/components/molecules/hr/documents/DocumentFoldersRail';
 import { DocumentManagerPanel } from './DocumentManagerPanel';
 import { UploadPersonalDocumentModal } from './UploadPersonalDocumentModal';
+import { DriverLicenceDetails } from '@/components/molecules/hr/documents/DriverLicenceDetails';
+import { UploadCompanyDocumentModal } from './UploadCompanyDocumentModal';
+import { useDriverLicence, useSaveDriverLicence } from '@/hooks/hr/useDriverLicence';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { useMyDocuments, useUploadMyDocument, useDeleteMyDocument } from '@/hooks/useMyDocuments';
 import { useMyEmployeeDocuments } from '@/hooks/hr/useEmployees';
@@ -16,7 +19,7 @@ import {
   type MyDocument,
 } from './types';
 import type { UserDocument } from '@/hooks/useMyDocuments';
-import type { EmployeeDocument } from '@/types/hr';
+import type { DriverLicenceDetails as LicenceDetails, EmployeeDocument } from '@/types/hr';
 
 function fromUserDocument(doc: UserDocument): MyDocument {
   return {
@@ -44,6 +47,7 @@ function fromEmployeeDocument(doc: EmployeeDocument): MyDocument {
     category:
       doc.type === 'OTHER' && doc.customType ? doc.customType : DOCUMENT_TYPE_LABELS[doc.type],
     previewUrl: doc.url,
+    type: doc.type,
   };
 }
 
@@ -68,6 +72,8 @@ export function MyDocumentsContent() {
   const { data: companyDocsRaw, isLoading: companyLoading } = useMyEmployeeDocuments();
   const { mutate: uploadDocument, isPending: isUploading } = useUploadMyDocument();
   const { mutate: deleteDocument } = useDeleteMyDocument();
+  const { data: licenceView } = useDriverLicence(null);
+  const { mutate: saveLicence, isPending: isSavingLicence } = useSaveDriverLicence(null);
 
   const personalDocs = useMemo(
     () => (personalDocsRaw ?? []).map(fromUserDocument),
@@ -83,9 +89,24 @@ export function MyDocumentsContent() {
   const isLoading = folder === 'personal' ? personalLoading : companyLoading;
 
   const handleUpload = (
-    { file, category }: { file: File; category: string },
+    { file, category, licence }: { file: File; category: string; licence?: LicenceDetails },
     onUploaded: () => void,
   ) => {
+    // A driver's licence is saved as the employee's licence (image and details), not as a
+    // personal document.
+    if (licence) {
+      saveLicence(
+        { file, details: licence, exists: !!licenceView?.licence },
+        {
+          onSuccess: () => {
+            onUploaded();
+            toast.success("Driver's licence saved");
+          },
+          onError: (err) => toast.error(extractError(err, "Failed to save the driver's licence")),
+        },
+      );
+      return;
+    }
     uploadDocument(
       { file, category },
       {
@@ -117,20 +138,47 @@ export function MyDocumentsContent() {
         key={folder}
         documents={documents}
         isLoading={isLoading}
-        allowUpload={folder === 'personal'}
+        // Company documents are HR's, except the employee's own driver's licence.
+        allowUpload
         allowDelete={folder === 'personal'}
         onDelete={handleDelete}
         onSelectionChange={(doc) => {
           if (doc) setRailCollapsed(true);
         }}
-        renderUploadModal={({ isOpen, onClose }) => (
-          <UploadPersonalDocumentModal
-            isOpen={isOpen}
-            onClose={onClose}
-            isUploading={isUploading}
-            onUpload={(input) => handleUpload(input, onClose)}
-          />
-        )}
+        renderDetails={(doc) =>
+          doc.type === 'DRIVER_LICENCE' ? <DriverLicenceDetails scope={null} /> : null
+        }
+        renderUploadModal={({ isOpen, onClose }) =>
+          folder === 'personal' ? (
+            <UploadPersonalDocumentModal
+              isOpen={isOpen}
+              onClose={onClose}
+              isUploading={isUploading || isSavingLicence}
+              onUpload={(input) => handleUpload(input, onClose)}
+            />
+          ) : (
+            <UploadCompanyDocumentModal
+              isOpen={isOpen}
+              onClose={onClose}
+              onlyTypes={['DRIVER_LICENCE']}
+              isUploading={isSavingLicence}
+              onUpload={(input) => {
+                if (!input.licence) return;
+                saveLicence(
+                  { file: input.file, details: input.licence, exists: !!licenceView?.licence },
+                  {
+                    onSuccess: () => {
+                      onClose();
+                      toast.success("Driver's licence saved");
+                    },
+                    onError: (err) =>
+                      toast.error(extractError(err, "Failed to save the driver's licence")),
+                  },
+                );
+              }}
+            />
+          )
+        }
       />
 
       <SuccessModal

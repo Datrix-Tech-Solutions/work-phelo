@@ -66,6 +66,22 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
     moduleKey: 'marketing',
     featurePath: ['marketing', 'leads'],
   },
+  'marketing.clients.billing': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.dashboard': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.targets': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
+  'marketing.targets.all': {
+    moduleKey: 'marketing',
+    featurePath: ['marketing', 'leads'],
+  },
   'marketing.prospects.interactions': {
     moduleKey: 'marketing',
     featurePath: ['marketing', 'leads'],
@@ -83,6 +99,33 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
     featurePath: ['marketing', 'leads'],
   },
   'marketing.fleet': {
+    moduleKey: 'marketing',
+  },
+  'marketing.requests': {
+    moduleKey: 'marketing',
+  },
+  'marketing.requests.all': {
+    moduleKey: 'marketing',
+  },
+  'marketing.appointments.all': {
+    moduleKey: 'marketing',
+  },
+  'marketing.transport-officers': {
+    moduleKey: 'marketing',
+  },
+  'marketing.campaigns': {
+    moduleKey: 'marketing',
+  },
+  'marketing.sms-sender-identities': {
+    moduleKey: 'marketing',
+  },
+  'marketing.domains': {
+    moduleKey: 'marketing',
+  },
+  'marketing.sms-wallet': {
+    moduleKey: 'marketing',
+  },
+  'marketing.sms-credits': {
     moduleKey: 'marketing',
   },
   'operations.reinsurance.dashboard': {

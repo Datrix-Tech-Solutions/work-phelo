@@ -1,15 +1,7 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { MarketingTabRedirect } from '@/components/molecules/marketing/MarketingTabRedirect';
 
-export default function TransportOfficersPage() {
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace(`/${tenantSlug}/marketing/transport-officers/details`);
-  }, [tenantSlug, router]);
-
-  return null;
+export default function Page() {
+  return <MarketingTabRedirect page="transport-officers" />;
 }

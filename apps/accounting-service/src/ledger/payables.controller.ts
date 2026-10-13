@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -16,6 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { QueryTradeSummaryDto } from './dto/trade-summary.dto';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -23,8 +26,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
+import { VoidEntryDto } from './dto/accounting.dto';
 import {
   CreatePayableBillDto,
+  EditPayableBillDto,
+  EditPayableNoteDto,
+  EditPayablePaymentDto,
+  RestorePayableBillDto,
   CreatePayableCreditNoteDto,
   CreatePayablePaymentDto,
   CreatePaymentAllocationDto,
@@ -100,8 +108,11 @@ export class PayablesController {
   @Get('summary')
   @ApiOperation({ summary: 'Get tenant Accounts Payable dashboard summary' })
   @RequirePermissions(AccountingPermission.PAYABLES_VIEW)
-  summary(@Req() request: Request & { user: RequestUser }) {
-    return this.service.summary(request.user.tenantId);
+  summary(
+    @Query() query: QueryTradeSummaryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.summary(request.user.tenantId, query);
   }
 
   @Get('bills/:billId')
@@ -112,6 +123,19 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.getBill(request.user, billId);
+  }
+
+  @Delete('bills/:billId')
+  @ApiOperation({
+    summary: 'Delete a draft vendor bill',
+    description: 'Removes the draft for good. Posted bills are immutable.',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  deleteBillDraft(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftBill(request.user, billId);
   }
 
   @Post('bills/:billId/post')
@@ -126,21 +150,6 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.postBill(request.user, billId);
-  }
-
-  @Post('bills/:billId/reverse')
-  @ApiOperation({
-    summary: 'Reverse a posted vendor bill',
-    description:
-      'Posted bills are immutable. Reversal creates a reversing journal and requires dependent allocations to be reversed first.',
-  })
-  @RequirePermissions(AccountingPermission.PAYABLES_REVERSE)
-  reverseBill(
-    @Param('billId', ParseUUIDPipe) billId: string,
-    @Body() dto: ReversePayableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseBill(request.user, billId, dto);
   }
 
   @Get('bills/:billId/balance')
@@ -191,6 +200,16 @@ export class PayablesController {
     return this.service.getCreditNote(request.user, creditNoteId);
   }
 
+  @Delete('credit-notes/:creditNoteId')
+  @ApiOperation({ summary: 'Delete a draft vendor credit note' })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  deleteCreditNoteDraft(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftCreditNote(request.user, creditNoteId);
+  }
+
   @Post('credit-notes/:creditNoteId/post')
   @ApiOperation({
     summary: 'Post a draft vendor credit note',
@@ -203,17 +222,6 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.postCreditNote(request.user, creditNoteId);
-  }
-
-  @Post('credit-notes/:creditNoteId/reverse')
-  @ApiOperation({ summary: 'Reverse a posted vendor credit note' })
-  @RequirePermissions(AccountingPermission.PAYABLES_REVERSE)
-  reverseCreditNote(
-    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
-    @Body() dto: ReversePayableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseCreditNote(request.user, creditNoteId, dto);
   }
 
   @Post('credit-notes/:creditNoteId/allocations')
@@ -294,6 +302,19 @@ export class PayablesController {
     return this.service.reversePayment(request.user, paymentId, dto);
   }
 
+  @Post('payments/:paymentId/void-reversal')
+  @ApiOperation({
+    summary: 'Void the reversal of a payment, returning it to posted',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_REVERSE)
+  voidPaymentReversal(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidPaymentReversal(request.user, paymentId, dto);
+  }
+
   @Post('payments/:paymentId/allocations')
   @ApiOperation({
     summary: 'Allocate posted vendor payment balance to a posted bill',
@@ -349,5 +370,122 @@ export class PayablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.vendorBalance(request.user.tenantId, vendorId);
+  }
+
+  @Patch('bills/:billId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted bill while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  editPostedBill(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Body() dto: EditPayableBillDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedBill(request.user, billId, dto);
+  }
+
+  @Post('bills/:billId/void')
+  @ApiOperation({
+    summary: 'Void a posted bill while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  voidBill(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidBill(request.user, billId, dto);
+  }
+
+  @Post('bills/:billId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided bill, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  restoreBill(
+    @Param('billId', ParseUUIDPipe) billId: string,
+    @Body() dto: RestorePayableBillDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreBill(request.user, billId, dto);
+  }
+
+  @Patch('credit-notes/:creditNoteId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted debit note while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  editPostedCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: EditPayableNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Post('credit-notes/:creditNoteId/void')
+  @ApiOperation({
+    summary: 'Void a posted debit note while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  voidCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Post('credit-notes/:creditNoteId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided debit note, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  restoreCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: EditPayableNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Patch('payments/:paymentId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted payment while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  editPostedPayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: EditPayablePaymentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedPayment(request.user, paymentId, dto);
+  }
+
+  @Post('payments/:paymentId/void')
+  @ApiOperation({
+    summary: 'Void a posted payment while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  voidPayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidPayment(request.user, paymentId, dto);
+  }
+
+  @Post('payments/:paymentId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided payment, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  restorePayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: EditPayablePaymentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restorePayment(request.user, paymentId, dto);
   }
 }

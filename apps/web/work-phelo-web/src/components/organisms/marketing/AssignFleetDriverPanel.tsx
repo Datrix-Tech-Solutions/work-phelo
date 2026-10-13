@@ -75,11 +75,16 @@ export function AssignFleetDriverPanel({ isOpen, onClose, vehicle }: Props) {
     >
       <SearchSelect
         label="Driver"
-        placeholder="Select an employee"
+        placeholder="Select a driver"
         options={driverOptions}
         value={employeeId}
         onChange={setEmployeeId}
       />
+      {options && driverOptions.length === 0 && (
+        <p className="text-xs text-amber-600 mt-2">
+          No transport officers yet. Add drivers under Transport Officers first.
+        </p>
+      )}
     </SidePanel>
   );
 }

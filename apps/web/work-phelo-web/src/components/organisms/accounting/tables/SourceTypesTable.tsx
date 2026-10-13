@@ -107,7 +107,7 @@ export function SourceTypesTable() {
         columns={columns}
         data={sorted}
         isLoading={isLoading}
-        emptyMessage="No sources linked yet — entries show up here automatically once another module (like Payroll) completes its own accounting setup."
+        emptyMessage="No sources yet — a source for each module you use shows up here automatically. Set it up with Manage, then link it."
         noInternalScroll
         onRowClick={(row) =>
           router.push(`/${tenantSlug}/accounting/settings/source-types/${row.id}`)

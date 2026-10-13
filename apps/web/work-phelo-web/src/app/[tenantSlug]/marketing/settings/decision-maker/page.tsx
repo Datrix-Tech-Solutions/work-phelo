@@ -19,6 +19,7 @@ import {
   useUpdateProspectingSetting,
 } from '@/hooks/marketing/useProspectingSettings';
 import { useToast } from '@/hooks/useToast';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { apiErrorMessage } from '@/lib/apiError';
 
 const EMPTY_FORM: DecisionMakerFields = { name: '', description: '' };
@@ -44,6 +45,17 @@ export default function DecisionMakerPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<DecisionMakerFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<DecisionMakerFields>>({});
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop;
+  // Continue clears the form for the next entry.
+  const entry = useMultiEntryPanel({
+    isOpen: panelOpen,
+    onStop: () => setPanelOpen(false),
+    onContinue: () => {
+      setForm(EMPTY_FORM);
+      setErrors({});
+    },
+  });
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [inUseMessage, setInUseMessage] = useState<string | null>(null);
@@ -94,7 +106,10 @@ export default function DecisionMakerPage() {
         {
           onSuccess: () => {
             toast.success('Decision maker added');
-            setPanelOpen(false);
+            entry.finishSave(
+              { title: 'Decision Maker Added!', message: `${name} has been added.` },
+              () => setPanelOpen(false),
+            );
           },
           onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add decision maker')),
         },
@@ -174,6 +189,7 @@ export default function DecisionMakerPage() {
       <SidePanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
+        {...(panelMode === 'add' ? entry.panelProps : {})}
         title={panelMode === 'add' ? 'Add Decision Maker' : 'Edit Decision Maker'}
         footer={
           <div className="flex items-center justify-end gap-3">

@@ -1,25 +1,37 @@
 'use client';
 
+import type { ClientDetailProduct } from '@/types/marketing';
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ClientBreadcrumb } from '@/components/molecules/marketing/ClientBreadcrumb';
-import { ClientProductCard } from '@/components/molecules/marketing/ClientProductCard';
+import {
+  ClientProductCard,
+  commissionOn,
+} from '@/components/molecules/marketing/ClientProductCard';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
 import { ProspectInteractionTimeline } from '@/components/molecules/marketing/ProspectInteractionTimeline';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
 import { AddClientProductModal } from '@/components/organisms/marketing/AddClientProductModal';
-import { ChangeClientDecisionMakerModal } from '@/components/organisms/marketing/ChangeClientDecisionMakerModal';
+import { EditPrimaryContactModal } from '@/components/organisms/marketing/EditPrimaryContactModal';
 import { ChangeClientLocationModal } from '@/components/organisms/marketing/ChangeClientLocationModal';
+import { ClientBillingModal } from '@/components/organisms/marketing/ClientBillingModal';
+import { ClientTransactionsTab } from '@/components/organisms/marketing/ClientTransactionsTab';
 import { EditClientCompanyModal } from '@/components/organisms/marketing/EditClientCompanyModal';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { useAuthStore } from '@/store/auth.store';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { TabBar } from '@/components/molecules/shared/TabBar';
-import { useClient, useDeleteClient } from '@/hooks/marketing/useClients';
+import {
+  useClient,
+  useClientBillingSummary,
+  useDeleteClient,
+  useUpdateClient,
+} from '@/hooks/marketing/useClients';
 import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -36,7 +48,7 @@ function formatDate(value: string | null): string {
   });
 }
 
-type ClientTab = 'products' | 'interactions';
+type ClientTab = 'products' | 'interactions' | 'transactions';
 
 export default function ClientDetailPage() {
   const { tenantSlug, id } = useParams<{ tenantSlug: string; id: string }>();
@@ -44,12 +56,26 @@ export default function ClientDetailPage() {
   const toast = useToast();
 
   const { data: client, isLoading, isError } = useClient(id);
+  const updateClient = useUpdateClient(id);
   const deleteClient = useDeleteClient();
-  const canEdit = useAnyPermissionRules(['marketing.clients:EDIT', 'marketing.clients.all:EDIT']);
-  const canAddFollowUp = useAnyPermissionRules([
+  // A client's assignee manages it - edit, follow-ups, billing - without any permission; the
+  // permissions only extend that to clients assigned to someone else. Deleting always needs one.
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isMine = !!client && client.assignedUserId === currentUserId;
+  const canViewBilling = true;
+  const hasBillingPermission = useAnyPermissionRules(['marketing.clients.billing:CREATE']);
+  const canBill = isMine || hasBillingPermission;
+  const { data: billingSummary } = useClientBillingSummary(id, canViewBilling);
+  const hasEditPermission = useAnyPermissionRules([
+    'marketing.clients:EDIT',
+    'marketing.clients.all:EDIT',
+  ]);
+  const canEdit = isMine || hasEditPermission;
+  const hasFollowUpPermission = useAnyPermissionRules([
     'marketing.prospects.interactions:CREATE',
     'marketing.prospects.interactions.all:CREATE',
   ]);
+  const canAddFollowUp = isMine || hasFollowUpPermission;
   const canDelete = useAnyPermissionRules([
     'marketing.clients:DELETE',
     'marketing.clients.all:DELETE',
@@ -58,9 +84,10 @@ export default function ClientDetailPage() {
   const [activeTab, setActiveTab] = useState<ClientTab>('products');
   const [addingProduct, setAddingProduct] = useState(false);
   const [addingFollowUp, setAddingFollowUp] = useState(false);
+  const [billingOpen, setBillingOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
-  const [changingDecisionMaker, setChangingDecisionMaker] = useState(false);
+  const [editingContact, setEditingContact] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const listHref = `/${tenantSlug}/marketing/clients`;
@@ -90,14 +117,38 @@ export default function ClientDetailPage() {
     null,
   );
   const purchased = client.products.filter((p) => p.status === 'PURCHASED').length;
+  const achievedByProduct = new Map(
+    (billingSummary?.products ?? []).map((p) => [p.productId, p.achievedRevenue]),
+  );
+  // Only the rate is stored on a product; commission is derived from it.
+  const sumCommission = (amountFor: (p: ClientDetailProduct) => string | null | undefined) => {
+    let total = 0;
+    let any = false;
+    for (const p of client.products) {
+      const commission = commissionOn(
+        p.commissionRate != null ? Number(p.commissionRate) : null,
+        amountFor(p),
+      );
+      if (commission != null) {
+        total += commission;
+        any = true;
+      }
+    }
+    return any ? total : null;
+  };
+  const totalAchievedCommission = sumCommission((p) => achievedByProduct.get(p.product.id));
+  // A transaction can be tagged to any product the client has, except one it isn't interested in.
+  const billingProductOptions = client.products
+    .filter((p) => p.status !== 'UNINTERESTED')
+    .map((p) => ({ value: p.product.id, label: p.product.name }));
 
   const menuItems = [
     ...(canEdit
       ? [
-          { label: 'Add Product', onClick: () => setAddingProduct(true) },
+          { label: 'Add Product/Service', onClick: () => setAddingProduct(true) },
           { label: 'Edit Company Details', onClick: () => setEditingCompany(true) },
           { label: 'Change Location', onClick: () => setChangingLocation(true) },
-          { label: 'Change Decision Maker', onClick: () => setChangingDecisionMaker(true) },
+          { label: 'Edit Primary Contact', onClick: () => setEditingContact(true) },
         ]
       : []),
     ...(canDelete
@@ -129,7 +180,7 @@ export default function ClientDetailPage() {
         title="Overview"
         headerExtra={
           <TypeChip
-            label={client.isBillable ? 'Billable' : 'Non-billable'}
+            label={client.isBillable ? 'Billed' : 'Not billed'}
             color={client.isBillable ? 'green' : 'purple'}
           />
         }
@@ -138,6 +189,7 @@ export default function ClientDetailPage() {
           <DetailField label="Company Name" value={client.companyName} />
           <DetailField label="Type of Business" value={client.businessType?.name} />
           <DetailField label="Source Type" value={client.sourceType?.name} />
+          <DetailField label="Assigned To" value={client.assignedUserName} />
           <DetailField label="Location" value={client.location.label} />
           <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
@@ -147,10 +199,14 @@ export default function ClientDetailPage() {
             label={client.convertedAt ? 'Converted On' : 'Date Created'}
             value={formatDate(client.convertedAt ?? client.createdAt)}
           />
-          <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
-          <DetailField label="Achieved Revenue" value={formatMoney(client.achievedRevenue)} />
+          <DetailField label="Last Follow up" value={formatDate(lastInteraction)} />
           <DetailField
-            label="Products"
+            label="Achieved Revenue"
+            value={formatMoney(billingSummary?.achievedRevenue)}
+          />
+          <DetailField label="Achieved Commission" value={formatMoney(totalAchievedCommission)} />
+          <DetailField
+            label="Products/Services"
             value={
               client.products.length === 0
                 ? '—'
@@ -166,8 +222,9 @@ export default function ClientDetailPage() {
 
       <TabBar
         tabs={[
-          { key: 'products', label: 'Products / Services' },
+          { key: 'products', label: 'Products/Services' },
           { key: 'interactions', label: 'Follow-ups' },
+          ...(canViewBilling ? [{ key: 'transactions', label: 'Transaction History' }] : []),
         ]}
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as ClientTab)}
@@ -176,8 +233,13 @@ export default function ClientDetailPage() {
       {activeTab === 'products' && (
         <DataCardGrid
           data={client.products}
-          renderCard={(product) => <ClientProductCard product={product} />}
-          emptyMessage="No products on record"
+          renderCard={(product) => (
+            <ClientProductCard
+              product={product}
+              achievedRevenue={achievedByProduct.get(product.product.id)}
+            />
+          )}
+          emptyMessage="No products/services on record"
           currentPage={1}
           totalPages={0}
           onPageChange={() => {}}
@@ -189,6 +251,24 @@ export default function ClientDetailPage() {
           interactions={client.interactions}
           addLabel="Add Follow-up"
           onAdd={canAddFollowUp ? () => setAddingFollowUp(true) : undefined}
+        />
+      )}
+
+      {activeTab === 'transactions' && canViewBilling && (
+        <ClientTransactionsTab
+          clientId={id}
+          onNew={canBill ? () => setBillingOpen(true) : undefined}
+        />
+      )}
+
+      {billingOpen && (
+        <ClientBillingModal
+          clientId={id}
+          clientName={client.companyName}
+          entityTypeId={client.accountingEntityTypeId}
+          productOptions={billingProductOptions}
+          isOpen
+          onClose={() => setBillingOpen(false)}
         />
       )}
 
@@ -207,11 +287,14 @@ export default function ClientDetailPage() {
 
       {editingCompany && (
         <EditClientCompanyModal
+          currentAssignedUserId={client.assignedUserId}
+          currentAssignedUserName={client.assignedUserName}
           clientId={id}
           clientName={client.companyName}
           currentBusinessTypeId={client.businessType?.id ?? ''}
           currentSourceTypeId={client.sourceType?.id ?? ''}
-          currentBillable={client.isBillable}
+          currentEntityTypeId={client.accountingEntityTypeId}
+          productOptions={billingProductOptions}
           isOpen
           onClose={() => setEditingCompany(false)}
         />
@@ -227,14 +310,31 @@ export default function ClientDetailPage() {
         />
       )}
 
-      {changingDecisionMaker && (
-        <ChangeClientDecisionMakerModal
-          clientId={id}
-          clientName={client.companyName}
-          currentName={primaryContact?.name ?? ''}
-          currentRoleId={primaryContact?.decisionMaker?.id ?? ''}
+      {editingContact && (
+        <EditPrimaryContactModal
+          companyName={client.companyName}
+          current={{
+            name: primaryContact?.name ?? '',
+            phone: primaryContact?.phone ?? null,
+            email: primaryContact?.email ?? null,
+            roleId: primaryContact?.decisionMaker?.id ?? '',
+          }}
           isOpen
-          onClose={() => setChangingDecisionMaker(false)}
+          isSaving={updateClient.isPending}
+          onClose={() => setEditingContact(false)}
+          onSave={(changes) =>
+            updateClient.mutate(
+              { primaryContact: changes },
+              {
+                onSuccess: () => {
+                  toast.success('Primary contact updated');
+                  setEditingContact(false);
+                },
+                onError: (error) =>
+                  toast.error(apiErrorMessage(error, 'Failed to update primary contact')),
+              },
+            )
+          }
         />
       )}
 
@@ -252,7 +352,7 @@ export default function ClientDetailPage() {
         <ConfirmDeleteProspectModal
           title="Delete Client"
           name={client.companyName}
-          consequence="removes its contacts and products, and the interactions recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
+          consequence="removes its contacts and products/services, and the interactions recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
           isDeleting={deleteClient.isPending}
           onConfirm={handleDelete}
           onCancel={() => setConfirmingDelete(false)}

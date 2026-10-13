@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -26,6 +27,12 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
 import { CashbookService } from './cashbook.service';
+import { VoidEntryDto } from './dto/accounting.dto';
+import {
+  EditPostedCashbookDto,
+  RejectDraftDto,
+  UpdateCashbookDraftDto,
+} from './dto/draft-actions.dto';
 import {
   CreateCashAccountDto,
   CreateCashbookAdjustmentDto,
@@ -206,6 +213,105 @@ export class CashbookController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.createAdjustment(request.user, dto);
+  }
+
+  @Patch('cashbook/:transactionId')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Complete a draft direct receipt or payment',
+    description:
+      'Changes the date, cash account, settlement method, account and references of a draft. The amount, quantity and unit price are fixed when it is raised and cannot be changed.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  updateDraftTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: UpdateCashbookDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.updateDraftTransaction(
+      request.user,
+      transactionId,
+      dto,
+    );
+  }
+
+  @Delete('cashbook/:transactionId')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Delete a draft direct receipt, payment or transfer',
+    description:
+      'Removes the draft for good. Posted entries are immutable. An entry raised by another module is rejected instead.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  deleteDraftTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftTransaction(request.user, transactionId);
+  }
+
+  @Patch('cashbook/:transactionId/posted')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Edit a posted receipt, payment or contra transaction',
+    description:
+      'Allowed while the entry’s fiscal period is open. The entry keeps its number and its journal is rewritten.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  editPostedTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: EditPostedCashbookDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedTransaction(request.user, transactionId, dto);
+  }
+
+  @Post('cashbook/:transactionId/void')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Void a posted cashbook entry while its period is open',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  voidPostedTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidPostedTransaction(request.user, transactionId, dto);
+  }
+
+  @Post('cashbook/:transactionId/restore')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Restore a voided cashbook entry, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  restoreVoidedTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: EditPostedCashbookDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreVoidedTransaction(
+      request.user,
+      transactionId,
+      dto,
+    );
+  }
+
+  @Post('cashbook/:transactionId/reject')
+  @ApiTags('Accounting - Cashbook')
+  @ApiOperation({
+    summary: 'Reject a draft direct receipt or payment',
+    description:
+      'Marks the draft REJECTED with a reason. It never posts, keeps its record, and the module that raised it is told.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  rejectTransaction(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: RejectDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.rejectTransaction(request.user, transactionId, dto);
   }
 
   @Post('cashbook/:transactionId/post')

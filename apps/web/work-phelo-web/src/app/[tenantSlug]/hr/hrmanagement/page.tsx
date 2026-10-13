@@ -46,8 +46,9 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
       return;
     }
 
+    // Payroll-only users have no settings page of their own here; company policies are open to all.
     if (canManagePayroll) {
-      router.replace(`/${tenantSlug}/hr/hrmanagement/companyPolicies/finances`);
+      router.replace(`/${tenantSlug}/hr/hrmanagement/companyPolicies`);
     }
   }, [
     canReadDepartments,

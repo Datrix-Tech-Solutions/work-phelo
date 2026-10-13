@@ -12,16 +12,18 @@ export function assertNotificationRuntimeEnv(): void {
     .trim()
     .toLowerCase();
 
-  if (smsProvider !== 'termii' && smsProvider !== 'pilosms') {
+  if (
+    smsProvider !== 'termii' &&
+    smsProvider !== 'pilosms' &&
+    smsProvider !== 'sasusync' &&
+    smsProvider !== 'agoosms'
+  ) {
     throw new Error(
-      `Unsupported SMS_PROVIDER "${process.env.SMS_PROVIDER}". Expected "termii" or "pilosms".`,
+      `Unsupported SMS_PROVIDER "${process.env.SMS_PROVIDER}". Expected "termii", "pilosms", "sasusync", or "agoosms".`,
     );
   }
 
-  const providerRequiredEnvVars =
-    smsProvider === 'termii'
-      ? ['TERMII_API_KEY', 'TERMII_SENDER_ID']
-      : ['PILOSMS_API_KEY', 'PILOSMS_SENDER_ID'];
+  const providerRequiredEnvVars = providerEnvVars(smsProvider);
   const missing = [
     ...notificationRequiredEnvVars,
     ...providerRequiredEnvVars,
@@ -32,6 +34,26 @@ export function assertNotificationRuntimeEnv(): void {
       `Notification service missing required environment variables: ${missing.join(', ')}`,
     );
   }
+}
+
+function providerEnvVars(smsProvider: string): string[] {
+  if (smsProvider === 'termii') {
+    return ['TERMII_API_KEY', 'TERMII_SENDER_ID'];
+  }
+
+  if (smsProvider === 'pilosms') {
+    return ['PILOSMS_API_KEY', 'PILOSMS_SENDER_ID'];
+  }
+
+  if (smsProvider === 'sasusync') {
+    return ['SASUSYNC_API_KEY', 'SASUSYNC_SENDER_ID'];
+  }
+
+  if (smsProvider === 'agoosms') {
+    return ['AGOOSMS_API_KEY'];
+  }
+
+  return [];
 }
 
 if (require.main === module) {

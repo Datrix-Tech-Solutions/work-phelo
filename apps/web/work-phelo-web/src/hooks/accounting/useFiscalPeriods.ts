@@ -115,3 +115,21 @@ export function useCloseFiscalPeriod() {
 export function useLockFiscalPeriod() {
   return useFiscalPeriodStatusMutation('lock');
 }
+
+/**
+ * Whether a date falls in a fiscal period that is still open. Posted entries can only be edited,
+ * voided or restored while this is true; the server enforces it, this just hides what can't work.
+ */
+export function usePeriodOpenCheck() {
+  const { data: periods = [] } = useFiscalPeriods();
+  return (date: string | null | undefined) => {
+    if (!date) return false;
+    const day = date.slice(0, 10);
+    return periods.some(
+      (period) =>
+        period.status === 'OPEN' &&
+        day >= period.startDate.slice(0, 10) &&
+        day <= period.endDate.slice(0, 10),
+    );
+  };
+}

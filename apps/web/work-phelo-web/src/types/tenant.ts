@@ -15,6 +15,8 @@ export interface Tenant {
   createdAt: string;
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;
+  /** Company-chosen display names for module features, singular (e.g. { projects: 'Case' }). */
+  labelConfig?: Record<string, string>;
 }
 
 export interface RegisterTenantPayload {

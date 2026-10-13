@@ -119,6 +119,13 @@ export function JournalEntryDetailsSection({ form, entryType }: JournalEntryDeta
   );
   const isGeneratingLines = isClosing ? isLoadingIncome : isOpening ? isLoadingTrial : false;
 
+  // Prefills the base currency once it is known, unless a currency is already set (e.g. when
+  // correcting an entry).
+  const baseCurrency = config?.baseCurrency;
+  useEffect(() => {
+    if (baseCurrency && !getValues('currency')) setValue('currency', baseCurrency);
+  }, [baseCurrency, getValues, setValue]);
+
   // Generates the lines once the year, its report and the offsetting account are all known.
   // Regenerates only when one of those changes, so hand edits survive a background refetch.
   const generatedFor = useRef('');

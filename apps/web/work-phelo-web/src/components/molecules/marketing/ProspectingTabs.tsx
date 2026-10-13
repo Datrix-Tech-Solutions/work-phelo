@@ -1,6 +1,7 @@
 'use client';
 
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { useMarketingAccess } from '@/hooks/marketing/useMarketingAccess';
 
 interface Props {
   base: string;
@@ -10,7 +11,7 @@ interface Props {
 export function ProspectingTabs({ base, className }: Props) {
   const tabs = [
     { key: 'sales-pipeline', label: 'Sales Pipeline', href: `${base}/sales-pipeline` },
-    { key: 'product', label: 'Product', href: `${base}/product` },
+    { key: 'product', label: 'Product/Service', href: `${base}/product` },
     { key: 'decision-maker', label: 'Decision Maker', href: `${base}/decision-maker` },
     { key: 'source-type', label: 'Source Type', href: `${base}/source-type` },
     { key: 'interaction-medium', label: 'Interaction Medium', href: `${base}/interaction-medium` },
@@ -21,5 +22,8 @@ export function ProspectingTabs({ base, className }: Props) {
     },
   ];
 
-  return <TabBar tabs={tabs} className={className} />;
+  const { canSeeTab } = useMarketingAccess();
+  const visible = tabs.filter((tab) => canSeeTab('settings', tab.key));
+
+  return <TabBar tabs={visible} className={className} />;
 }

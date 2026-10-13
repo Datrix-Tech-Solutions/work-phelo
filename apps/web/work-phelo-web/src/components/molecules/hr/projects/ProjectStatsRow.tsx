@@ -1,5 +1,6 @@
 import { ClipboardList, CheckCircle, Layers } from 'lucide-react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import type { ModuleLabels } from '@/lib/moduleLabels';
 
 interface ProjectStatsRowProps {
   isLoading: boolean;
@@ -7,6 +8,7 @@ interface ProjectStatsRowProps {
   active: number;
   completed: number;
   planning: number;
+  labels: ModuleLabels;
 }
 
 export function ProjectStatsRow({
@@ -15,18 +17,19 @@ export function ProjectStatsRow({
   active,
   completed,
   planning,
+  labels,
 }: ProjectStatsRowProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
       <KpiCard
-        label="Total Projects"
+        label={`Total ${labels.plural}`}
         value={total}
         icon={Layers}
         iconColor="#22c55e"
         isLoading={isLoading}
       />
       <KpiCard
-        label="Active Projects"
+        label={`Active ${labels.plural}`}
         value={active}
         icon={ClipboardList}
         iconColor="#3b82f6"

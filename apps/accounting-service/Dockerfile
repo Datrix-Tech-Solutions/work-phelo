@@ -5,10 +5,12 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/types ./packages/types
 COPY packages/config ./packages/config
+COPY packages/internal-auth ./packages/internal-auth
 COPY apps/accounting-service ./apps/accounting-service
 RUN npm ci
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/config
+RUN npm run build --workspace=packages/internal-auth
 RUN npm run build --workspace=apps/accounting-service
 
 FROM node:20-alpine AS runner
@@ -19,9 +21,11 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json ./
 COPY --from=builder /app/packages/types/package.json ./packages/types/
 COPY --from=builder /app/packages/config/package.json ./packages/config/
+COPY --from=builder /app/packages/internal-auth/package.json ./packages/internal-auth/
 COPY --from=builder /app/apps/accounting-service/package.json ./apps/accounting-service/
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
+COPY --from=builder /app/packages/internal-auth/dist ./packages/internal-auth/dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/accounting-service/prisma ./apps/accounting-service/prisma
 COPY --from=builder /app/apps/accounting-service/dist ./apps/accounting-service/dist

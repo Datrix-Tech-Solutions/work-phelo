@@ -1,77 +1,78 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
-import {
-  AppointmentCard,
-  Appointment,
-  APPOINTMENT_STATUS_PILL,
-} from '@/components/molecules/marketing/AppointmentCard';
-import { AppointmentFilterBar } from '@/components/molecules/marketing/AppointmentFilterBar';
+import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   NewAppointmentForm,
   NewAppointmentFields,
   NewAppointmentErrors,
 } from '@/components/molecules/marketing/NewAppointmentForm';
+import { AppointmentDetailPanel } from '@/components/organisms/marketing/AppointmentDetailPanel';
+import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
+import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
 import { AppointmentsPanel } from '@/components/organisms/marketing/AppointmentsPanel';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { TabBar } from '@/components/molecules/shared/TabBar';
-import { useProspects } from '@/hooks/marketing/useProspects';
-import { formatDate } from '@/lib/formatters';
+import {
+  useAppointment,
+  useAppointmentFormOptions,
+  useCreateAppointment,
+} from '@/hooks/marketing/useAppointments';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-
-const PAGE_SIZE = 12;
-
-type MobileTab = 'appointments' | 'upcoming';
-
-const MOBILE_TABS = [
-  { key: 'appointments' as const, label: 'Appointments' },
-  { key: 'upcoming' as const, label: 'Upcoming Appointments' },
-];
+import { useAuthStore } from '@/store/auth.store';
+import type { Appointment } from '@/types/marketing';
 
 const EMPTY_FORM: NewAppointmentFields = {
   prospectId: '',
   date: '',
   startTime: '',
   endTime: '',
-  manager: '',
+  marketerId: '',
   comment: '',
 };
 
 export default function AppointmentsPage() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
-  const [page, setPage] = useState(1);
+  const toast = useToast();
+  const user = useAuthStore((s) => s.user);
+  const router = useRouter();
+  const pathname = usePathname();
+  const [viewing, setViewing] = useState<Appointment | null>(null);
+
+  // A notification links here with ?appointmentId=…, which opens that appointment's details.
+  const linkedId = useSearchParams().get('appointmentId');
+  const { data: linked } = useAppointment(linkedId ?? undefined);
+  const detail = viewing ?? linked ?? null;
+
+  function closeDetail() {
+    setViewing(null);
+    if (linkedId) router.replace(pathname);
+  }
+
+  // The appointment a vehicle is being requested for; the request form is open while this is set.
+  const [transportFor, setTransportFor] = useState<Appointment | null>(null);
+  const [followUpFor, setFollowUpFor] = useState<Appointment | null>(null);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState<NewAppointmentFields>(EMPTY_FORM);
   const [errors, setErrors] = useState<NewAppointmentErrors>({});
-  const [mobileTab, setMobileTab] = useState<MobileTab>('appointments');
-
   const [prospectSearch, setProspectSearch] = useState('');
-  const { data: prospectsPage } = useProspects({
-    limit: 100,
-    search: prospectSearch || undefined,
-  });
-  const prospectOptions = useMemo(
-    () => (prospectsPage?.data ?? []).map((p) => ({ value: p.id, label: p.companyName })),
-    [prospectsPage],
+
+  // Who can be the marketer, and that marketer's prospects — the server decides what this caller
+  // may pick, so someone who can only book for themselves gets just themselves.
+  const { data: options } = useAppointmentFormOptions(
+    { marketerUserId: form.marketerId || undefined, search: prospectSearch || undefined },
+    panelOpen,
   );
-  // Appointments are still local state, so keep the chosen prospect's name alongside its id.
-  const [prospectLabels, setProspectLabels] = useState<Record<string, string>>({});
+  const marketerOptions = (options?.marketers ?? []).map((m) => ({ value: m.id, label: m.name }));
+  const prospectOptions = (options?.prospects ?? []).map((p) => ({ value: p.id, label: p.name }));
 
-  const filtered = appointments
-    .filter((a) => a.prospectName.toLowerCase().includes(search.toLowerCase()))
-    .filter((a) => !dateFilter || a.date === dateFilter);
+  const createAppointment = useCreateAppointment();
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  function openNew() {
-    setForm(EMPTY_FORM);
+  function openNew(date?: string) {
+    setForm({ ...EMPTY_FORM, date: date ?? '', marketerId: user?.id ?? '' });
     setErrors({});
     setProspectSearch('');
     setPanelOpen(true);
@@ -83,93 +84,63 @@ export default function AppointmentsPage() {
 
   function validate(): boolean {
     const next: NewAppointmentErrors = {};
+    if (!form.marketerId) next.marketerId = 'Marketer is required.';
     if (!form.prospectId) next.prospectId = 'Prospect is required.';
     if (!form.date) next.date = 'Date is required.';
     if (!form.startTime) next.startTime = 'Start time is required.';
-    if (!form.endTime) next.endTime = 'End time is required.';
     if (form.startTime && form.endTime && form.endTime <= form.startTime) {
       next.endTime = 'End time must be after start time.';
     }
-    if (!form.manager.trim()) next.manager = 'Manager is required.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!validate()) return;
-    setAppointments((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        prospectName: prospectLabels[form.prospectId] ?? '',
+    try {
+      await createAppointment.mutateAsync({
+        prospectId: form.prospectId,
         date: form.date,
         startTime: form.startTime,
-        endTime: form.endTime,
-        manager: form.manager,
-        comment: form.comment,
-        status: 'scheduled',
-      },
-    ]);
-    setPanelOpen(false);
+        ...(form.endTime ? { endTime: form.endTime } : {}),
+        marketerUserId: form.marketerId,
+        ...(form.comment.trim() ? { comment: form.comment.trim() } : {}),
+      });
+      toast.success('Appointment requested');
+      setPanelOpen(false);
+    } catch (err) {
+      toast.error(extractError(err));
+    }
   }
 
   return (
-    <div className={cn(pageContent, 'flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto')}>
-      <h1 className="text-xl font-bold text-gray-900 shrink-0">Appointments</h1>
+    <div className={cn(pageContent, 'flex flex-col gap-3 flex-1 min-h-0')}>
+      <AppointmentsPanel onNew={openNew} onSelectAppointment={setViewing} />
 
-      <TabBar
-        tabs={MOBILE_TABS}
-        activeTab={mobileTab}
-        onTabChange={(t) => setMobileTab(t as MobileTab)}
-        className="lg:hidden"
+      <AppointmentDetailPanel
+        key={detail?.id ?? 'none'}
+        appointment={detail}
+        onClose={closeDetail}
+        onRequestTransport={(appointment) => {
+          closeDetail();
+          setTransportFor(appointment);
+        }}
+        onCompleted={(appointment) => {
+          if (appointment.prospectId) setFollowUpFor(appointment);
+        }}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className={cn('lg:col-span-3', mobileTab !== 'appointments' && 'hidden lg:block')}>
-          <DataCardGrid
-            data={paginated}
-            skeletonCount={6}
-            searchPlaceholder="Search by prospect..."
-            searchValue={search}
-            onSearch={(q) => {
-              setSearch(q);
-              setPage(1);
-            }}
-            extraFilters={
-              <AppointmentFilterBar
-                dateFilter={dateFilter}
-                onDateChange={(v) => {
-                  setDateFilter(v);
-                  setPage(1);
-                }}
-                showClear={!!dateFilter}
-                onClear={() => {
-                  setDateFilter('');
-                  setPage(1);
-                }}
-              />
-            }
-            actionButton={{ label: 'New Appointment', onClick: openNew }}
-            emptyMessage="No appointments found"
-            currentPage={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            renderCard={(appt) => (
-              <AppointmentCard
-                prospectName={appt.prospectName}
-                date={formatDate(appt.date)}
-                time={`${appt.startTime} – ${appt.endTime}`}
-                manager={appt.manager}
-                statusPill={APPOINTMENT_STATUS_PILL[appt.status]}
-              />
-            )}
-          />
-        </div>
+      <AddInteractionPanel
+        prospectId={followUpFor?.prospectId ?? undefined}
+        isOpen={!!followUpFor}
+        onClose={() => setFollowUpFor(null)}
+      />
 
-        <div className={cn('lg:col-span-1', mobileTab !== 'upcoming' && 'hidden lg:block')}>
-          <AppointmentsPanel appointments={appointments} />
-        </div>
-      </div>
+      <RequestPanel
+        isOpen={!!transportFor}
+        appointment={transportFor}
+        onClose={() => setTransportFor(null)}
+      />
 
       <SidePanel
         isOpen={panelOpen}
@@ -180,20 +151,20 @@ export default function AppointmentsPage() {
             <Button variant="outline" onClick={closePanel}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save Appointment</Button>
+            <Button onClick={handleSave} disabled={createAppointment.isPending}>
+              Save Appointment
+            </Button>
           </div>
         }
       >
         <NewAppointmentForm
           values={form}
-          onChange={(next) => {
-            const label = prospectOptions.find((o) => o.value === next.prospectId)?.label;
-            if (label) setProspectLabels((prev) => ({ ...prev, [next.prospectId]: label }));
-            setForm(next);
-          }}
+          onChange={setForm}
           errors={errors}
           prospectOptions={prospectOptions}
           onProspectSearch={setProspectSearch}
+          marketerOptions={marketerOptions}
+          canChooseMarketer={!!options?.canCreateForOthers}
         />
       </SidePanel>
     </div>

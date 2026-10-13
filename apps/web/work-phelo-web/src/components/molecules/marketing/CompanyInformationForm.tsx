@@ -18,6 +18,8 @@ export interface CompanyInformationFields {
   roleJobTitle: string;
   sourceType: string;
   dateContacted: string;
+  /** Who the prospect is assigned to; empty means the person creating it. */
+  assignedUserId?: string;
 }
 
 export type CompanyInformationErrors = Partial<Record<keyof CompanyInformationFields, string>>;
@@ -32,6 +34,8 @@ interface Props {
   interactionTypeOptions?: { value: string; label: string }[];
   roleOptions?: { value: string; label: string }[];
   sourceTypeOptions?: { value: string; label: string }[];
+  /** Shown at the end of Company Data, e.g. an "Assigned to" picker. */
+  assigneeSlot?: React.ReactNode;
   /** Hides interaction type and date contacted (not editable after creation). */
   hideInteraction?: boolean;
   /** Lets the user create a new option inline when nothing matches what they typed —
@@ -51,6 +55,7 @@ export function CompanyInformationForm({
   roleOptions = [],
   sourceTypeOptions = [],
   hideInteraction = false,
+  assigneeSlot,
   businessTypeEmptyState,
   interactionTypeEmptyState,
   roleEmptyState,
@@ -170,6 +175,8 @@ export function CompanyInformationForm({
             error={errors?.dateContacted}
           />
         )}
+
+        {assigneeSlot}
       </ProspectFormSection>
     </div>
   );

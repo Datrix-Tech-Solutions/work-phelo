@@ -125,6 +125,18 @@ export class PayrollController {
     return this.payrollService.getMyPayslips(req.user.tenantId, req.user.id);
   }
 
+  @Get('accounting-status')
+  @RequirePermissions(Permission.APPROVE_PAYROLL)
+  @ApiOperation({
+    summary: 'Whether approving payroll will post it to Accounting',
+    description:
+      'Asks Accounting. STANDALONE: payroll runs on its own. ACCOUNTING: linked there, and `ready` says whether every payroll account it needs is chosen. UNKNOWN: Accounting could not be reached.',
+  })
+  @ApiResponse({ status: 200, description: 'Accounting status for payroll' })
+  getAccountingStatus(@Req() req: Request & { user: RequestUser }) {
+    return this.payrollService.getAccountingStatus(req.user.tenantId);
+  }
+
   @Get(':id')
   @RequirePermissions(Permission.READ_PAYROLL)
   @ApiOperation({ summary: 'Get a specific payroll run with all payslips' })

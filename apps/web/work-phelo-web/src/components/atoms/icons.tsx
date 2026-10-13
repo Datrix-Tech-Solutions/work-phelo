@@ -82,6 +82,9 @@ import {
   FileText,
   FileX2,
   Bell,
+  Lock,
+  LockOpen,
+  Target,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -160,6 +163,10 @@ export const Icons = {
   FileCheck2,
   FileWarning,
   MapPin,
+  Lock,
+  LockOpen,
+  Target,
+  Timer,
 } as const;
 
 export type IconName = keyof typeof Icons;

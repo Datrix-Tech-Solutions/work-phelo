@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { pageBreadcrumb, pagePx } from '@/lib/layout';
 import { ProjectBanner } from '@/components/molecules/hr/projects/ProjectBanner';
 import { useProject } from '@/hooks';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 const TAB_ACTIVE =
   'relative text-brand font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand after:rounded-t-full';
@@ -22,6 +23,7 @@ export default function ProjectDetailLayout({
 }) {
   const { tenantSlug, id } = use(params);
   const pathname = usePathname();
+  const labels = useProjectLabels();
   const base = `/${tenantSlug}/hr/projects`;
   const root = `${base}/${id}`;
 
@@ -38,13 +40,17 @@ export default function ProjectDetailLayout({
   }
 
   if (!project) {
-    return <div className={cn(pageBreadcrumb, 'text-sm text-gray-500')}>Project not found.</div>;
+    return (
+      <div className={cn(pageBreadcrumb, 'text-sm text-gray-500')}>
+        {labels.singular} not found.
+      </div>
+    );
   }
 
   const tabs = [
-    { label: 'Project Details', href: `${root}/details` },
-    { label: 'Project Tasks', href: `${root}/tasks` },
-    { label: 'Project Board', href: `${root}/board` },
+    { label: `${labels.singular} Details`, href: `${root}/details` },
+    { label: `${labels.singular} Tasks`, href: `${root}/tasks` },
+    { label: `${labels.singular} Board`, href: `${root}/board` },
   ];
 
   return (
@@ -53,7 +59,7 @@ export default function ProjectDetailLayout({
       <div className={`${pageBreadcrumb} shrink-0`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link href={base} className="hover:text-gray-700 transition-colors">
-            Projects
+            {labels.plural}
           </Link>
           <ChevronRight className="w-4 h-4" />
           <span className="text-gray-700 font-medium">{project.name}</span>

@@ -1,9 +1,35 @@
 'use client';
 
+import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { usePostCashbookTransaction } from '@/hooks';
+import { EditCashbookDraftModal } from '@/components/organisms/accounting/panels/EditCashbookDraftModal';
+import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
+import { DraftChoiceModal } from '@/components/organisms/accounting/panels/DraftChoiceModal';
+import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
+import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTransferPanel';
+import { ReverseEntryModal } from '@/components/organisms/accounting/panels/ReverseEntryModal';
+import { RestoreEntryModal } from '@/components/organisms/accounting/panels/RestoreEntryModal';
+import { VoidEntryModal } from '@/components/organisms/accounting/panels/VoidEntryModal';
+import { DeleteArchivedEntryModal } from '@/components/organisms/accounting/panels/DeleteArchivedEntryModal';
+import {
+  SourceRecordPanel,
+  SourceRecordTarget,
+} from '@/components/organisms/accounting/panels/SourceRecordPanel';
+import type { EntryChangeMode } from '@/components/organisms/accounting/panels/NewTransactionPanel';
+import {
+  useDeleteCashbookDraft,
+  usePeriodOpenCheck,
+  usePostCashbookTransaction,
+  useRejectCashbookTransaction,
+  useRestoreCashbook,
+  useReverseCashbookTransaction,
+  useTransactionTypes,
+  useVoidCashbook,
+} from '@/hooks';
+import { transactionTypeCodeFromNumber } from '@/lib/accounting/transactionTypeCode';
+import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import type { CashbookTransaction, CashbookTransactionStatus } from '@/types/accounting';
@@ -12,12 +38,16 @@ const STATUS_LABEL: Record<CashbookTransactionStatus, string> = {
   DRAFT: 'PENDING',
   POSTED: 'POSTED',
   REVERSED: 'REVERSED',
+  REJECTED: 'REJECTED',
+  VOIDED: 'Voided',
 };
 
 const STATUS_VARIANT: Record<CashbookTransactionStatus, 'success' | 'neutral' | 'danger'> = {
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtDate(iso: string | null) {
@@ -63,17 +93,175 @@ export function CashbookTransactionDetailPanel({
 }) {
   const toast = useToast();
   const postTransaction = usePostCashbookTransaction();
+  const rejectTransaction = useRejectCashbookTransaction();
+  const deleteDraft = useDeleteCashbookDraft();
+  const { data: transactionTypes = [] } = useTransactionTypes();
+  const [editOpen, setEditOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  // The entry whose form is opening (a draft to redo, a posted one to edit, a voided one to
+  // restore): its form opens once this panel closes.
+  const [formTarget, setFormTarget] = useState<{
+    transaction: CashbookTransaction;
+    mode: EntryChangeMode;
+  } | null>(null);
+  const redoTarget = formTarget?.transaction ?? null;
+  const setRedoTarget = (tx: CashbookTransaction | null) =>
+    setFormTarget(tx ? { transaction: tx, mode: 'redo' } : null);
+
+  // A posted entry made on the Transactions page can be edited or voided while its period is
+  // open; a voided one can be restored. Receipts and payments on an invoice or bill change from
+  // that document, and another module's entries there.
+  const isPeriodOpen = usePeriodOpenCheck();
+  const voidEntry = useVoidCashbook();
+  const restoreEntry = useRestoreCashbook();
+  const reverseEntry = useReverseCashbookTransaction();
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  // A receipt or payment on an invoice or bill is voided from its own panel, opened from here.
+  const [settlementTarget, setSettlementTarget] = useState<SourceRecordTarget | null>(null);
+  const settlementRef = transaction?.receivableReceipt
+    ? ({ type: 'RECEIPT', id: transaction.receivableReceipt.id } as const)
+    : transaction?.payablePayment
+      ? ({ type: 'PAYMENT', id: transaction.payablePayment.id } as const)
+      : null;
+  const isDirect =
+    !!transaction &&
+    !transaction.sourceModule &&
+    ['RECEIPT', 'PAYMENT', 'TRANSFER'].includes(transaction.transactionType);
+  const periodOpen = isPeriodOpen(transaction?.transactionDate);
+  const isReversalEntry = !!transaction?.reversalOfTransactionId;
+  const canChangePosted = isDirect && transaction?.status === 'POSTED' && periodOpen;
+  const canVoidPosted = canChangePosted;
+  // A posted direct receipt or payment is reversed here (never from its journal), which keeps the
+  // entry and its journal in step. A reversal itself is undone by voiding it.
+  const canReversePosted =
+    isDirect &&
+    transaction?.status === 'POSTED' &&
+    !isReversalEntry &&
+    transaction.transactionType !== 'TRANSFER';
+  const canRestore = isDirect && transaction?.status === 'VOIDED' && periodOpen;
+  // A receipt's or payment's own cash entry goes with that record, which is archived instead.
+  const canDeleteArchived = transaction?.status === 'VOIDED' && !settlementRef;
+  const restoresAsIs = !!transaction?.voidedReversalOfTransactionId;
+
+  // A draft entered on the Transactions page (not raised by another module) can be redone or
+  // deleted. Receipts and payments redo in the form of the type they were made under, which is
+  // read back from their number; a transfer has its own form.
+  const isOwnDraft =
+    !!transaction &&
+    transaction.status === 'DRAFT' &&
+    !transaction.sourceModule &&
+    ['RECEIPT', 'PAYMENT', 'TRANSFER'].includes(transaction.transactionType);
+  const typeCode = transactionTypeCodeFromNumber(transaction?.transactionNumber ?? null);
+  const redoType = (tx: CashbookTransaction | null) => {
+    const code = transactionTypeCodeFromNumber(tx?.transactionNumber ?? null);
+    return code ? transactionTypes.find((t) => t.postsToCashbook && t.code === code) : undefined;
+  };
+  const canRedo =
+    transaction?.transactionType === 'TRANSFER' || (!!typeCode && !!redoType(transaction));
+  const canEditPosted = canChangePosted && !isReversalEntry && canRedo;
+
+  // A direct receipt or payment can be completed or turned down. Customer receipts and vendor
+  // payments (sourceModule ACCOUNTING) are handled through their own documents instead.
+  const canReviewDraft =
+    !!transaction &&
+    transaction.status === 'DRAFT' &&
+    !isOwnDraft &&
+    (transaction.transactionType === 'RECEIPT' || transaction.transactionType === 'PAYMENT') &&
+    transaction.sourceModule !== 'ACCOUNTING';
+  // Raised by another module (not entered by an accountant): it is simply posted - there is no
+  // separate receive/make payment step.
+  const isExternal = !!transaction?.sourceModule && transaction.sourceModule !== 'ACCOUNTING';
+  const sourceLabel = transaction?.sourceModule
+    ? (SOURCE_MODULE_LABELS[transaction.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
+      transaction.sourceModule)
+    : null;
+
+  const hasActions =
+    isOwnDraft ||
+    canReviewDraft ||
+    canEditPosted ||
+    canReversePosted ||
+    canVoidPosted ||
+    canRestore ||
+    !!settlementRef ||
+    transaction?.status === 'DRAFT';
+
+  const handleReject = async (reason: string) => {
+    if (!transaction) return;
+    try {
+      await rejectTransaction.mutateAsync({ transactionId: transaction.id, reason });
+      toast.success('Draft rejected.');
+      setRejectOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to reject the draft'));
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!transaction) return;
+    try {
+      await deleteDraft.mutateAsync(transaction.id);
+      toast.success('Draft deleted.');
+      setChoiceOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to delete the draft'));
+    }
+  };
+
+  const handleVoid = async (reason: string) => {
+    if (!transaction) return;
+    try {
+      await voidEntry.mutateAsync({ id: transaction.id, reason });
+      toast.success('Entry voided. It is in the archive now.');
+      setVoidOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to void the entry'));
+    }
+  };
+
+  const handleReverse = async (input: { reversalDate: string; reason: string }) => {
+    if (!transaction) return;
+    try {
+      await reverseEntry.mutateAsync({ transactionId: transaction.id, ...input });
+      toast.success('Entry reversed.');
+      setReverseOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to reverse the entry'));
+    }
+  };
+
+  const handleRestoreAsIs = async () => {
+    if (!transaction) return;
+    try {
+      await restoreEntry.mutateAsync({ id: transaction.id });
+      toast.success('Entry restored.');
+      setRestoreOpen(false);
+      onClose();
+    } catch (error) {
+      toast.error(extractError(error, 'Failed to restore the entry'));
+    }
+  };
 
   const handlePost = async () => {
     if (!transaction) return;
     try {
       await postTransaction.mutateAsync(transaction.id);
       toast.success(
-        transaction.direction === 'INFLOW'
-          ? 'Payment received.'
-          : transaction.direction === 'OUTFLOW'
-            ? 'Payment made.'
-            : 'Transaction posted.',
+        isExternal
+          ? 'Transaction posted.'
+          : transaction.direction === 'INFLOW'
+            ? 'Payment received.'
+            : transaction.direction === 'OUTFLOW'
+              ? 'Payment made.'
+              : 'Transaction posted.',
       );
       onClose();
     } catch (error) {
@@ -82,54 +270,304 @@ export function CashbookTransactionDetailPanel({
   };
 
   return (
-    <SidePanel
-      isOpen={!!transaction}
-      onClose={onClose}
-      title={transaction?.description ?? 'Transaction'}
-      description={transaction ? (transaction.reference ?? undefined) : undefined}
-      footer={
-        transaction &&
-        transaction.status === 'DRAFT' && (
-          <Button
-            className="w-full"
-            onClick={handlePost}
-            isLoading={postTransaction.isPending}
-            loadingText={transaction.direction === 'INFLOW' ? 'Receiving…' : 'Paying…'}
-          >
-            {actionLabel(transaction.direction)}
-          </Button>
-        )
-      }
-    >
-      {transaction && (
-        <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Status</span>
+    <>
+      <SidePanel
+        isOpen={!!transaction}
+        onClose={onClose}
+        title={transaction?.description ?? 'Transaction'}
+        description={transaction ? (transaction.reference ?? undefined) : undefined}
+        footer={
+          transaction &&
+          hasActions && (
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={onClose}>
+                Close
+              </Button>
+              {isOwnDraft && (
+                <Button variant="danger" onClick={() => setChoiceOpen(true)}>
+                  Reject
+                </Button>
+              )}
+              {canReviewDraft && (
+                <>
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    Edit
+                  </Button>
+                  <Button variant="danger" onClick={() => setRejectOpen(true)}>
+                    Reject
+                  </Button>
+                </>
+              )}
+              {canEditPosted && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFormTarget({ transaction, mode: 'edit' });
+                    onClose();
+                  }}
+                >
+                  Edit
+                </Button>
+              )}
+              {canReversePosted && (
+                <Button variant="outline" onClick={() => setReverseOpen(true)}>
+                  Reverse
+                </Button>
+              )}
+              {canVoidPosted && (
+                <Button variant="danger" onClick={() => setVoidOpen(true)}>
+                  Void
+                </Button>
+              )}
+              {canRestore && (
+                <Button
+                  onClick={() => {
+                    if (restoresAsIs) {
+                      setRestoreOpen(true);
+                      return;
+                    }
+                    setFormTarget({ transaction, mode: 'restore' });
+                    onClose();
+                  }}
+                >
+                  Restore
+                </Button>
+              )}
+              {canDeleteArchived && (
+                <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                  Delete
+                </Button>
+              )}
+              {settlementRef && (
+                <Button variant="outline" onClick={() => setSettlementTarget(settlementRef)}>
+                  Open {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'}
+                </Button>
+              )}
+              {transaction.status === 'DRAFT' && (
+                <Button
+                  onClick={handlePost}
+                  isLoading={postTransaction.isPending}
+                  loadingText={
+                    isExternal
+                      ? 'Posting…'
+                      : transaction.direction === 'INFLOW'
+                        ? 'Receiving…'
+                        : 'Paying…'
+                  }
+                >
+                  {isExternal ? 'Post' : actionLabel(transaction.direction)}
+                </Button>
+              )}
+            </div>
+          )
+        }
+      >
+        {transaction && (
+          <div className="mb-3">
             <Badge
               label={STATUS_LABEL[transaction.status]}
               variant={STATUS_VARIANT[transaction.status]}
             />
           </div>
-          <Row label="Type" value={transaction.transactionType} />
-          <Row label="Cash/Bank Account" value={transaction.cashAccount.name} />
-          {transaction.offsetGlAccount && (
-            <Row
-              label="Offset Account"
-              value={`${transaction.offsetGlAccount.code} — ${transaction.offsetGlAccount.name}`}
-            />
-          )}
-          <Row label="Transaction Date" value={fmtDate(transaction.transactionDate)} />
-          {transaction.postedJournalEntry && (
-            <Row label="Journal #" value={transaction.postedJournalEntry.journalNumber} />
-          )}
-          <div className="border-t border-gray-100 pt-2 flex items-center justify-between text-sm">
-            <span className="text-gray-600">Amount</span>
-            <span className="font-semibold text-gray-900">
-              {fmtAmount(transaction.amount, transaction.currency)}
+        )}
+
+        {transaction && sourceLabel && transaction.status === 'DRAFT' && (
+          <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+            Raised from {sourceLabel}. Complete the remaining details, then post it — or reject it
+            with a reason.
+          </div>
+        )}
+
+        {transaction && settlementRef && (
+          <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            <span>
+              This is the {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'} on an{' '}
+              {settlementRef.type === 'RECEIPT' ? 'invoice' : 'bill'}.{' '}
+              {transaction.status === 'VOIDED'
+                ? 'Restore it from there.'
+                : 'To void it, open it there.'}
             </span>
           </div>
-        </div>
-      )}
-    </SidePanel>
+        )}
+
+        {transaction && transaction.status === 'VOIDED' && (
+          <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            <p className="font-semibold">
+              Voided{transaction.voidedAt ? ` on ${fmtDate(transaction.voidedAt)}` : ''}
+            </p>
+            {transaction.voidReason && <p className="mt-1">{transaction.voidReason}</p>}
+            <p className="mt-1 text-xs text-gray-500">
+              It counts in no balance or report.
+              {!periodOpen && ' Its period is no longer open, so it can’t be restored.'}
+            </p>
+          </div>
+        )}
+
+        {transaction && transaction.status === 'REVERSED' && transaction.reversalTransaction && (
+          <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            This entry has been reversed. To edit or void it, void its reversal first.
+          </div>
+        )}
+
+        {transaction && transaction.status === 'REJECTED' && (
+          <div className="mb-3 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-900">
+            <p className="font-semibold">
+              Rejected{transaction.rejectedAt ? ` on ${fmtDate(transaction.rejectedAt)}` : ''}
+            </p>
+            {transaction.rejectionReason && <p className="mt-1">{transaction.rejectionReason}</p>}
+          </div>
+        )}
+
+        {transaction && (
+          <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
+            <Row label="Type" value={transaction.transactionType} />
+            <Row label="Cash/Bank Account" value={transaction.cashAccount.name} />
+            {(transaction.lines?.length ?? 0) > 1 ? (
+              <div className="flex flex-col gap-1 border-t border-gray-100 pt-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Lines
+                </span>
+                {transaction.lines.map((line) => (
+                  <div key={line.id} className="flex items-start justify-between gap-3 text-sm">
+                    <span className="min-w-0 text-gray-700">
+                      {line.glAccount.code} — {line.glAccount.name}
+                      {line.kind !== 'ITEM' && (
+                        <span className="ml-2 text-xs font-medium text-gray-500">
+                          {line.kind === 'DEDUCTION' ? 'Deduction' : 'Charge'}
+                        </span>
+                      )}
+                      {line.description && (
+                        <span className="block text-xs text-gray-500">{line.description}</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-gray-900">
+                      {line.kind === 'DEDUCTION' ? '− ' : line.kind === 'CHARGE' ? '+ ' : ''}
+                      {fmtAmount(line.amount, transaction.currency)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              transaction.offsetGlAccount && (
+                <Row
+                  label="Offset Account"
+                  value={`${transaction.offsetGlAccount.code} — ${transaction.offsetGlAccount.name}`}
+                />
+              )
+            )}
+            <Row label="Transaction Date" value={fmtDate(transaction.transactionDate)} />
+            {transaction.postedJournalEntry && (
+              <Row label="Journal #" value={transaction.postedJournalEntry.journalNumber} />
+            )}
+            <div className="border-t border-gray-100 pt-2 flex items-center justify-between text-sm">
+              <span className="text-gray-600">
+                {transaction.lines?.some((line) => line.kind !== 'ITEM')
+                  ? transaction.direction === 'INFLOW'
+                    ? 'Cash received'
+                    : 'Cash paid'
+                  : 'Amount'}
+              </span>
+              <span className="font-semibold text-gray-900">
+                {fmtAmount(transaction.amount, transaction.currency)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {editOpen && transaction && (
+          <EditCashbookDraftModal
+            transaction={transaction}
+            onClose={() => setEditOpen(false)}
+            onSaved={() => {
+              setEditOpen(false);
+              // The panel shows a snapshot of the row; reopening it shows the saved values.
+              onClose();
+            }}
+          />
+        )}
+
+        <DraftChoiceModal
+          isOpen={choiceOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          canRedo={canRedo}
+          isDeleting={deleteDraft.isPending}
+          onRedo={() => {
+            setRedoTarget(transaction);
+            onClose();
+          }}
+          onDelete={handleDelete}
+          onClose={() => setChoiceOpen(false)}
+        />
+
+        <SourceRecordPanel
+          target={settlementTarget}
+          onClose={() => setSettlementTarget((t) => (t ? { type: t.type } : null))}
+        />
+
+        <VoidEntryModal
+          isOpen={voidOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          isPending={voidEntry.isPending}
+          onConfirm={handleVoid}
+          onClose={() => setVoidOpen(false)}
+        />
+        <ReverseEntryModal
+          isOpen={reverseOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          isPending={reverseEntry.isPending}
+          onConfirm={handleReverse}
+          onClose={() => setReverseOpen(false)}
+        />
+        <DeleteArchivedEntryModal
+          target={
+            deleteOpen && transaction
+              ? {
+                  kind: 'CASHBOOK',
+                  id: transaction.id,
+                  subject: transaction.transactionNumber ?? 'This entry',
+                }
+              : null
+          }
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={onClose}
+        />
+        <RestoreEntryModal
+          isOpen={restoreOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          note="A reversal comes back as it was."
+          isPending={restoreEntry.isPending}
+          onConfirm={handleRestoreAsIs}
+          onClose={() => setRestoreOpen(false)}
+        />
+
+        <RejectDraftModal
+          isOpen={rejectOpen}
+          subject={transaction?.transactionNumber ?? 'This entry'}
+          isRejecting={rejectTransaction.isPending}
+          onConfirm={handleReject}
+          onClose={() => setRejectOpen(false)}
+        />
+      </SidePanel>
+
+      <NewTransactionPanel
+        transactionType={
+          redoTarget && redoTarget.transactionType !== 'TRANSFER'
+            ? (redoType(redoTarget) ?? undefined)
+            : undefined
+        }
+        draft={
+          redoTarget && formTarget
+            ? { kind: 'cashbook', transaction: redoTarget, mode: formTarget.mode }
+            : null
+        }
+        onClose={() => setRedoTarget(null)}
+      />
+      <NewTransferPanel
+        isOpen={redoTarget?.transactionType === 'TRANSFER'}
+        draft={redoTarget}
+        mode={formTarget?.mode}
+        onClose={() => setRedoTarget(null)}
+      />
+    </>
   );
 }

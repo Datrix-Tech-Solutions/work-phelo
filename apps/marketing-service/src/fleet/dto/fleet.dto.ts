@@ -24,9 +24,11 @@ const MAX_MILEAGE = 10_000_000;
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
 
+/** Derived status: BOOKED / ON_ROUTE come from approved trips, the rest from HR. */
 export const FLEET_STATUSES = [
   'AVAILABLE',
-  'ASSIGNED',
+  'BOOKED',
+  'ON_ROUTE',
   'MAINTENANCE',
   'RETIRED',
 ] as const;
@@ -69,12 +71,17 @@ class FleetDetailsFields {
   @IsEnum(MarketingFleetFuelType)
   fuelType!: MarketingFleetFuelType;
 
-  @ApiProperty({ example: 45000, description: 'Odometer reading in km.' })
+  @ApiPropertyOptional({
+    example: 45000,
+    nullable: true,
+    description: 'Odometer reading in km. Optional.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(MAX_MILEAGE)
-  currentMileage!: number;
+  currentMileage?: number | null;
 }
 
 export class CreateFleetVehicleDto extends FleetDetailsFields {
@@ -132,13 +139,16 @@ export class UpdateFleetVehicleDto {
   @IsEnum(MarketingFleetFuelType)
   fuelType?: MarketingFleetFuelType;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Null clears the mileage.',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(MAX_MILEAGE)
-  currentMileage?: number;
+  currentMileage?: number | null;
 
   @ApiPropertyOptional({
     format: 'uuid',

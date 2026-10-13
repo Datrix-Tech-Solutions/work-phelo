@@ -10,7 +10,8 @@ import type {
   CreateTradeInvoicePayload,
   PaginatedResult,
   QueryTradeDocumentsParams,
-  ReverseTradeDocumentPayload,
+  RejectDraftPayload,
+  UpdateInvoiceDraftPayload,
 } from '@/types/accounting';
 
 /* Accounts Receivable (customer invoices/credit notes) and Accounts Payable
@@ -68,7 +69,10 @@ const CREDIT_NOTE_SEGMENT = 'credit-notes';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RawTradeDocument = Record<string, any>;
 
-function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): AccountingTradeDocument {
+export function mapDocument(
+  raw: RawTradeDocument,
+  side: AccountingTradeSide,
+): AccountingTradeDocument {
   const config = SIDE_CONFIG[side];
   const original = raw[config.originalKey] ?? null;
   return {
@@ -96,10 +100,15 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     status: raw.status,
     paymentState: raw.paymentState,
     outstandingAmount: raw.outstandingAmount ?? null,
+    pendingPaymentRequestCount: raw.pendingPaymentRequestCount ?? 0,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,
     reversedAt: raw.reversedAt ?? null,
+    rejectedAt: raw.rejectedAt ?? null,
+    rejectionReason: raw.rejectionReason ?? null,
+    voidedAt: raw.voidedAt ?? null,
+    voidReason: raw.voidReason ?? null,
     postedJournalEntryId: raw.postedJournalEntryId ?? null,
     reversalJournalEntryId: raw.reversalJournalEntryId ?? null,
     reversalOfDocumentId: raw.reversalOfDocumentId ?? null,
@@ -107,6 +116,7 @@ function mapDocument(raw: RawTradeDocument, side: AccountingTradeSide): Accounti
     offsetGlAccount: raw.offsetGlAccount,
     costCentre: raw.costCentre ?? null,
     controlAccount: raw.arAccount ?? raw.apAccount,
+    lines: raw.lines ?? [],
     taxBreakdown: raw.taxBreakdown ?? [],
     postedJournalEntry: raw.postedJournalEntry ?? null,
     reversalJournalEntry: raw.reversalJournalEntry ?? null,
@@ -144,6 +154,8 @@ function mapBalance(
     originalAmount: raw.originalAmount,
     appliedSettlements: raw[config.appliedSettlementsField],
     appliedCreditNotes: raw.appliedCreditNotes,
+    appliedNotes: raw.appliedNotes ?? [],
+    appliedSettlementDetails: raw.appliedSettlementDetails ?? [],
     outstandingAmount: raw.outstandingAmount,
     paymentState: raw.paymentState,
   };
@@ -277,27 +289,6 @@ function usePostDocument(side: AccountingTradeSide, segment: string) {
   });
 }
 
-function useReverseDocument(side: AccountingTradeSide, segment: string) {
-  const config = SIDE_CONFIG[side];
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...payload }: ReverseTradeDocumentPayload & { id: string }) => {
-      const res = await api.post<RawTradeDocument>(
-        `${config.base}/${segment}/${id}/reverse`,
-        payload,
-      );
-      return mapDocument(res.data, side);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentsKey(side, segment) });
-      // Reversing a credit/debit note gives its original invoice/bill its balance back.
-      if (segment === CREDIT_NOTE_SEGMENT) {
-        queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
-      }
-    },
-  });
-}
-
 // ---- Invoices (AR) / Bills (AP) ----
 
 export function useReceivableInvoices(
@@ -318,8 +309,59 @@ export function useCreateReceivableInvoice() {
 export function usePostReceivableInvoice() {
   return usePostDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment);
 }
-export function useReverseReceivableInvoice() {
-  return useReverseDocument('RECEIVABLE', SIDE_CONFIG.RECEIVABLE.invoiceSegment);
+
+/** Completes a draft invoice's dates, cost centre and references. Its amount stays as raised. */
+export function useUpdateReceivableInvoiceDraft() {
+  const queryClient = useQueryClient();
+  const config = SIDE_CONFIG.RECEIVABLE;
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: UpdateInvoiceDraftPayload & { id: string }) => {
+      const res = await api.patch<RawTradeDocument>(
+        `${config.base}/${config.invoiceSegment}/${id}`,
+        payload,
+      );
+      return mapDocument(res.data, 'RECEIVABLE');
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: documentsKey('RECEIVABLE', config.invoiceSegment),
+      }),
+  });
+}
+
+/** Turns a draft invoice down. It keeps its record, never posts, and the reason is stored. */
+export function useRejectReceivableInvoice() {
+  const queryClient = useQueryClient();
+  const config = SIDE_CONFIG.RECEIVABLE;
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: RejectDraftPayload & { id: string }) => {
+      const res = await api.post<RawTradeDocument>(
+        `${config.base}/${config.invoiceSegment}/${id}/reject`,
+        payload,
+      );
+      return mapDocument(res.data, 'RECEIVABLE');
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: documentsKey('RECEIVABLE', config.invoiceSegment),
+      }),
+  });
+}
+
+/** Deletes a draft invoice/bill or credit/debit note for good. Posted ones are never deletable. */
+export function useDeleteTradeDraft(side: AccountingTradeSide) {
+  const queryClient = useQueryClient();
+  const config = SIDE_CONFIG[side];
+  return useMutation({
+    mutationFn: async ({ id, isCreditNote }: { id: string; isCreditNote: boolean }) => {
+      const segment = isCreditNote ? CREDIT_NOTE_SEGMENT : config.invoiceSegment;
+      await api.delete(`${config.base}/${segment}/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: documentsKey(side, config.invoiceSegment) });
+      queryClient.invalidateQueries({ queryKey: documentsKey(side, CREDIT_NOTE_SEGMENT) });
+    },
+  });
 }
 
 export function usePayableBills(
@@ -340,14 +382,14 @@ export function useCreatePayableBill() {
 export function usePostPayableBill() {
   return usePostDocument('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment);
 }
-export function useReversePayableBill() {
-  return useReverseDocument('PAYABLE', SIDE_CONFIG.PAYABLE.invoiceSegment);
-}
 
 // ---- Credit Notes (AR customer credits / AP vendor credits) ----
 
-export function useReceivableCreditNotes(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('RECEIVABLE', CREDIT_NOTE_SEGMENT, params);
+export function useReceivableCreditNotes(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('RECEIVABLE', CREDIT_NOTE_SEGMENT, params, options);
 }
 export function useReceivableCreditNote(creditNoteId: string | undefined) {
   return useDocument('RECEIVABLE', CREDIT_NOTE_SEGMENT, creditNoteId);
@@ -358,15 +400,15 @@ export function useCreateReceivableCreditNote() {
 export function usePostReceivableCreditNote() {
   return usePostDocument('RECEIVABLE', CREDIT_NOTE_SEGMENT);
 }
-export function useReverseReceivableCreditNote() {
-  return useReverseDocument('RECEIVABLE', CREDIT_NOTE_SEGMENT);
-}
 export function useAllocateReceivableCreditNote() {
   return useAllocateCreditNote('RECEIVABLE');
 }
 
-export function usePayableCreditNotes(params: QueryTradeDocumentsParams = {}) {
-  return useDocuments('PAYABLE', CREDIT_NOTE_SEGMENT, params);
+export function usePayableCreditNotes(
+  params: QueryTradeDocumentsParams = {},
+  options: { enabled?: boolean } = {},
+) {
+  return useDocuments('PAYABLE', CREDIT_NOTE_SEGMENT, params, options);
 }
 export function usePayableCreditNote(creditNoteId: string | undefined) {
   return useDocument('PAYABLE', CREDIT_NOTE_SEGMENT, creditNoteId);
@@ -376,9 +418,6 @@ export function useCreatePayableCreditNote() {
 }
 export function usePostPayableCreditNote() {
   return usePostDocument('PAYABLE', CREDIT_NOTE_SEGMENT);
-}
-export function useReversePayableCreditNote() {
-  return useReverseDocument('PAYABLE', CREDIT_NOTE_SEGMENT);
 }
 export function useAllocatePayableCreditNote() {
   return useAllocateCreditNote('PAYABLE');

@@ -57,6 +57,7 @@ export type DocumentType =
   | 'CERTIFICATE'
   | 'OFFER_LETTER'
   | 'NDA'
+  | 'DRIVER_LICENCE'
   | 'OTHER';
 
 // ── Employee ─────────────────────────────────────────────
@@ -121,6 +122,8 @@ export interface Employee {
   assets?: import('@/types/asset').EmployeeAsset[];
   allowances?: EmployeeAllowance[];
   deductions?: EmployeeDeduction[];
+  /** The payroll group the employee is paid through, set from the group's own page. */
+  payrollGroupId?: string | null;
   offboarding?: OffboardingRecord;
 }
 
@@ -174,6 +177,34 @@ export interface EmployeeDocument {
   uploadedBy: string;
   expiresAt?: string | null;
   createdAt: string;
+}
+
+export type DriverLicenceStatus = 'NONE' | 'VALID' | 'EXPIRING' | 'EXPIRED';
+
+/**
+ * A driver's licence and what it amounts to. Driving yourself on a company trip needs the licence
+ * unexpired and an image of it on file; removing the image switches it off without losing details.
+ */
+export interface DriverLicenceView {
+  licence: {
+    id: string;
+    licenceNumber: string;
+    /** YYYY-MM-DD */
+    issuedAt: string;
+    /** YYYY-MM-DD */
+    expiresAt: string;
+  } | null;
+  imageOnFile: boolean;
+  status: DriverLicenceStatus;
+  /** Negative once expired; null when there is no licence. */
+  daysLeft: number | null;
+  canDrive: boolean;
+}
+
+export interface DriverLicenceDetails {
+  licenceNumber: string;
+  issuedAt: string;
+  expiresAt: string;
 }
 
 export interface AddAllowancePayload {
@@ -435,12 +466,16 @@ export type {
   PayrollItemAllowance,
   PayrollItemDeduction,
   PayrollItem,
+  PayrollItemLine,
   PayrollRunDetail,
   PayrollLedgerPaymentState,
   PayrollLedgerLineStatus,
   PayrollSettlementStatus,
+  PayrollAccountingStatus,
   PayrollDecisionDto,
   RunPayrollDto,
+  RunConfiguredPayrollDto,
+  ApprovePayrollMonthResult,
   UpdatePayrollItemDto,
   PayrollSettings,
   UpdatePayrollSettingsDto,
@@ -569,6 +604,69 @@ export interface DashboardSummary {
   pendingLeaveRequests: number;
   assignedAssetsCount: number;
   hasEmployees: boolean;
+}
+
+export interface PendingActions {
+  leaveRequests: number;
+  timeCorrections: number;
+  shiftSwaps: number;
+  resignations: number;
+  payrollApprovals: number;
+  appraisalFinalizations: number;
+  probationEnding: number;
+  contractsEnding: number;
+  endingWithinDays: number;
+}
+
+export type RecentActivityType =
+  | 'HIRED'
+  | 'STATUS_CHANGED'
+  | 'OFFBOARDED'
+  | 'OFFBOARDING_INITIATED'
+  | 'RESIGNATION_SUBMITTED'
+  | 'RESIGNATION_WITHDRAWN'
+  | 'RESIGNATION_DISMISSED'
+  | 'LEAVE_APPROVED'
+  | 'LEAVE_REJECTED'
+  | 'TIME_CORRECTION_APPROVED'
+  | 'TIME_CORRECTION_REJECTED';
+
+export interface RecentActivityEvent {
+  id: string;
+  type: RecentActivityType;
+  employeeId: string;
+  employeeName: string;
+  detail: string | null;
+  actor: string | null;
+  timestamp: string;
+}
+
+export interface DepartmentDistribution {
+  distribution: {
+    department: string;
+    count: number;
+    gender: { male: number; female: number; other: number; unspecified: number };
+  }[];
+  hasData: boolean;
+}
+
+export interface HrDashboardKpis {
+  headcount: { current: number; previous: number; onProbation: number; suspended: number };
+  attendance: {
+    rate: number | null;
+    previousRate: number | null;
+    late: number;
+    absent: number;
+  };
+  onLeave: { current: number; previous: number; today: number; pending: number };
+  hiresAndExits: {
+    hires: number;
+    previousHires: number;
+    exits: number;
+    previousExits: number;
+    turnoverRate: number | null;
+    previousTurnoverRate: number | null;
+  };
 }
 
 // ── Employee Query Params ─────────────────────────────────

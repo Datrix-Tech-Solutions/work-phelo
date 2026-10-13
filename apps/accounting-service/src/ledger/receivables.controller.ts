@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -16,6 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { QueryTradeSummaryDto } from './dto/trade-summary.dto';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -23,8 +26,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
+import { VoidEntryDto } from './dto/accounting.dto';
 import {
   CreateCreditNoteAllocationDto,
+  EditReceivableInvoiceDto,
+  EditReceivableNoteDto,
+  EditReceivableReceiptDto,
+  RestoreReceivableInvoiceDto,
   CreateReceivableCreditNoteDto,
   CreateReceivableInvoiceDto,
   CreateReceivableReceiptDto,
@@ -35,6 +43,10 @@ import {
   ReverseAllocationDto,
   ReverseReceivableDto,
 } from './dto/receivables.dto';
+import {
+  RejectDraftDto,
+  UpdateReceivableInvoiceDraftDto,
+} from './dto/draft-actions.dto';
 import { ReceivablesService } from './receivables.service';
 
 @Controller('receivables')
@@ -73,8 +85,11 @@ export class ReceivablesController {
   @Get('summary')
   @ApiOperation({ summary: 'Get tenant Accounts Receivable dashboard summary' })
   @RequirePermissions(AccountingPermission.RECEIVABLES_VIEW)
-  summary(@Req() request: Request & { user: RequestUser }) {
-    return this.service.summary(request.user.tenantId);
+  summary(
+    @Query() query: QueryTradeSummaryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.summary(request.user.tenantId, query);
   }
 
   @Get('aging')
@@ -114,6 +129,50 @@ export class ReceivablesController {
     return this.service.getInvoice(request.user, invoiceId);
   }
 
+  @Patch('invoices/:invoiceId')
+  @ApiOperation({
+    summary: 'Complete a draft customer invoice',
+    description:
+      'Changes the dates, currency, tax lines, cost centre and references of a draft. The amount, quantity, unit price, customer and transaction type are fixed when it is raised and cannot be changed.',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_CREATE)
+  updateInvoiceDraft(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Body() dto: UpdateReceivableInvoiceDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.updateInvoiceDraft(request.user, invoiceId, dto);
+  }
+
+  @Delete('invoices/:invoiceId')
+  @ApiOperation({
+    summary: 'Delete a draft customer invoice',
+    description:
+      'Removes the draft for good. Posted invoices are immutable. A draft raised by another module is rejected instead.',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  deleteInvoiceDraft(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftInvoice(request.user, invoiceId);
+  }
+
+  @Post('invoices/:invoiceId/reject')
+  @ApiOperation({
+    summary: 'Reject a draft customer invoice',
+    description:
+      'Marks the draft REJECTED with a reason. It never posts, keeps its record, and the module that raised it is told.',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  rejectInvoice(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Body() dto: RejectDraftDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.rejectInvoice(request.user, invoiceId, dto);
+  }
+
   @Post('invoices/:invoiceId/post')
   @ApiOperation({
     summary: 'Post a draft customer invoice',
@@ -126,21 +185,6 @@ export class ReceivablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.postInvoice(request.user, invoiceId);
-  }
-
-  @Post('invoices/:invoiceId/reverse')
-  @ApiOperation({
-    summary: 'Reverse a posted customer invoice',
-    description:
-      'Posted invoices are immutable. Reversal creates a reversing journal and requires dependent allocations to be reversed first.',
-  })
-  @RequirePermissions(AccountingPermission.RECEIVABLES_REVERSE)
-  reverseInvoice(
-    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
-    @Body() dto: ReverseReceivableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseInvoice(request.user, invoiceId, dto);
   }
 
   @Get('invoices/:invoiceId/balance')
@@ -191,6 +235,16 @@ export class ReceivablesController {
     return this.service.getCreditNote(request.user, creditNoteId);
   }
 
+  @Delete('credit-notes/:creditNoteId')
+  @ApiOperation({ summary: 'Delete a draft customer credit note' })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  deleteCreditNoteDraft(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.deleteDraftCreditNote(request.user, creditNoteId);
+  }
+
   @Post('credit-notes/:creditNoteId/post')
   @ApiOperation({
     summary: 'Post a draft customer credit note',
@@ -203,17 +257,6 @@ export class ReceivablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.postCreditNote(request.user, creditNoteId);
-  }
-
-  @Post('credit-notes/:creditNoteId/reverse')
-  @ApiOperation({ summary: 'Reverse a posted customer credit note' })
-  @RequirePermissions(AccountingPermission.RECEIVABLES_REVERSE)
-  reverseCreditNote(
-    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
-    @Body() dto: ReverseReceivableDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.reverseCreditNote(request.user, creditNoteId, dto);
   }
 
   @Post('credit-notes/:creditNoteId/allocations')
@@ -294,6 +337,19 @@ export class ReceivablesController {
     return this.service.reverseReceipt(request.user, receiptId, dto);
   }
 
+  @Post('receipts/:receiptId/void-reversal')
+  @ApiOperation({
+    summary: 'Void the reversal of a receipt, returning it to posted',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_REVERSE)
+  voidReceiptReversal(
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidReceiptReversal(request.user, receiptId, dto);
+  }
+
   @Post('receipts/:receiptId/allocations')
   @ApiOperation({
     summary: 'Allocate posted receipt balance to a posted invoice',
@@ -349,5 +405,122 @@ export class ReceivablesController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.customerBalance(request.user.tenantId, customerId);
+  }
+
+  @Patch('invoices/:invoiceId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted invoice while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  editPostedInvoice(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Body() dto: EditReceivableInvoiceDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedInvoice(request.user, invoiceId, dto);
+  }
+
+  @Post('invoices/:invoiceId/void')
+  @ApiOperation({
+    summary: 'Void a posted invoice while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  voidInvoice(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidInvoice(request.user, invoiceId, dto);
+  }
+
+  @Post('invoices/:invoiceId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided invoice, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  restoreInvoice(
+    @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
+    @Body() dto: RestoreReceivableInvoiceDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreInvoice(request.user, invoiceId, dto);
+  }
+
+  @Patch('credit-notes/:creditNoteId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted credit note while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  editPostedCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: EditReceivableNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Post('credit-notes/:creditNoteId/void')
+  @ApiOperation({
+    summary: 'Void a posted credit note while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  voidCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Post('credit-notes/:creditNoteId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided credit note, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  restoreCreditNote(
+    @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
+    @Body() dto: EditReceivableNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreCreditNote(request.user, creditNoteId, dto);
+  }
+
+  @Patch('receipts/:receiptId/posted')
+  @ApiOperation({
+    summary: 'Edit a posted receipt while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  editPostedReceipt(
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @Body() dto: EditReceivableReceiptDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.editPostedReceipt(request.user, receiptId, dto);
+  }
+
+  @Post('receipts/:receiptId/void')
+  @ApiOperation({
+    summary: 'Void a posted receipt while its fiscal period is open',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  voidReceipt(
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @Body() dto: VoidEntryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.voidReceipt(request.user, receiptId, dto);
+  }
+
+  @Post('receipts/:receiptId/restore')
+  @ApiOperation({
+    summary: 'Restore a voided receipt, optionally with corrections',
+  })
+  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  restoreReceipt(
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @Body() dto: EditReceivableReceiptDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.restoreReceipt(request.user, receiptId, dto);
   }
 }

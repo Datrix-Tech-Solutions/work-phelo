@@ -8,6 +8,7 @@
       "@work-phelo/schemas": ["../../packages/schemas/dist"],
       "@work-phelo/config": ["../../packages/config/dist"],
       "@work-phelo/utils": ["../../packages/utils/dist"],
+      "@work-phelo/payroll-engine": ["../../packages/payroll-engine/dist"],
       "@work-phelo/internal-auth": ["../../packages/internal-auth/dist"]
     }
   },

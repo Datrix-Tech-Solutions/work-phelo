@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsOptional,
   IsString,
+  Matches,
   IsUUID,
   Length,
 } from 'class-validator';
@@ -120,4 +121,24 @@ export class CashFlowReportQueryDto {
   @IsOptional()
   @IsUUID()
   fiscalPeriodId?: string;
+}
+
+const DAY = '\\d{4}-\\d{2}-\\d{2}';
+const RANGE = `${DAY}:${DAY}`;
+
+export const INCOME_SERIES_MAX_RANGES = 12;
+
+export class IncomeSeriesReportQueryDto {
+  @ApiProperty({
+    example: '2026-04-01:2026-04-30,2026-05-01:2026-05-31',
+    description: `Comma-separated fromDate:toDate ranges (YYYY-MM-DD, both inclusive), at most ${INCOME_SERIES_MAX_RANGES}.`,
+  })
+  @IsString()
+  @Matches(
+    new RegExp(`^${RANGE}(,${RANGE}){0,${INCOME_SERIES_MAX_RANGES - 1}}$`),
+    {
+      message: `ranges must be 1-${INCOME_SERIES_MAX_RANGES} comma-separated fromDate:toDate pairs`,
+    },
+  )
+  ranges!: string;
 }

@@ -49,7 +49,10 @@ const SETTLEMENT_SIDE_CONFIG: Record<AccountingTradeSide, SettlementSideConfig> 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RawSettlement = Record<string, any>;
 
-function mapSettlement(raw: RawSettlement, side: AccountingTradeSide): AccountingTradeSettlement {
+export function mapSettlement(
+  raw: RawSettlement,
+  side: AccountingTradeSide,
+): AccountingTradeSettlement {
   const config = SETTLEMENT_SIDE_CONFIG[side];
   return {
     id: raw.id,
@@ -69,6 +72,8 @@ function mapSettlement(raw: RawSettlement, side: AccountingTradeSide): Accountin
     updatedAt: raw.updatedAt,
     postedAt: raw.postedAt ?? null,
     reversedAt: raw.reversedAt ?? null,
+    voidedAt: raw.voidedAt ?? null,
+    voidReason: raw.voidReason ?? null,
     reversalOfSettlementId: raw.reversalOfReceiptId ?? raw.reversalOfPaymentId ?? null,
     party: raw[config.partyKey],
     cashbookTransaction: raw.cashbookTransaction,
@@ -196,6 +201,34 @@ export function useReverseReceivableReceipt() {
 }
 export function useReversePayablePayment() {
   return useReverseSettlement('PAYABLE');
+}
+
+/** Takes a reversed receipt's or payment's reversal back, so it is posted again. */
+export function useVoidReceivableReceiptReversal() {
+  return useVoidSettlementReversal('RECEIVABLE');
+}
+export function useVoidPayablePaymentReversal() {
+  return useVoidSettlementReversal('PAYABLE');
+}
+
+function useVoidSettlementReversal(side: AccountingTradeSide) {
+  const config = SETTLEMENT_SIDE_CONFIG[side];
+  const invalidate = useInvalidateSettlement(side);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await api.post<RawSettlement>(
+        `${config.base}/${config.segment}/${id}/void-reversal`,
+        { reason },
+      );
+      return mapSettlement(res.data, side);
+    },
+    onSuccess: () => {
+      invalidate();
+      // The reversing entry leaves the books, so every balance and report moves.
+      queryClient.invalidateQueries({ queryKey: ['accounting'] });
+    },
+  });
 }
 
 function useReverseSettlement(side: AccountingTradeSide) {

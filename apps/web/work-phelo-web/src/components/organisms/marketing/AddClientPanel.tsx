@@ -7,7 +7,21 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { EmailField } from '@/components/atoms/EmailField';
-import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { AssignedToSelect } from '@/components/molecules/marketing/AssignedToSelect';
+import {
+  ClientProductDetail,
+  ClientProductDetails,
+  ClientProductTotals,
+  EMPTY_PRODUCT_DETAIL,
+} from '@/components/organisms/marketing/ClientProductDetails';
+import { BillingSection } from '@/components/organisms/marketing/BillingSection';
+import {
+  ClientBillingErrors,
+  ClientBillingValues,
+  EMPTY_BILLING,
+  toBillingInput,
+  validateBilling,
+} from '@/components/molecules/marketing/ClientBillingFields';
 import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/CreateOptionEmptyState';
 import {
   CompanyLocationFields,
@@ -17,7 +31,8 @@ import {
   useCreateProspectingSetting,
   useProspectingSettings,
 } from '@/hooks/marketing/useProspectingSettings';
-import { useCreateClient } from '@/hooks/marketing/useClients';
+import { useBillingOptions, useCreateClient } from '@/hooks/marketing/useClients';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import { inputClass, isValidEmail } from '@/lib/utils';
@@ -32,8 +47,11 @@ interface FormValues {
   phone: string;
   email: string;
   productIds: string[];
-  isBillable: boolean;
+  /** Raise the client's first transaction now. Optional: without one the client is Not billed. */
+  raiseBilling: boolean;
   location: CompanyLocationFields;
+  /** Empty means the person creating the client. */
+  assignedUserId: string;
 }
 
 type FormErrors = Partial<
@@ -49,8 +67,9 @@ const EMPTY: FormValues = {
   phone: '',
   email: '',
   productIds: [],
-  isBillable: false,
+  raiseBilling: false,
   location: { location: '' },
+  assignedUserId: '',
 };
 
 function toOptions(items: ProspectingSetting[]) {
@@ -59,7 +78,7 @@ function toOptions(items: ProspectingSetting[]) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">{children}</p>
+    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-1">{children}</p>
   );
 }
 
@@ -74,6 +93,15 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
 
   const [values, setValues] = useState<FormValues>(EMPTY);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
+  const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
+  // Generated up front, so if saving fails after Accounting took the transaction, trying again
+  // reuses the same client (and the same Accounting entity) instead of creating another.
+  const [clientId, setClientId] = useState(() => crypto.randomUUID());
+  // Revenue and commission per selected product, keyed by product id.
+  const [productDetails, setProductDetails] = useState<Record<string, ClientProductDetail>>({});
+  const [productsExpanded, setProductsExpanded] = useState(true);
+  const { data: billingOptions } = useBillingOptions();
 
   const { data: businessTypes = [] } = useProspectingSettings('business-types');
   const { data: sourceTypes = [] } = useProspectingSettings('source-types');
@@ -93,11 +121,24 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleClose() {
+  function resetForm() {
     setValues(EMPTY);
     setErrors({});
+    setBilling(EMPTY_BILLING);
+    setBillingErrors({});
+    setProductDetails({});
+    setProductsExpanded(true);
+    setClientId(crypto.randomUUID());
+  }
+
+  function handleClose() {
+    resetForm();
     onClose();
   }
+
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop;
+  // Continue clears the form for the next client.
+  const entry = useMultiEntryPanel({ isOpen, onStop: handleClose, onContinue: resetForm });
 
   function validate(): boolean {
     const next: FormErrors = {};
@@ -109,22 +150,45 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     if (values.location.lat == null || values.location.lng == null)
       next.location = 'Select a location on the map or from search.';
     setErrors(next);
-    return Object.keys(next).length === 0;
+
+    let billingValid = true;
+    if (values.raiseBilling && billingOptions) {
+      const nextBilling = validateBilling(billing, billingOptions);
+      setBillingErrors(nextBilling);
+      billingValid = Object.keys(nextBilling).length === 0;
+    } else {
+      setBillingErrors({});
+    }
+    return Object.keys(next).length === 0 && billingValid;
   }
 
   function buildPayload(): CreateClientPayload {
     return {
+      id: clientId,
       companyName: values.companyName.trim(),
+      ...(values.assignedUserId ? { assignedUserId: values.assignedUserId } : {}),
       ...(values.businessType ? { businessTypeId: values.businessType } : {}),
       ...(values.sourceType ? { sourceTypeId: values.sourceType } : {}),
-      isBillable: values.isBillable,
+      ...(values.raiseBilling && billingOptions
+        ? { billing: toBillingInput(billing, billingOptions) }
+        : {}),
       primaryContact: {
         name: values.contactName.trim(),
         ...(values.phone.trim() ? { phone: values.phone.trim() } : {}),
         ...(values.email.trim() ? { email: values.email.trim() } : {}),
         ...(values.roleJobTitle ? { decisionMakerTypeId: values.roleJobTitle } : {}),
       },
-      productIds: values.productIds,
+      products: values.productIds.map((productId) => {
+        const detail = productDetails[productId] ?? EMPTY_PRODUCT_DETAIL;
+        const expected = parseFloat(detail.expectedRevenue);
+        const rate = parseFloat(detail.commissionRate);
+        return {
+          productId,
+          ...(Number.isFinite(expected) ? { expectedValue: expected } : {}),
+          ...(Number.isFinite(rate) ? { commissionRate: rate } : {}),
+          ...(detail.expectedCloseDate ? { expectedCloseDate: detail.expectedCloseDate } : {}),
+        };
+      }),
       location: {
         label: values.location.location,
         latitude: values.location.lat as number,
@@ -138,7 +202,10 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     createClient.mutate(buildPayload(), {
       onSuccess: () => {
         toast.success('Client created');
-        handleClose();
+        entry.finishSave(
+          { title: 'Client Added!', message: `${values.companyName.trim()} has been added.` },
+          handleClose,
+        );
       },
       onError: (error) => toast.error(apiErrorMessage(error, 'Failed to create client')),
     });
@@ -148,6 +215,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
+      {...entry.panelProps}
       title="New Client"
       description="Add a business you already work with."
       // width="sm:w-[640px]"
@@ -162,7 +230,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
         </div>
       }
     >
-      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+      <div className="flex flex-col gap-2">
         <SectionTitle>Company Data</SectionTitle>
 
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
@@ -177,62 +245,66 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
         </div>
 
-        <SearchSelect
-          label="Type of Business"
-          placeholder="Select or type to add new"
-          options={businessTypeOptions}
-          value={values.businessType}
-          onChange={(v) => set('businessType', v)}
-          error={errors.businessType}
-          emptyState={buildCreateOptionEmptyState(
-            'business type',
-            createBusinessType,
-            (id) => set('businessType', id),
-            toast,
-          )}
-        />
+        <div className="grid grid-cols-2 gap-4">
+          <SearchSelect
+            label="Type of Business"
+            placeholder="Select or type to add new"
+            options={businessTypeOptions}
+            value={values.businessType}
+            onChange={(v) => set('businessType', v)}
+            error={errors.businessType}
+            emptyState={buildCreateOptionEmptyState(
+              'business type',
+              createBusinessType,
+              (id) => set('businessType', id),
+              toast,
+            )}
+          />
 
-        <SearchSelect
-          label="Source Type"
-          placeholder="Select or type to add new"
-          options={sourceTypeOptions}
-          value={values.sourceType}
-          onChange={(v) => set('sourceType', v)}
-          emptyState={buildCreateOptionEmptyState(
-            'source type',
-            createSourceType,
-            (id) => set('sourceType', id),
-            toast,
-          )}
-        />
+          <SearchSelect
+            label="Source Type"
+            placeholder="Select or type to add new"
+            options={sourceTypeOptions}
+            value={values.sourceType}
+            onChange={(v) => set('sourceType', v)}
+            emptyState={buildCreateOptionEmptyState(
+              'source type',
+              createSourceType,
+              (id) => set('sourceType', id),
+              toast,
+            )}
+          />
+        </div>
 
         <SectionTitle>Contact Person</SectionTitle>
 
-        <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-          <label className="text-sm font-bold text-gray-900">Name</label>
-          <input
-            type="text"
-            placeholder="Contact person's full name"
-            value={values.contactName}
-            onChange={(e) => set('contactName', e.target.value)}
-            className={inputClass(errors.contactName)}
-          />
-          {errors.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
-        </div>
+        <div className="grid grid-cols-[3fr_2fr] gap-4">
+          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+            <label className="text-sm font-bold text-gray-900">Name</label>
+            <input
+              type="text"
+              placeholder="Contact person's full name"
+              value={values.contactName}
+              onChange={(e) => set('contactName', e.target.value)}
+              className={inputClass(errors.contactName)}
+            />
+            {errors.contactName && <p className="text-xs text-red-500">{errors.contactName}</p>}
+          </div>
 
-        <SearchSelect
-          label="Role / Job Title"
-          placeholder="Select or type to add new"
-          options={roleOptions}
-          value={values.roleJobTitle}
-          onChange={(v) => set('roleJobTitle', v)}
-          emptyState={buildCreateOptionEmptyState(
-            'role',
-            createDecisionMaker,
-            (id) => set('roleJobTitle', id),
-            toast,
-          )}
-        />
+          <SearchSelect
+            label="Role / Job Title"
+            placeholder="Select or type to add new"
+            options={roleOptions}
+            value={values.roleJobTitle}
+            onChange={(v) => set('roleJobTitle', v)}
+            emptyState={buildCreateOptionEmptyState(
+              'role',
+              createDecisionMaker,
+              (id) => set('roleJobTitle', id),
+              toast,
+            )}
+          />
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <PhoneInput label="Phone" value={values.phone} onChange={(v) => set('phone', v)} />
@@ -244,28 +316,67 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           />
         </div>
 
-        <SectionTitle>Products &amp; Services</SectionTitle>
+        <SectionTitle>Products/Services</SectionTitle>
 
-        <MultiSelect
-          label="Products / Services"
-          placeholder="Select products or services"
-          options={productOptions}
-          value={values.productIds}
-          onChange={(v) => set('productIds', v)}
-        />
+        <div className="grid grid-cols-[3fr_2fr] gap-4">
+          <MultiSelect
+            label="Products/Services"
+            placeholder="Select products/services"
+            options={productOptions}
+            value={values.productIds}
+            onChange={(v) => {
+              set('productIds', v);
+              // A billing transaction can only be tagged to a product the client has.
+              if (billing.productId && !v.includes(billing.productId)) {
+                setBilling((prev) => ({ ...prev, productId: '' }));
+              }
+            }}
+          />
+          <AssignedToSelect
+            record="client"
+            value={values.assignedUserId}
+            onChange={(id) => set('assignedUserId', id)}
+          />
+        </div>
+
+        {(productsExpanded || values.productIds.length < 2) &&
+          values.productIds.map((id) => (
+            <ClientProductDetails
+              key={id}
+              name={productOptions.find((o) => o.value === id)?.label ?? 'Product/Service'}
+              value={productDetails[id] ?? EMPTY_PRODUCT_DETAIL}
+              onChange={(detail) => setProductDetails((prev) => ({ ...prev, [id]: detail }))}
+            />
+          ))}
+
+        {values.productIds.length > 1 && (
+          <ClientProductTotals
+            details={values.productIds.map((id) => productDetails[id] ?? EMPTY_PRODUCT_DETAIL)}
+            expanded={productsExpanded}
+            inline
+            onToggle={() => setProductsExpanded((v) => !v)}
+          />
+        )}
 
         <SectionTitle>Billing</SectionTitle>
 
-        <ToggleRow
-          label="Make billable"
-          description="Mark this client as billable."
-          enabled={values.isBillable}
-          onChange={(v) => set('isBillable', v)}
+        <BillingSection
+          enabled={values.raiseBilling}
+          onEnabledChange={(v) => set('raiseBilling', v)}
+          values={billing}
+          onValuesChange={setBilling}
+          errors={billingErrors}
+          productOptions={productOptions.filter((o) => values.productIds.includes(o.value))}
         />
 
         <SectionTitle>Location</SectionTitle>
 
-        <CompanyLocationForm values={values.location} onChange={(v) => set('location', v)} />
+        <CompanyLocationForm
+          values={values.location}
+          onChange={(v) => set('location', v)}
+          collapsibleMap
+          compact
+        />
         {errors.location && <p className="text-xs text-red-500">{errors.location}</p>}
       </div>
     </SidePanel>

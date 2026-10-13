@@ -10,6 +10,7 @@ import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelec
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SubledgerAccount, SubledgerType } from '@/types/accounting';
 import { useCreateSubledger, useEntityTypes, useSubledgers, useUpdateSubledger } from '@/hooks';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -94,6 +95,7 @@ export function AddEntityPanel({
     control,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
@@ -124,6 +126,25 @@ export function AddEntityPanel({
     onClose();
   };
 
+  // Multi-entry: with the lock on, saving keeps the panel open and asks Continue / Stop. Continue
+  // clears the form for the next entity but keeps the type, with its next free code. Only when
+  // adding on its own — editing, or being opened from another form that takes the new entity
+  // back (onCreated), saves and closes as usual.
+  const canMultiEntry = !isEditing && !onCreated;
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: handleClose,
+    onContinue: () => {
+      const type = getValues('type');
+      reset({
+        ...DEFAULTS,
+        type,
+        code: nextCodeFor(type) ?? '',
+        controlAccountId: initialControlAccountId ?? '',
+      });
+    },
+  });
+
   const onSubmit = async (data: FormValues) => {
     try {
       const payload = {
@@ -141,7 +162,10 @@ export function AddEntityPanel({
         : await createSubledger(payload);
       toast.success(isEditing ? 'Entity updated successfully' : 'Entity created successfully');
       onCreated?.(subledger);
-      handleClose();
+      entry.finishSave(
+        { title: 'Entity Added!', message: `${subledger.name} has been added.` },
+        handleClose,
+      );
     } catch (err) {
       toast.error(extractError(err, `Failed to ${isEditing ? 'update' : 'create'} entity`));
     }
@@ -151,6 +175,8 @@ export function AddEntityPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
+      {...entry.panelProps}
+      lock={canMultiEntry ? entry.panelProps.lock : undefined}
       title={isEditing ? 'Update Entity' : 'Add Entity'}
       description="Register a new subledger entity in your accounting records."
       footer={
@@ -165,64 +191,72 @@ export function AddEntityPanel({
       }
     >
       <div className="flex flex-col gap-3">
-        <Controller
-          name="type"
-          control={control}
-          rules={{ required: 'Entity type is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Entity Type"
-              placeholder="Select type…"
-              options={typeOptions}
-              value={field.value}
-              onChange={(value) => {
-                field.onChange(value);
-                if (isEditing) return;
-                const code = nextCodeFor(value);
-                if (code) setValue('code', code, { shouldValidate: true });
-              }}
-              error={errors.type?.message}
-            />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)]">
+          <Controller
+            name="type"
+            control={control}
+            rules={{ required: 'Entity type is required' }}
+            render={({ field }) => (
+              <SearchSelect
+                label="Entity Type"
+                placeholder="Select type…"
+                options={typeOptions}
+                value={field.value}
+                onChange={(value) => {
+                  field.onChange(value);
+                  if (isEditing) return;
+                  const code = nextCodeFor(value);
+                  if (code) setValue('code', code, { shouldValidate: true });
+                }}
+                error={errors.type?.message}
+              />
+            )}
+          />
+
+          <FormField
+            label="Entity Code"
+            registration={register('code', { required: 'Entity code is required' })}
+            error={errors.code}
+            placeholder="e.g. ENT-0001"
+          />
+        </div>
+
+        <div
+          className={`grid grid-cols-1 gap-3 ${initialControlAccountId ? 'sm:grid-cols-2' : ''}`}
+        >
+          <FormField
+            label="Entity Name"
+            registration={register('name', { required: 'Entity name is required' })}
+            error={errors.name}
+            placeholder="e.g. Acme Supplies Ltd."
+          />
+
+          {initialControlAccountId && (
+            <Input label="Control Account" value={initialControlAccountLabel ?? ''} readOnly />
           )}
-        />
+        </div>
 
-        <FormField
-          label="Entity Code"
-          registration={register('code', { required: 'Entity code is required' })}
-          error={errors.code}
-          placeholder="e.g. ENT-0001"
-        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <FormField
+            label="Contact Person"
+            registration={register('contactName')}
+            error={errors.contactName}
+            placeholder="e.g. Jane Doe"
+          />
 
-        <FormField
-          label="Entity Name"
-          registration={register('name', { required: 'Entity name is required' })}
-          error={errors.name}
-          placeholder="e.g. Acme Supplies Ltd."
-        />
-
-        {initialControlAccountId && (
-          <Input label="Control Account" value={initialControlAccountLabel ?? ''} readOnly />
-        )}
-
-        <FormField
-          label="Contact Person"
-          registration={register('contactName')}
-          error={errors.contactName}
-          placeholder="e.g. Jane Doe"
-        />
-
-        <Controller
-          control={control}
-          name="phone"
-          render={({ field, fieldState }) => (
-            <PhoneInput
-              label="Contact"
-              value={field.value}
-              onChange={field.onChange}
-              error={fieldState.error?.message}
-            />
-          )}
-        />
+          <Controller
+            control={control}
+            name="phone"
+            render={({ field, fieldState }) => (
+              <PhoneInput
+                label="Contact"
+                value={field.value}
+                onChange={field.onChange}
+                error={fieldState.error?.message}
+              />
+            )}
+          />
+        </div>
 
         <FormField
           label="Address"
@@ -234,7 +268,7 @@ export function AddEntityPanel({
         <FormField
           label="Description"
           type="textarea"
-          rows={3}
+          rows={2}
           registration={register('description')}
           error={errors.description}
           placeholder="Optional description"

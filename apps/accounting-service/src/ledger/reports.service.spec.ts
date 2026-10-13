@@ -123,6 +123,7 @@ describe('ReportsService', () => {
     const prisma = {
       journalLine: {
         findMany: jest.fn().mockResolvedValue(lines),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
       gLAccount: {
         findMany: jest.fn().mockResolvedValue(accounts),
@@ -337,6 +338,77 @@ describe('ReportsService', () => {
         tenantId,
         transactionCurrency: 'GHS',
       },
+    });
+  });
+
+  describe('incomeSeries', () => {
+    it('totals revenue and expenses for each range with the Income Statement rules', async () => {
+      const { prisma, service } = setup([], [revenueAccount, expenseAccount]);
+      prisma.gLAccount.findMany.mockResolvedValue([
+        { id: revenueAccount.id, category: GLAccountCategory.REVENUE },
+        { id: expenseAccount.id, category: GLAccountCategory.EXPENSE },
+      ]);
+      const sum = (debit: number, credit: number) => ({
+        baseDebit: new Prisma.Decimal(debit),
+        baseCredit: new Prisma.Decimal(credit),
+      });
+      prisma.journalLine.groupBy
+        .mockResolvedValueOnce([
+          // revenue is credit less debit: 1000 - 50
+          { glAccountId: revenueAccount.id, _sum: sum(50, 1000) },
+          // expenses are debit less credit: 400 - 100
+          { glAccountId: expenseAccount.id, _sum: sum(400, 100) },
+        ])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.incomeSeries(tenantId, {
+        ranges: '2026-07-01:2026-07-31,2026-08-01:2026-08-31',
+      });
+
+      expect(result).toEqual([
+        {
+          fromDate: '2026-07-01',
+          toDate: '2026-07-31',
+          totalRevenue: '950.00',
+          totalExpenses: '300.00',
+        },
+        {
+          fromDate: '2026-08-01',
+          toDate: '2026-08-31',
+          totalRevenue: '0.00',
+          totalExpenses: '0.00',
+        },
+      ]);
+    });
+
+    it('only counts posted and reversed journals for this tenant', async () => {
+      const { prisma, service } = setup();
+      prisma.journalLine.groupBy.mockResolvedValue([]);
+
+      await service.incomeSeries(tenantId, { ranges: '2026-07-01:2026-07-31' });
+
+      const call = prisma.journalLine.groupBy.mock.calls[0] as [
+        {
+          where: {
+            tenantId: string;
+            journalEntry: { tenantId: string; status: { in: JournalStatus[] } };
+          };
+        },
+      ];
+      expect(call[0].where.tenantId).toBe(tenantId);
+      expect(call[0].where.journalEntry.tenantId).toBe(tenantId);
+      expect(call[0].where.journalEntry.status.in).toEqual([
+        JournalStatus.POSTED,
+        JournalStatus.REVERSED,
+      ]);
+    });
+
+    it('rejects a range that ends before it starts', async () => {
+      const { service } = setup();
+
+      await expect(
+        service.incomeSeries(tenantId, { ranges: '2026-08-01:2026-07-01' }),
+      ).rejects.toThrow('ends before it starts');
     });
   });
 

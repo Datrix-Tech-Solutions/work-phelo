@@ -116,7 +116,8 @@ describe('PayrollService', () => {
           provide: HrAccountingClient,
           useValue: {
             postPayrollAccrual: jest.fn(),
-            configurationStatus: jest.fn(),
+            isConfigured: jest.fn(),
+            getPayrollAccountingStatus: jest.fn(),
           },
         },
       ],

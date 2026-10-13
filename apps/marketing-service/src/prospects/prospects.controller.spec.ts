@@ -43,94 +43,37 @@ describe('ProspectsController authorization contract', () => {
     ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_CREATE]);
   });
 
-  it('requires prospect view permission on list', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.list,
-      ),
-    ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_VIEW]);
+  it('needs no permission to view prospects: the service shows an assignee their own', () => {
+    for (const handler of [
+      ProspectsController.prototype.list,
+      ProspectsController.prototype.findOne,
+      ProspectsController.prototype.listInteractions,
+      ProspectsController.prototype.listFollowUps,
+    ]) {
+      expect(Reflect.getMetadata(ANY_PERMISSIONS_KEY, handler)).toBeUndefined();
+    }
+  });
+});
+
+describe('Managing your own prospects', () => {
+  it('needs no permission: the service limits it to the caller’s own prospects unless they hold the tenant-wide one', () => {
+    for (const handler of [
+      ProspectsController.prototype.update,
+      ProspectsController.prototype.remove,
+      ProspectsController.prototype.createInteraction,
+      ProspectsController.prototype.createFollowUp,
+    ]) {
+      expect(Reflect.getMetadata(ANY_PERMISSIONS_KEY, handler)).toBeUndefined();
+    }
   });
 
-  it('requires prospect view permission on detail', () => {
+  it('still needs the create permission to create a prospect', () => {
     expect(
       Reflect.getMetadata(
         ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.findOne,
+        ProspectsController.prototype.create,
       ),
-    ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_VIEW]);
-  });
-
-  it('requires assigned or tenant-wide prospect edit permission on update', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.update,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.PROSPECTS_EDIT,
-      MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide prospect delete permission on remove', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.remove,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.PROSPECTS_DELETE,
-      MarketingCrmSettingsPermission.PROSPECTS_DELETE_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide prospect interaction view permission on history', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.listInteractions,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW,
-      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_VIEW_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide prospect interaction create permission on create interaction', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.createInteraction,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE,
-      MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide follow-up view permission on history', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.listFollowUps,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW,
-      MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide follow-up create permission on create follow-up', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectsController.prototype.createFollowUp,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE,
-      MarketingCrmSettingsPermission.FOLLOW_UPS_CREATE_ALL,
-    ]);
+    ).toEqual([MarketingCrmSettingsPermission.PROSPECTS_CREATE]);
   });
 });
 
@@ -146,53 +89,18 @@ describe('ProspectFollowUpsController authorization contract', () => {
       feature: 'leads',
     });
   });
+});
 
-  it('requires assigned or tenant-wide follow-up view permission on worklist', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectFollowUpsController.prototype.listWorklist,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW,
-      MarketingCrmSettingsPermission.FOLLOW_UPS_VIEW_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide follow-up edit permission on update', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectFollowUpsController.prototype.update,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.FOLLOW_UPS_EDIT,
-      MarketingCrmSettingsPermission.FOLLOW_UPS_EDIT_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide follow-up cancel permission on cancel', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectFollowUpsController.prototype.cancel,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.FOLLOW_UPS_CANCEL,
-      MarketingCrmSettingsPermission.FOLLOW_UPS_CANCEL_ALL,
-    ]);
-  });
-
-  it('requires assigned or tenant-wide follow-up complete permission on complete', () => {
-    expect(
-      Reflect.getMetadata(
-        ANY_PERMISSIONS_KEY,
-        ProspectFollowUpsController.prototype.complete,
-      ),
-    ).toEqual([
-      MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE,
-      MarketingCrmSettingsPermission.FOLLOW_UPS_COMPLETE_ALL,
-    ]);
+describe('Follow-ups on your own prospects', () => {
+  it('need no permission: the service limits them to the caller’s own prospects unless they hold the tenant-wide one', () => {
+    for (const handler of [
+      ProspectFollowUpsController.prototype.listWorklist,
+      ProspectFollowUpsController.prototype.update,
+      ProspectFollowUpsController.prototype.cancel,
+      ProspectFollowUpsController.prototype.complete,
+    ]) {
+      expect(Reflect.getMetadata(ANY_PERMISSIONS_KEY, handler)).toBeUndefined();
+    }
   });
 });
 

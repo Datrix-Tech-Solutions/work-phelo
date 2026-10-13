@@ -1,7 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  IsBoolean,
   IsOptional,
   IsString,
   IsUUID,
@@ -15,6 +14,14 @@ import {
 } from '../../prospects/dto/update-prospect.dto';
 
 export class UpdateClientDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'User to assign it to. Choosing someone else needs the assign permission.',
+  })
+  @IsOptional()
+  @IsUUID()
+  assignedUserId?: string;
   @ApiPropertyOptional({ example: 'Acme Manufacturing Ltd', maxLength: 200 })
   @CollapseWhitespaceString()
   @IsOptional()
@@ -31,11 +38,6 @@ export class UpdateClientDto {
   @IsOptional()
   @IsUUID()
   sourceTypeId?: string | null;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  isBillable?: boolean;
 
   @ApiPropertyOptional({ type: UpdateProspectPrimaryContactDto })
   @IsOptional()

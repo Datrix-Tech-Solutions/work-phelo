@@ -1,5 +1,6 @@
 'use client';
 
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
@@ -239,19 +240,9 @@ export default function SourceTypeDetailPage({
               onFilter={(value) => setStatusFilter(value as SourceLedgerStatusFilter)}
               extraFilters={
                 <div className="flex items-center gap-2 text-sm">
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-700"
-                  />
+                  <DatePicker value={dateFrom} onChange={setDateFrom} placeholder="From" />
                   <span className="text-gray-400">to</span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-700"
-                  />
+                  <DatePicker value={dateTo} onChange={setDateTo} placeholder="To" />
                 </div>
               }
               sortState={sortState}

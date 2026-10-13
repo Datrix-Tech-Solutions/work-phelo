@@ -1,10 +1,10 @@
 'use client';
 
-import { use, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { usePermission } from '@/hooks/hr/usePermission';
+import { useRedirectWhenDenied } from '@/hooks/hr/useRedirectWhenDenied';
 import { Permission } from '@/lib/permissionMap';
-import { ApprovePayrollTab } from '@/components/organisms/hr/payroll/ApprovePayrollTab';
+import { ApprovePayrollContent } from '@/components/organisms/hr/payroll/run-payroll/ApprovePayrollContent';
 import { pageHeader, pageContent } from '@/lib/layout';
 
 export default function ApprovePayrollPage({
@@ -13,14 +13,9 @@ export default function ApprovePayrollPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
-  const router = useRouter();
   const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
 
-  useEffect(() => {
-    if (canApprovePayroll === false) {
-      router.replace(`/${tenantSlug}/hr/payroll`);
-    }
-  }, [canApprovePayroll, tenantSlug, router]);
+  useRedirectWhenDenied(canApprovePayroll === false, `/${tenantSlug}/hr/payroll`);
 
   if (!canApprovePayroll) return null;
 
@@ -30,7 +25,7 @@ export default function ApprovePayrollPage({
         <h1 className="text-xl font-bold text-gray-900">Approve Payroll</h1>
       </div>
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto flex flex-col`}>
-        <ApprovePayrollTab />
+        <ApprovePayrollContent />
       </div>
     </div>
   );

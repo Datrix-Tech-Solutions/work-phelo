@@ -26,6 +26,7 @@ const STATUS_VARIANT: Record<JournalRecordStatus, 'success' | 'neutral' | 'dange
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  VOIDED: 'neutral',
 };
 
 function fmtDate(iso: string) {
@@ -74,6 +75,7 @@ export function JournalEntriesTable() {
     return data.filter(
       (r) =>
         r.journalNumber.toLowerCase().includes(q) ||
+        formatJournalNumber(r.journalNumber).toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
         r.transactionCurrency.toLowerCase().includes(q) ||
         // (r.source ? describeJournalSource(r.source).toLowerCase().includes(q) : false) ||

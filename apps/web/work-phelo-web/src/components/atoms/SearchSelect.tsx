@@ -10,6 +10,10 @@ export interface SearchSelectOption {
   value: string;
   label: string;
   sublabel?: string;
+  /** Shown in the list but greyed out and not selectable (e.g. a vehicle under maintenance). */
+  disabled?: boolean;
+  /** Short tag shown at the right of the option, typically the reason it is disabled. */
+  tag?: string;
 }
 
 interface SearchSelectProps {
@@ -19,8 +23,9 @@ interface SearchSelectProps {
   value?: string;
   onChange?: (value: string) => void;
   error?: string;
-  /** 'md' (default) keeps the standard py-3 height; 'sm' matches the DataTable search input (py-2). */
-  size?: 'sm' | 'md';
+  /** 'md' keeps the standard py-3 height; 'sm' (default) matches the DataTable search input (py-2);
+   *  'xs' is a compact control for card headers such as dashboard chart filters. */
+  size?: 'xs' | 'sm' | 'md';
   /** Fires on every keystroke — lets callers drive async option sources (e.g. geocoding search). */
   onQueryChange?: (query: string) => void;
   /** Rendered inside the control's own box, alongside the clear/chevron icons (e.g. a
@@ -43,9 +48,15 @@ interface SearchSelectProps {
   disabled?: boolean;
 }
 
-function ChevronDown({ open }: { open: boolean }) {
+function ChevronDown({ open, small }: { open: boolean; small?: boolean }) {
   return (
-    <Icons.ChevronDown className={cn('transition-transform duration-150', open && 'rotate-180')} />
+    <Icons.ChevronDown
+      className={cn(
+        'transition-transform duration-150',
+        small ? 'w-3.5 h-3.5' : 'w-4 h-4',
+        open && 'rotate-180',
+      )}
+    />
   );
 }
 
@@ -156,6 +167,17 @@ export function SearchSelect({
     optionRefs.current[highlightedIndex]?.scrollIntoView({ block: 'nearest' });
   }, [highlightedIndex, open]);
 
+  /* Moves the highlight one step, hopping over disabled options (stays put if none are enabled). */
+  const stepEnabled = (from: number, direction: 1 | -1) => {
+    const count = filtered.length;
+    if (!count) return -1;
+    for (let step = 1; step <= count; step += 1) {
+      const next = (((from + direction * step) % count) + count) % count;
+      if (!filtered[next].disabled) return next;
+    }
+    return from;
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!open) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -167,13 +189,11 @@ export function SearchSelect({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setHighlightedIndex((i) => (filtered.length ? (i + 1) % filtered.length : -1));
+        setHighlightedIndex((i) => stepEnabled(i, 1));
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setHighlightedIndex((i) =>
-          filtered.length ? (i - 1 + filtered.length) % filtered.length : -1,
-        );
+        setHighlightedIndex((i) => stepEnabled(i, -1));
         break;
       case 'Enter':
         e.preventDefault();
@@ -213,6 +233,7 @@ export function SearchSelect({
   };
 
   const handleSelect = (opt: SearchSelectOption) => {
+    if (opt.disabled) return;
     onChange?.(opt.value);
     closeDropdown();
     setQuery('');
@@ -243,7 +264,8 @@ export function SearchSelect({
       {/* Combobox input */}
       <div
         className={cn(
-          'flex items-center border rounded-input px-4 transition-colors',
+          'flex items-center border rounded-input transition-colors',
+          size === 'xs' ? 'px-3' : 'px-4',
           disabled && 'opacity-60 cursor-not-allowed',
           open
             ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
@@ -269,8 +291,8 @@ export function SearchSelect({
             open && highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined
           }
           className={cn(
-            'flex-1 text-sm bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 min-w-0',
-            size === 'sm' ? 'py-2' : 'py-3',
+            'flex-1 bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 min-w-0',
+            size === 'xs' ? 'py-1 text-xs' : size === 'sm' ? 'py-2 text-sm' : 'py-3 text-sm',
           )}
         />
 
@@ -283,7 +305,7 @@ export function SearchSelect({
               onClick={handleClear}
               className="text-gray-400 hover:text-gray-500 transition-colors p-0.5"
             >
-              <Icons.X className="w-5 h-5" />
+              <Icons.X className={size === 'xs' ? 'w-4 h-4' : 'w-5 h-5'} />
             </button>
           )}
           {/* Chevron toggle */}
@@ -293,7 +315,7 @@ export function SearchSelect({
             onClick={handleChevronClick}
             className="text-gray-400 hover:text-gray-600 transition-colors p-0.5"
           >
-            <ChevronDown open={open} />
+            <ChevronDown open={open} small={size === 'xs'} />
           </button>
         </div>
       </div>
@@ -345,26 +367,43 @@ export function SearchSelect({
                       id={`${listboxId}-option-${idx}`}
                       role="option"
                       aria-selected={opt.value === value}
+                      aria-disabled={opt.disabled || undefined}
                       ref={(el) => {
                         optionRefs.current[idx] = el;
                       }}
                       type="button"
                       onMouseDown={(e) => e.preventDefault()} // prevent input blur before select fires
-                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      onMouseEnter={() => !opt.disabled && setHighlightedIndex(idx)}
                       onClick={() => handleSelect(opt)}
                       className={cn(
                         'w-full text-left px-4 py-2.5 text-sm transition-colors flex flex-col',
-                        opt.value === value
-                          ? 'bg-brand-tint text-brand font-medium'
-                          : cn(
-                              'text-gray-900 hover:bg-gray-300',
-                              idx === highlightedIndex && 'bg-gray-300',
-                            ),
+                        opt.disabled
+                          ? 'cursor-not-allowed text-gray-500'
+                          : opt.value === value
+                            ? 'bg-brand-tint text-brand font-medium'
+                            : cn(
+                                'text-gray-900 hover:bg-gray-300',
+                                idx === highlightedIndex && 'bg-gray-300',
+                              ),
                       )}
                     >
-                      <span>{opt.label}</span>
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={cn(opt.disabled && 'opacity-50')}>{opt.label}</span>
+                        {opt.tag && (
+                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                            {opt.tag}
+                          </span>
+                        )}
+                      </span>
                       {opt.sublabel && (
-                        <span className="text-xs text-gray-400 mt-0.5">{opt.sublabel}</span>
+                        <span
+                          className={cn(
+                            'text-xs text-gray-400 mt-0.5',
+                            opt.disabled && 'opacity-60',
+                          )}
+                        >
+                          {opt.sublabel}
+                        </span>
                       )}
                     </button>
                   ))

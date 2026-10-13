@@ -33,3 +33,9 @@ export const pageWrapper = 'p-4 sm:p-6 lg:p-8';
 // Responsive card grid: as many columns as fit, each card stretching to fill its column.
 // Cards placed in it should be w-full (ContactCard and DataCard are).
 export const cardGrid = 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3';
+
+// Same as cardGrid, for small stat cards: never more than 5 columns, so five or more cards fill
+// the row (the column minimum is a fifth of the row less its four 0.75rem gaps), and as few as 160px
+// wide on narrow screens.
+export const compactCardGrid =
+  'grid grid-cols-[repeat(auto-fill,minmax(max(160px,calc((100%_-_3rem)_/_5)),1fr))] gap-3';

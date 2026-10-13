@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import { DocumentManagerPanel } from '@/components/organisms/hr/documents/DocumentManagerPanel';
 import { UploadCompanyDocumentModal } from '@/components/organisms/hr/documents/UploadCompanyDocumentModal';
+import { DriverLicenceDetails } from '@/components/molecules/hr/documents/DriverLicenceDetails';
+import { useDriverLicence, useSaveDriverLicence } from '@/hooks/hr/useDriverLicence';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import {
   DOCUMENT_TYPE_LABELS,
@@ -30,6 +32,7 @@ function fromEmployeeDocument(doc: EmployeeDocument): MyDocument {
     category:
       doc.type === 'OTHER' && doc.customType ? doc.customType : DOCUMENT_TYPE_LABELS[doc.type],
     previewUrl: doc.url,
+    type: doc.type,
   };
 }
 
@@ -46,6 +49,8 @@ export function EmployeeDocumentsTab({ employee }: Props) {
   const { data: documentsRaw, isLoading } = useEmployeeDocuments(employee.id);
   const { mutate: uploadDocument, isPending: isUploading } = useUploadEmployeeDocument(employee.id);
   const { mutate: deleteDocument } = useDeleteEmployeeDocument(employee.id);
+  const { data: licenceView } = useDriverLicence(employee.id);
+  const { mutate: saveLicence, isPending: isSavingLicence } = useSaveDriverLicence(employee.id);
 
   const documents = useMemo(() => (documentsRaw ?? []).map(fromEmployeeDocument), [documentsRaw]);
 
@@ -64,12 +69,30 @@ export function EmployeeDocumentsTab({ employee }: Props) {
         allowUpload
         allowDelete
         onDelete={handleDelete}
+        renderDetails={(doc) =>
+          doc.type === 'DRIVER_LICENCE' ? <DriverLicenceDetails scope={employee.id} /> : null
+        }
         renderUploadModal={({ isOpen, onClose }) => (
           <UploadCompanyDocumentModal
             isOpen={isOpen}
             onClose={onClose}
-            isUploading={isUploading}
+            isUploading={isUploading || isSavingLicence}
             onUpload={(input) => {
+              // A driver's licence is its image plus its details, saved together.
+              if (input.type === 'DRIVER_LICENCE' && input.licence) {
+                saveLicence(
+                  { file: input.file, details: input.licence, exists: !!licenceView?.licence },
+                  {
+                    onSuccess: () => {
+                      onClose();
+                      setUploadSuccess(true);
+                    },
+                    onError: (err) =>
+                      toast.error(extractError(err, "Failed to save the driver's licence")),
+                  },
+                );
+                return;
+              }
               uploadDocument(input, {
                 onSuccess: () => {
                   onClose();

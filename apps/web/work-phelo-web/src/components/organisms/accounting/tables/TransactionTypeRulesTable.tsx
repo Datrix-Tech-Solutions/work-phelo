@@ -50,7 +50,7 @@ export function TransactionTypeRulesTable() {
         if (!query) return true;
         if (`${type.name} ${type.code}`.toLowerCase().includes(query)) return true;
         return !!rule?.lines.some((line) =>
-          `${line.account.code} ${line.account.name} ${line.description ?? ''}`
+          `${line.account?.code ?? ''} ${line.account?.name ?? ''} ${line.scopes.map((s) => `${s.classification?.name ?? ''} ${s.category}`).join(' ')} ${line.description ?? ''}`
             .toLowerCase()
             .includes(query),
         );
@@ -210,7 +210,7 @@ function RuleCard({
             <span>Account</span>
             <span>Description</span>
             <span>Dir</span>
-            <span>Tax / Subledger</span>
+            <span>Tax / Settlement</span>
           </div>
           {rule.lines.map((line) => (
             <div
@@ -219,15 +219,28 @@ function RuleCard({
               style={{ gridTemplateColumns: columns }}
             >
               <span className="min-w-0 truncate">
-                {line.account.code} – {line.account.name}
+                {line.account
+                  ? `${line.account.code} – ${line.account.name}`
+                  : line.scopes
+                      .map((s) =>
+                        s.account
+                          ? `${s.account.code} – ${s.account.name}`
+                          : s.classification
+                            ? `Any ${s.classification.name} account`
+                            : `Any ${s.category.toLowerCase()} account`,
+                      )
+                      .join(' or ')}
               </span>
               <span className="min-w-0 truncate text-gray-600">{line.description ?? '—'}</span>
               <TypeChip label={line.direction} color={line.direction === 'DR' ? 'blue' : 'green'} />
               <span className="min-w-0 truncate text-gray-600">
-                {line.taxType ? `${line.taxType.name} (${line.taxType.rate}%)` : ''}
-                {line.taxType && line.subledgerType ? ' · ' : ''}
-                {line.subledgerType ?? ''}
-                {!line.taxType && !line.subledgerType ? '—' : ''}
+                {line.settlementKind
+                  ? `At settlement · ${line.settlementKind === 'DEDUCTION' ? 'deduction' : 'charge'}${
+                      line.taxType ? ` · ${line.taxType.name} (${line.taxType.rate}%)` : ''
+                    }`
+                  : line.taxType
+                    ? `${line.taxType.name} (${line.taxType.rate}%)`
+                    : '—'}
               </span>
             </div>
           ))}

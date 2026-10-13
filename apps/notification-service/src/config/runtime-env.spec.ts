@@ -18,6 +18,13 @@ describe('assertNotificationRuntimeEnv', () => {
     delete process.env.TERMII_SENDER_ID;
     delete process.env.PILOSMS_API_KEY;
     delete process.env.PILOSMS_SENDER_ID;
+    delete process.env.SASUSYNC_API_KEY;
+    delete process.env.SASUSYNC_SENDER_ID;
+    delete process.env.SASUSYNC_BASE_URL;
+    delete process.env.SASUSYNC_SANDBOX;
+    delete process.env.AGOOSMS_API_KEY;
+    delete process.env.AGOOSMS_BASE_URL;
+    delete process.env.AGOOSMS_SANDBOX;
   });
 
   afterEach(() => {
@@ -33,6 +40,29 @@ describe('assertNotificationRuntimeEnv', () => {
 
     process.env.TERMII_API_KEY = 'termii-key';
     process.env.TERMII_SENDER_ID = 'WorkPhelo';
+    expect(() => assertNotificationRuntimeEnv()).not.toThrow();
+  });
+
+  it('requires only AgooSMS credentials when SMS_PROVIDER is agoosms', () => {
+    process.env.SMS_PROVIDER = 'agoosms';
+
+    expect(() => assertNotificationRuntimeEnv()).toThrow(
+      'Notification service missing required environment variables: AGOOSMS_API_KEY',
+    );
+
+    process.env.AGOOSMS_API_KEY = 'agoo-key';
+    expect(() => assertNotificationRuntimeEnv()).not.toThrow();
+  });
+
+  it('requires only SasuSync credentials when SMS_PROVIDER is sasusync', () => {
+    process.env.SMS_PROVIDER = 'sasusync';
+
+    expect(() => assertNotificationRuntimeEnv()).toThrow(
+      'Notification service missing required environment variables: SASUSYNC_API_KEY, SASUSYNC_SENDER_ID',
+    );
+
+    process.env.SASUSYNC_API_KEY = 'sasusync-key';
+    process.env.SASUSYNC_SENDER_ID = 'WorkPhelo';
     expect(() => assertNotificationRuntimeEnv()).not.toThrow();
   });
 
@@ -58,7 +88,7 @@ describe('assertNotificationRuntimeEnv', () => {
     process.env.SMS_PROVIDER = 'unsupported';
 
     expect(() => assertNotificationRuntimeEnv()).toThrow(
-      'Unsupported SMS_PROVIDER "unsupported". Expected "termii" or "pilosms".',
+      'Unsupported SMS_PROVIDER "unsupported". Expected "termii", "pilosms", "sasusync", or "agoosms".',
     );
   });
 });

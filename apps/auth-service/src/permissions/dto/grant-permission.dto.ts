@@ -19,6 +19,7 @@ export enum PermissionAction {
   EXPORT = 'EXPORT',
   ASSIGN = 'ASSIGN',
   CANCEL = 'CANCEL',
+  VERIFY = 'VERIFY',
 }
 
 export class GrantPermissionDto {

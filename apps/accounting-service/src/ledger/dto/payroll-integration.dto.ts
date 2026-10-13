@@ -5,10 +5,12 @@ import {
   IsBoolean,
   IsDateString,
   IsNumber,
+  IsOptional,
   IsString,
   IsUUID,
   Min,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -122,17 +124,108 @@ export class PostPayrollAccrualDto {
   @IsNumber()
   @Min(0)
   totalOtherDeductions!: number;
+}
+
+export class PostPayrollRoleAccrualDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  tenantId!: string;
+
+  @ApiProperty({ description: 'The HR payroll run this accrual is for.' })
+  @IsString()
+  payrollRunId!: string;
+
+  @ApiProperty({ example: '10/2026' })
+  @IsString()
+  @MaxLength(80)
+  periodLabel!: string;
 
   @ApiProperty({
+    type: String,
+    format: 'date',
     description:
-      'Post straight to the ledger instead of leaving the journal as a draft for review.',
+      "Date the accrual is recorded on - the payroll run's period end date.",
   })
-  @IsBoolean()
-  autoPost!: boolean;
+  @IsDateString()
+  transactionDate!: string;
+
+  @ApiProperty({ description: 'Salary and wages: gross pay for the run.' })
+  @IsNumber()
+  @Min(0)
+  totalGross!: number;
+
+  @ApiProperty({ description: 'Net pay for the run.' })
+  @IsNumber()
+  @Min(0)
+  totalNet!: number;
+
+  @ApiProperty({ description: 'Income tax withheld, after any tax credits.' })
+  @IsNumber()
+  @Min(0)
+  totalIncomeTax!: number;
+
+  @ApiProperty({
+    description: "Employees' social security contributions withheld.",
+  })
+  @IsNumber()
+  @Min(0)
+  totalEmployeeSocialSecurity!: number;
+
+  @ApiProperty({
+    description: "The employer's own social security contribution.",
+  })
+  @IsNumber()
+  @Min(0)
+  totalEmployerSocialSecurity!: number;
+
+  @ApiProperty({ description: 'Pension withheld, owed to a private fund.' })
+  @IsNumber()
+  @Min(0)
+  totalPension!: number;
+
+  @ApiProperty({
+    description: 'Other amounts withheld from pay, such as loan repayments.',
+  })
+  @IsNumber()
+  @Min(0)
+  totalOtherDeductions!: number;
 }
 
 export class QueryPayrollSettlementStatusDto {
   @ApiProperty({ description: 'Tenant the payroll run belongs to' })
   @IsUUID()
   tenantId!: string;
+}
+
+export class SetPayrollAccountMappingDto {
+  @ApiProperty({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The account that handles this payroll function, or null to clear it.',
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  glAccountId!: string | null;
+}
+
+export class CreatePayrollRoleAccountDto {
+  @ApiPropertyOptional({
+    example: 'Net Pay Payable',
+    description:
+      'Name for the new account. Defaults to the standard name for this function.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  name?: string;
+}
+
+export class UpdatePayrollAccountingSettingsDto {
+  @ApiProperty({
+    description:
+      'Post the accrual journal straight to the ledger instead of leaving it as a draft for review.',
+  })
+  @IsBoolean()
+  autoPostOnApproval!: boolean;
 }

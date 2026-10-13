@@ -30,21 +30,29 @@ describe('assertAccountingRuntimeEnv', () => {
   it('requires a sufficiently strong internal auth secret', () => {
     process.env.DEPLOY_ENV = 'dev';
     process.env.INTERNAL_SERVICE_AUTH_SECRET = 'short';
-    process.env.INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES = 'reinsurance-service';
+    process.env.INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES = 'marketing-service';
 
     expect(() => assertAccountingRuntimeEnv()).toThrow(
       'INTERNAL_SERVICE_AUTH_SECRET must be at least 32 characters',
     );
   });
 
-  it('requires the Reinsurance service identity in the allowed services list', () => {
+  it('requires at least one calling service in the allowed services list', () => {
     process.env.DEPLOY_ENV = 'dev';
     process.env.INTERNAL_SERVICE_AUTH_SECRET = 'x'.repeat(32);
-    process.env.INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES = 'auth-service';
+    process.env.INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES = ' , ';
 
     expect(() => assertAccountingRuntimeEnv()).toThrow(
-      'INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES must include reinsurance-service',
+      'INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES must name at least one calling service',
     );
+  });
+
+  it('accepts any named calling service', () => {
+    process.env.DEPLOY_ENV = 'dev';
+    process.env.INTERNAL_SERVICE_AUTH_SECRET = 'x'.repeat(32);
+    process.env.INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES = 'marketing-service';
+
+    expect(() => assertAccountingRuntimeEnv()).not.toThrow();
   });
 
   it('allows internal integration config to be omitted when explicitly disabled', () => {

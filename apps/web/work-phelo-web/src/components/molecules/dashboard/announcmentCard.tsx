@@ -46,7 +46,7 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
 
   if (announcements.length === 0) {
     return (
-      <div className={cardClass('p-5 flex flex-col gap-3 min-h-60 flex-1 border-gray-200')}>
+      <div className={cardClass('p-5 flex flex-col gap-3 min-h-40 flex-1 border-gray-200')}>
         <div className="flex items-center gap-2 shrink-0">
           <h2 className="text-base font-bold text-(--module-btn-bg,var(--color-brand))">
             General Announcements
@@ -65,7 +65,7 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
 
   return (
     <>
-      <div className={cardClass('p-3 flex flex-col min-h-100 flex-1 border-gray-200')}>
+      <div className={cardClass('p-3 flex flex-col min-h-40 flex-1 border-gray-200')}>
         {/* Header */}
         <div className="flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
@@ -92,7 +92,7 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
         <div className="h-px bg-gray-100 -mx-5 mt-1 shrink-0" />
 
         {/* List */}
-        <div className="flex flex-col divide-y divide-gray-100 overflow-y-auto max-h-225">
+        <div className="flex flex-col divide-y divide-gray-100 overflow-y-auto flex-1 min-h-0">
           {announcements.map((a) => {
             const isRead = (a.isRead ?? false) || pendingReadIds.has(a.id);
             return (

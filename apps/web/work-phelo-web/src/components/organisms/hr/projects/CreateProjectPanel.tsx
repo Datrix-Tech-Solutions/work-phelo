@@ -11,6 +11,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import { CreateProjectDto } from '@/types/hr';
 import { EmployeeOption } from '@/types/hr';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 interface CreateProjectPanelProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export function CreateProjectPanel({
   onSubmit,
   isSubmitting,
 }: CreateProjectPanelProps) {
+  const labels = useProjectLabels();
   const {
     register,
     handleSubmit,
@@ -77,22 +79,22 @@ export function CreateProjectPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="New Project"
-      description="Create a new project and assign an owner."
+      title={`New ${labels.singular}`}
+      description={`Create a new ${labels.singularLower} and assign an owner.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button isLoading={isSubmitting} loadingText="Creating…" onClick={handleSubmit(onValid)}>
-            Create Project
+            Create {labels.singular}
           </Button>
         </div>
       }
     >
       <FormField
-        label="Project Name"
-        registration={register('name', { required: 'Project name is required' })}
+        label={`${labels.singular} Name`}
+        registration={register('name', { required: `${labels.singular} name is required` })}
         error={errors.name}
         placeholder="e.g. Website Redesign"
       />
@@ -103,7 +105,7 @@ export function CreateProjectPanel({
         </label>
         <textarea
           {...register('description')}
-          placeholder="Brief overview of the project"
+          placeholder={`Brief overview of the ${labels.singularLower}`}
           rows={3}
           className={inputClass(undefined, 'resize-none')}
         />
@@ -158,7 +160,7 @@ export function CreateProjectPanel({
         control={control}
         render={({ field }) => (
           <SearchSelect
-            label="Project Owner"
+            label={`${labels.singular} Owner`}
             placeholder="Select owner (optional)"
             options={managerOptions}
             value={field.value}

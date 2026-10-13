@@ -28,6 +28,18 @@ export enum Permission {
   EXPORT_EMPLOYEES = 'export:employees',
   READ_HR_SETTINGS = 'read:hr_settings',
   MANAGE_HR_SETTINGS = 'manage:hr_settings',
+  VIEW_HR_DASHBOARD = 'view:hr_dashboard',
+  VIEW_HR_REPORTS = 'view:hr_reports',
+  READ_RECRUITMENT_VACANCIES = 'read:recruitment_vacancies',
+  CREATE_RECRUITMENT_VACANCY = 'create:recruitment_vacancy',
+  UPDATE_RECRUITMENT_VACANCY = 'update:recruitment_vacancy',
+  CLOSE_RECRUITMENT_VACANCY = 'close:recruitment_vacancy',
+  READ_RECRUITMENT_CANDIDATES = 'read:recruitment_candidates',
+  UPDATE_RECRUITMENT_CANDIDATE_STAGE = 'update:recruitment_candidate_stage',
+  READ_RECRUITMENT_STAGES = 'read:recruitment_stages',
+  CREATE_RECRUITMENT_STAGE = 'create:recruitment_stage',
+  UPDATE_RECRUITMENT_STAGE = 'update:recruitment_stage',
+  DELETE_RECRUITMENT_STAGE = 'delete:recruitment_stage',
 
   // ── Departments ───────────────────────────────────────────────────────────
   CREATE_DEPARTMENT = 'create:department',

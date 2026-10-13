@@ -1,10 +1,7 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-export default async function UserManagementPage({
-  params,
-}: {
-  params: Promise<{ tenantSlug: string }>;
-}) {
-  const { tenantSlug } = await params;
-  redirect(`/${tenantSlug}/marketing/user-management/roles-permissions`);
+import { MarketingTabRedirect } from '@/components/molecules/marketing/MarketingTabRedirect';
+
+export default function Page() {
+  return <MarketingTabRedirect page="user-management" />;
 }

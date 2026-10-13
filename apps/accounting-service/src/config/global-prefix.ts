@@ -17,8 +17,40 @@ export const ACCOUNTING_GLOBAL_PREFIX_EXCLUSIONS: RouteInfo[] = [
     method: RequestMethod.POST,
   },
   {
+    path: 'internal/source-transactions/options',
+    method: RequestMethod.GET,
+  },
+  {
+    path: 'internal/source-transactions',
+    method: RequestMethod.POST,
+  },
+  {
+    path: 'internal/source-transactions',
+    method: RequestMethod.GET,
+  },
+  {
+    path: 'internal/source-transactions/receipts-summary',
+    method: RequestMethod.POST,
+  },
+  {
+    path: 'internal/source-transactions/payment-requests',
+    method: RequestMethod.POST,
+  },
+  {
+    path: 'internal/source-transactions/payment-requests/:requestId/cancel',
+    method: RequestMethod.POST,
+  },
+  {
     path: 'internal/payroll-integration/post-accrual',
     method: RequestMethod.POST,
+  },
+  {
+    path: 'internal/payroll-integration/post-role-accrual',
+    method: RequestMethod.POST,
+  },
+  {
+    path: 'internal/payroll-integration/status',
+    method: RequestMethod.GET,
   },
   {
     path: 'internal/payroll-integration/:payrollRunId/settlement-status',

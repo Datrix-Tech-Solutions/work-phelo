@@ -9,6 +9,7 @@ import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/Con
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
+import { useAuthStore } from '@/store/auth.store';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { TabBar } from '@/components/molecules/shared/TabBar';
@@ -19,7 +20,7 @@ import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectMan
 import { EditProspectProductsModal } from '@/components/organisms/marketing/EditProspectProductsModal';
 import { EditProspectCompanyModal } from '@/components/organisms/marketing/EditProspectCompanyModal';
 import { ChangeProspectLocationModal } from '@/components/organisms/marketing/ChangeProspectLocationModal';
-import { ChangeProspectDecisionMakerModal } from '@/components/organisms/marketing/ChangeProspectDecisionMakerModal';
+import { EditPrimaryContactModal } from '@/components/organisms/marketing/EditPrimaryContactModal';
 import { ProspectInteractionTimeline } from '@/components/molecules/marketing/ProspectInteractionTimeline';
 import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
@@ -28,7 +29,7 @@ import { ProspectProductCard } from '@/components/molecules/marketing/ProspectPr
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import type { FollowUpStatus, ProspectFollowUp } from '@/types/marketing';
 import { useFollowUpWorklist, useProspectFollowUps } from '@/hooks/marketing/useFollowUps';
-import { useDeleteProspect, useProspect } from '@/hooks/marketing/useProspects';
+import { useDeleteProspect, useProspect, useUpdateProspect } from '@/hooks/marketing/useProspects';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -104,7 +105,12 @@ export default function ProspectDetailPage() {
   const toast = useToast();
 
   const { data: prospect, isLoading, isError } = useProspect(id);
-  const canCreateClient = usePermissionRule('marketing.clients:CREATE');
+  const updateProspect = useUpdateProspect(id);
+  // The assignee can convert their own prospect; the permission extends that to others' prospects.
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const hasCreateClientPermission = usePermissionRule('marketing.clients:CREATE');
+  const canCreateClient =
+    hasCreateClientPermission || (!!prospect && prospect.assignedUserId === currentUserId);
   const deleteProspect = useDeleteProspect();
   const { data: followUps = [], isLoading: followUpsLoading } = useProspectFollowUps(id);
   const { data: worklist = [] } = useFollowUpWorklist();
@@ -114,7 +120,7 @@ export default function ProspectDetailPage() {
   const [editingProducts, setEditingProducts] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
-  const [changingDecisionMaker, setChangingDecisionMaker] = useState(false);
+  const [editingContact, setEditingContact] = useState(false);
   const [addingInteraction, setAddingInteraction] = useState(false);
   const [activeTab, setActiveTab] = useState<ProspectTab>('products');
 
@@ -181,10 +187,10 @@ export default function ProspectDetailPage() {
           </Button>
           <ProspectManageMenu
             items={[
-              { label: 'Manage Products', onClick: () => setEditingProducts(true) },
+              { label: 'Manage Products/Services', onClick: () => setEditingProducts(true) },
               { label: 'Edit Company Details', onClick: () => setEditingCompany(true) },
               { label: 'Change Location', onClick: () => setChangingLocation(true) },
-              { label: 'Change Decision Maker', onClick: () => setChangingDecisionMaker(true) },
+              { label: 'Edit Primary Contact', onClick: () => setEditingContact(true) },
               { label: 'Delete Prospect', onClick: () => setConfirmingDelete(true), danger: true },
             ]}
           />
@@ -199,6 +205,7 @@ export default function ProspectDetailPage() {
           <DetailField label="Company Name" value={prospect.companyName} />
           <DetailField label="Type of Business" value={prospect.businessType?.name} />
           <DetailField label="Source Type" value={prospect.sourceType?.name} />
+          <DetailField label="Assigned To" value={prospect.assignedUserName} />
           <DetailField label="Location" value={prospect.location.label} />
           {/* <DetailField label="Decision Maker" value={primaryContact?.name} /> */}
           <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
@@ -207,6 +214,7 @@ export default function ProspectDetailPage() {
           <DetailField label="Primary Contact Email" value={primaryContact?.email} />
           <DetailField label="Date Created" value={formatDate(prospect.createdAt)} />
           <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
+          <DetailField label="Follow-ups" value={String(prospect.interactions.length)} />
           <DetailField label="Total Expected" value={formatMoney(prospect.totalExpectedValue)} />
           {/* <DetailField label="Total Achieved" value={formatMoney(prospect.totalAchievedValue)} /> */}
           <div className="col-span-2 flex flex-col gap-1.5">
@@ -220,7 +228,7 @@ export default function ProspectDetailPage() {
 
       <TabBar
         tabs={[
-          { key: 'products', label: 'Products / Services' },
+          { key: 'products', label: 'Products/Services' },
           { key: 'interactions', label: 'Follow ups' },
           // { key: 'follow-ups', label: 'Follow-ups' },
         ]}
@@ -232,7 +240,7 @@ export default function ProspectDetailPage() {
         <DataCardGrid
           data={prospect.products}
           renderCard={(product) => <ProspectProductCard product={product} />}
-          emptyMessage="No products on record"
+          emptyMessage="No products/services on record"
           currentPage={1}
           totalPages={0}
           onPageChange={() => {}}
@@ -281,6 +289,8 @@ export default function ProspectDetailPage() {
 
       {editingCompany && (
         <EditProspectCompanyModal
+          currentAssignedUserId={prospect.assignedUserId}
+          currentAssignedUserName={prospect.assignedUserName}
           prospectId={id}
           prospectName={prospect.companyName}
           currentBusinessTypeId={prospect.businessType?.id ?? ''}
@@ -300,14 +310,31 @@ export default function ProspectDetailPage() {
         />
       )}
 
-      {changingDecisionMaker && (
-        <ChangeProspectDecisionMakerModal
-          prospectId={id}
-          prospectName={prospect.companyName}
-          currentName={primaryContact?.name ?? ''}
-          currentRoleId={primaryContact?.decisionMaker?.id ?? ''}
+      {editingContact && (
+        <EditPrimaryContactModal
+          companyName={prospect.companyName}
+          current={{
+            name: primaryContact?.name ?? '',
+            phone: primaryContact?.phone ?? null,
+            email: primaryContact?.email ?? null,
+            roleId: primaryContact?.decisionMaker?.id ?? '',
+          }}
           isOpen
-          onClose={() => setChangingDecisionMaker(false)}
+          isSaving={updateProspect.isPending}
+          onClose={() => setEditingContact(false)}
+          onSave={(changes) =>
+            updateProspect.mutate(
+              { primaryContact: changes },
+              {
+                onSuccess: () => {
+                  toast.success('Primary contact updated');
+                  setEditingContact(false);
+                },
+                onError: (error) =>
+                  toast.error(apiErrorMessage(error, 'Failed to update primary contact')),
+              },
+            )
+          }
         />
       )}
 

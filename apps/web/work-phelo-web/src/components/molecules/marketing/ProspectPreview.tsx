@@ -83,14 +83,17 @@ export function ProspectPreview({
         </div>
       </ProspectFormSection>
 
-      <ProspectFormSection title="Products / Services">
+      <ProspectFormSection title="Products/Services">
         <div className="flex flex-col gap-2">
           {productRows.map((row) => (
             <div
               key={row.id}
               className="grid grid-cols-6 gap-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5"
             >
-              <Field label="Product" value={labelFor(productTypeOptions, row.productType)} />
+              <Field
+                label="Product/Service"
+                value={labelFor(productTypeOptions, row.productType)}
+              />
               <Field label="Expected Revenue" value={formatMoney(row.expectedRevenue)} />
               <Field label="Achieved Revenue" value={formatMoney(row.achievedRevenue)} />
               <Field label="Expected Close Date" value={row.expectedCloseDate} />

@@ -1,5 +1,6 @@
 'use client';
 
+import { Trash2 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import {
   Control,
@@ -14,31 +15,47 @@ import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { CATEGORIES } from '@/components/organisms/accounting/ChartOfAccountsTree';
 import {
+  useAccountClassifications,
   useCashAccountOptions,
   useCreateTransactionTypeRule,
   useGLAccountOptions,
+  useGLAccounts,
   useTaxTypes,
   useTransactionTypes,
   useUpdateTransactionTypeRule,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { SUBLEDGER_TYPE_LABELS } from '@/types/accounting';
 import type {
+  GLAccount,
+  GLAccountCategory,
   PostingLineDirection,
-  SubledgerType,
   TransactionTypeCategory,
   TransactionTypeRule,
   TransactionTypeRuleLineInput,
 } from '@/types/accounting';
 
-type LineKind = 'DEBIT' | 'CREDIT' | 'DEDUCTION' | '';
+type LineKind =
+  | 'DEBIT'
+  | 'CREDIT'
+  | 'DEDUCTION'
+  | 'SETTLEMENT_DEDUCTION'
+  | 'SETTLEMENT_CHARGE'
+  | '';
 
 const KIND_OPTIONS: SearchSelectOption[] = [
   { label: 'Debit', value: 'DEBIT' },
   { label: 'Credit', value: 'CREDIT' },
-  { label: 'Deduction', value: 'DEDUCTION' },
+  { label: 'Tax', value: 'DEDUCTION' },
+];
+
+/** Lines that apply when the bill/invoice is paid rather than when it is raised. The user ticks
+ *  the ones that apply on the payment form. */
+const SETTLEMENT_KIND_OPTIONS: SearchSelectOption[] = [
+  { label: 'Settlement Deduction', value: 'SETTLEMENT_DEDUCTION' },
+  { label: 'Settlement Charge', value: 'SETTLEMENT_CHARGE' },
 ];
 
 const DEDUCTION_DIRECTION_OPTIONS: SearchSelectOption[] = [
@@ -46,15 +63,26 @@ const DEDUCTION_DIRECTION_OPTIONS: SearchSelectOption[] = [
   { value: 'CR', label: 'Credit (CR)' },
 ];
 
+type ScopeFormValues = {
+  category: GLAccountCategory | '';
+  classificationId: string;
+  accountId: string;
+};
+
+const EMPTY_SCOPE: ScopeFormValues = { category: '', classificationId: '', accountId: '' };
+
 type LineFormValues = {
   kind: LineKind;
   /** Only used when kind is DEDUCTION — a deduction can land on either side
    *  (e.g. output VAT is a credit, input VAT is a debit). */
   deductionDirection: PostingLineDirection | '';
   accountId: string;
+  /** Main line only (see isMainLine): where the user may pick the account from. Each row is a
+   *  category, narrowed to a classification and/or one account. A single row that names an account
+   *  is saved as the rule's fixed account. */
+  scopes: ScopeFormValues[];
   /** Only used when kind is DEDUCTION. */
   taxTypeId: string;
-  subledgerType: SubledgerType | '';
   description: string;
 };
 
@@ -69,8 +97,8 @@ const EMPTY_LINE: LineFormValues = {
   kind: 'DEBIT',
   deductionDirection: '',
   accountId: '',
+  scopes: [{ ...EMPTY_SCOPE }],
   taxTypeId: '',
-  subledgerType: '',
   description: '',
 };
 
@@ -96,30 +124,91 @@ function cashbookDirectionFor(
   return type.category === 'RECEIVABLE' ? 'CR' : 'DR';
 }
 
-function directionOf(line: LineFormValues): PostingLineDirection | '' {
+function isSettlementKind(kind: LineKind) {
+  return kind === 'SETTLEMENT_DEDUCTION' || kind === 'SETTLEMENT_CHARGE';
+}
+
+/** Paying a bill debits Trade Payable, so a deduction (less cash out) is a credit and a charge
+ *  a debit; receiving on an invoice credits Trade Receivable, so it is the other way round. */
+function settlementDirection(
+  kind: 'SETTLEMENT_DEDUCTION' | 'SETTLEMENT_CHARGE',
+  category: TransactionTypeCategory | undefined,
+): PostingLineDirection | null {
+  if (category !== 'PAYABLE' && category !== 'RECEIVABLE') return null;
+  const isDeduction = kind === 'SETTLEMENT_DEDUCTION';
+  return (category === 'PAYABLE') === isDeduction ? 'CR' : 'DR';
+}
+
+function directionOf(
+  line: LineFormValues,
+  category?: TransactionTypeCategory,
+): PostingLineDirection | '' {
   if (line.kind === 'DEBIT') return 'DR';
   if (line.kind === 'CREDIT') return 'CR';
   if (line.kind === 'DEDUCTION') return line.deductionDirection;
+  if (line.kind === 'SETTLEMENT_DEDUCTION' || line.kind === 'SETTLEMENT_CHARGE') {
+    return settlementDirection(line.kind, category) ?? '';
+  }
   return '';
 }
 
+/** What a main line saves: one fixed account, or the list of places to choose one from. */
+function scopeInput(
+  line: LineFormValues,
+): Pick<TransactionTypeRuleLineInput, 'accountId' | 'scopes'> {
+  const rows = line.scopes.filter((s) => s.category);
+  if (rows.length === 1 && rows[0].accountId) return { accountId: rows[0].accountId };
+  return {
+    scopes: rows.map((s) => ({
+      category: s.category as GLAccountCategory,
+      classificationId: s.classificationId || undefined,
+      accountId: s.accountId || undefined,
+    })),
+  };
+}
+
 function lineToFormValues(line: TransactionTypeRule['lines'][number]): LineFormValues {
+  if (line.settlementKind) {
+    return {
+      kind: line.settlementKind === 'DEDUCTION' ? 'SETTLEMENT_DEDUCTION' : 'SETTLEMENT_CHARGE',
+      deductionDirection: '',
+      accountId: line.account?.id ?? '',
+      scopes: [],
+      taxTypeId: line.taxType?.id ?? '',
+      description: line.description ?? '',
+    };
+  }
   if (line.taxType) {
     return {
       kind: 'DEDUCTION',
       deductionDirection: line.direction,
-      accountId: line.account.id,
+      accountId: line.account?.id ?? '',
+      scopes: [],
       taxTypeId: line.taxType.id,
-      subledgerType: line.subledgerType ?? '',
       description: line.description ?? '',
     };
   }
   return {
     kind: line.direction === 'DR' ? 'DEBIT' : 'CREDIT',
     deductionDirection: '',
-    accountId: line.account.id,
+    accountId: line.account?.id ?? '',
+    // A fixed account still opens the main line's category / classification pickers filled in.
+    scopes: line.account
+      ? [
+          {
+            category: line.account.category,
+            classificationId: line.account.classificationId ?? '',
+            accountId: line.account.id,
+          },
+        ]
+      : line.scopes.length > 0
+        ? line.scopes.map((s) => ({
+            category: s.category,
+            classificationId: s.classification?.id ?? '',
+            accountId: s.account?.id ?? '',
+          }))
+        : [{ ...EMPTY_SCOPE }],
     taxTypeId: '',
-    subledgerType: line.subledgerType ?? '',
     description: line.description ?? '',
   };
 }
@@ -165,10 +254,6 @@ export function TransactionTypeRulePanel({
     () => transactionTypes.find((t) => t.id === activeTransactionTypeId),
     [transactionTypes, activeTransactionTypeId],
   );
-  const businessRoles = selectedType?.businessRoles ?? [];
-  const subledgerTypeOptions: SearchSelectOption[] = businessRoles
-    .filter((role): role is SubledgerType => role in SUBLEDGER_TYPE_LABELS)
-    .map((role) => ({ value: role, label: SUBLEDGER_TYPE_LABELS[role] }));
   const taxTypeOptions: SearchSelectOption[] = taxTypes.map((t) => ({
     value: t.id,
     label: `${t.name} (${t.rate}%)`,
@@ -195,6 +280,29 @@ export function TransactionTypeRulePanel({
           ? 'CR'
           : 'DR'
         : null;
+
+  // The main line of a Receivable/Payable rule — not the control line, not a deduction — is
+  // where a scope applies. It sits on the side opposite the control line, which is the same
+  // side a deduction posts to (see above): debit for a bill, credit for an invoice, and the
+  // reverse for the linked notes. Cashbook and source-linked types keep a fixed account.
+  const mainLineDirection: PostingLineDirection | null = fixedDeductionDirection;
+  const allowsScope = !isCashbookType && !selectedType?.sourceTypeId && mainLineDirection !== null;
+  const watchedLines = useWatch({ control, name: 'lines' });
+  // Taxes, deductions and charges are added on the bill, invoice and payment forms now, so the
+  // rule is just its debit and credit. A rule made before that can still carry those lines, and
+  // keeps showing the types it uses so they can be seen and removed.
+  const legacyKindOptions = useMemo(() => {
+    const used = new Set((watchedLines ?? []).map((l) => l.kind));
+    return [...KIND_OPTIONS, ...SETTLEMENT_KIND_OPTIONS].filter(
+      (option) =>
+        option.value === 'DEBIT' || option.value === 'CREDIT' || used.has(option.value as LineKind),
+    );
+  }, [watchedLines]);
+  const mainLineIndex = allowsScope
+    ? (watchedLines ?? []).findIndex(
+        (l) => (l.kind === 'DEBIT' || l.kind === 'CREDIT') && directionOf(l) === mainLineDirection,
+      )
+    : -1;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -264,26 +372,39 @@ export function TransactionTypeRulePanel({
     }
 
     for (const line of values.lines) {
+      if (isSettlementKind(line.kind) && !line.accountId) {
+        toast.error('Every settlement line needs an account.');
+        return;
+      }
       if (line.kind === 'DEDUCTION' && !line.deductionDirection) {
-        toast.error('Every deduction line needs a Debit/Credit side.');
+        toast.error('Every tax line needs a Debit/Credit side.');
         return;
       }
     }
 
-    const lines: TransactionTypeRuleLineInput[] = values.lines.map((line) => ({
-      direction: directionOf(line) as PostingLineDirection,
-      accountId: line.accountId,
-      taxTypeId: line.kind === 'DEDUCTION' ? line.taxTypeId || undefined : undefined,
-      subledgerType: (line.subledgerType || undefined) as SubledgerType | undefined,
+    const lines: TransactionTypeRuleLineInput[] = values.lines.map((line, index) => ({
+      direction: directionOf(line, selectedType?.category) as PostingLineDirection,
+      ...(index === mainLineIndex ? scopeInput(line) : { accountId: line.accountId }),
+      taxTypeId:
+        line.kind === 'DEDUCTION' || line.kind === 'SETTLEMENT_DEDUCTION'
+          ? line.taxTypeId || undefined
+          : undefined,
+      ...(line.kind === 'SETTLEMENT_DEDUCTION'
+        ? { settlementKind: 'DEDUCTION' as const }
+        : line.kind === 'SETTLEMENT_CHARGE'
+          ? { settlementKind: 'CHARGE' as const }
+          : {}),
       description: line.description || undefined,
     }));
 
-    if (lines.length < 2) {
+    // Settlement lines belong to the payment, not the posting, so they don't count here.
+    const documentLines = lines.filter((l) => !l.settlementKind);
+    if (documentLines.length < 2) {
       toast.error('A rule needs at least 2 lines.');
       return;
     }
-    const debitCount = lines.filter((l) => l.direction === 'DR').length;
-    const creditCount = lines.filter((l) => l.direction === 'CR').length;
+    const debitCount = documentLines.filter((l) => l.direction === 'DR').length;
+    const creditCount = documentLines.filter((l) => l.direction === 'CR').length;
     if (debitCount === 0 || creditCount === 0) {
       toast.error('A rule needs at least one debit line and one credit line.');
       return;
@@ -314,7 +435,7 @@ export function TransactionTypeRulePanel({
       description={
         isCashbookType
           ? `Map how this type posts — the single offset account it ${cashbookDirection === 'CR' ? 'credits' : 'debits'} against a cash/bank account.`
-          : 'Map how this transaction type posts — a debit line, a credit line, and any deductions (tax) it needs.'
+          : 'Map how this transaction type posts — a debit line, a credit line, any taxes, and any deductions or charges taken at payment.'
       }
       footer={
         <div className="flex justify-end gap-3">
@@ -407,7 +528,7 @@ export function TransactionTypeRulePanel({
             />
           </>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-gray-900">Lines</span>
               <Button type="button" variant="outline" onClick={() => append({ ...EMPTY_LINE })}>
@@ -438,9 +559,11 @@ export function TransactionTypeRulePanel({
                 onRemove={() => remove(index)}
                 accountOptions={accountOptions}
                 isLoadingAccounts={isLoadingAccounts}
-                subledgerTypeOptions={subledgerTypeOptions}
                 taxTypeOptions={taxTypeOptions}
                 fixedDeductionDirection={fixedDeductionDirection}
+                isMainLine={index === mainLineIndex}
+                kindOptions={legacyKindOptions}
+                settlementCategory={selectedType?.category}
               />
             ))}
           </div>
@@ -460,9 +583,11 @@ function RuleLineEditor({
   onRemove,
   accountOptions,
   isLoadingAccounts,
-  subledgerTypeOptions,
   taxTypeOptions,
   fixedDeductionDirection,
+  isMainLine,
+  kindOptions,
+  settlementCategory,
 }: {
   control: Control<FormValues>;
   register: ReturnType<typeof useForm<FormValues>>['register'];
@@ -473,11 +598,73 @@ function RuleLineEditor({
   onRemove: () => void;
   accountOptions: SearchSelectOption[];
   isLoadingAccounts: boolean;
-  subledgerTypeOptions: SearchSelectOption[];
   taxTypeOptions: SearchSelectOption[];
   fixedDeductionDirection: PostingLineDirection | null;
+  isMainLine: boolean;
+  kindOptions: SearchSelectOption[];
+  settlementCategory: TransactionTypeCategory | undefined;
 }) {
   const kind = useWatch({ control, name: `lines.${index}.kind` });
+  const scopeRows = useFieldArray({ control, name: `lines.${index}.scopes` });
+  const scopes = useWatch({ control, name: `lines.${index}.scopes` }) ?? [];
+  const { data: allAccounts = [] } = useGLAccounts();
+  // Every level works on its own, like the journal entry lines: a level that's set narrows the
+  // ones below it, and picking a lower level fills in the ones above.
+  const { data: classificationsData } = useAccountClassifications({ isActive: true });
+  const classifications = classificationsData?.items ?? [];
+  // Every row can go all the way down to one account, so a rule can list, say, two exact accounts
+  // and the transaction offers just those two.
+  const isSingleScope = scopes.length <= 1;
+  const classificationOptionsFor = (category: GLAccountCategory | ''): SearchSelectOption[] =>
+    classifications
+      .filter((c) => !category || c.category === category)
+      .map((c) => ({ value: c.id, label: c.name }));
+  const accountOptionsFor = (row: ScopeFormValues | undefined): SearchSelectOption[] =>
+    allAccounts
+      .filter(
+        (a: GLAccount) =>
+          a.status === 'ACTIVE' &&
+          a.allowPosting &&
+          (!row?.category || a.category === row.category) &&
+          (!row?.classificationId || a.classificationId === row.classificationId),
+      )
+      .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` }));
+
+  // A scoped line always shows at least one row to fill in.
+  useEffect(() => {
+    if (isMainLine && scopeRows.fields.length === 0) scopeRows.append({ ...EMPTY_SCOPE });
+  }, [isMainLine, scopeRows]);
+
+  const pickCategory = (row: number, category: GLAccountCategory) => {
+    setValue(`lines.${index}.scopes.${row}.category`, category);
+    // Keep a lower level only while it still sits under the new category.
+    const classification = classifications.find((c) => c.id === scopes[row]?.classificationId);
+    if (classification && classification.category !== category) {
+      setValue(`lines.${index}.scopes.${row}.classificationId`, '');
+    }
+    const account = allAccounts.find((a) => a.id === scopes[row]?.accountId);
+    if (account && account.category !== category) {
+      setValue(`lines.${index}.scopes.${row}.accountId`, '');
+    }
+  };
+  const pickClassification = (row: number, id: string) => {
+    setValue(`lines.${index}.scopes.${row}.classificationId`, id);
+    const classification = classifications.find((c) => c.id === id);
+    if (classification) setValue(`lines.${index}.scopes.${row}.category`, classification.category);
+    const account = allAccounts.find((a) => a.id === scopes[row]?.accountId);
+    if (id && account && account.classificationId !== id) {
+      setValue(`lines.${index}.scopes.${row}.accountId`, '');
+    }
+  };
+  const pickAccount = (row: number, id: string) => {
+    setValue(`lines.${index}.scopes.${row}.accountId`, id);
+    const account = allAccounts.find((a) => a.id === id);
+    if (account) {
+      setValue(`lines.${index}.scopes.${row}.category`, account.category);
+      setValue(`lines.${index}.scopes.${row}.classificationId`, account.classificationId ?? '');
+    }
+  };
+  const addScope = () => scopeRows.append({ ...EMPTY_SCOPE });
 
   useEffect(() => {
     if (kind === 'DEDUCTION' && fixedDeductionDirection) {
@@ -485,117 +672,229 @@ function RuleLineEditor({
     }
   }, [kind, fixedDeductionDirection, index, setValue]);
 
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-500">Line {index + 1}</span>
-        {canRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="text-xs font-medium text-red-600 hover:text-red-700"
+  const isSettlement = kind === 'SETTLEMENT_DEDUCTION' || kind === 'SETTLEMENT_CHARGE';
+  const hasTaxType = kind === 'DEDUCTION' || kind === 'SETTLEMENT_DEDUCTION';
+  const hasPostsAs = kind === 'DEDUCTION' || isSettlement;
+
+  const kindField = (
+    <Controller
+      name={`lines.${index}.kind`}
+      control={control}
+      rules={{ required: 'Required' }}
+      render={({ field: f }) => (
+        <SearchSelect
+          label="Line Type"
+          placeholder="Select…"
+          options={kindOptions}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.kind?.message}
+        />
+      )}
+    />
+  );
+
+  const postsAsField = !hasPostsAs ? null : kind === 'DEDUCTION' && !fixedDeductionDirection ? (
+    <Controller
+      name={`lines.${index}.deductionDirection`}
+      control={control}
+      rules={{ required: 'Required' }}
+      render={({ field: f }) => (
+        <SearchSelect
+          label="Posts As"
+          placeholder="Debit or credit…"
+          options={DEDUCTION_DIRECTION_OPTIONS}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.deductionDirection?.message}
+        />
+      )}
+    />
+  ) : (
+    <Input
+      label="Posts As"
+      readOnly
+      value={
+        (isSettlement
+          ? settlementDirection(
+              kind as 'SETTLEMENT_DEDUCTION' | 'SETTLEMENT_CHARGE',
+              settlementCategory,
+            )
+          : fixedDeductionDirection) === 'DR'
+          ? 'Debit (DR)'
+          : 'Credit (CR)'
+      }
+    />
+  );
+
+  const taxTypeField = !hasTaxType ? null : (
+    <Controller
+      name={`lines.${index}.taxTypeId`}
+      control={control}
+      rules={kind === 'DEDUCTION' ? { required: 'Select a tax type' } : undefined}
+      render={({ field: f }) => (
+        <SearchSelect
+          label={kind === 'DEDUCTION' ? 'Tax Type' : 'Tax Type (optional)'}
+          placeholder={kind === 'DEDUCTION' ? 'Select a tax type…' : 'None — a plain discount'}
+          options={taxTypeOptions}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.taxTypeId?.message}
+        />
+      )}
+    />
+  );
+
+  const accountField = (
+    <Controller
+      name={`lines.${index}.accountId`}
+      control={control}
+      rules={{ required: 'Required' }}
+      render={({ field: f }) => (
+        <SearchSelect
+          label="Account"
+          placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
+          options={accountOptions}
+          value={f.value}
+          onChange={f.onChange}
+          error={errors.lines?.[index]?.accountId?.message}
+        />
+      )}
+    />
+  );
+
+  const descriptionField = (
+    <FormField
+      label="Description"
+      registration={register(`lines.${index}.description`)}
+      placeholder="Optional"
+    />
+  );
+
+  const removeButton = (
+    <div className="flex h-10 items-center">
+      {canRemove ? (
+        <button
+          type="button"
+          aria-label="Remove line"
+          title="Remove line"
+          onClick={onRemove}
+          className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+        >
+          <Trash2 size={15} />
+        </button>
+      ) : (
+        <span className="w-[27px]" aria-hidden />
+      )}
+    </div>
+  );
+
+  // The main line narrows where it posts. Each row is a place the account may come from: a
+  // category, narrowed to a classification if wanted. One row can go on to a single fixed account;
+  // several rows leave the choice to the transaction, from any of them.
+  if (isMainLine) {
+    return (
+      <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-2.5">
+        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          {kindField}
+          {removeButton}
+        </div>
+        {scopeRows.fields.map((row, rowIndex) => (
+          <div
+            key={row.id}
+            className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto]"
           >
-            Remove
-          </button>
-        )}
-      </div>
-
-      <Controller
-        name={`lines.${index}.kind`}
-        control={control}
-        rules={{ required: 'Required' }}
-        render={({ field: f }) => (
-          <SearchSelect
-            label="Line Type"
-            placeholder="Debit, Credit, or Deduction…"
-            options={KIND_OPTIONS}
-            value={f.value}
-            onChange={f.onChange}
-            error={errors.lines?.[index]?.kind?.message}
-          />
-        )}
-      />
-
-      {kind === 'DEDUCTION' && (
-        <div className="grid grid-cols-2 gap-3">
-          {fixedDeductionDirection ? (
-            <Input
-              label="Posts As"
-              readOnly
-              value={fixedDeductionDirection === 'DR' ? 'Debit (DR)' : 'Credit (CR)'}
-            />
-          ) : (
             <Controller
-              name={`lines.${index}.deductionDirection`}
+              name={`lines.${index}.scopes.${rowIndex}.category`}
               control={control}
-              rules={{ required: 'Required' }}
+              rules={{ required: 'Choose a category' }}
               render={({ field: f }) => (
                 <SearchSelect
-                  label="Posts As"
-                  placeholder="Debit or credit…"
-                  options={DEDUCTION_DIRECTION_OPTIONS}
+                  label="Category"
+                  placeholder="Select a category…"
+                  options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
                   value={f.value}
-                  onChange={f.onChange}
-                  error={errors.lines?.[index]?.deductionDirection?.message}
+                  onChange={(value) => pickCategory(rowIndex, value as GLAccountCategory)}
+                  error={errors.lines?.[index]?.scopes?.[rowIndex]?.category?.message}
                 />
               )}
             />
-          )}
-          <Controller
-            name={`lines.${index}.taxTypeId`}
-            control={control}
-            rules={{ required: 'Select a tax type' }}
-            render={({ field: f }) => (
-              <SearchSelect
-                label="Tax Type"
-                placeholder="Select a tax type…"
-                options={taxTypeOptions}
-                value={f.value}
-                onChange={f.onChange}
-                error={errors.lines?.[index]?.taxTypeId?.message}
-              />
-            )}
-          />
-        </div>
-      )}
-
-      <Controller
-        name={`lines.${index}.accountId`}
-        control={control}
-        rules={{ required: 'Required' }}
-        render={({ field: f }) => (
-          <SearchSelect
-            label="Account"
-            placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
-            options={accountOptions}
-            value={f.value}
-            onChange={f.onChange}
-            error={errors.lines?.[index]?.accountId?.message}
-          />
-        )}
-      />
-
-      {subledgerTypeOptions.length > 0 && (
-        <Controller
-          name={`lines.${index}.subledgerType`}
-          control={control}
-          render={({ field: f }) => (
-            <SearchSelect
-              label="Subledger Type (optional)"
-              placeholder="None — this account alone"
-              options={subledgerTypeOptions}
-              value={f.value}
-              onChange={f.onChange}
+            <Controller
+              name={`lines.${index}.scopes.${rowIndex}.classificationId`}
+              control={control}
+              render={({ field: f }) => (
+                <SearchSelect
+                  label="Classification (optional)"
+                  placeholder="Any"
+                  options={classificationOptionsFor(scopes[rowIndex]?.category ?? '')}
+                  value={f.value}
+                  onChange={(value) => pickClassification(rowIndex, value)}
+                />
+              )}
             />
-          )}
-        />
-      )}
+            <Controller
+              name={`lines.${index}.scopes.${rowIndex}.accountId`}
+              control={control}
+              render={({ field: f }) => (
+                <SearchSelect
+                  label="Account (optional)"
+                  placeholder="Any"
+                  options={accountOptionsFor(scopes[rowIndex])}
+                  value={f.value}
+                  onChange={(value) => pickAccount(rowIndex, value)}
+                />
+              )}
+            />
+            <div className="flex h-10 items-center">
+              {isSingleScope ? (
+                <span className="w-[27px]" aria-hidden />
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Remove this row"
+                  title="Remove this row"
+                  onClick={() => scopeRows.remove(rowIndex)}
+                  className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-500">
+            {isSingleScope
+              ? 'Add another row to let the transaction pick from more than one place.'
+              : 'The transaction offers the accounts from all of these rows, and one is picked.'}
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={addScope}>
+            Add another row
+          </Button>
+        </div>
+        {descriptionField}
+      </div>
+    );
+  }
 
-      <FormField
-        label="Description"
-        registration={register(`lines.${index}.description`)}
-        placeholder="Optional description"
-      />
+  const columns = isSettlement
+    ? kind === 'SETTLEMENT_DEDUCTION'
+      ? 'sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.3fr)_auto]'
+      : 'sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_auto]'
+    : kind === 'DEDUCTION'
+      ? 'sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.3fr)_auto]'
+      : 'sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,2fr)_auto]';
+
+  return (
+    <div className="rounded-xl border border-gray-200 p-2.5">
+      <div className={`grid grid-cols-1 items-end gap-2 ${columns}`}>
+        {kindField}
+        {postsAsField}
+        {taxTypeField}
+        {accountField}
+        {descriptionField}
+        {removeButton}
+      </div>
     </div>
   );
 }

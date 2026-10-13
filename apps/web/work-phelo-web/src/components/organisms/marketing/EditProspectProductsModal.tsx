@@ -68,10 +68,11 @@ export function EditProspectProductsModal({
       },
       {
         onSuccess: () => {
-          toast.success('Products updated');
+          toast.success('Products/services updated');
           onClose();
         },
-        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update products')),
+        onError: (error) =>
+          toast.error(apiErrorMessage(error, 'Failed to update products/services')),
       },
     );
   }
@@ -80,7 +81,7 @@ export function EditProspectProductsModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Edit Products / Services"
+      title="Edit Products/Services"
       description={prospectName}
       width="max-w-7xl"
       footer={

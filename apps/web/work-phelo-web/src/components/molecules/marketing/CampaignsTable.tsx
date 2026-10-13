@@ -2,50 +2,93 @@
 
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { TableButton } from '@/components/atoms/TableButton';
+import { formatDate } from '@/lib/formatters';
+import type { Campaign, CampaignChannel, CampaignStatus } from '@/types/marketing';
 
-export interface Campaign {
-  id: string;
-  name: string;
-  channel: string;
-  targetAudience: string;
-  performanceRate: number;
-  conversions: number;
-  status: 'draft' | 'active' | 'paused' | 'completed';
-}
-
-const STATUS_MAP: Record<
-  Campaign['status'],
-  { label: string; variant: 'success' | 'warning' | 'info' | 'neutral' }
+export const CAMPAIGN_STATUS_MAP: Record<
+  CampaignStatus,
+  { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }
 > = {
-  draft: { label: 'Draft', variant: 'neutral' },
-  active: { label: 'Active', variant: 'success' },
-  paused: { label: 'Paused', variant: 'warning' },
-  completed: { label: 'Completed', variant: 'info' },
+  DRAFT: { label: 'Draft', variant: 'neutral' },
+  PENDING_DISPATCH: { label: 'Pendingn', variant: 'warning' },
+  SCHEDULED: { label: 'Scheduled', variant: 'info' },
+  QUEUED: { label: 'Queued', variant: 'info' },
+  SENDING: { label: 'Sending', variant: 'info' },
+  COMPLETED: { label: 'Completed', variant: 'success' },
+  PARTIALLY_COMPLETED: { label: 'Partially Completed', variant: 'warning' },
+  FAILED: { label: 'Failed', variant: 'danger' },
+  CANCELLED: { label: 'Cancelled', variant: 'neutral' },
 };
+
+const CHANNEL_LABEL: Record<CampaignChannel, string> = { SMS: 'SMS', EMAIL: 'Email' };
 
 const COLUMNS: Column<Campaign>[] = [
   {
     key: 'name',
-    label: 'Campaign & Channel',
+    label: 'Campaign',
+    width: 'minmax(120px, 1fr)',
     render: (row) => (
       <div className="flex flex-col">
         <span className="font-medium text-gray-900">{row.name}</span>
-        <span className="text-xs text-gray-500">{row.channel}</span>
+        <span className="text-xs text-gray-500 truncate max-w-64">{row.subject}</span>
       </div>
     ),
   },
-  { key: 'targetAudience', label: 'Target Audience' },
-  // {
-  //   key: 'performanceRate',
-  //   label: 'Performance Rate',
-  //   render: (row) => `${row.performanceRate}%`,
-  // },
-  // { key: 'conversions', label: 'Conversions' },
+  {
+    key: 'channels',
+    label: 'Channels',
+    width: '120px',
+    render: (row) => row.channels.map((c) => CHANNEL_LABEL[c]).join(', '),
+  },
+  {
+    key: 'businessType',
+    label: 'Target Audience',
+    width: 'minmax(120px, 1fr)',
+    render: (row) => row.segments.map((segment) => segment.name).join(', '),
+  },
+  {
+    key: 'recipients',
+    label: 'Recipients',
+    width: '90px',
+    render: (row) => {
+      const { total, skipped, sent, accepted, delivered, failed, cancelled } = row.recipients;
+      const submitted = sent + accepted + delivered;
+      const detail = [
+        submitted > 0 ? `${submitted} sent` : null,
+        failed > 0 ? `${failed} failed` : null,
+        skipped > 0 ? `${skipped} skipped` : null,
+        cancelled > 0 ? `${cancelled} cancelled` : null,
+      ].filter(Boolean);
+      return (
+        <div className="flex flex-col">
+          <span className="text-gray-900">{total - skipped - cancelled}</span>
+          {detail.length > 0 && <span className="text-xs text-gray-500">{detail.join(' · ')}</span>}
+        </div>
+      );
+    },
+  },
+  {
+    key: 'dispatchMode',
+    label: 'Dispatch',
+    width: '90px',
+    render: (row) =>
+      row.dispatchMode === 'SCHEDULED' && row.scheduledDate
+        ? formatDate(row.scheduledDate)
+        : 'Instant',
+  },
+  {
+    key: 'createdAt',
+    label: 'Created',
+    width: '90px',
+    render: (row) => formatDate(row.createdAt),
+  },
   {
     key: 'status',
     label: 'Status',
+    width: '100px',
     render: (row) => {
-      const { label, variant } = STATUS_MAP[row.status];
+      const { label, variant } = CAMPAIGN_STATUS_MAP[row.status];
       return <Badge label={label} variant={variant} />;
     },
   },
@@ -53,17 +96,34 @@ const COLUMNS: Column<Campaign>[] = [
 
 interface Props {
   data: Campaign[];
+  isLoading?: boolean;
   searchValue: string;
   onSearch: (q: string) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
   onRowClick?: (row: Campaign) => void;
-  onAdd: () => void;
+  /** Omit to hide the New Campaign button (no create permission). */
+  onAdd?: () => void;
+  /** Omit to hide the Actions column (no cancel permission). Cancel shows only on scheduled campaigns. */
+  onCancel?: (row: Campaign) => void;
+  /** Omit to hide Send. Send shows only on queued-ready SMS campaigns. */
+  onSend?: (row: Campaign) => void;
+  /** Omit to hide Edit. Edit shows only on scheduled campaigns, which have not started sending. */
+  onEdit?: (row: Campaign) => void;
+  /** Omit to hide Resend and Retry. Resend shows on completed campaigns, Retry on failed ones. */
+  onReuse?: (row: Campaign) => void;
 }
+
+/** What a campaign can be started again as: a completed one is sent again, a failed one retried. */
+export const REUSE_LABEL: Partial<Record<CampaignStatus, string>> = {
+  COMPLETED: 'Resend',
+  FAILED: 'Retry',
+};
 
 export function CampaignsTable({
   data,
+  isLoading,
   searchValue,
   onSearch,
   currentPage,
@@ -71,11 +131,86 @@ export function CampaignsTable({
   onPageChange,
   onRowClick,
   onAdd,
+  onCancel,
+  onSend,
+  onReuse,
+  onEdit,
 }: Props) {
+  const hasActions = Boolean(onCancel || onSend || onReuse || onEdit);
+  const columns: Column<Campaign>[] = hasActions
+    ? [
+        ...COLUMNS,
+        {
+          key: 'actions',
+          label: 'Actions',
+          width: '150px',
+          render: (row) => {
+            const canSend =
+              onSend &&
+              row.channels.includes('SMS') &&
+              !row.channels.includes('EMAIL') &&
+              ['PENDING_DISPATCH', 'SCHEDULED'].includes(row.status);
+            const canCancel = onCancel && ['PENDING_DISPATCH', 'SCHEDULED'].includes(row.status);
+            const reuseLabel = onReuse ? REUSE_LABEL[row.status] : undefined;
+            const canEdit = onEdit && row.status === 'SCHEDULED';
+            if (!canSend && !canCancel && !reuseLabel && !canEdit) return null;
+            return (
+              <div className="flex gap-2">
+                {canEdit && (
+                  <TableButton
+                    variant="blue"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(row);
+                    }}
+                  >
+                    Edit
+                  </TableButton>
+                )}
+                {reuseLabel && (
+                  <TableButton
+                    variant={row.status === 'FAILED' ? 'orange' : 'green'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReuse?.(row);
+                    }}
+                  >
+                    {reuseLabel}
+                  </TableButton>
+                )}
+                {canSend && (
+                  <TableButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSend(row);
+                    }}
+                  >
+                    Send
+                  </TableButton>
+                )}
+                {canCancel && (
+                  <TableButton
+                    variant="red"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCancel(row);
+                    }}
+                  >
+                    Cancel
+                  </TableButton>
+                )}
+              </div>
+            );
+          },
+        },
+      ]
+    : COLUMNS;
+
   return (
     <DataTable
-      columns={COLUMNS}
+      columns={columns}
       data={data}
+      isLoading={isLoading}
       emptyMessage="No campaigns yet"
       searchPlaceholder="Search campaigns..."
       searchValue={searchValue}
@@ -84,7 +219,7 @@ export function CampaignsTable({
       totalPages={totalPages}
       onPageChange={onPageChange}
       onRowClick={onRowClick}
-      actionButton={{ label: 'New Campaign', onClick: onAdd }}
+      actionButton={onAdd ? { label: 'New Campaign', onClick: onAdd } : undefined}
       noInternalScroll
     />
   );

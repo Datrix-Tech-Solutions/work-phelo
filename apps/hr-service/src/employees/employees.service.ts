@@ -310,9 +310,6 @@ export class EmployeesService {
             ssnit: this.encryption.encrypt(dto.ssnit),
             tinNumber: this.encryption.encrypt(dto.tinNumber),
             compensationType: dto.compensationType,
-            taxPolicy: dto.taxPolicy,
-            fixedTaxAmount: dto.fixedTaxAmount,
-            commissionTaxable: dto.commissionTaxable,
             ...(dto.departmentId && { departmentId: dto.departmentId }),
             ...(dto.branchId && { branchId: dto.branchId }),
             ...(dto.managerId && { managerId: dto.managerId }),
@@ -521,10 +518,6 @@ export class EmployeesService {
       contractEndDate: dto.contractEndDate
         ? new Date(dto.contractEndDate)
         : undefined,
-    });
-    this.validatePayrollTaxPolicy({
-      taxPolicy: dto.taxPolicy,
-      fixedTaxAmount: dto.fixedTaxAmount,
     });
 
     let provisionedUser;
@@ -801,6 +794,7 @@ export class EmployeesService {
           taxPolicy: true,
           fixedTaxAmount: true,
           commissionTaxable: true,
+          payrollGroupId: true,
           ssnit: true,
           allowances: {
             select: {

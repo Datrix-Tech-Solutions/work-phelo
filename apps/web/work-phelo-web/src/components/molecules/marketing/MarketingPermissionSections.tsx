@@ -6,17 +6,24 @@ import type { PermissionAction, PermissionSetResourceDto } from '@/types/roles';
 interface PermissionTag {
   key: string;
   label: string;
+  /** Pills that are switched on with this one; switching any of them off switches this one off. */
+  implies?: string[];
 }
 
 interface PermissionSection {
   key: string;
   label: string;
-  /** Pill that selects/clears every other pill in the section. */
-  umbrellaKey: string;
+  /** Pill that selects/clears every other pill in the section, when the section has one. */
+  umbrellaKey?: string;
   tags: PermissionTag[];
 }
 
 export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
+  {
+    key: 'dashboard',
+    label: 'Dashboard',
+    tags: [{ key: 'view_dashboard', label: 'View General Dashboard' }],
+  },
   {
     key: 'prospecting',
     label: 'Prospecting',
@@ -29,6 +36,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'manage_all_prospect_interactions', label: 'Manage All Prospect Interactions' },
       { key: 'manage_all_follow_ups', label: 'Manage All Follow Ups' },
       { key: 'create_prospect', label: 'Create Prospect' },
+      { key: 'assign_prospects', label: 'Assign Prospects' },
     ],
   },
   {
@@ -41,18 +49,40 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'edit_all_clients', label: 'Edit All Clients' },
       { key: 'delete_all_clients', label: 'Delete All Clients' },
       { key: 'create_client', label: 'Create Client' },
+      { key: 'manage_billing', label: 'Manage Billing' },
+      { key: 'assign_clients', label: 'Assign Clients' },
     ],
   },
   {
-    key: 'fleet',
-    label: 'Fleet',
-    umbrellaKey: 'manage_fleet',
+    key: 'targets',
+    label: 'Sales Targets',
+    umbrellaKey: 'manage_targets',
     tags: [
-      { key: 'manage_fleet', label: 'Manage Fleet' },
+      { key: 'manage_targets', label: 'Manage Sales Targets' },
+      { key: 'view_all_targets', label: 'View All Sales Targets' },
+    ],
+  },
+  {
+    key: 'campaigns',
+    label: 'Campaigns',
+    umbrellaKey: 'manage_campaigns',
+    tags: [
+      { key: 'manage_campaigns', label: 'Manage Campaigns' },
+      { key: 'view_campaigns', label: 'View Campaigns' },
+      { key: 'manage_sms_sender_identities', label: 'Manage SMS Sender IDs' },
+      { key: 'manage_business_domains', label: 'Manage Business Domains' },
+      { key: 'view_sms_wallet', label: 'View SMS Wallet' },
+    ],
+  },
+  {
+    key: 'transport',
+    label: 'Transport',
+    tags: [
+      { key: 'manage_requests', label: 'Manage Requests', implies: ['view_all_requests'] },
+      { key: 'view_all_requests', label: 'View All Requests' },
+      { key: 'manage_transport_officers', label: 'Manage Transport Officers' },
       { key: 'view_fleet', label: 'View Fleet' },
-      { key: 'create_fleet', label: 'Create Vehicles' },
-      { key: 'edit_fleet', label: 'Edit Vehicles' },
-      { key: 'delete_fleet', label: 'Delete Vehicles' },
+      { key: 'manage_fleet', label: 'Manage Fleet', implies: ['view_fleet'] },
     ],
   },
   {
@@ -62,7 +92,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
     tags: [
       { key: 'manage_crm_configuration', label: 'Manage CRM Configuration' },
       { key: 'manage_pipelines', label: 'Manage Pipelines' },
-      { key: 'manage_products', label: 'Manage Products' },
+      { key: 'manage_products', label: 'Manage Products/Services' },
       { key: 'manage_decision_makers', label: 'Manage Decision Makers' },
       { key: 'manage_source_types', label: 'Manage Source Types' },
       { key: 'manage_interaction_types', label: 'Manage Interaction Types' },
@@ -87,6 +117,8 @@ const sectionDetailKeys = (sectionKey: string): string[] => {
   const section = MARKETING_PERMISSION_SECTIONS.find((s) => s.key === sectionKey)!;
   return section.tags.map((t) => t.key).filter((k) => k !== section.umbrellaKey);
 };
+
+const ALL_TAGS = MARKETING_PERMISSION_SECTIONS.flatMap((section) => section.tags);
 
 const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   // Prospecting — "create prospect" is the own-records bundle: the creator is
@@ -116,17 +148,48 @@ const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
     ...pairs('marketing.follow-ups.all', FOLLOW_UP_ACTIONS),
   ],
 
+  // Assigning is on top of the own-records view: a user hands on the records they can already see.
+  assign_prospects: [...PROSPECT_OWN_VIEW, ...pairs('marketing.prospects', ['ASSIGN'])],
+
   // Clients — "create client" is the own-records bundle, like "create prospect".
   create_client: pairs('marketing.clients', CRUD),
   view_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['VIEW'])],
   edit_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['EDIT'])],
   delete_all_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.all', ['DELETE'])],
+  // Billing sits on top of client visibility: a user bills the clients they can already see.
+  manage_billing: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients.billing', ['VIEW', 'CREATE'])],
 
-  // Fleet — edit/delete imply view since the list is the entry point.
+  assign_clients: [...CLIENT_OWN_VIEW, ...pairs('marketing.clients', ['ASSIGN'])],
+
+  // The general (organisation-wide) dashboard. Without it a user only has the personal dashboard.
+  view_dashboard: pairs('marketing.dashboard', ['VIEW']),
+
+  // Sales targets — everyone sees their own progress; this pill adds every rep's.
+  view_all_targets: pairs('marketing.targets.all', ['VIEW']),
+
+  // Transport — each "manage" pill carries the full set for its area.
+  manage_requests: [
+    ...pairs('marketing.requests', ['VIEW', 'CREATE', 'EDIT', 'CANCEL']),
+    ...pairs('marketing.requests.all', ['VIEW', 'APPROVE']),
+  ],
+  view_all_requests: [
+    ...pairs('marketing.requests', ['VIEW']),
+    ...pairs('marketing.requests.all', ['VIEW']),
+  ],
+  manage_transport_officers: pairs('marketing.transport-officers', ['VIEW', 'CREATE', 'EDIT']),
   view_fleet: pairs('marketing.fleet', ['VIEW']),
-  create_fleet: pairs('marketing.fleet', ['VIEW', 'CREATE']),
-  edit_fleet: pairs('marketing.fleet', ['VIEW', 'EDIT']),
-  delete_fleet: pairs('marketing.fleet', ['VIEW', 'DELETE']),
+  manage_fleet: pairs('marketing.fleet', ['VIEW', 'CREATE', 'EDIT', 'DELETE']),
+
+  // Campaigns — "view" is the read-only pill; "manage" is the umbrella below.
+  view_campaigns: pairs('marketing.campaigns', ['VIEW']),
+  manage_sms_sender_identities: pairs('marketing.sms-sender-identities', [
+    'VIEW',
+    'CREATE',
+    'EDIT',
+    'DELETE',
+  ]),
+  manage_business_domains: pairs('marketing.domains', ['VIEW', 'CREATE', 'VERIFY', 'DELETE']),
+  view_sms_wallet: pairs('marketing.sms-wallet', ['VIEW']),
 
   // CRM Configuration
   manage_pipelines: pairs('marketing.pipeline-stages', CRUD),
@@ -141,20 +204,28 @@ const UMBRELLA_EXTRAS: Record<string, PermissionPair[]> = {
   manage_crm_configuration: pairs('marketing.crm-settings', CRUD),
   manage_prospects: [],
   manage_clients: [],
-  manage_fleet: [],
+  manage_targets: pairs('marketing.targets', CRUD),
+  manage_campaigns: [
+    ...pairs('marketing.campaigns', ['VIEW', 'CREATE', 'RUN', 'CANCEL']),
+    ...pairs('marketing.sms-sender-identities', ['VIEW', 'CREATE', 'EDIT', 'DELETE']),
+    ...pairs('marketing.domains', ['VIEW', 'CREATE', 'VERIFY', 'DELETE']),
+    ...pairs('marketing.sms-wallet', ['VIEW']),
+  ],
 };
 
 /** Pill key → backend resource/action pairs it grants (umbrellas grant their section's union). */
 export const MARKETING_PERMISSION_TAG_MAPPING: Record<string, PermissionPair[]> = {
   ...DETAIL_MAPPING,
   ...Object.fromEntries(
-    MARKETING_PERMISSION_SECTIONS.map((section) => {
+    MARKETING_PERMISSION_SECTIONS.flatMap((section) => {
+      const umbrellaKey = section.umbrellaKey;
+      if (!umbrellaKey) return [];
       const merged = [
-        ...(UMBRELLA_EXTRAS[section.umbrellaKey] ?? []),
+        ...(UMBRELLA_EXTRAS[umbrellaKey] ?? []),
         ...sectionDetailKeys(section.key).flatMap((k) => DETAIL_MAPPING[k] ?? []),
       ];
       const unique = new Map(merged.map((p) => [`${p.resource}:${p.action}`, p]));
-      return [section.umbrellaKey, [...unique.values()]];
+      return [[umbrellaKey, [...unique.values()]]];
     }),
   ),
 };
@@ -169,9 +240,7 @@ const ROLE_MANAGEMENT_PERMISSIONS: PermissionPair[] = [
 export const MARKETING_ADMIN_PERMISSIONS: PermissionPair[] = [
   ...new Map(
     [
-      ...MARKETING_PERMISSION_SECTIONS.flatMap(
-        (section) => MARKETING_PERMISSION_TAG_MAPPING[section.umbrellaKey],
-      ),
+      ...ALL_TAGS.flatMap((tag) => MARKETING_PERMISSION_TAG_MAPPING[tag.key] ?? []),
       ...ROLE_MANAGEMENT_PERMISSIONS,
     ].map((p) => [`${p.resource}:${p.action}`, p] as const),
   ).values(),
@@ -221,10 +290,11 @@ export function MarketingPermissionSections({ value, onChange }: MarketingPermis
   const selected = new Set(value);
 
   const toggle = (section: PermissionSection, key: string) => {
+    const umbrellaKey = section.umbrellaKey;
     const detailKeys = sectionDetailKeys(section.key);
     const next = new Set(selected);
 
-    if (key === section.umbrellaKey) {
+    if (umbrellaKey && key === umbrellaKey) {
       // Umbrella selects or clears every pill in its section.
       if (next.has(key)) {
         detailKeys.forEach((k) => next.delete(k));
@@ -235,10 +305,16 @@ export function MarketingPermissionSections({ value, onChange }: MarketingPermis
       }
     } else if (next.has(key)) {
       next.delete(key);
-      next.delete(section.umbrellaKey);
+      if (umbrellaKey) next.delete(umbrellaKey);
+      // Switching off a pill also switches off any pill that depends on it.
+      section.tags.filter((t) => t.implies?.includes(key)).forEach((t) => next.delete(t.key));
     } else {
       next.add(key);
-      if (detailKeys.every((k) => next.has(k))) next.add(section.umbrellaKey);
+      section.tags.find((t) => t.key === key)?.implies?.forEach((k) => next.add(k));
+      // A section with a single detail pill (e.g. View) must not promote itself to Manage.
+      if (umbrellaKey && detailKeys.length > 1 && detailKeys.every((k) => next.has(k))) {
+        next.add(umbrellaKey);
+      }
     }
 
     onChange(Array.from(next));

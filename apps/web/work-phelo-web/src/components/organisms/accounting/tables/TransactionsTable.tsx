@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
@@ -17,20 +17,28 @@ import {
   AccountingTradeDocument,
   AccountingTradeDocumentPaymentState,
   AccountingTradeDocumentStatus,
+  AccountingTradeSettlement,
   CashbookTransaction,
   CashbookTransactionType,
+  PaymentRequest,
+  TransactionsPageType,
   TransactionTypeDefinition,
 } from '@/types/accounting';
 import {
-  useCashbookTransactions,
-  usePayableBills,
-  usePayableCreditNotes,
-  useReceivableCreditNotes,
-  useReceivableInvoices,
+  usePendingPaymentRequests,
+  useReceivableInvoice,
+  useRejectPaymentRequest,
+  useTransactionsPage,
   useTransactionTypes,
 } from '@/hooks';
+import { RejectDraftModal } from '@/components/organisms/accounting/panels/RejectDraftModal';
+import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { TradeDocumentDetailPanel } from '@/components/organisms/accounting/panels/TradeDocumentDetailPanel';
+import { TradeSettlementDetailPanel } from '@/components/organisms/accounting/panels/TradeSettlementDetailPanel';
 import { CashbookTransactionDetailPanel } from '@/components/organisms/accounting/panels/CashbookTransactionDetailPanel';
+import { useTabUsage } from '@/hooks/useTabUsage';
 import { NewTransactionPanel } from '@/components/organisms/accounting/panels/NewTransactionPanel';
 import { MakePaymentPanel } from '@/components/organisms/accounting/panels/MakePaymentPanel';
 import { BulkPaymentPanel } from '@/components/organisms/accounting/panels/BulkPaymentPanel';
@@ -47,17 +55,22 @@ const STATUS_VARIANT: Record<AccountingTradeDocumentStatus, 'success' | 'neutral
   DRAFT: 'neutral',
   POSTED: 'success',
   REVERSED: 'danger',
+  REJECTED: 'danger',
+  VOIDED: 'neutral',
 };
 
 const STATUS_LABEL: Record<AccountingTradeDocumentStatus, string> = {
   DRAFT: 'PENDING',
   POSTED: 'POSTED',
   REVERSED: 'REVERSED',
+  REJECTED: 'REJECTED',
+  VOIDED: 'Voided',
 };
 
 const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
   DRAFT: 'Draft',
   REVERSED: 'Reversed',
+  REJECTED: 'Rejected',
   PAID: 'Paid',
   PARTIALLY_PAID: 'Partially Paid',
   OPEN: 'Unpaid',
@@ -68,6 +81,7 @@ const PAYMENT_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> =
 const CREDIT_NOTE_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, string> = {
   DRAFT: 'Draft',
   REVERSED: 'Reversed',
+  REJECTED: 'Rejected',
   PAID: 'Applied',
   PARTIALLY_PAID: 'Partly Applied',
   OPEN: 'Unapplied',
@@ -76,7 +90,7 @@ const CREDIT_NOTE_STATE_LABEL: Record<AccountingTradeDocumentPaymentState, strin
 const CASHBOOK_TYPE_LABEL: Record<CashbookTransactionType, string> = {
   RECEIPT: 'Receipt',
   PAYMENT: 'Payment',
-  TRANSFER: 'Transfer',
+  TRANSFER: 'Contra',
   CHARGE: 'Charge',
   ADJUSTMENT: 'Adjustment',
 };
@@ -108,6 +122,7 @@ const TYPE_FILTER_OPTIONS: SearchSelectOption[] = [
   { value: 'RECEIVABLE', label: 'Receivable' },
   { value: 'PAYABLE', label: 'Payable' },
   { value: 'CASHBOOK', label: 'Cashbook' },
+  { value: 'TRANSFER', label: 'Contra' },
 ];
 
 function fmtDate(iso: string | null) {
@@ -131,11 +146,14 @@ function fmtAmount(amount: string, currency: string) {
  *  on kind for every field, only for the handful that genuinely differ. */
 interface UnifiedTransactionRow {
   id: string;
-  kind: 'document' | 'cashbook';
+  kind: 'document' | 'cashbook' | 'paymentRequest' | 'settlement';
   transactionNumber: string;
   date: string;
   entityLabel: string;
-  /** The original invoice/bill a credit/debit note reduces, when it has one. */
+  /** Shown under the entity name, e.g. who raised a payment request. */
+  entitySubLabel?: string;
+  /** The original invoice/bill a credit/debit note reduces, or the invoices/bills a receipt or
+   *  payment is applied to, when it has any. */
   linkedTo: string | null;
   subtotalAmount: string | null;
   taxAmount: string | null;
@@ -143,7 +161,7 @@ interface UnifiedTransactionRow {
   currency: string;
   typeLabel: string;
   typeColor: TypeChipColor;
-  filterSide: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK';
+  filterSide: 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK' | 'TRANSFER';
   status: AccountingTradeDocumentStatus;
   paymentStateLabel: string | null;
   /** The printable document this row's Transaction Type allows, if any. */
@@ -151,6 +169,8 @@ interface UnifiedTransactionRow {
   createdAt: string;
   document?: AccountingTradeDocument;
   cashbook?: CashbookTransaction;
+  paymentRequest?: PaymentRequest;
+  settlement?: AccountingTradeSettlement;
 }
 
 function toDocumentRow(
@@ -186,6 +206,38 @@ function toDocumentRow(
   };
 }
 
+/** A receipt or payment made against an invoice or bill, linked to what it settles the way a
+ *  credit or debit note is linked to its original. */
+function toSettlementRow(
+  settlement: AccountingTradeSettlement,
+  linkedDocuments: { documentNumber: string }[],
+): UnifiedTransactionRow {
+  const isReceipt = settlement.side === 'RECEIVABLE';
+  return {
+    id: settlement.id,
+    kind: 'settlement',
+    transactionNumber: settlement.settlementNumber,
+    date: settlement.settlementDate,
+    entityLabel: settlement.party.name,
+    linkedTo:
+      linkedDocuments.length > 0
+        ? linkedDocuments.map((document) => document.documentNumber).join(', ')
+        : null,
+    subtotalAmount: settlement.amount,
+    taxAmount: '0',
+    totalAmount: settlement.amount,
+    currency: settlement.currency,
+    typeLabel: isReceipt ? 'Receipt' : 'Payment',
+    typeColor: isReceipt ? 'green' : 'red',
+    filterSide: settlement.side,
+    status: settlement.status,
+    paymentStateLabel: null,
+    documentKey: null,
+    createdAt: settlement.createdAt,
+    settlement,
+  };
+}
+
 function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
   return {
     id: cb.id,
@@ -202,12 +254,41 @@ function toCashbookRow(cb: CashbookTransaction): UnifiedTransactionRow {
     currency: cb.currency,
     typeLabel: CASHBOOK_TYPE_LABEL[cb.transactionType],
     typeColor: CASHBOOK_TYPE_CHIP_COLOR[cb.transactionType],
-    filterSide: 'CASHBOOK',
+    filterSide: cb.transactionType === 'TRANSFER' ? 'TRANSFER' : 'CASHBOOK',
     status: cb.status,
     paymentStateLabel: null,
     documentKey: null,
     createdAt: cb.createdAt,
     cashbook: cb,
+  };
+}
+
+/** A payment another module asked to have recorded. Only the ones waiting for the accountant get a
+ *  row - once settled or turned down they live on the invoice's request history. */
+function toPaymentRequestRow(request: PaymentRequest): UnifiedTransactionRow {
+  const source =
+    SOURCE_MODULE_LABELS[request.sourceModule as keyof typeof SOURCE_MODULE_LABELS] ??
+    request.sourceModule;
+  return {
+    id: `payment-request-${request.id}`,
+    kind: 'paymentRequest',
+    transactionNumber: request.invoiceNumber,
+    date: request.paymentDate,
+    entityLabel: request.entity?.name ?? '—',
+    entitySubLabel: `Requested by ${request.requestedByName ?? 'a user'} · ${source}`,
+    linkedTo: null,
+    subtotalAmount: request.amount,
+    taxAmount: '0',
+    totalAmount: request.amount,
+    currency: request.currency,
+    typeLabel: 'Payment Request',
+    typeColor: 'blue',
+    filterSide: 'RECEIVABLE',
+    status: 'DRAFT',
+    paymentStateLabel: null,
+    documentKey: null,
+    createdAt: request.createdAt,
+    paymentRequest: request,
   };
 }
 
@@ -217,11 +298,16 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<AccountingTradeDocument | null>(null);
+  const [settlementTarget, setSettlementTarget] = useState<AccountingTradeSettlement | null>(null);
   const [cashbookDetailTarget, setCashbookDetailTarget] = useState<CashbookTransaction | null>(
     null,
   );
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<AccountingTradeDocument | null>(null);
+  const toast = useToast();
+  const [requestInvoiceId, setRequestInvoiceId] = useState<string | undefined>();
+  const [receiveRequest, setReceiveRequest] = useState<PaymentRequest | null>(null);
+  const [rejectRequest, setRejectRequest] = useState<PaymentRequest | null>(null);
   const [newTransactionOpen, setNewTransactionOpen] = useState(false);
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TransactionTypeDefinition | null | undefined>(
@@ -231,25 +317,49 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const { data: transactionTypes = [], isLoading: isLoadingTransactionTypes } =
     useTransactionTypes();
   const selectableTypes = useMemo(
-    () => transactionTypes.filter((t) => t.category === 'RECEIVABLE' || t.category === 'PAYABLE'),
+    () =>
+      transactionTypes
+        .filter((t) => t.category === 'RECEIVABLE' || t.category === 'PAYABLE')
+        .map((t) => ({ ...t, key: t.id })),
     [transactionTypes],
   );
+  // The types used most come first, as on the HR profile tabs: the order is counted per browser
+  // and settles at the next visit. Types that can't be used yet (no rule or source) go last.
+  const { tabs: typesByUse, recordUse: recordTypeUse } = useTabUsage(
+    'accounting-transaction-types-usage',
+    selectableTypes,
+    { pinFirst: false },
+  );
+  const orderedTypes = useMemo(() => {
+    const usable = (t: TransactionTypeDefinition) =>
+      t.rulesCount > 0 || Boolean(t.sourceTypeId) || t.postsToCashbook;
+    return [...typesByUse.filter(usable), ...typesByUse.filter((t) => !usable(t))];
+  }, [typesByUse]);
 
-  const invoices = useReceivableInvoices({ limit: 100, partyId });
-  const bills = usePayableBills({ limit: 100, partyId });
-  const receivableCreditNotes = useReceivableCreditNotes({ limit: 100, partyId });
-  const payableCreditNotes = usePayableCreditNotes({ limit: 100, partyId });
-  // An entity's own page only ever shows its AP/AR documents — cashbook entries aren't
-  // resolved against a party the same way, so they're fetched but left out of that scoped
-  // view's merged list below.
-  const cashbookTransactions = useCashbookTransactions({ limit: 100 });
+  // The search waits for a pause in typing before it goes to the server.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const isLoading =
-    invoices.isLoading ||
-    bills.isLoading ||
-    receivableCreditNotes.isLoading ||
-    payableCreditNotes.isLoading ||
-    (!partyId && cashbookTransactions.isLoading);
+  // The server filters, searches and pages. On an entity's own page this is only the direct
+  // cashbook entries that name the entity; they are listed for reference and never count
+  // towards what the entity owes.
+  const transactionsPage = useTransactionsPage({
+    type: (typeFilter || undefined) as TransactionsPageType | undefined,
+    status: statusFilter || undefined,
+    search: debouncedSearch || undefined,
+    partyId,
+    page,
+    limit: PAGE_SIZE,
+  });
+  const paymentRequests = usePendingPaymentRequests();
+  const rejectPaymentRequest = useRejectPaymentRequest();
+  // The invoice behind a request, for its detail view and for recording the payment.
+  const requestInvoice = useReceivableInvoice(requestInvoiceId);
+
+  const isLoading = transactionsPage.isLoading;
 
   const documentKeyByTypeId = useMemo(() => {
     const map = new Map<string, AccountingDocumentKey>();
@@ -259,54 +369,44 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
     return map;
   }, [transactionTypes]);
 
-  const transactions = useMemo<UnifiedTransactionRow[]>(() => {
-    const toRow = (doc: AccountingTradeDocument) => toDocumentRow(doc, documentKeyByTypeId);
-    const all = [
-      ...(invoices.data?.items ?? []).map(toRow),
-      ...(bills.data?.items ?? []).map(toRow),
-      ...(receivableCreditNotes.data?.items ?? []).map(toRow),
-      ...(payableCreditNotes.data?.items ?? []).map(toRow),
-      ...(!partyId
-        ? (cashbookTransactions.data?.items ?? [])
-            .filter((cb) => cb.sourceModule !== 'ACCOUNTING')
-            .map(toCashbookRow)
-        : []),
-    ];
-    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [
-    invoices.data,
-    bills.data,
-    receivableCreditNotes.data,
-    payableCreditNotes.data,
-    cashbookTransactions.data,
-    partyId,
-    documentKeyByTypeId,
-  ]);
+  // Requests waiting for the accountant are few, so they are matched here and shown at the top of
+  // the first page; they are not part of the server's count.
+  const requestRows = useMemo<UnifiedTransactionRow[]>(() => {
+    if (page !== 1) return [];
+    if (typeFilter && typeFilter !== 'RECEIVABLE') return [];
+    if (statusFilter && statusFilter !== 'DRAFT') return [];
+    const q = debouncedSearch.toLowerCase();
+    return (paymentRequests.data ?? [])
+      .filter((request) => !partyId || request.entity?.id === partyId)
+      .filter(
+        (request) =>
+          !q ||
+          request.invoiceNumber.toLowerCase().includes(q) ||
+          (request.entity?.name ?? '').toLowerCase().includes(q),
+      )
+      .map(toPaymentRequestRow);
+  }, [paymentRequests.data, page, typeFilter, statusFilter, debouncedSearch, partyId]);
+
+  const paged = useMemo<UnifiedTransactionRow[]>(() => {
+    const rows = (transactionsPage.data?.items ?? []).map((item) =>
+      item.kind === 'document'
+        ? toDocumentRow(item.document, documentKeyByTypeId)
+        : item.kind === 'settlement'
+          ? toSettlementRow(item.settlement, item.linkedDocuments)
+          : toCashbookRow(item.transaction),
+    );
+    return [...requestRows, ...rows];
+  }, [transactionsPage.data, requestRows, documentKeyByTypeId]);
 
   // On an entity's page, "New Transaction" doesn't make sense — offer the payment
   // action for whichever side actually has documents here instead.
   const bulkPaymentSide = useMemo(() => {
-    const payableCount = transactions.filter((t) => t.filterSide === 'PAYABLE').length;
-    const receivableCount = transactions.filter((t) => t.filterSide === 'RECEIVABLE').length;
+    const payableCount = paged.filter((t) => t.filterSide === 'PAYABLE').length;
+    const receivableCount = paged.filter((t) => t.filterSide === 'RECEIVABLE').length;
     return payableCount > receivableCount ? 'PAYABLE' : 'RECEIVABLE';
-  }, [transactions]);
+  }, [paged]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return transactions.filter((r) => {
-      if (statusFilter && r.status !== statusFilter) return false;
-      if (typeFilter && r.filterSide !== typeFilter) return false;
-      if (!q) return true;
-      return (
-        r.transactionNumber.toLowerCase().includes(q) ||
-        r.entityLabel.toLowerCase().includes(q) ||
-        r.status.toLowerCase().includes(q)
-      );
-    });
-  }, [search, statusFilter, typeFilter, transactions]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = transactionsPage.data?.totalPages ?? 1;
 
   const columns = useMemo<Column<UnifiedTransactionRow>[]>(
     () => [
@@ -342,7 +442,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         label: 'Entity',
         width: 'minmax(120px, 1fr)',
         render: (row) => (
-          <span className="text-sm text-gray-800 font-medium truncate">{row.entityLabel}</span>
+          <div className="flex flex-col">
+            <span className="text-sm text-gray-800 font-medium truncate">{row.entityLabel}</span>
+            {row.entitySubLabel && (
+              <span className="text-xs text-gray-500 truncate">{row.entitySubLabel}</span>
+            )}
+          </div>
         ),
       },
       {
@@ -387,7 +492,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'status',
         label: 'Status',
-        width: '70px',
+        width: '80px',
         render: (row) => (
           <div className="flex flex-col gap-0.5">
             <Badge label={STATUS_LABEL[row.status]} variant={STATUS_VARIANT[row.status]} />
@@ -403,7 +508,22 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
         width: '160px',
         render: (row) => (
           <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-            {row.kind === 'document' ? (
+            {row.kind === 'paymentRequest' ? (
+              <>
+                <TableButton variant="red" onClick={() => setRejectRequest(row.paymentRequest!)}>
+                  Reject
+                </TableButton>
+                <TableButton
+                  variant="green"
+                  onClick={() => {
+                    setRequestInvoiceId(row.paymentRequest!.invoiceId);
+                    setReceiveRequest(row.paymentRequest!);
+                  }}
+                >
+                  Receive Payment
+                </TableButton>
+              </>
+            ) : row.kind === 'document' ? (
               row.document!.status === 'DRAFT' ? (
                 <TableButton variant="green" onClick={() => setDetailTarget(row.document!)}>
                   Post
@@ -413,6 +533,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
                 row.document!.paymentState !== 'PAID' ? (
                 <TableButton variant="green" onClick={() => setPaymentTarget(row.document!)}>
                   {row.document!.side === 'RECEIVABLE' ? 'Receive Payment' : 'Make Payment'}
+                </TableButton>
+              ) : null
+            ) : row.kind === 'settlement' ? (
+              row.settlement!.status === 'DRAFT' ? (
+                <TableButton variant="green" onClick={() => setSettlementTarget(row.settlement!)}>
+                  Post
                 </TableButton>
               ) : null
             ) : row.cashbook!.status === 'DRAFT' ? (
@@ -494,11 +620,12 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           setPage(1);
         }}
         extraFilters={extraFilters}
-        onRowClick={(row) =>
-          row.kind === 'document'
-            ? setDetailTarget(row.document!)
-            : setCashbookDetailTarget(row.cashbook!)
-        }
+        onRowClick={(row) => {
+          if (row.kind === 'paymentRequest') setRequestInvoiceId(row.paymentRequest!.invoiceId);
+          else if (row.kind === 'document') setDetailTarget(row.document!);
+          else if (row.kind === 'settlement') setSettlementTarget(row.settlement!);
+          else setCashbookDetailTarget(row.cashbook!);
+        }}
         actionButton={
           partyId
             ? {
@@ -528,14 +655,13 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-2">
-            {selectableTypes.map((type) => {
-              // A rule and a source are each independently sufficient to use a type — applies
-              // uniformly, including cashbook (Receipt/Payment/Charge/Adjustment) types: every
-              // type must be deliberately configured with at least one before it's usable,
-              // rather than falling back to ad hoc free-form account picking.
+            {orderedTypes.map((type) => {
+              // A rule and a source are each independently sufficient to use a type. A cashbook
+              // type (direct receipt/payment) needs neither: both accounts are picked on the
+              // form, and a rule would only pre-fill one of them.
               const hasRule = type.rulesCount > 0;
               const hasSource = Boolean(type.sourceTypeId);
-              const canSelect = hasRule || hasSource;
+              const canSelect = hasRule || hasSource || type.postsToCashbook;
               return (
                 <button
                   key={type.id}
@@ -543,6 +669,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
                   disabled={!canSelect}
                   onClick={() => {
                     if (!canSelect) return;
+                    recordTypeUse(type.id);
                     setNewTransactionOpen(false);
                     setSelectedType(type);
                   }}
@@ -577,18 +704,60 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
 
       <TradeDocumentDetailPanel
         side={detailTarget?.side ?? 'RECEIVABLE'}
-        document={detailTarget}
+        document={detailTarget ?? (receiveRequest ? null : (requestInvoice.data ?? null))}
         documentKind={detailTarget?.documentType === 'CREDIT_NOTE' ? 'creditNote' : 'invoice'}
-        onClose={() => setDetailTarget(null)}
+        onClose={() => {
+          setDetailTarget(null);
+          setRequestInvoiceId(undefined);
+        }}
         onPostedForPayment={(document) => {
           setDetailTarget(null);
           setPaymentTarget(document);
         }}
       />
 
+      <TradeSettlementDetailPanel
+        side={settlementTarget?.side ?? 'RECEIVABLE'}
+        settlement={settlementTarget}
+        onClose={() => setSettlementTarget(null)}
+      />
+
       <DocumentPreviewPanel target={previewTarget} onClose={() => setPreviewTarget(null)} />
 
       <MakePaymentPanel document={paymentTarget} onClose={() => setPaymentTarget(null)} />
+
+      <MakePaymentPanel
+        document={receiveRequest ? (requestInvoice.data ?? null) : null}
+        paymentRequest={receiveRequest}
+        onClose={() => {
+          setReceiveRequest(null);
+          setRequestInvoiceId(undefined);
+        }}
+        onRejectRequest={() => {
+          setRejectRequest(receiveRequest);
+          setReceiveRequest(null);
+          setRequestInvoiceId(undefined);
+        }}
+      />
+
+      <RejectDraftModal
+        isOpen={!!rejectRequest}
+        title="Reject Payment Request"
+        subject="This payment request"
+        description="It is turned down, no payment is recorded, and the reason is shown to whoever asked."
+        isRejecting={rejectPaymentRequest.isPending}
+        onConfirm={async (reason) => {
+          if (!rejectRequest) return;
+          try {
+            await rejectPaymentRequest.mutateAsync({ id: rejectRequest.id, reason });
+            toast.success('Payment request rejected.');
+            setRejectRequest(null);
+          } catch (error) {
+            toast.error(extractError(error, 'Failed to reject the request'));
+          }
+        }}
+        onClose={() => setRejectRequest(null)}
+      />
 
       <CashbookTransactionDetailPanel
         transaction={cashbookDetailTarget}

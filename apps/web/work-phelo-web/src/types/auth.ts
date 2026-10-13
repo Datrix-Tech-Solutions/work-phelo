@@ -10,6 +10,7 @@ export interface User {
   avatarUrl?: string | null;
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;
+  labelConfig?: Record<string, string>;
 }
 
 export interface AuthState {

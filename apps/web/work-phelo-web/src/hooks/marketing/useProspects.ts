@@ -13,8 +13,9 @@ import {
 const ENDPOINT = '/marketing/prospects';
 const PROSPECTS_KEY = ['marketing', 'prospects'] as const;
 
-export function useProspects(query: ProspectsQuery = {}) {
+export function useProspects(query: ProspectsQuery = {}, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: [...PROSPECTS_KEY, query] as const,
     queryFn: async () => {
       const res = await api.get<ProspectListResponse>(ENDPOINT, { params: query });

@@ -47,6 +47,9 @@ describe('permission entitlements', () => {
     'marketing.prospects.all',
     'marketing.clients',
     'marketing.clients.all',
+    'marketing.clients.billing',
+    'marketing.targets',
+    'marketing.targets.all',
     'marketing.prospects.interactions',
     'marketing.prospects.interactions.all',
     'marketing.follow-ups',
@@ -62,8 +65,19 @@ describe('permission entitlements', () => {
     ).toBe(false);
   });
 
-  it('scopes marketing.fleet to the Marketing module only', () => {
-    const resource = { name: 'marketing.fleet', module: 'MARKETING' };
+  it.each([
+    'marketing.fleet',
+    'marketing.requests',
+    'marketing.requests.all',
+    'marketing.appointments.all',
+    'marketing.transport-officers',
+    'marketing.campaigns',
+    'marketing.sms-sender-identities',
+    'marketing.domains',
+    'marketing.sms-wallet',
+    'marketing.sms-credits',
+  ])('scopes %s to the Marketing module only', (name) => {
+    const resource = { name, module: 'MARKETING' };
 
     expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
       true,

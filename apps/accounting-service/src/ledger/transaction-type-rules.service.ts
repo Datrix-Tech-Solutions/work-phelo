@@ -9,6 +9,7 @@ import {
   GLAccountCategory,
   Prisma,
   PostingDirection,
+  RuleLineSettlementKind,
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -40,7 +41,26 @@ const ruleInclude = {
   lines: {
     orderBy: { sequence: 'asc' as const },
     include: {
-      account: { select: { id: true, code: true, name: true } },
+      account: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          category: true,
+          classificationId: true,
+        },
+      },
+      scopes: {
+        orderBy: { createdAt: 'asc' as const },
+        include: {
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+          account: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+        },
+      },
       taxType: { select: { id: true, name: true, rate: true } },
     },
   },
@@ -72,6 +92,7 @@ export class TransactionTypeRulesService {
 
   async createTaxType(user: RequestUser, dto: CreateTaxTypeDto) {
     try {
+      await this.assertTaxAccounts(user.tenantId, dto);
       const taxType = await this.prisma.taxType.create({
         data: {
           tenantId: user.tenantId,
@@ -80,6 +101,8 @@ export class TransactionTypeRulesService {
           rate: dto.rate,
           effectiveFrom: new Date(dto.effectiveFrom),
           effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+          payableAccountId: dto.payableAccountId ?? null,
+          receivableAccountId: dto.receivableAccountId ?? null,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -101,6 +124,7 @@ export class TransactionTypeRulesService {
   ) {
     const taxType = await this.findTaxType(user.tenantId, taxTypeId);
     try {
+      await this.assertTaxAccounts(user.tenantId, dto);
       const updated = await this.prisma.taxType.update({
         where: { id_tenantId: { id: taxType.id, tenantId: user.tenantId } },
         data: {
@@ -116,6 +140,12 @@ export class TransactionTypeRulesService {
               }
             : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          ...(dto.payableAccountId !== undefined
+            ? { payableAccountId: dto.payableAccountId }
+            : {}),
+          ...(dto.receivableAccountId !== undefined
+            ? { receivableAccountId: dto.receivableAccountId }
+            : {}),
           updatedByUserId: user.id,
         },
       });
@@ -150,6 +180,19 @@ export class TransactionTypeRulesService {
     });
   }
 
+  /** The default accounts must exist for this tenant; the forms re-check they can be posted to. */
+  private async assertTaxAccounts(
+    tenantId: string,
+    dto: {
+      payableAccountId?: string | null;
+      receivableAccountId?: string | null;
+    },
+  ) {
+    for (const accountId of [dto.payableAccountId, dto.receivableAccountId]) {
+      if (accountId) await this.masterData.findGLAccount(tenantId, accountId);
+    }
+  }
+
   private async findTaxType(tenantId: string, id: string) {
     const taxType = await this.prisma.taxType.findFirst({
       where: { id, tenantId },
@@ -166,6 +209,8 @@ export class TransactionTypeRulesService {
     effectiveFrom: Date;
     effectiveTo: Date | null;
     isActive: boolean;
+    payableAccountId: string | null;
+    receivableAccountId: string | null;
   }) {
     return {
       id: taxType.id,
@@ -177,6 +222,8 @@ export class TransactionTypeRulesService {
         ? taxType.effectiveTo.toISOString()
         : null,
       isActive: taxType.isActive,
+      payableAccountId: taxType.payableAccountId,
+      receivableAccountId: taxType.receivableAccountId,
     };
   }
 
@@ -313,9 +360,17 @@ export class TransactionTypeRulesService {
     return lines.map((line, index) => ({
       sequence: index + 1,
       direction: line.direction,
-      accountId: line.accountId,
+      accountId: line.accountId ?? null,
+      scopes: {
+        create: (line.scopes ?? []).map((scope) => ({
+          category: scope.category,
+          classificationId: scope.classificationId ?? null,
+          accountId: scope.accountId ?? null,
+        })),
+      },
       taxTypeId: line.taxTypeId,
       subledgerType: line.subledgerType,
+      settlementKind: line.settlementKind ?? null,
       description: this.optional(line.description),
     }));
   }
@@ -342,13 +397,29 @@ export class TransactionTypeRulesService {
       postsToCashbook: boolean;
       isLinked: boolean;
       category: TransactionTypeCategory;
+      sourceTypeId: string | null;
     },
-    lines: TransactionTypeRuleLineDto[],
+    allLines: TransactionTypeRuleLineDto[],
   ) {
     if (transactionType.postsToCashbook) {
-      this.validateCashbookLine(transactionType.category, lines);
+      this.validateCashbookLine(transactionType.category, allLines);
+      if (!allLines[0].accountId || allLines[0].scopes?.length) {
+        throw new BadRequestException(
+          'The offset line of a cashbook type needs a fixed account.',
+        );
+      }
       return;
     }
+
+    // Settlement lines apply when the bill/invoice is paid, not when it is raised, so they
+    // are checked on their own and kept out of the document rules below.
+    this.validateSettlementLines(
+      transactionType,
+      allLines.filter((l) => l.settlementKind),
+    );
+    const lines = allLines.filter((l) => !l.settlementKind);
+
+    this.validateAccountOrScope(transactionType, lines);
 
     const debitLines = lines.filter((l) => l.direction === PostingDirection.DR);
     const creditLines = lines.filter(
@@ -379,6 +450,113 @@ export class TransactionTypeRulesService {
     if (balancingLines[0].taxTypeId) {
       throw new BadRequestException(
         'The auto-balancing line cannot itself be a tax line.',
+      );
+    }
+  }
+
+  /** A deduction reduces the cash that moves when a bill/invoice is settled, a charge adds to it.
+   *  The side follows from that and the category: paying a bill debits Trade Payable, so a
+   *  deduction is a credit and a charge a debit; receiving on an invoice credits Trade
+   *  Receivable, so it is the other way round. Only a plain Receivable/Payable type is ever
+   *  settled — a note, a cashbook type or a source-linked type has no payment form for these. */
+  private validateSettlementLines(
+    transactionType: {
+      isLinked: boolean;
+      category: TransactionTypeCategory;
+      sourceTypeId: string | null;
+    },
+    lines: TransactionTypeRuleLineDto[],
+  ) {
+    if (lines.length === 0) return;
+    const isPayable =
+      transactionType.category === TransactionTypeCategory.PAYABLE;
+    const isReceivable =
+      transactionType.category === TransactionTypeCategory.RECEIVABLE;
+    if (
+      transactionType.isLinked ||
+      transactionType.sourceTypeId ||
+      (!isPayable && !isReceivable)
+    ) {
+      throw new BadRequestException(
+        'Settlement lines only apply to a plain Receivable or Payable type — not a linked, cashbook or source-linked one.',
+      );
+    }
+    for (const line of lines) {
+      if (!line.accountId || line.scopes?.length) {
+        throw new BadRequestException(
+          'A settlement line needs a fixed account.',
+        );
+      }
+      if (line.subledgerType) {
+        throw new BadRequestException(
+          'A settlement line cannot post to a subledger.',
+        );
+      }
+      const isDeduction =
+        line.settlementKind === RuleLineSettlementKind.DEDUCTION;
+      if (line.taxTypeId && !isDeduction) {
+        throw new BadRequestException(
+          'Only a settlement deduction can be a tax.',
+        );
+      }
+      const expected =
+        isPayable === isDeduction ? PostingDirection.CR : PostingDirection.DR;
+      if (line.direction !== expected) {
+        throw new BadRequestException(
+          `A settlement ${isDeduction ? 'deduction' : 'charge'} on this type must be a ` +
+            `${expected === PostingDirection.CR ? 'credit' : 'debit'} line.`,
+        );
+      }
+    }
+  }
+
+  /** Each line is either one fixed account or a list of scopes (category / classification).
+   *  Only a Receivable/Payable type's main line (not the control line, not a tax line) may be
+   *  scoped — the control account and tax accounts stay fixed, and a source-linked type
+   *  has no form to pick from. */
+  private validateAccountOrScope(
+    transactionType: {
+      isLinked: boolean;
+      category: TransactionTypeCategory;
+      sourceTypeId: string | null;
+    },
+    lines: TransactionTypeRuleLineDto[],
+  ) {
+    const autoBalanceDirection = this.autoBalanceDirection(
+      transactionType.category,
+      transactionType.isLinked,
+    );
+    for (const line of lines) {
+      const scopeCount = line.scopes?.length ?? 0;
+      if (line.accountId ? scopeCount > 0 : scopeCount === 0) {
+        throw new BadRequestException(
+          'Each line needs either a fixed account or at least one category / classification to choose from.',
+        );
+      }
+      const keys = (line.scopes ?? []).map(
+        (s) => `${s.category}:${s.classificationId ?? ''}:${s.accountId ?? ''}`,
+      );
+      if (new Set(keys).size !== keys.length) {
+        throw new BadRequestException(
+          'The same category, classification or account is listed more than once.',
+        );
+      }
+      const scoped = !line.accountId;
+      if (!scoped) continue;
+      if (
+        !autoBalanceDirection ||
+        transactionType.sourceTypeId ||
+        line.taxTypeId ||
+        line.direction === autoBalanceDirection
+      ) {
+        throw new BadRequestException(
+          'Only the main (non-tax, non-control) line of a Receivable or Payable rule can be a category or classification.',
+        );
+      }
+    }
+    if (lines.filter((l) => !l.accountId).length > 1) {
+      throw new BadRequestException(
+        'Only one line of a rule can let the user choose the account.',
       );
     }
   }
@@ -438,12 +616,45 @@ export class TransactionTypeRulesService {
           ? GLAccountCategory.LIABILITY
           : null;
     for (const line of lines) {
-      const account = await this.masterData.findGLAccount(
-        tenantId,
-        line.accountId,
-      );
+      for (const scope of line.scopes ?? []) {
+        if (!scope.classificationId) continue;
+        const classification =
+          await this.prisma.accountClassification.findFirst({
+            where: { id: scope.classificationId, tenantId, isActive: true },
+            select: { id: true, category: true },
+          });
+        if (!classification) {
+          throw new BadRequestException('Classification not found or inactive');
+        }
+        if (classification.category !== scope.category) {
+          throw new BadRequestException(
+            'A classification must belong to the category it is listed under.',
+          );
+        }
+      }
+      for (const scope of line.scopes ?? []) {
+        if (!scope.accountId) continue;
+        const scoped = await this.masterData.findGLAccount(
+          tenantId,
+          scope.accountId,
+        );
+        if (
+          scoped.category !== scope.category ||
+          (scope.classificationId &&
+            scoped.classificationId !== scope.classificationId)
+        ) {
+          throw new BadRequestException(
+            'An account must sit inside the category and classification it is listed under.',
+          );
+        }
+      }
+      const account = line.accountId
+        ? await this.masterData.findGLAccount(tenantId, line.accountId)
+        : null;
       if (
+        account &&
         requiredCategory &&
+        !line.settlementKind &&
         line.direction === autoBalanceDirection &&
         account.category !== requiredCategory
       ) {
@@ -498,6 +709,12 @@ export class TransactionTypeRulesService {
         sequence: line.sequence,
         direction: line.direction,
         account: line.account,
+        scopes: line.scopes.map((scope) => ({
+          id: scope.id,
+          category: scope.category,
+          classification: scope.classification,
+          account: scope.account,
+        })),
         taxType: line.taxType
           ? {
               id: line.taxType.id,
@@ -506,6 +723,7 @@ export class TransactionTypeRulesService {
             }
           : null,
         subledgerType: line.subledgerType,
+        settlementKind: line.settlementKind,
         description: line.description,
       })),
     };

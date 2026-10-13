@@ -42,6 +42,8 @@ export const EventPatterns = {
   NOTIFICATION_PASSWORD_RESET_LINK: 'notification.password_reset_link',
   NOTIFICATION_PASSWORD_RESET_OTP: 'notification.password_reset_otp',
   NOTIFICATION_SMS_OTP: 'notification.sms_otp',
+  NOTIFICATION_SMS_SENDER_SUBMIT: 'notification.sms_sender.submit',
+  NOTIFICATION_SMS_SENDER_STATUS: 'notification.sms_sender.status',
   NOTIFICATION_IN_APP_CREATE: 'notification.in_app.create',
 
   // Reinsurance Operations domain events
@@ -83,6 +85,10 @@ export const EventPatterns = {
   NOTIFY_ANNOUNCEMENT_PUBLISHED: 'notify.announcement_published',
   NOTIFY_PAYROLL_APPROVAL_REQUESTED: 'notify.payroll_approval_requested',
   NOTIFY_PAYROLL_DECISION: 'notify.payroll_decision',
+
+  // Marketing → Notification
+  NOTIFY_CAMPAIGN_DISPATCH: 'notify.campaign_dispatch',
+  MARKETING_CAMPAIGN_DELIVERY_RESULT: 'marketing.campaign_delivery_result',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -686,4 +692,98 @@ export interface AnnouncementPublishedEvent {
   deliveryChannels?: AnnouncementDeliveryChannel[];
   platformLink?: string;
   recipients: AnnouncementRecipientEvent[];
+}
+
+// ── Marketing → Notification Events ────────────────────────────────────────
+
+export type CampaignDeliveryChannel = 'SMS' | 'EMAIL';
+
+export interface CampaignRecipientEvent {
+  /** MarketingCampaignRecipient id, echoed back when reporting the delivery result. */
+  recipientId: string;
+  channel: CampaignDeliveryChannel;
+  /** Phone number for SMS, email address for EMAIL. */
+  address: string;
+  contactName: string;
+  segmentCount?: number;
+  estimatedCredits?: number;
+  idempotencyKey?: string;
+}
+
+/** One batch of a campaign's pending recipients. Large campaigns are sent as several events. */
+export interface CampaignDispatchEvent {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
+  senderIdentityId?: string;
+  senderId?: string;
+  reservationId?: string;
+  tenantName?: string;
+  subject: string;
+  message: string;
+  recipients: CampaignRecipientEvent[];
+}
+
+export interface CampaignDispatchBatchEvent extends CampaignDispatchEvent {
+  batchId: string;
+  channel: CampaignDeliveryChannel;
+  senderIdentityId?: string;
+  senderId?: string;
+  reservationId?: string;
+}
+
+export interface CampaignDeliveryResultEvent {
+  tenantId: string;
+  campaignId: string;
+  recipientId: string;
+  channel: CampaignDeliveryChannel;
+  reservationId?: string;
+  accepted: boolean;
+  provider: string;
+  providerMessageId?: string;
+  providerStatus?: string;
+  providerDetail?: string;
+  failureCode?: string;
+  failureReason?: string;
+  chargedCredits: number;
+  idempotencyKey: string;
+}
+
+// ── Marketing ↔ Notification SMS Sender Identity RPC ──────────────────────
+
+export type SmsProviderName = 'termii' | 'pilosms' | 'sasusync' | 'agoosms';
+
+export type SmsProviderVerificationStatus =
+  | 'NOT_SUBMITTED'
+  | 'SUBMITTED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SUSPENDED'
+  | 'UNKNOWN';
+
+export interface SmsSenderIdentitySubmissionCommand {
+  tenantId: string;
+  senderIdentityId: string;
+  provider: SmsProviderName;
+  senderId: string;
+  purpose: string;
+  tenantDomain?: string | null;
+}
+
+export interface SmsSenderIdentityStatusCommand {
+  tenantId: string;
+  senderIdentityId: string;
+  provider: SmsProviderName;
+  senderId: string;
+  providerReferenceId?: string | null;
+}
+
+export interface SmsSenderIdentityProviderResult {
+  provider: SmsProviderName;
+  providerStatus: SmsProviderVerificationStatus;
+  providerReferenceId?: string | null;
+  providerStatusReason?: string | null;
+  providerPayload?: Record<string, unknown> | null;
+  rawProviderStatus?: string | null;
 }

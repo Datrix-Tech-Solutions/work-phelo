@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarClock, Package, Phone, Target } from 'lucide-react';
+import { CalendarClock, MessagesSquare, Package, Phone, Target, UserCheck } from 'lucide-react';
 import { DataCard } from '@/components/organisms/shared/DataCard';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { getInitials, pickAvatarColor } from '@/components/atoms/Avatar';
@@ -83,13 +83,19 @@ export function ProspectCard({
           <InfoRow icon={Package} iconClass="text-violet-500" value={prospect.product} />
           <InfoRow icon={Phone} iconClass="text-emerald-500" value={prospect.contactNo} />
           <InfoRow icon={CalendarClock} iconClass="text-orange-500" value={lastInteraction} />
+          <InfoRow
+            icon={MessagesSquare}
+            iconClass="text-sky-500"
+            value={`${prospect.interactionCount} follow-up${prospect.interactionCount === 1 ? '' : 's'}`}
+          />
+          <InfoRow icon={UserCheck} iconClass="text-rose-500" value={prospect.assignedTo} />
         </div>
       }
       actions={[
         ...(prospect.salesStageProgress >= 100 && onConvertToClient
           ? [
               {
-                label: 'Convert to Client',
+                label: 'Convert',
                 onClick: onConvertToClient,
                 className: 'bg-green-50 text-green-700 hover:bg-green-100',
               },

@@ -30,6 +30,8 @@ interface DataCardProps {
   className?: string;
   /** `strong` (default) is the opaque-ish glass; `card` is the lighter card style the overview uses. */
   surface?: 'strong' | 'card';
+  /** Tighter vertical spacing between the header, detail rows and buttons. */
+  compact?: boolean;
 }
 
 export function DataCard({
@@ -43,6 +45,7 @@ export function DataCard({
   onClick,
   className,
   surface = 'strong',
+  compact = false,
 }: DataCardProps) {
   const classes = cn(
     surface === 'strong' && 'shadow-lg',
@@ -58,7 +61,7 @@ export function DataCard({
       className={surface === 'card' ? cardClass(classes) : glassStrongClass(classes, 'plain')}
     >
       {/* Header: icon + title/subtitle — badge on the right */}
-      <div className="flex items-start gap-3 p-4 pb-3">
+      <div className={cn('flex items-start gap-3', compact ? 'p-3.5 pb-2.5' : 'p-4 pb-3')}>
         {icon}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-gray-900 leading-snug truncate">{title}</p>
@@ -70,7 +73,9 @@ export function DataCard({
       {(note || (details && details.length > 0)) && (
         <>
           <div className="mx-4 h-px bg-gray-100" />
-          <div className="flex flex-col gap-2.5 px-4 py-3 flex-1">
+          <div
+            className={cn('flex flex-col px-4 flex-1', compact ? 'gap-1.5 py-2' : 'gap-2.5 py-3')}
+          >
             {note}
             {details?.map((d, i) => (
               <div key={i} className="flex items-center justify-between gap-2">
@@ -85,7 +90,7 @@ export function DataCard({
       {actions && actions.length > 0 && (
         <>
           <div className="mx-4 h-px bg-gray-100" />
-          <div className="flex gap-2 p-4 pt-3">
+          <div className={cn('flex gap-2', compact ? 'px-4 pb-3 pt-2.5' : 'p-4 pt-3')}>
             {actions.map((a) => (
               <button
                 key={a.label}
@@ -94,7 +99,9 @@ export function DataCard({
                   a.onClick();
                 }}
                 className={cn(
-                  'flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors',
+                  // The border is always there (transparent) so hovering never shifts the layout;
+                  // `border-current` picks up each button's own text colour on hover.
+                  'flex-1 py-[5px] text-xs font-semibold rounded-lg border border-transparent transition-colors hover:border-current',
                   a.className,
                 )}
               >

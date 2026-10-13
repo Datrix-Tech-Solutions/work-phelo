@@ -1,6 +1,7 @@
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 
 import {
+  Archive,
   // BanknoteArrowDown,
   // BanknoteArrowUp,
   BookOpenText,
@@ -30,6 +31,7 @@ const BudgetIcon = () => <Target className="w-5 h-5" />;
 const FiscalYearIcon = () => <WalletCards className="w-5 h-5" />;
 const EntitiesIcon = () => <Users className="w-5 h-5" />;
 const CostCentresIcon = () => <Network className="w-5 h-5" />;
+const ArchiveIcon = () => <Archive className="w-5 h-5" />;
 // const BillsIcon = () => <ReceiptText className="w-5 h-5" />;
 
 export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
@@ -109,6 +111,14 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         label: 'Cash and Bank',
         icon: <CashAndBankIcon />,
         href: 'cashandbank',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'archive',
+        label: 'Archive',
+        icon: <ArchiveIcon />,
+        href: 'archive',
         enabled: true,
         active: true,
       },

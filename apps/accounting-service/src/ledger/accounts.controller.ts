@@ -27,6 +27,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingPermission } from './accounting.permissions';
 import {
+  BulkDeleteAccountsDto,
   BulkImportAccountsDto,
   CreateAccountClassificationDto,
   CreateAccountGroupDto,
@@ -279,6 +280,33 @@ export class AccountsController {
     return this.masterData.bulkImportAccounts(request.user, dto);
   }
 
+  @Get('accounts/unused')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary: 'List GL accounts that are safe to delete',
+    description:
+      'Accounts nothing references (no journal activity, rules, cash accounts, entities, documents, budgets or mappings) whose child accounts are all unused too. Preview only — nothing is deleted.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_DELETE)
+  listUnusedAccounts(@Req() request: Request & { user: RequestUser }) {
+    return this.masterData.listUnusedGLAccounts(request.user.tenantId);
+  }
+
+  @Post('accounts/bulk-delete')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary: 'Delete several unused GL accounts',
+    description:
+      'Each account is re-checked at delete time and removed deepest-first. Accounts that were used since the preview are skipped, never deleted.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_DELETE)
+  bulkDeleteAccounts(
+    @Body() dto: BulkDeleteAccountsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.bulkDeleteGLAccounts(request.user, dto);
+  }
+
   @Get('accounts')
   @ApiTags('Accounting - Chart of Accounts')
   @ApiOperation({ summary: 'List tenant GL accounts' })
@@ -322,6 +350,21 @@ export class AccountsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.masterData.deactivateGLAccount(request.user, accountId);
+  }
+
+  @Post('accounts/:accountId/activate')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({
+    summary: 'Reactivate a deactivated GL account',
+    description:
+      'Only allowed once its classification, parent account and parent GL account (if any) are active. Posting is switched back on unless it has child accounts.',
+  })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  activateAccount(
+    @Param('accountId', ParseUUIDPipe) accountId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.activateGLAccount(request.user, accountId);
   }
 
   @Delete('accounts/:accountId')

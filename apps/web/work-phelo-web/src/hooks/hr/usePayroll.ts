@@ -4,9 +4,12 @@ import {
   PayrollItem,
   PayrollRun,
   PayrollRunDetail,
+  PayrollAccountingStatus,
   PayrollSettings,
   PayrollSettlementStatus,
   RunPayrollDto,
+  RunConfiguredPayrollDto,
+  ApprovePayrollMonthResult,
   PayrollDecisionDto,
   UpdatePayrollItemDto,
   UpdatePayrollSettingsDto,
@@ -151,6 +154,44 @@ export function useSubmitPayroll() {
       queryClient.invalidateQueries({ queryKey: ['payroll'] });
       queryClient.invalidateQueries({ queryKey: ['payroll', id] });
     },
+  });
+}
+
+/** Whether approving payroll will post it to Accounting - asked fresh each time the approve screen opens. */
+export function usePayrollAccountingStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: ['payroll', 'accounting-status'],
+    queryFn: async () =>
+      (await api.get<PayrollAccountingStatus>('/hr/payroll/accounting-status')).data,
+    enabled,
+    refetchOnMount: 'always',
+    staleTime: 0,
+  });
+}
+
+/** Runs one payslip type for a month: the server works every payslip out and sends it for approval. */
+export function useRunConfiguredPayroll() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: RunConfiguredPayrollDto) => {
+      const res = await api.post<PayrollRun>('/hr/payroll-runs', payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payroll'] }),
+  });
+}
+
+/** Approves every run of the month that is waiting for approval. */
+export function useApprovePayrollMonth() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { month: number; year: number; note?: string }) => {
+      const res = await api.post<ApprovePayrollMonthResult>('/hr/payroll-runs/approve', payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payroll'] }),
   });
 }
 

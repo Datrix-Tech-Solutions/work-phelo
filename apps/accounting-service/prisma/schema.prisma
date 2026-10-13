@@ -59,6 +59,9 @@ enum JournalStatus {
   DRAFT
   POSTED
   REVERSED
+  /// Taken out of the books while its period was open. Counted nowhere; lives in the archive and
+  /// can be restored (re-submitted) while its period is still open.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -111,6 +114,21 @@ enum CashbookTransactionType {
   @@schema("accounting")
 }
 
+enum RuleLineSettlementKind {
+  DEDUCTION
+  CHARGE
+
+  @@schema("accounting")
+}
+
+enum CashbookLineKind {
+  ITEM
+  DEDUCTION
+  CHARGE
+
+  @@schema("accounting")
+}
+
 enum CashbookDirection {
   INFLOW
   OUTFLOW
@@ -135,6 +153,10 @@ enum CashbookTransactionStatus {
   DRAFT
   POSTED
   REVERSED
+  /// A draft the accountant turned down. Final - it is never posted, and the reason is kept.
+  REJECTED
+  /// Taken out of the books while its period was open. Counted nowhere; restorable from the archive.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -166,6 +188,10 @@ enum AccountingReceivableStatus {
   DRAFT
   POSTED
   REVERSED
+  /// A draft the accountant turned down. Final - it is never posted, and the reason is kept.
+  REJECTED
+  /// Taken out of the books while its period was open. Counted nowhere; restorable from the archive.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -188,6 +214,8 @@ enum AccountingPayableStatus {
   DRAFT
   POSTED
   REVERSED
+  /// Taken out of the books while its period was open. Counted nowhere; restorable from the archive.
+  VOIDED
 
   @@schema("accounting")
 }
@@ -209,14 +237,14 @@ enum TransactionTypeCategory {
 }
 
 model AccountingTenantConfig {
-  tenantId              String   @id
-  baseCurrency          String
-  fiscalYearStartMonth  Int      @default(1)
-  decimalPlaces         Int      @default(2)
-  createdByUserId       String
-  updatedByUserId       String
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  tenantId             String   @id
+  baseCurrency         String
+  fiscalYearStartMonth Int      @default(1)
+  decimalPlaces        Int      @default(2)
+  createdByUserId      String
+  updatedByUserId      String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@schema("accounting")
 }
@@ -280,25 +308,25 @@ model FiscalYear {
 }
 
 model FiscalPeriod {
-  id              String             @id @default(uuid())
-  tenantId        String
-  fiscalYearId    String
-  name            String
-  startDate       DateTime
-  endDate         DateTime
-  status          FiscalPeriodStatus @default(OPEN)
-  softClosedAt    DateTime?
+  id                 String             @id @default(uuid())
+  tenantId           String
+  fiscalYearId       String
+  name               String
+  startDate          DateTime
+  endDate            DateTime
+  status             FiscalPeriodStatus @default(OPEN)
+  softClosedAt       DateTime?
   softClosedByUserId String?
-  closedAt        DateTime?
-  closedByUserId  String?
-  lockedAt        DateTime?
-  lockedByUserId  String?
-  createdByUserId String
-  updatedByUserId String
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  journals        JournalEntry[]
-  fiscalYear      FiscalYear         @relation(fields: [fiscalYearId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closedAt           DateTime?
+  closedByUserId     String?
+  lockedAt           DateTime?
+  lockedByUserId     String?
+  createdByUserId    String
+  updatedByUserId    String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  journals           JournalEntry[]
+  fiscalYear         FiscalYear         @relation(fields: [fiscalYearId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
@@ -308,43 +336,50 @@ model FiscalPeriod {
 }
 
 model GLAccount {
-  id                String                         @id @default(uuid())
-  tenantId          String
-  code              String
-  name              String
-  category          GLAccountCategory
-  normalBalance     NormalBalance
-  classificationId  String?
-  accountGroupId    String?
-  parentAccountId   String?
+  id                          String                             @id @default(uuid())
+  tenantId                    String
+  code                        String
+  name                        String
+  category                    GLAccountCategory
+  normalBalance               NormalBalance
+  classificationId            String?
+  accountGroupId              String?
+  parentAccountId             String?
   /// Overrides the group's (or classification's) cash-flow default for this one account.
-  cashFlowCategory  CashFlowCategory?
-  allowPosting      Boolean                        @default(true)
-  description       String?
-  status            RecordStatus                   @default(ACTIVE)
-  createdByUserId   String
-  updatedByUserId   String
-  createdAt         DateTime                       @default(now())
-  updatedAt         DateTime                       @updatedAt
-  classification    AccountClassification?         @relation(fields: [classificationId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  accountGroup      AccountGroup?                  @relation(fields: [accountGroupId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  parentAccount     GLAccount?                     @relation("GLAccountHierarchy", fields: [parentAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  childAccounts     GLAccount[]                    @relation("GLAccountHierarchy")
-  journalLines      JournalLine[]
-  postingRuleLines  PostingRuleLine[]
-  transactionRuleLines TransactionTypeRuleLine[]
-  subledgers        SubledgerAccount[]
-  cashAccounts      AccountingCashAccount[]
-  cashbookOffsets   CashbookTransaction[]          @relation("CashbookOffsetAccount")
-  receivableOffsets AccountingReceivableDocument[] @relation("ReceivableOffsetAccount")
-  receivableArAccounts AccountingReceivableDocument[] @relation("ReceivableArAccount")
-  receivableReceiptArAccounts AccountingReceivableReceipt[] @relation("ReceivableReceiptArAccount")
-  payableOffsets    AccountingPayableDocument[]    @relation("PayableOffsetAccount")
-  payableApAccounts AccountingPayableDocument[]    @relation("PayableApAccount")
-  payablePaymentApAccounts AccountingPayablePayment[] @relation("PayablePaymentApAccount")
-  budgetLines       BudgetLine[]
-  recurringLines    RecurringJournalLine[]
-  sourceLedgerEntries SourceLedgerEntry[]
+  cashFlowCategory            CashFlowCategory?
+  allowPosting                Boolean                            @default(true)
+  description                 String?
+  status                      RecordStatus                       @default(ACTIVE)
+  createdByUserId             String
+  updatedByUserId             String
+  createdAt                   DateTime                           @default(now())
+  updatedAt                   DateTime                           @updatedAt
+  classification              AccountClassification?             @relation(fields: [classificationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  accountGroup                AccountGroup?                      @relation(fields: [accountGroupId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  parentAccount               GLAccount?                         @relation("GLAccountHierarchy", fields: [parentAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  childAccounts               GLAccount[]                        @relation("GLAccountHierarchy")
+  journalLines                JournalLine[]
+  payrollAccountMappings      PayrollAccountMapping[]
+  postingRuleLines            PostingRuleLine[]
+  transactionRuleLines        TransactionTypeRuleLine[]
+  ruleLineScopes              TransactionTypeRuleLineScope[]
+  subledgers                  SubledgerAccount[]
+  cashAccounts                AccountingCashAccount[]
+  cashbookOffsets             CashbookTransaction[]              @relation("CashbookOffsetAccount")
+  cashbookLines               CashbookTransactionLine[]          @relation("CashbookLineAccount")
+  taxTypesPayable             TaxType[]                          @relation("TaxTypePayableAccount")
+  payableDocumentLines        AccountingPayableDocumentLine[]    @relation("PayableDocLineAccount")
+  receivableDocumentLines     AccountingReceivableDocumentLine[] @relation("ReceivableDocLineAccount")
+  taxTypesReceivable          TaxType[]                          @relation("TaxTypeReceivableAccount")
+  receivableOffsets           AccountingReceivableDocument[]     @relation("ReceivableOffsetAccount")
+  receivableArAccounts        AccountingReceivableDocument[]     @relation("ReceivableArAccount")
+  receivableReceiptArAccounts AccountingReceivableReceipt[]      @relation("ReceivableReceiptArAccount")
+  payableOffsets              AccountingPayableDocument[]        @relation("PayableOffsetAccount")
+  payableApAccounts           AccountingPayableDocument[]        @relation("PayableApAccount")
+  payablePaymentApAccounts    AccountingPayablePayment[]         @relation("PayablePaymentApAccount")
+  budgetLines                 BudgetLine[]
+  recurringLines              RecurringJournalLine[]
+  sourceLedgerEntries         SourceLedgerEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -369,23 +404,25 @@ enum CashFlowCategory {
 }
 
 model AccountClassification {
-  id               String            @id @default(uuid())
+  id               String                         @id @default(uuid())
   tenantId         String
   code             String
   name             String
   category         GLAccountCategory
-  displayOrder     Int               @default(0)
-  isSystemTemplate Boolean           @default(false)
-  isActive         Boolean           @default(true)
+  description      String?
+  displayOrder     Int                            @default(0)
+  isSystemTemplate Boolean                        @default(false)
+  isActive         Boolean                        @default(true)
   /// Cash-flow default for accounts under this classification; a group or account below it
   /// can override. Null falls back to the category-based default (see GLAccount).
   cashFlowCategory CashFlowCategory?
   createdByUserId  String
   updatedByUserId  String
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt        DateTime                       @default(now())
+  updatedAt        DateTime                       @updatedAt
   accountGroups    AccountGroup[]
   glAccounts       GLAccount[]
+  ruleLineScopes   TransactionTypeRuleLineScope[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -399,6 +436,7 @@ model AccountGroup {
   classificationId String
   code             String
   name             String
+  description      String?
   displayOrder     Int                   @default(0)
   isActive         Boolean               @default(true)
   /// Overrides the classification's cash-flow default for every account in this group; an
@@ -433,21 +471,23 @@ model AccountingAuditLog {
 }
 
 model CostCentre {
-  id              String        @id @default(uuid())
-  tenantId        String
-  code            String
-  name            String
-  description     String?
-  externalRef     String?
-  status          RecordStatus  @default(ACTIVE)
-  createdByUserId String
-  updatedByUserId String
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  journalLines    JournalLine[]
-  payableDocuments    AccountingPayableDocument[]
-  receivableDocuments AccountingReceivableDocument[]
-  budgetLines         BudgetLine[]
+  id                      String                             @id @default(uuid())
+  tenantId                String
+  code                    String
+  name                    String
+  description             String?
+  externalRef             String?
+  status                  RecordStatus                       @default(ACTIVE)
+  createdByUserId         String
+  updatedByUserId         String
+  createdAt               DateTime                           @default(now())
+  updatedAt               DateTime                           @updatedAt
+  journalLines            JournalLine[]
+  payableDocuments        AccountingPayableDocument[]
+  receivableDocuments     AccountingReceivableDocument[]
+  payableDocumentLines    AccountingPayableDocumentLine[]    @relation("PayableDocLineCostCentre")
+  receivableDocumentLines AccountingReceivableDocumentLine[] @relation("ReceivableDocLineCostCentre")
+  budgetLines             BudgetLine[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -466,23 +506,23 @@ model CostCentre {
 /// A control account here is only ever an optional, explicit override for a specific entity
 /// (e.g. a manual Journal Entry quick-add), never something posting logic depends on.
 model SubledgerAccount {
-  id               String                @id @default(uuid())
-  tenantId         String
-  code             String
-  name             String
-  type             String
-  externalRef      String?
-  controlAccountId String?
-  currency         String?
-  contactName      String?
-  phone            String?
-  address          String?
-  description      String?
-  status           RecordStatus          @default(ACTIVE)
-  createdByUserId  String
-  updatedByUserId  String
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id                    String                           @id @default(uuid())
+  tenantId              String
+  code                  String
+  name                  String
+  type                  String
+  externalRef           String?
+  controlAccountId      String?
+  currency              String?
+  contactName           String?
+  phone                 String?
+  address               String?
+  description           String?
+  status                RecordStatus                     @default(ACTIVE)
+  createdByUserId       String
+  updatedByUserId       String
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
   controlAccount        GLAccount?                       @relation(fields: [controlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   journalLines          JournalLine[]
   cashbookOffsets       CashbookTransaction[]            @relation("CashbookOffsetSubledger")
@@ -637,6 +677,15 @@ model JournalEntry {
   updatedAt                   DateTime                      @updatedAt
   postedAt                    DateTime?
   reversedAt                  DateTime?
+  voidedAt                    DateTime?
+  voidedByUserId              String?
+  voidReason                  String?
+  /// Deleted from the archive: hidden everywhere, but the row, its journals and audit trail stay.
+  archiveDeletedAt            DateTime?
+  archiveDeletedByUserId      String?
+  /// A voided reversal gives up its link to the original (so the original can be reversed again);
+  /// the id is kept here so a restore can put the link back.
+  voidedReversalOfJournalId   String?
   fiscalPeriod                FiscalPeriod                  @relation(fields: [fiscalPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
   recurringJournal            RecurringJournal?             @relation(fields: [recurringJournalId, tenantId], references: [id, tenantId], onDelete: Restrict)
   lines                       JournalLine[]
@@ -694,27 +743,27 @@ model AccountingCashAccount {
 }
 
 model BankReconciliation {
-  id                      String                   @id @default(uuid())
-  tenantId                String
-  cashAccountId           String
-  statementReference      String
-  statementStartDate      DateTime
-  statementEndDate        DateTime
-  openingBalance          Decimal                  @db.Decimal(20, 4)
-  closingBalance          Decimal                  @db.Decimal(20, 4)
-  currency                String
-  status                  BankReconciliationStatus @default(DRAFT)
-  createdByUserId         String
-  updatedByUserId         String
-  completedByUserId       String?
-  voidedByUserId          String?
-  completedAt             DateTime?
-  voidedAt                DateTime?
-  voidReason              String?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  cashAccount             AccountingCashAccount    @relation(fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  statementLines          BankStatementLine[]
+  id                 String                   @id @default(uuid())
+  tenantId           String
+  cashAccountId      String
+  statementReference String
+  statementStartDate DateTime
+  statementEndDate   DateTime
+  openingBalance     Decimal                  @db.Decimal(20, 4)
+  closingBalance     Decimal                  @db.Decimal(20, 4)
+  currency           String
+  status             BankReconciliationStatus @default(DRAFT)
+  createdByUserId    String
+  updatedByUserId    String
+  completedByUserId  String?
+  voidedByUserId     String?
+  completedAt        DateTime?
+  voidedAt           DateTime?
+  voidReason         String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  cashAccount        AccountingCashAccount    @relation(fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  statementLines     BankStatementLine[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, cashAccountId, statementReference])
@@ -756,62 +805,75 @@ model BankStatementLine {
 }
 
 model CashbookTransaction {
-  id                       String                       @id @default(uuid())
-  tenantId                 String
-  cashAccountId            String
-  destinationCashAccountId String?
-  transactionType          CashbookTransactionType
-  direction                CashbookDirection
-  amount                   Decimal                      @db.Decimal(20, 4)
+  id                            String                       @id @default(uuid())
+  tenantId                      String
+  cashAccountId                 String
+  destinationCashAccountId      String?
+  transactionType               CashbookTransactionType
+  direction                     CashbookDirection
+  amount                        Decimal                      @db.Decimal(20, 4)
   /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
-  quantity                 Decimal?                     @db.Decimal(20, 4)
-  unitPrice                Decimal?                     @db.Decimal(20, 4)
-  currency                 String
-  transactionDate          DateTime
-  settlementMethod         AccountingSettlementMethod
-  reference                String?
-  counterpartyType         String?
-  counterpartyId           String?
-  externalReference        String?
-  description              String
+  quantity                      Decimal?                     @db.Decimal(20, 4)
+  unitPrice                     Decimal?                     @db.Decimal(20, 4)
+  currency                      String
+  transactionDate               DateTime
+  settlementMethod              AccountingSettlementMethod
+  reference                     String?
+  counterpartyType              String?
+  counterpartyId                String?
+  externalReference             String?
+  description                   String
   /// Set only for direct entries made from the Transactions page (Receipt/Payment types):
   /// <TransactionType code><YY>-<00001>, e.g. RCPT26-00001. Null for transfers, charges,
   /// adjustments, reversals, integration-event postings and rows created before it existed.
-  transactionNumber        String?
-  offsetGlAccountId        String?
-  offsetSubledgerAccountId String?
-  chargeAmount             Decimal?                     @db.Decimal(20, 4)
-  sourceEventInboxId       String?
-  sourceModule             String?
-  sourceEventType          String?
-  sourceRecordId           String?
-  sourceReference          String?
-  exchangeRate             Decimal?                     @db.Decimal(18, 8)
-  status                   CashbookTransactionStatus    @default(DRAFT)
-  createdByUserId          String
-  updatedByUserId          String
-  postedByUserId           String?
-  reversedByUserId         String?
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
-  postedAt                 DateTime?
-  reversedAt               DateTime?
-  postedJournalEntryId     String?
-  reversalJournalEntryId   String?
-  reversalOfTransactionId  String?
-  cashAccount              AccountingCashAccount        @relation("CashbookCashAccount", fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  destinationCashAccount   AccountingCashAccount?       @relation("CashbookDestinationCashAccount", fields: [destinationCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  offsetGlAccount          GLAccount?                   @relation("CashbookOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  offsetSubledgerAccount   SubledgerAccount?            @relation("CashbookOffsetSubledger", fields: [offsetSubledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  sourceEventInbox         SourceEventInbox?            @relation("SourceEventCashbookTransaction", fields: [sourceEventInboxId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  postedJournalEntry       JournalEntry?                @relation("CashbookPostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalJournalEntry     JournalEntry?                @relation("CashbookReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalOfTransaction    CashbookTransaction?         @relation("CashbookTransactionReversal", fields: [reversalOfTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalTransaction      CashbookTransaction?         @relation("CashbookTransactionReversal")
-  bankStatementMatches     BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
-  receivableReceipt        AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
-  payablePayment           AccountingPayablePayment?    @relation("PayableCashbookTransaction")
-  sourceLedgerAllocations  SourceLedgerAllocation[]
+  transactionNumber             String?
+  offsetGlAccountId             String?
+  offsetSubledgerAccountId      String?
+  chargeAmount                  Decimal?                     @db.Decimal(20, 4)
+  sourceEventInboxId            String?
+  sourceModule                  String?
+  sourceEventType               String?
+  sourceRecordId                String?
+  sourceReference               String?
+  exchangeRate                  Decimal?                     @db.Decimal(18, 8)
+  status                        CashbookTransactionStatus    @default(DRAFT)
+  createdByUserId               String
+  updatedByUserId               String
+  postedByUserId                String?
+  reversedByUserId              String?
+  rejectedByUserId              String?
+  rejectionReason               String?
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+  postedAt                      DateTime?
+  reversedAt                    DateTime?
+  rejectedAt                    DateTime?
+  voidedAt                      DateTime?
+  voidedByUserId                String?
+  voidReason                    String?
+  /// Deleted from the archive: hidden everywhere, but the row, its journals and audit trail stay.
+  archiveDeletedAt              DateTime?
+  archiveDeletedByUserId        String?
+  /// A voided reversal gives up its link to the original so the original can be reversed again;
+  /// the id is kept here so a restore can put it back.
+  voidedReversalOfTransactionId String?
+  postedJournalEntryId          String?
+  reversalJournalEntryId        String?
+  reversalOfTransactionId       String?
+  cashAccount                   AccountingCashAccount        @relation("CashbookCashAccount", fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  destinationCashAccount        AccountingCashAccount?       @relation("CashbookDestinationCashAccount", fields: [destinationCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetGlAccount               GLAccount?                   @relation("CashbookOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetSubledgerAccount        SubledgerAccount?            @relation("CashbookOffsetSubledger", fields: [offsetSubledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  sourceEventInbox              SourceEventInbox?            @relation("SourceEventCashbookTransaction", fields: [sourceEventInboxId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  postedJournalEntry            JournalEntry?                @relation("CashbookPostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalJournalEntry          JournalEntry?                @relation("CashbookReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfTransaction         CashbookTransaction?         @relation("CashbookTransactionReversal", fields: [reversalOfTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalTransaction           CashbookTransaction?         @relation("CashbookTransactionReversal")
+  bankStatementMatches          BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
+  receivableReceipt             AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
+  payablePayment                AccountingPayablePayment?    @relation("PayableCashbookTransaction")
+  sourceLedgerAllocations       SourceLedgerAllocation[]
+  lines                         CashbookTransactionLine[]
 
   @@unique([tenantId, transactionNumber])
   @@unique([id, tenantId])
@@ -829,43 +891,74 @@ model CashbookTransaction {
   @@schema("accounting")
 }
 
+/// One account an entry posts to, against the entry's single cash line. An ITEM or CHARGE adds
+/// to the entry (a payment debits it, a receipt credits it); a DEDUCTION takes away from it (the
+/// other way round). `CashbookTransaction.amount` is the net cash that moves: items + charges −
+/// deductions. `offsetGlAccountId` mirrors the first item. Entries made before lines existed
+/// have none — readers treat the header offset account and amount as their one item.
+model CashbookTransactionLine {
+  id            String              @id @default(uuid())
+  tenantId      String
+  transactionId String
+  sequence      Int
+  kind          CashbookLineKind    @default(ITEM)
+  glAccountId   String
+  amount        Decimal             @db.Decimal(20, 4)
+  /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
+  quantity      Decimal?            @db.Decimal(20, 4)
+  unitPrice     Decimal?            @db.Decimal(20, 4)
+  description   String?
+  createdAt     DateTime            @default(now())
+  transaction   CashbookTransaction @relation(fields: [transactionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount     GLAccount           @relation("CashbookLineAccount", fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, transactionId, sequence])
+  @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
 /// User-defined transaction types offered when creating a cashbook entry (e.g. Receipt,
 /// Payment). The five system defaults (RECEIPT/PAYMENT/TRANSFER/CHARGE/ADJUSTMENT) are
 /// auto-seeded per tenant on first read via AccountingMasterDataService.listTransactionTypes()
 /// (backed by seedStandardTransactionTypes()) and flagged isSystemDefault, but are otherwise
 /// ordinary rows — freely editable and deletable like any tenant-created type.
 model TransactionType {
-  id              String                   @id @default(uuid())
-  tenantId        String
-  code            String
-  name            String
-  category        TransactionTypeCategory
-  businessRoles   String[]                 @default([])
-  allowedDocument String?
+  id                String                  @id @default(uuid())
+  tenantId          String
+  code              String
+  name              String
+  category          TransactionTypeCategory
+  businessRoles     String[]                @default([])
+  allowedDocument   String?
   /// Legacy free-text tag — superseded by sourceTypeId below, kept only so existing rows
   /// aren't silently dropped. Never read by the New Transaction source-picker dropdown.
-  source          String?
+  source            String?
   /// A rule is not the only thing that makes a type usable on New Transaction — a type
   /// linked to a source is usable too, since its offset account/amount come from picking
   /// one of that source's open SourceLedgerEntry items instead of a preconfigured rule line.
-  sourceTypeId    String?
-  description     String?
-  isSystemDefault Boolean                  @default(false)
+  sourceTypeId      String?
+  description       String?
+  isSystemDefault   Boolean                 @default(false)
   /// When true, this Receivable/Payable type posts a single-line direct entry straight
   /// to Cashbook (New Transaction opens the cash/bank + offset account form and calls
   /// /cashbook/receipts or /cashbook/payments) instead of creating an Invoice/Bill.
-  postsToCashbook Boolean                  @default(false)
+  postsToCashbook   Boolean                 @default(false)
   /// Receivable/Payable types only (never cashbook-posted): a linked type creates a Credit
   /// Note (receivable) / Debit Note (payable) that must reference an original posted
   /// invoice/bill and reduces its outstanding balance. Its rule is written in the note's own
   /// direction, so the control (AR/AP) line is the opposite side to a normal invoice/bill.
-  isLinked        Boolean                  @default(false)
-  createdByUserId String
-  updatedByUserId String
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  rule            TransactionTypeRule?
-  sourceType      SourceType?              @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  isLinked          Boolean                 @default(false)
+  /// When true the New Transaction form asks for quantity × unit price and derives the amount;
+  /// when false it takes a straight amount (rent, insurance and the like have no quantity).
+  /// Presentation only — the API still accepts quantity and unit price together or not at all.
+  usesQuantityPrice Boolean                 @default(true)
+  createdByUserId   String
+  updatedByUserId   String
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  rule              TransactionTypeRule?
+  sourceType        SourceType?             @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -878,19 +971,27 @@ model TransactionType {
 /// TransactionTypeRuleLine — a rule's tax lines pick one of these rather than storing
 /// their own rate, so a rate change applies to every rule that uses it.
 model TaxType {
-  id              String                    @id @default(uuid())
-  tenantId        String
-  code            String
-  name            String
-  rate            Decimal                   @db.Decimal(6, 3)
-  effectiveFrom   DateTime
-  effectiveTo     DateTime?
-  isActive        Boolean                   @default(true)
-  createdByUserId String
-  updatedByUserId String
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
-  ruleLines       TransactionTypeRuleLine[]
+  id                  String                    @id @default(uuid())
+  tenantId            String
+  code                String
+  name                String
+  rate                Decimal                   @db.Decimal(6, 3)
+  effectiveFrom       DateTime
+  effectiveTo         DateTime?
+  isActive            Boolean                   @default(true)
+  /// Where this tax posts by default: on the payables side (a bill's input tax, or tax withheld
+  /// when paying a vendor) and on the receivables side (an invoice's output tax, or tax withheld
+  /// by a customer). Pre-fills the account on the bill/invoice and payment forms; the user can
+  /// still pick another.
+  payableAccountId    String?
+  receivableAccountId String?
+  createdByUserId     String
+  updatedByUserId     String
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  ruleLines           TransactionTypeRuleLine[]
+  payableAccount      GLAccount?                @relation("TaxTypePayableAccount", fields: [payableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  receivableAccount   GLAccount?                @relation("TaxTypeReceivableAccount", fields: [receivableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -903,21 +1004,21 @@ model TaxType {
 /// is derived (sum of the other side) rather than entered, so it absorbs however many
 /// tax lines the other side carries. See AccountingMasterDataService for the posting math.
 model TransactionTypeRule {
-  id                    String                    @id @default(uuid())
-  tenantId              String
-  transactionTypeId     String
-  description           String?
+  id                   String                    @id @default(uuid())
+  tenantId             String
+  transactionTypeId    String
+  description          String?
   /// Only meaningful for postsToCashbook types: the cash/bank account pre-selected on
   /// the New Transaction form for this type, still changeable there. Null means the
   /// form starts with no cash account chosen.
-  defaultCashAccountId  String?
-  createdByUserId       String
-  updatedByUserId       String
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
-  transactionType       TransactionType           @relation(fields: [transactionTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  defaultCashAccount    AccountingCashAccount?    @relation(fields: [defaultCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  lines                 TransactionTypeRuleLine[]
+  defaultCashAccountId String?
+  createdByUserId      String
+  updatedByUserId      String
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  transactionType      TransactionType           @relation(fields: [transactionTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  defaultCashAccount   AccountingCashAccount?    @relation(fields: [defaultCashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  lines                TransactionTypeRuleLine[]
 
   @@unique([id, tenantId])
   @@unique([transactionTypeId, tenantId])
@@ -926,20 +1027,28 @@ model TransactionTypeRule {
 }
 
 model TransactionTypeRuleLine {
-  id            String              @id @default(uuid())
-  tenantId      String
-  ruleId        String
-  sequence      Int
-  direction     PostingDirection
-  accountId     String
-  taxTypeId     String?
-  subledgerType String?
-  description   String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  rule          TransactionTypeRule @relation(fields: [ruleId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  account       GLAccount           @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  taxType       TaxType?            @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  id             String                         @id @default(uuid())
+  tenantId       String
+  ruleId         String
+  sequence       Int
+  direction      PostingDirection
+  /// A fixed account. Null only on the main line of a Receivable/Payable rule that is scoped
+  /// instead (`scopes`) — the user picks the account on the form from any of them.
+  accountId      String?
+  taxTypeId      String?
+  subledgerType  String?
+  /// Set only on a line that applies when a bill/invoice is settled, not when it is raised: a
+  /// DEDUCTION reduces the cash that moves (discount, withholding tax), a CHARGE adds to it
+  /// (bank charge). Offered as optional checkboxes on the payment form; ignored when the
+  /// document is created. Null on every document line.
+  settlementKind RuleLineSettlementKind?
+  description    String?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  rule           TransactionTypeRule            @relation(fields: [ruleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  account        GLAccount?                     @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  scopes         TransactionTypeRuleLineScope[]
+  taxType        TaxType?                       @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, ruleId, sequence])
@@ -947,8 +1056,30 @@ model TransactionTypeRuleLine {
   @@schema("accounting")
 }
 
+/// One place a scoped main line may take its account from: a whole category, one classification
+/// within it, or one specific account. A scoped line lists one or more of these and the user picks
+/// a single account from any of them.
+model TransactionTypeRuleLineScope {
+  id               String                  @id @default(uuid())
+  tenantId         String
+  ruleLineId       String
+  category         GLAccountCategory
+  classificationId String?
+  accountId        String?
+  createdAt        DateTime                @default(now())
+  ruleLine         TransactionTypeRuleLine @relation(fields: [ruleLineId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  classification   AccountClassification?  @relation(fields: [classificationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  account          GLAccount?              @relation(fields: [accountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, accountId])
+  @@index([tenantId, ruleLineId])
+  @@index([tenantId, classificationId])
+  @@schema("accounting")
+}
+
 model AccountingReceivableDocument {
-  id                     String                           @id @default(uuid())
+  id                     String                             @id @default(uuid())
   tenantId               String
   customerId             String
   documentType           AccountingReceivableDocumentType
@@ -956,13 +1087,13 @@ model AccountingReceivableDocument {
   documentDate           DateTime
   dueDate                DateTime?
   currency               String
-  exchangeRate           Decimal?                         @db.Decimal(18, 8)
-  subtotalAmount         Decimal                          @db.Decimal(20, 4)
+  exchangeRate           Decimal?                           @db.Decimal(18, 8)
+  subtotalAmount         Decimal                            @db.Decimal(20, 4)
   /// Optional descriptive breakdown of the subtotal: subtotalAmount = quantity × unitPrice (2dp).
-  quantity               Decimal?                         @db.Decimal(20, 4)
-  unitPrice              Decimal?                         @db.Decimal(20, 4)
-  taxAmount              Decimal                          @default(0) @db.Decimal(20, 4)
-  totalAmount            Decimal                          @db.Decimal(20, 4)
+  quantity               Decimal?                           @db.Decimal(20, 4)
+  unitPrice              Decimal?                           @db.Decimal(20, 4)
+  taxAmount              Decimal                            @default(0) @db.Decimal(20, 4)
+  totalAmount            Decimal                            @db.Decimal(20, 4)
   description            String?
   externalReference      String?
   sourceModule           String?
@@ -985,30 +1116,40 @@ model AccountingReceivableDocument {
   /// posted to its own account instead of being lumped into offsetGlAccountId.
   taxBreakdown           Json?
   originalInvoiceId      String?
-  status                 AccountingReceivableStatus       @default(DRAFT)
+  status                 AccountingReceivableStatus         @default(DRAFT)
   createdByUserId        String
   updatedByUserId        String
   postedByUserId         String?
   reversedByUserId       String?
-  createdAt              DateTime                         @default(now())
-  updatedAt              DateTime                         @updatedAt
+  rejectedByUserId       String?
+  rejectionReason        String?
+  createdAt              DateTime                           @default(now())
+  updatedAt              DateTime                           @updatedAt
   postedAt               DateTime?
   reversedAt             DateTime?
+  rejectedAt             DateTime?
+  voidedAt               DateTime?
+  voidedByUserId         String?
+  voidReason             String?
+  /// Deleted from the archive: hidden everywhere, but the row, its journals and audit trail stay.
+  archiveDeletedAt       DateTime?
+  archiveDeletedByUserId String?
   postedJournalEntryId   String?
   reversalJournalEntryId String?
   reversalOfDocumentId   String?
-  customer               SubledgerAccount                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  offsetGlAccount        GLAccount                        @relation("ReceivableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  costCentre             CostCentre?  @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  arAccount              GLAccount                        @relation("ReceivableArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  postedJournalEntry     JournalEntry?                    @relation("ReceivablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalJournalEntry   JournalEntry?                    @relation("ReceivableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  originalInvoice        AccountingReceivableDocument?    @relation("ReceivableCreditSource", fields: [originalInvoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  creditNotes            AccountingReceivableDocument[]   @relation("ReceivableCreditSource")
-  reversalOfDocument     AccountingReceivableDocument?    @relation("ReceivableDocumentReversal", fields: [reversalOfDocumentId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalDocument       AccountingReceivableDocument?    @relation("ReceivableDocumentReversal")
-  receiptAllocations     AccountingReceivableAllocation[] @relation("ReceivableInvoiceAllocations")
-  creditAllocations      AccountingReceivableAllocation[] @relation("ReceivableCreditAllocations")
+  customer               SubledgerAccount                   @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetGlAccount        GLAccount                          @relation("ReceivableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre             CostCentre?                        @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  arAccount              GLAccount                          @relation("ReceivableArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  postedJournalEntry     JournalEntry?                      @relation("ReceivablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalJournalEntry   JournalEntry?                      @relation("ReceivableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  originalInvoice        AccountingReceivableDocument?      @relation("ReceivableCreditSource", fields: [originalInvoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  creditNotes            AccountingReceivableDocument[]     @relation("ReceivableCreditSource")
+  reversalOfDocument     AccountingReceivableDocument?      @relation("ReceivableDocumentReversal", fields: [reversalOfDocumentId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalDocument       AccountingReceivableDocument?      @relation("ReceivableDocumentReversal")
+  receiptAllocations     AccountingReceivableAllocation[]   @relation("ReceivableInvoiceAllocations")
+  lines                  AccountingReceivableDocumentLine[] @relation("ReceivableDocLines")
+  creditAllocations      AccountingReceivableAllocation[]   @relation("ReceivableCreditAllocations")
 
   @@unique([id, tenantId])
   @@unique([tenantId, documentNumber])
@@ -1026,40 +1167,46 @@ model AccountingReceivableDocument {
 }
 
 model AccountingReceivableReceipt {
-  id                    String                           @id @default(uuid())
-  tenantId              String
-  customerId            String
-  cashbookTransactionId String
-  receiptNumber         String
-  receiptDate           DateTime
-  currency              String
-  amount                Decimal                          @db.Decimal(20, 4)
-  exchangeRate          Decimal?                         @db.Decimal(18, 8)
-  reference             String?
-  description           String?
-  externalReference     String?
-  sourceModule          String?
-  sourceRecordId        String?
+  id                     String                           @id @default(uuid())
+  tenantId               String
+  customerId             String
+  cashbookTransactionId  String
+  receiptNumber          String
+  receiptDate            DateTime
+  currency               String
+  amount                 Decimal                          @db.Decimal(20, 4)
+  exchangeRate           Decimal?                         @db.Decimal(18, 8)
+  reference              String?
+  description            String?
+  externalReference      String?
+  sourceModule           String?
+  sourceRecordId         String?
   /// Inherited from the invoice this receipt was created to pay (see CreateReceivableReceiptDto.invoiceId)
   /// — never re-derived from a tenant-wide setting. Allocation is only allowed against
   /// invoices sharing this same account.
-  arAccountId           String
-  status                AccountingReceivableStatus       @default(DRAFT)
-  createdByUserId       String
-  updatedByUserId       String
-  postedByUserId        String?
-  reversedByUserId      String?
-  createdAt             DateTime                         @default(now())
-  updatedAt             DateTime                         @updatedAt
-  postedAt              DateTime?
-  reversedAt            DateTime?
-  reversalOfReceiptId   String?
-  customer              SubledgerAccount                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  arAccount             GLAccount                        @relation("ReceivableReceiptArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  cashbookTransaction   CashbookTransaction              @relation("ReceivableCashbookTransaction", fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalOfReceipt     AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal", fields: [reversalOfReceiptId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalReceipt       AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal")
-  allocations           AccountingReceivableAllocation[]
+  arAccountId            String
+  status                 AccountingReceivableStatus       @default(DRAFT)
+  createdByUserId        String
+  updatedByUserId        String
+  postedByUserId         String?
+  reversedByUserId       String?
+  createdAt              DateTime                         @default(now())
+  updatedAt              DateTime                         @updatedAt
+  postedAt               DateTime?
+  reversedAt             DateTime?
+  voidedAt               DateTime?
+  voidedByUserId         String?
+  voidReason             String?
+  /// Deleted from the archive: hidden everywhere, but the row, its journals and audit trail stay.
+  archiveDeletedAt       DateTime?
+  archiveDeletedByUserId String?
+  reversalOfReceiptId    String?
+  customer               SubledgerAccount                 @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  arAccount              GLAccount                        @relation("ReceivableReceiptArAccount", fields: [arAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashbookTransaction    CashbookTransaction              @relation("ReceivableCashbookTransaction", fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfReceipt      AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal", fields: [reversalOfReceiptId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalReceipt        AccountingReceivableReceipt?     @relation("ReceivableReceiptReversal")
+  allocations            AccountingReceivableAllocation[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, receiptNumber])
@@ -1102,7 +1249,7 @@ model AccountingReceivableAllocation {
 }
 
 model AccountingPayableDocument {
-  id                     String                        @id @default(uuid())
+  id                     String                          @id @default(uuid())
   tenantId               String
   vendorId               String
   documentType           AccountingPayableDocumentType
@@ -1110,13 +1257,13 @@ model AccountingPayableDocument {
   documentDate           DateTime
   dueDate                DateTime?
   currency               String
-  exchangeRate           Decimal?                      @db.Decimal(18, 8)
-  subtotalAmount         Decimal                       @db.Decimal(20, 4)
+  exchangeRate           Decimal?                        @db.Decimal(18, 8)
+  subtotalAmount         Decimal                         @db.Decimal(20, 4)
   /// Optional descriptive breakdown of the subtotal: subtotalAmount = quantity × unitPrice (2dp).
-  quantity               Decimal?                         @db.Decimal(20, 4)
-  unitPrice              Decimal?                         @db.Decimal(20, 4)
-  taxAmount              Decimal                       @default(0) @db.Decimal(20, 4)
-  totalAmount            Decimal                       @db.Decimal(20, 4)
+  quantity               Decimal?                        @db.Decimal(20, 4)
+  unitPrice              Decimal?                        @db.Decimal(20, 4)
+  taxAmount              Decimal                         @default(0) @db.Decimal(20, 4)
+  totalAmount            Decimal                         @db.Decimal(20, 4)
   description            String?
   externalReference      String?
   sourceModule           String?
@@ -1130,30 +1277,37 @@ model AccountingPayableDocument {
   transactionTypeId      String?
   taxBreakdown           Json?
   originalBillId         String?
-  status                 AccountingPayableStatus       @default(DRAFT)
+  status                 AccountingPayableStatus         @default(DRAFT)
   createdByUserId        String
   updatedByUserId        String
   postedByUserId         String?
   reversedByUserId       String?
-  createdAt              DateTime                      @default(now())
-  updatedAt              DateTime                      @updatedAt
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
   postedAt               DateTime?
   reversedAt             DateTime?
+  voidedAt               DateTime?
+  voidedByUserId         String?
+  voidReason             String?
+  /// Deleted from the archive: hidden everywhere, but the row, its journals and audit trail stay.
+  archiveDeletedAt       DateTime?
+  archiveDeletedByUserId String?
   postedJournalEntryId   String?
   reversalJournalEntryId String?
   reversalOfDocumentId   String?
-  vendor                 SubledgerAccount              @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  offsetGlAccount        GLAccount                     @relation("PayableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  costCentre             CostCentre?  @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  apAccount              GLAccount                     @relation("PayableApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  postedJournalEntry     JournalEntry?                 @relation("PayablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalJournalEntry   JournalEntry?                 @relation("PayableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  originalBill           AccountingPayableDocument?    @relation("PayableCreditSource", fields: [originalBillId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  creditNotes            AccountingPayableDocument[]   @relation("PayableCreditSource")
-  reversalOfDocument     AccountingPayableDocument?    @relation("PayableDocumentReversal", fields: [reversalOfDocumentId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalDocument       AccountingPayableDocument?    @relation("PayableDocumentReversal")
-  paymentAllocations     AccountingPayableAllocation[] @relation("PayableBillAllocations")
-  creditAllocations      AccountingPayableAllocation[] @relation("PayableCreditAllocations")
+  vendor                 SubledgerAccount                @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  offsetGlAccount        GLAccount                       @relation("PayableOffsetAccount", fields: [offsetGlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre             CostCentre?                     @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  apAccount              GLAccount                       @relation("PayableApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  postedJournalEntry     JournalEntry?                   @relation("PayablePostedJournal", fields: [postedJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalJournalEntry   JournalEntry?                   @relation("PayableReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  originalBill           AccountingPayableDocument?      @relation("PayableCreditSource", fields: [originalBillId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  creditNotes            AccountingPayableDocument[]     @relation("PayableCreditSource")
+  reversalOfDocument     AccountingPayableDocument?      @relation("PayableDocumentReversal", fields: [reversalOfDocumentId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalDocument       AccountingPayableDocument?      @relation("PayableDocumentReversal")
+  paymentAllocations     AccountingPayableAllocation[]   @relation("PayableBillAllocations")
+  lines                  AccountingPayableDocumentLine[] @relation("PayableDocLines")
+  creditAllocations      AccountingPayableAllocation[]   @relation("PayableCreditAllocations")
 
   @@unique([id, tenantId])
   @@unique([tenantId, documentNumber])
@@ -1171,40 +1325,46 @@ model AccountingPayableDocument {
 }
 
 model AccountingPayablePayment {
-  id                    String                        @id @default(uuid())
-  tenantId              String
-  vendorId              String
-  cashbookTransactionId String
-  paymentNumber         String
-  paymentDate           DateTime
-  currency              String
-  amount                Decimal                       @db.Decimal(20, 4)
-  exchangeRate          Decimal?                      @db.Decimal(18, 8)
-  reference             String?
-  description           String?
-  externalReference     String?
-  sourceModule          String?
-  sourceRecordId        String?
+  id                     String                        @id @default(uuid())
+  tenantId               String
+  vendorId               String
+  cashbookTransactionId  String
+  paymentNumber          String
+  paymentDate            DateTime
+  currency               String
+  amount                 Decimal                       @db.Decimal(20, 4)
+  exchangeRate           Decimal?                      @db.Decimal(18, 8)
+  reference              String?
+  description            String?
+  externalReference      String?
+  sourceModule           String?
+  sourceRecordId         String?
   /// Inherited from the bill this payment was created to pay (see
   /// CreatePayablePaymentDto.billId) — never re-derived from a tenant-wide setting.
   /// Allocation is only allowed against bills sharing this same account.
-  apAccountId           String
-  status                AccountingPayableStatus       @default(DRAFT)
-  createdByUserId       String
-  updatedByUserId       String
-  postedByUserId        String?
-  reversedByUserId      String?
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
-  postedAt              DateTime?
-  reversedAt            DateTime?
-  reversalOfPaymentId   String?
-  vendor                SubledgerAccount              @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  apAccount             GLAccount                     @relation("PayablePaymentApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  cashbookTransaction   CashbookTransaction           @relation("PayableCashbookTransaction", fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalOfPayment     AccountingPayablePayment?     @relation("PayablePaymentReversal", fields: [reversalOfPaymentId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalPayment       AccountingPayablePayment?     @relation("PayablePaymentReversal")
-  allocations           AccountingPayableAllocation[]
+  apAccountId            String
+  status                 AccountingPayableStatus       @default(DRAFT)
+  createdByUserId        String
+  updatedByUserId        String
+  postedByUserId         String?
+  reversedByUserId       String?
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  postedAt               DateTime?
+  reversedAt             DateTime?
+  voidedAt               DateTime?
+  voidedByUserId         String?
+  voidReason             String?
+  /// Deleted from the archive: hidden everywhere, but the row, its journals and audit trail stay.
+  archiveDeletedAt       DateTime?
+  archiveDeletedByUserId String?
+  reversalOfPaymentId    String?
+  vendor                 SubledgerAccount              @relation(fields: [vendorId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  apAccount              GLAccount                     @relation("PayablePaymentApAccount", fields: [apAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashbookTransaction    CashbookTransaction           @relation("PayableCashbookTransaction", fields: [cashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfPayment      AccountingPayablePayment?     @relation("PayablePaymentReversal", fields: [reversalOfPaymentId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalPayment        AccountingPayablePayment?     @relation("PayablePaymentReversal")
+  allocations            AccountingPayableAllocation[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, paymentNumber])
@@ -1321,25 +1481,25 @@ model PostingRuleLine {
 }
 
 model SourceEventInbox {
-  id               String            @id @default(uuid())
-  tenantId         String
-  sourceModule     String
-  sourceEventType  String
-  sourceRecordId   String
-  sourceDocumentId String?
-  idempotencyKey   String
-  payload          Json
-  status           SourceEventStatus @default(RECEIVED)
-  failureReason    String?
-  postingRuleId    String?
-  journalEntryId   String?
-  retryCount       Int               @default(0)
-  receivedByUserId String
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  processedAt      DateTime?
-  postingRule      PostingRule?      @relation(fields: [postingRuleId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  journalEntry     JournalEntry?     @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  id                  String               @id @default(uuid())
+  tenantId            String
+  sourceModule        String
+  sourceEventType     String
+  sourceRecordId      String
+  sourceDocumentId    String?
+  idempotencyKey      String
+  payload             Json
+  status              SourceEventStatus    @default(RECEIVED)
+  failureReason       String?
+  postingRuleId       String?
+  journalEntryId      String?
+  retryCount          Int                  @default(0)
+  receivedByUserId    String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  processedAt         DateTime?
+  postingRule         PostingRule?         @relation(fields: [postingRuleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalEntry        JournalEntry?        @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   cashbookTransaction CashbookTransaction? @relation("SourceEventCashbookTransaction")
 
   @@unique([id, tenantId])
@@ -1357,17 +1517,17 @@ model SourceEventInbox {
 /// Payable is decided entirely by the Transaction Type used to create it — a type here is
 /// just a name/category for entities, nothing about it drives GL posting directly.
 model EntityType {
-  id                String   @id @default(uuid())
-  tenantId          String
-  name              String
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String
   /// Short ID/prefix (e.g. "SUP") the entity form builds Entity Codes from. Null for types
   /// that predate it (e.g. auto-created Employee) until someone sets one.
-  code              String?
-  isSystem          Boolean  @default(false)
-  createdByUserId   String
-  updatedByUserId   String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  code            String?
+  isSystem        Boolean  @default(false)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([id, tenantId])
   @@unique([tenantId, name])
@@ -1390,14 +1550,14 @@ enum SourceModule {
 // (e.g. HR's payroll GL-account seed calls SourceTypesService.ensureExists('HR', 'Payroll')).
 // Accounting's Source Types page only lists/links/unlinks what's already here.
 model SourceType {
-  id           String              @id @default(uuid())
-  tenantId     String
-  module       SourceModule
-  name         String
-  isActive     Boolean             @default(true)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  ledgerEntries SourceLedgerEntry[]
+  id               String              @id @default(uuid())
+  tenantId         String
+  module           SourceModule
+  name             String
+  isActive         Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  ledgerEntries    SourceLedgerEntry[]
   transactionTypes TransactionType[]
 
   @@unique([id, tenantId])
@@ -1420,16 +1580,20 @@ model SourceLedgerEntry {
   /// Traces back to the record that caused this entry to exist (e.g. a payroll run id) —
   /// informational only, not a hard FK since it belongs to another service's data.
   sourceRecordId String?
+  /// Which of the module's accounts this open item belongs to (e.g. payroll's "netPayPayable"),
+  /// recorded when the entry is created so a later change to the module's account mapping never
+  /// re-labels items that already exist.
+  sourceRole     String?
   description    String
   amount         Decimal  @db.Decimal(20, 4)
   currency       String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  sourceType  SourceType               @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  glAccount   GLAccount                @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  journalEntry JournalEntry            @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  allocations SourceLedgerAllocation[]
+  sourceType   SourceType               @relation(fields: [sourceTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  glAccount    GLAccount                @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalEntry JournalEntry             @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  allocations  SourceLedgerAllocation[]
 
   @@unique([id, tenantId])
   @@index([tenantId, sourceTypeId])
@@ -1536,5 +1700,177 @@ model BudgetLine {
   @@index([tenantId, budgetId])
   @@index([tenantId, glAccountId])
   @@index([tenantId, costCentreId])
+  @@schema("accounting")
+}
+
+enum AccountingSourceTransactionKind {
+  INVOICE
+  RECEIPT
+
+  @@schema("accounting")
+}
+
+/// One transaction another module asked Accounting to raise for one of its records (e.g. a client
+/// bill from Marketing). It makes the request idempotent - the same key never raises a second
+/// document - and records which document it became. The document itself (a draft invoice or
+/// cashbook receipt) is an ordinary Accounting document the accountant reviews, edits and posts.
+model AccountingSourceTransaction {
+  id                String                          @id @default(uuid())
+  tenantId          String
+  sourceModule      SourceModule
+  idempotencyKey    String
+  /// The module's own record the transaction is for (e.g. the client id).
+  sourceRecordId    String
+  entityId          String
+  transactionTypeId String
+  kind              AccountingSourceTransactionKind
+  /// The invoice or cashbook entry created. Null only while the request is being processed.
+  documentId        String?
+  amount            Decimal                         @db.Decimal(20, 4)
+  requestedByUserId String
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  @@unique([tenantId, sourceModule, idempotencyKey])
+  @@index([tenantId, sourceModule, sourceRecordId])
+  @@index([tenantId, documentId])
+  @@schema("accounting")
+}
+
+enum AccountingPaymentRequestStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+  CANCELLED
+
+  @@schema("accounting")
+}
+
+/// A request from another module's user ("the client paid this much") against a posted invoice. It
+/// is not money moving: it waits for an accountant, who confirms it with the usual Receive Payment
+/// (choosing the bank), which creates, posts and allocates the receipt and marks this COMPLETED.
+/// Only PENDING requests count against what can still be claimed on the invoice.
+model AccountingPaymentRequest {
+  id                  String                         @id @default(uuid())
+  tenantId            String
+  sourceModule        SourceModule
+  /// Stable per submission - the same key never raises a second request.
+  idempotencyKey      String
+  invoiceId           String
+  /// The invoice's customer entity, kept so lists need no join.
+  customerId          String
+  amount              Decimal                        @db.Decimal(20, 4)
+  currency            String
+  /// When the payer says they paid - not when it was recorded.
+  paymentDate         DateTime                       @db.Date
+  reference           String?
+  note                String?
+  status              AccountingPaymentRequestStatus @default(PENDING)
+  requestedByUserId   String
+  requestedByName     String?
+  /// Set the moment a completion starts, so two accountants cannot record the same request.
+  processingStartedAt DateTime?
+  /// The receipt created for it. Set before the receipt is posted and allocated, so a completion
+  /// that stopped part way can be resumed instead of recording the payment twice.
+  receiptId           String?
+  completedAt         DateTime?
+  completedByUserId   String?
+  rejectedAt          DateTime?
+  rejectedByUserId    String?
+  rejectionReason     String?
+  cancelledAt         DateTime?
+  cancelledByUserId   String?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+
+  @@unique([tenantId, sourceModule, idempotencyKey])
+  @@index([tenantId, invoiceId, status])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, customerId])
+  @@schema("accounting")
+}
+
+/// Which of the tenant's GL accounts handles each payroll function (net pay payable, income tax
+/// payable, ...). The accountant chooses these in Accounting; payroll posting reads them instead
+/// of looking accounts up by name.
+model PayrollAccountMapping {
+  id          String   @id @default(uuid())
+  tenantId    String
+  /// A payroll account role key, e.g. "netPayPayable" (see payroll-account-roles.ts).
+  role        String
+  glAccountId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  glAccount GLAccount @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([tenantId, role])
+  @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
+/// Accounting-side choices about how payroll is posted. Payroll itself has no accounting settings.
+model PayrollAccountingSetting {
+  tenantId           String   @id
+  /// Post the accrual journal straight to the ledger instead of leaving it as a draft.
+  autoPostOnApproval Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+
+  @@schema("accounting")
+}
+
+/// One item on a payable document: an account it posts to and its amount. The document's
+/// subtotal is the sum of its lines, and `offsetGlAccountId` mirrors the first line. Documents made
+/// before lines existed have none — readers treat the document's own offset account, amount
+/// and cost centre as its one line.
+model AccountingPayableDocumentLine {
+  id           String                    @id @default(uuid())
+  tenantId     String
+  documentId   String
+  sequence     Int
+  glAccountId  String
+  amount       Decimal                   @db.Decimal(20, 4)
+  /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
+  quantity     Decimal?                  @db.Decimal(20, 4)
+  unitPrice    Decimal?                  @db.Decimal(20, 4)
+  description  String?
+  /// Optional department tag, carried onto this line's journal line when posted.
+  costCentreId String?
+  createdAt    DateTime                  @default(now())
+  document     AccountingPayableDocument @relation("PayableDocLines", fields: [documentId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount    GLAccount                 @relation("PayableDocLineAccount", fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre   CostCentre?               @relation("PayableDocLineCostCentre", fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, documentId, sequence])
+  @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
+/// One item on a receivable document: an account it posts to and its amount. The document's
+/// subtotal is the sum of its lines, and `offsetGlAccountId` mirrors the first line. Documents made
+/// before lines existed have none — readers treat the document's own offset account, amount
+/// and cost centre as its one line.
+model AccountingReceivableDocumentLine {
+  id           String                       @id @default(uuid())
+  tenantId     String
+  documentId   String
+  sequence     Int
+  glAccountId  String
+  amount       Decimal                      @db.Decimal(20, 4)
+  /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
+  quantity     Decimal?                     @db.Decimal(20, 4)
+  unitPrice    Decimal?                     @db.Decimal(20, 4)
+  description  String?
+  /// Optional department tag, carried onto this line's journal line when posted.
+  costCentreId String?
+  createdAt    DateTime                     @default(now())
+  document     AccountingReceivableDocument @relation("ReceivableDocLines", fields: [documentId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount    GLAccount                    @relation("ReceivableDocLineAccount", fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre   CostCentre?                  @relation("ReceivableDocLineCostCentre", fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, documentId, sequence])
+  @@index([tenantId, glAccountId])
   @@schema("accounting")
 }

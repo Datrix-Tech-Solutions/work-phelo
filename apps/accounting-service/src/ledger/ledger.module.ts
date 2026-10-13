@@ -6,6 +6,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingSettingsController } from './accounting-settings.controller';
 import { AccountsController } from './accounts.controller';
+import { ArchiveController } from './archive.controller';
+import { ArchiveService } from './archive.service';
+import { TransactionsController } from './transactions.controller';
+import { TransactionsService } from './transactions.service';
 import { CashbookController } from './cashbook.controller';
 import { CashbookService } from './cashbook.service';
 import { BankReconciliationsController } from './bank-reconciliations.controller';
@@ -23,6 +27,7 @@ import { PayablesController } from './payables.controller';
 import { PayablesService } from './payables.service';
 import { PayrollIntegrationController } from './payroll-integration.controller';
 import { PayrollIntegrationService } from './payroll-integration.service';
+import { PayrollSetupService } from './payroll-setup.service';
 import { RecurringJournalsController } from './recurring-journals.controller';
 import { RecurringJournalsCron } from './recurring-journals.cron';
 import { RecurringJournalsService } from './recurring-journals.service';
@@ -34,6 +39,13 @@ import { SourceLedgerController } from './source-ledger.controller';
 import { SourceLedgerService } from './source-ledger.service';
 import { SourceTypesController } from './source-types.controller';
 import { SourceTypesService } from './source-types.service';
+import { InternalPaymentRequestsController } from './payment-requests/internal-payment-requests.controller';
+import { PaymentRequestsController } from './payment-requests/payment-requests.controller';
+import { PaymentRequestsService } from './payment-requests/payment-requests.service';
+import { InternalSourceTransactionsController } from './source-transactions/internal-source-transactions.controller';
+import { SourceEventsNotifier } from './source-transactions/source-events.notifier';
+import { SourceProvisioningService } from './source-transactions/source-provisioning.service';
+import { SourceTransactionsService } from './source-transactions/source-transactions.service';
 import { TransactionTypeRulesController } from './transaction-type-rules.controller';
 import { TransactionTypeRulesService } from './transaction-type-rules.service';
 
@@ -42,14 +54,19 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
   controllers: [
     AccountingSettingsController,
     AccountsController,
+    ArchiveController,
+    TransactionsController,
     CashbookController,
     BankReconciliationsController,
     BudgetsController,
     EntityTypesController,
     InternalPayrollIntegrationController,
+    InternalPaymentRequestsController,
+    InternalSourceTransactionsController,
     InternalSubledgersController,
     JournalsController,
     PayablesController,
+    PaymentRequestsController,
     PayrollIntegrationController,
     RecurringJournalsController,
     ReceivablesController,
@@ -61,6 +78,8 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
   providers: [
     AccountingHrClient,
     AccountingMasterDataService,
+    ArchiveService,
+    TransactionsService,
     CashbookService,
     BankReconciliationsService,
     BudgetsService,
@@ -68,12 +87,17 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     JournalPolicy,
     JournalsService,
     PayablesService,
+    PaymentRequestsService,
     PayrollIntegrationService,
+    PayrollSetupService,
     RecurringJournalsCron,
     RecurringJournalsService,
     ReceivablesService,
     ReportsService,
+    SourceEventsNotifier,
     SourceLedgerService,
+    SourceProvisioningService,
+    SourceTransactionsService,
     SourceTypesService,
     TransactionTypeRulesService,
   ],

@@ -212,6 +212,7 @@ enum DocumentType {
   CERTIFICATE
   OFFER_LETTER
   NDA
+  DRIVER_LICENCE
   OTHER
 
   @@schema("hr")
@@ -363,6 +364,41 @@ enum ProjectActivityType {
   @@schema("hr")
 }
 
+enum RecruitmentVacancyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+
+  @@schema("hr")
+}
+
+enum RecruitmentQuestionType {
+  SHORT_ANSWER
+  PARAGRAPH
+  YES_NO
+  MULTIPLE_CHOICE
+  CHECKBOXES
+  DROPDOWN
+
+  @@schema("hr")
+}
+
+enum RecruitmentSalaryType {
+  FIXED
+  RANGE
+  NEGOTIABLE
+  NON_DISCLOSED
+
+  @@schema("hr")
+}
+
+enum RecruitmentApplicationStatus {
+  DRAFT
+  SUBMITTED
+
+  @@schema("hr")
+}
+
 // ── Branch ───────────────────────────────────────────────────────────────
 
 model Branch {
@@ -386,6 +422,8 @@ model Branch {
   assets      Asset[]
   departments Department[]
 
+  recruitmentVacancies RecruitmentVacancy[]
+
   @@unique([tenantId, name])
   @@schema("hr")
 }
@@ -408,6 +446,8 @@ model Department {
   children  Department[] @relation("DepartmentHierarchy")
   branch    Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
   employees Employee[]
+
+  recruitmentVacancies RecruitmentVacancy[]
 
   @@unique([tenantId, name])
   @@index([tenantId, branchId])
@@ -460,6 +500,8 @@ model Employee {
   taxPolicy            PayrollTaxPolicy         @default(STANDARD_PAYE)
   fixedTaxAmount       Decimal?                 @db.Decimal(15, 2)
   commissionTaxable    Boolean                  @default(true)
+  /// The payroll group this employee is paid through. Set from the group's own page.
+  payrollGroupId       String?
   emailHash            String?
   avatarUrl            String?
   createdAt            DateTime                 @default(now())
@@ -467,6 +509,7 @@ model Employee {
 
   department            Department?                 @relation(fields: [departmentId], references: [id])
   branch                Branch?                     @relation(fields: [branchId], references: [id])
+  payrollGroup          PayrollGroup?               @relation(fields: [payrollGroupId], references: [id], onDelete: SetNull)
   leaveBalances         LeaveBalance[]
   leaveRequests         LeaveRequest[]
   coveringLeaveRequests LeaveRequest[]              @relation("LeaveCoverageEmployee")
@@ -483,6 +526,7 @@ model Employee {
   appraisals            Appraisal[]                 @relation("AppraisalEmployee")
   managedAppraisals     Appraisal[]                 @relation("AppraisalManager")
   documents             EmployeeDocument[]
+  driverLicence        EmployeeDriverLicence?
   agreementSignatures   CompanyAgreementSignature[]
   allowances            EmployeeAllowance[]
   deductions            EmployeeDeduction[]
@@ -491,11 +535,13 @@ model Employee {
   managedProjects       Project[]                   @relation("ManagedProjects")
   projectMemberships    ProjectMember[]
   assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
+  recruitmentStageMoves RecruitmentStageHistory[]   @relation("RecruitmentStageChangedBy")
   offboarding           OffboardingRecord?
   resignation           ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
+  @@index([tenantId, payrollGroupId])
   @@schema("hr")
 }
 
@@ -589,6 +635,193 @@ model ProjectActivity {
 
   @@index([tenantId, projectId, createdAt])
   @@index([tenantId, taskId])
+  @@schema("hr")
+}
+
+// ── Recruitment ───────────────────────────────────────────────────────────
+
+model RecruitmentVacancy {
+  id               String                   @id @default(uuid())
+  tenantId         String
+  title            String?
+  departmentId     String?
+  branchId         String?
+  location         String?
+  city             String?
+  jobType          EmploymentType?
+  workMode         WorkMode?
+  vacancies        Int                      @default(1)
+  closingDate      DateTime?                @db.Date
+  /// Plain text: the job summary.
+  description      String?
+  /// Plain text.
+  responsibilities String?
+  /// Plain text.
+  perksAndBenefits String?
+  /// Plain text rendering of `details`, kept for the public posting.
+  requirements     String?
+  /// Structured requirements: education, experience, skills, languages, certificates and the
+  /// documents applicants are asked for. A missing key means the field is not part of the vacancy.
+  details          Json?
+  salaryType       RecruitmentSalaryType    @default(NON_DISCLOSED)
+  /// Set when salaryType is FIXED.
+  salaryAmount     Decimal?                 @db.Decimal(15, 2)
+  /// Set when salaryType is RANGE.
+  salaryMin        Decimal?                 @db.Decimal(15, 2)
+  salaryMax        Decimal?                 @db.Decimal(15, 2)
+  salaryCurrency   String?
+  status           RecruitmentVacancyStatus @default(DRAFT)
+  createdByUserId  String?
+  updatedByUserId  String?
+  closedAt         DateTime?
+  closedByUserId   String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  branch     Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  applications RecruitmentApplication[]
+  questions    RecruitmentVacancyQuestion[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, branchId])
+  @@index([tenantId, closingDate])
+  @@schema("hr")
+}
+
+model RecruitmentVacancyQuestion {
+  id        String                  @id @default(uuid())
+  tenantId  String
+  vacancyId String
+  question  String
+  type      RecruitmentQuestionType @default(SHORT_ANSWER)
+  options   Json?
+  required  Boolean                 @default(false)
+  sortOrder Int
+  retiredAt DateTime?
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  vacancy RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  answers RecruitmentApplicationAnswer[]
+
+  @@index([tenantId, vacancyId, retiredAt])
+  @@index([tenantId, sortOrder])
+  @@schema("hr")
+}
+
+model RecruitmentStage {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  normalizedName String
+  description    String?
+  sortOrder      Int
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  applications RecruitmentApplication[]
+  fromHistory  RecruitmentStageHistory[] @relation("RecruitmentPreviousStage")
+  toHistory    RecruitmentStageHistory[] @relation("RecruitmentNewStage")
+
+  @@unique([tenantId, normalizedName])
+  @@unique([tenantId, sortOrder])
+  @@index([tenantId, isDefault])
+  @@schema("hr")
+}
+
+model RecruitmentApplication {
+  id                     String                       @id @default(uuid())
+  tenantId               String
+  vacancyId              String
+  currentStageId         String?
+  status                 RecruitmentApplicationStatus @default(DRAFT)
+  accessTokenHash        String?                      @unique
+  submittedAt            DateTime?
+  firstName              String?
+  lastName               String?
+  email                  String?
+  phone                  String?
+  country                String?
+  city                   String?
+  professionalSummary    String?
+  skills                 String[]                     @default([])
+  education              String?
+  yearsOfExperience      Int?
+  currentJobTitle        String?
+  currentEmployer        String?
+  highestEducationLevel  String?
+  expectedSalary         Decimal?                     @db.Decimal(15, 2)
+  expectedSalaryCurrency String?
+  noticePeriod           String?
+  resumeUrl              String?
+  resumeFileName         String?
+  coverLetterUrl         String?
+  coverLetterFileName    String?
+  portfolioUrl           String?
+  githubUrl              String?
+  metadata               Json?
+  appliedAt              DateTime                     @default(now())
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+
+  vacancy      RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  currentStage RecruitmentStage?              @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
+  stageHistory RecruitmentStageHistory[]
+  answers      RecruitmentApplicationAnswer[]
+
+  @@index([tenantId, vacancyId])
+  @@index([tenantId, currentStageId])
+  @@index([tenantId, status])
+  @@index([tenantId, vacancyId, status])
+  @@index([tenantId, appliedAt])
+  @@index([tenantId, submittedAt])
+  @@index([tenantId, email])
+  @@schema("hr")
+}
+
+model RecruitmentApplicationAnswer {
+  id               String   @id @default(uuid())
+  tenantId         String
+  applicationId    String
+  questionId       String
+  questionSnapshot String
+  answer           String
+  answerText       String?
+  selectedOptions  String[] @default([])
+  createdAt        DateTime @default(now())
+
+  application RecruitmentApplication     @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  question    RecruitmentVacancyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([applicationId, questionId])
+  @@index([tenantId, applicationId])
+  @@index([tenantId, questionId])
+  @@schema("hr")
+}
+
+model RecruitmentStageHistory {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  applicationId       String
+  previousStageId     String?
+  newStageId          String
+  changedByUserId     String?
+  changedByEmployeeId String?
+  note                String?
+  changedAt           DateTime @default(now())
+
+  application       RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  previousStage     RecruitmentStage?      @relation("RecruitmentPreviousStage", fields: [previousStageId], references: [id], onDelete: Restrict)
+  newStage          RecruitmentStage       @relation("RecruitmentNewStage", fields: [newStageId], references: [id], onDelete: Restrict)
+  changedByEmployee Employee?              @relation("RecruitmentStageChangedBy", fields: [changedByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, applicationId, changedAt])
+  @@index([tenantId, newStageId])
   @@schema("hr")
 }
 
@@ -763,6 +996,26 @@ model EmployeeDocument {
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
+  @@schema("hr")
+}
+
+/// The licence details behind an employee's right to drive themselves on company trips. The
+/// licence image is a separate EmployeeDocument (type DRIVER_LICENCE); the ability to drive needs
+/// both this record (unexpired) and at least one such image on file.
+model EmployeeDriverLicence {
+  id            String   @id @default(uuid())
+  tenantId      String
+  employeeId    String   @unique
+  /// Encrypted at rest, like the other personal ids.
+  licenceNumber String
+  issuedAt      DateTime @db.Date
+  expiresAt     DateTime @db.Date
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
   @@schema("hr")
 }
 
@@ -1040,40 +1293,54 @@ model ShiftAssignmentOverride {
 // ── Payroll ───────────────────────────────────────────────────────────────
 
 model PayrollRun {
-  id                 String         @id @default(uuid())
-  tenantId           String
-  month              Int
-  year               Int
-  status             PayrollStatus  @default(DRAFT)
-  totalGross         Decimal        @db.Decimal(15, 2)
-  totalNet           Decimal        @db.Decimal(15, 2)
-  totalSSNIT         Decimal        @db.Decimal(15, 2)
-  totalTier1         Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier2         Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier3         Decimal        @default(0) @db.Decimal(15, 2)
-  totalPAYE          Decimal        @db.Decimal(15, 2)
-  totalEmployerCost  Decimal        @default(0) @db.Decimal(15, 2)
-  runBy              String
-  submittedBy        String?
-  submittedAt        DateTime?
-  approvedBy         String?
-  approvedAt         DateTime?
-  approvalNote       String?
-  returnToDraftNote  String?
-  paidAt             DateTime?
-  payslipsReleasedAt DateTime?
-  notes              String?
-  payrollCountry     PayrollCountry @default(GH)
-  payrollCurrency    String         @default("GHS")
-  tier3Enabled       Boolean        @default(false)
-  tier3Rate          Decimal?       @db.Decimal(5, 2)
-  tier3SchemeName    String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  id                          String         @id @default(uuid())
+  tenantId                    String
+  month                       Int
+  year                        Int
+  status                      PayrollStatus  @default(DRAFT)
+  totalGross                  Decimal        @db.Decimal(15, 2)
+  totalNet                    Decimal        @db.Decimal(15, 2)
+  totalSSNIT                  Decimal        @db.Decimal(15, 2)
+  totalTier1                  Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier2                  Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier3                  Decimal        @default(0) @db.Decimal(15, 2)
+  totalPAYE                   Decimal        @db.Decimal(15, 2)
+  totalEmployerCost           Decimal        @default(0) @db.Decimal(15, 2)
+  runBy                       String
+  submittedBy                 String?
+  submittedAt                 DateTime?
+  approvedBy                  String?
+  approvedAt                  DateTime?
+  approvalNote                String?
+  returnToDraftNote           String?
+  paidAt                      DateTime?
+  payslipsReleasedAt          DateTime?
+  /// True when the run was approved while payroll was linked to Accounting, so its accrual was
+  /// posted there and it is settled there. Fixed at approval: linking or unlinking later never
+  /// changes a run that already exists.
+  postedToAccounting          Boolean        @default(false)
+  notes                       String?
+  payrollCountry              PayrollCountry @default(GH)
+  payrollCurrency             String         @default("GHS")
+  tier3Enabled                Boolean        @default(false)
+  tier3Rate                   Decimal?       @db.Decimal(5, 2)
+  tier3SchemeName             String?
+  /// "legacy" for runs made by the old calculators; otherwise the payslip type the run is for
+  /// (monthly, commission or monthly_commission), so each type has its own run each month.
+  payslipKey                  String         @default("legacy")
+  /// Totals by accounting role, for runs made with payroll configurations. Old runs keep the
+  /// tier and PAYE columns above and leave these at zero.
+  totalEmployeeSocialSecurity Decimal        @default(0) @db.Decimal(15, 2)
+  totalPension                Decimal        @default(0) @db.Decimal(15, 2)
+  totalIncomeTax              Decimal        @default(0) @db.Decimal(15, 2)
+  totalOtherDeductions        Decimal        @default(0) @db.Decimal(15, 2)
+  totalEmployerSocialSecurity Decimal        @default(0) @db.Decimal(15, 2)
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @updatedAt
 
   items PayrollItem[]
 
-  @@unique([tenantId, month, year])
+  @@unique([tenantId, month, year, payslipKey])
   @@schema("hr")
 }
 
@@ -1102,6 +1369,17 @@ model PayrollItem {
   taxPolicySnapshot         PayrollTaxPolicy         @default(STANDARD_PAYE)
   compensationTypeSnapshot  EmployeeCompensationType @default(SALARY)
   commissionTaxableSnapshot Boolean                  @default(true)
+  /// Set for payslips made with a payroll configuration: who it was for and what was used.
+  payrollGroupId            String?
+  configurationId           String?
+  configurationVersion      Int?
+  /// The figure the commission rate was applied to (for example sales).
+  commissionFigure          Decimal                  @default(0) @db.Decimal(15, 2)
+  /// Totals by accounting role (income tax already net of any tax credits).
+  employeeSocialSecurity    Decimal                  @default(0) @db.Decimal(15, 2)
+  pension                   Decimal                  @default(0) @db.Decimal(15, 2)
+  incomeTax                 Decimal                  @default(0) @db.Decimal(15, 2)
+  employerSocialSecurity    Decimal                  @default(0) @db.Decimal(15, 2)
   totalDeductions           Decimal                  @db.Decimal(15, 2)
   netSalary                 Decimal                  @db.Decimal(15, 2)
   createdAt                 DateTime                 @default(now())
@@ -1111,6 +1389,7 @@ model PayrollItem {
   employee       Employee               @relation(fields: [employeeId], references: [id])
   allowanceItems PayrollItemAllowance[]
   deductionItems PayrollItemDeduction[]
+  lines          PayrollItemLine[]
 
   @@unique([payrollRunId, employeeId])
   @@schema("hr")
@@ -1143,6 +1422,168 @@ model PayrollItemDeduction {
   payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, payrollItemId])
+  @@schema("hr")
+}
+
+/// One line of a payslip made with a payroll configuration: a component, the accounting role it
+/// posts to, and what it came to. Together the lines are the payslip, for any configuration.
+model PayrollItemLine {
+  id            String   @id @default(uuid())
+  tenantId      String
+  payrollItemId String
+  sortOrder     Int
+  componentId   String
+  code          String
+  name          String
+  kind          String
+  role          String?
+  amount        Decimal  @db.Decimal(15, 2)
+  /// Tax credits taken off this line (deductions only).
+  relief        Decimal  @default(0) @db.Decimal(15, 2)
+  /// False for a deduction that only lowers taxable income and is not taken from pay.
+  takenFromPay  Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollItemId])
+  @@index([tenantId, role])
+  @@schema("hr")
+}
+
+/// The kind of payslip a payroll configuration is used for.
+enum PayrollPayslipType {
+  MONTHLY
+  COMMISSION
+  MONTHLY_COMMISSION
+
+  @@schema("hr")
+}
+
+/// A set of pay components (earnings, deductions, tax credits, employer contributions) that
+/// decides how a payslip type is calculated. Its history of versions holds the components; a
+/// payroll run uses the version in force on its date.
+model PayrollConfiguration {
+  id          String              @id @default(uuid())
+  tenantId    String
+  name        String
+  /// The payslip type this configuration is for, which decides the figures it is calculated from
+  /// (basic salary, commission, or both). Several configurations can share a type; payroll groups
+  /// choose which one they use.
+  payslipType PayrollPayslipType?
+  /// The currency its payslips are paid in. A payroll run uses the currency of the
+  /// configurations it is made from.
+  currency    String              @default("GHS")
+  createdBy   String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  versions PayrollConfigurationVersion[]
+  groups   PayrollGroup[]
+
+  @@index([tenantId, payslipType])
+  @@schema("hr")
+}
+
+/// One published state of a configuration. Versions are never edited, only added.
+model PayrollConfigurationVersion {
+  id              String   @id @default(uuid())
+  tenantId        String
+  configurationId String
+  version         Int
+  /// The date the version starts to apply. Runs dated earlier keep the earlier version.
+  effectiveFrom   DateTime @db.Date
+  note            String   @default("")
+  /// The components, as validated by the payroll configuration service.
+  components      Json
+  createdBy       String
+  createdAt       DateTime @default(now())
+
+  configuration PayrollConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+
+  @@unique([configurationId, version])
+  @@index([tenantId, configurationId, effectiveFrom])
+  @@schema("hr")
+}
+
+/// How often a payroll group is paid. Only monthly is calculated so far.
+enum PayrollPayFrequency {
+  MONTHLY
+  BIWEEKLY
+  WEEKLY
+
+  @@schema("hr")
+}
+
+/// Whether payday is a fixed day of the month or its last day.
+enum PayrollPaydayKind {
+  DAY_OF_MONTH
+  LAST_DAY
+
+  @@schema("hr")
+}
+
+/// A set of employees paid the same way: how often, on which day, with which payroll
+/// configuration, and when to remind the people who run payroll. Employees join a group later.
+model PayrollGroup {
+  id                 String              @id @default(uuid())
+  tenantId           String
+  name               String
+  frequency          PayrollPayFrequency @default(MONTHLY)
+  paydayKind         PayrollPaydayKind
+  /// 1 to 28 when `paydayKind` is DAY_OF_MONTH; null for the last day of the month.
+  paydayDay          Int?
+  configurationId    String
+  reminderEnabled    Boolean             @default(true)
+  reminderDaysBefore Int                 @default(3)
+  createdBy          String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  /// A configuration that groups still use can't be deleted.
+  configuration PayrollConfiguration @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  /// Deleting a group leaves its employees without one.
+  employees     Employee[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([configurationId])
+  @@schema("hr")
+}
+
+/// A report built in the HR report builder and saved for everyone who can open the reports page.
+/// `definition` is the report spec the builder produces (type, period and blocks); it is
+/// validated against the report catalog on save and again every time it runs.
+model SavedReport {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  description   String?
+  /// TABLE or CHART. A report is one or the other, never both.
+  type          String
+  definition    Json
+  createdBy     String
+  createdByName String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@schema("hr")
+}
+
+/// A pay component kept for reuse. Adding it to a configuration copies it, so later edits never
+/// change components already added.
+model PayrollSavedComponent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  component Json
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
   @@schema("hr")
 }
 
@@ -1476,7 +1917,10 @@ model TenantConfig {
   payrollTier3Enabled          Boolean                        @default(false)
   payrollTier3Rate             Decimal?                       @db.Decimal(5, 2)
   payrollTier3SchemeName       String?
+  /// Deprecated: no longer read. Whether payroll posts to Accounting is decided in Accounting,
+  /// and each run records how it was approved (PayrollRun.postedToAccounting).
   linkedToAccounting           Boolean                        @default(false)
+  /// Deprecated: no longer read. Auto-post is an Accounting setting now.
   autoPostOnApproval           Boolean                        @default(false)
   appraisalCycleRecipients     AppraisalCycleRecipientGroup[] @default([ALL])
   appraisalEligibleStatuses    EmploymentStatus[]             @default([ACTIVE, PROBATION])

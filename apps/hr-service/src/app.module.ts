@@ -10,13 +10,18 @@ import { EmployeesModule } from './employees/employees.module';
 import { LeaveModule } from './leave/leave.module';
 import { TimeModule } from './time/time.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { PayrollConfigurationModule } from './payroll-configuration/payroll-configuration.module';
+import { PayrollGroupsModule } from './payroll-groups/payroll-groups.module';
+import { PayrollRunsModule } from './payroll-runs/payroll-runs.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportsModule } from './reports/reports.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { AssetsModule } from './assets/assets.module';
+import { DirectoryModule } from './directory/directory.module';
 import { CompanyPoliciesModule } from './company-policies/company-policies.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
@@ -26,6 +31,7 @@ import { SettingsModule } from './settings/settings.module';
 import { ProjectsModule } from './projects/projects.module';
 import { HrImportsModule } from './imports/hr-imports.module';
 import { BulkImportModule } from './bulk-import/bulk-import.module';
+import { RecruitmentModule } from './recruitment/recruitment.module';
 
 @Module({
   imports: [
@@ -46,9 +52,14 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     LeaveModule,
     TimeModule,
     PayrollModule,
+    PayrollConfigurationModule,
+    PayrollGroupsModule,
+    PayrollRunsModule,
     AppraisalsModule,
     DashboardModule,
+    ReportsModule,
     AssetsModule,
+    DirectoryModule,
     CompanyPoliciesModule,
     RabbitMQModule,
     AnnouncementsModule,
@@ -59,6 +70,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     ProjectsModule,
     HrImportsModule,
     BulkImportModule,
+    RecruitmentModule,
   ],
   providers: [
     RabbitMQSetupService,

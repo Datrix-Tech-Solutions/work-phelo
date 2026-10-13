@@ -54,8 +54,27 @@ export class ClientDetailResponseDto {
   @ApiProperty()
   assignedUserId!: string;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: "The assigned marketer's name, when it can be found.",
+  })
+  assignedUserName!: string | null;
+
   @ApiProperty()
   isBillable!: boolean;
+
+  @ApiProperty({
+    description:
+      'True once the client has its entity in Accounting (its first transaction was sent).',
+  })
+  hasAccountingEntity!: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      "The entity type the client's Accounting entity was created under. Fixed after the first transaction.",
+  })
+  accountingEntityTypeId!: string | null;
 
   @ApiProperty({ type: ProspectLocationDto })
   location!: ProspectLocationDto;

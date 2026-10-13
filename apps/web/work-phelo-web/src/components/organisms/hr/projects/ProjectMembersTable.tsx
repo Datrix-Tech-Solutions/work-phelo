@@ -17,10 +17,10 @@ import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import type { ProjectMember } from '@/types/hr';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: 'Owner',
-  MANAGER: 'Project Lead',
   MEMBER: 'Member',
 };
 
@@ -29,6 +29,7 @@ interface Props {
 }
 
 export function ProjectMembersTable({ projectId }: Props) {
+  const labels = useProjectLabels();
   const toast = useToastStore((s) => s.addToast);
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -107,7 +108,7 @@ export function ProjectMembersTable({ projectId }: Props) {
       width: '120px',
       render: (row) => (
         <span className="text-sm font-medium text-gray-700">
-          {ROLE_LABELS[row.role] ?? row.role}
+          {row.role === 'MANAGER' ? `${labels.singular} Lead` : (ROLE_LABELS[row.role] ?? row.role)}
         </span>
       ),
     },
@@ -128,7 +129,7 @@ export function ProjectMembersTable({ projectId }: Props) {
                       if (!isLead) handleRemove(row.employeeId);
                     }}
                     disabled={isLead || removeMember.isPending}
-                    tooltip={isLead ? "Project lead can't be removed" : undefined}
+                    tooltip={isLead ? `${labels.singular} lead can't be removed` : undefined}
                   >
                     Remove
                   </TableButton>

@@ -3,6 +3,7 @@ import type { DocumentType } from '@/types/hr';
 export type DocumentFolderKey = 'personal' | 'company';
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  DRIVER_LICENCE: "Driver's License",
   CONTRACT: 'Contract',
   ID_CARD: 'ID Card',
   PASSPORT: 'Passport',
@@ -25,6 +26,12 @@ export const PERSONAL_DOCUMENT_CATEGORIES = [
   'Other',
 ] as const;
 
+/**
+ * Offered in the personal upload too, but it is not a personal document: the image and its
+ * details are saved as the employee's driver's licence, which HR sees as a company document.
+ */
+export const DRIVER_LICENCE_CATEGORY = "Driver's License";
+
 export type DocumentFileKind = 'pdf' | 'image' | 'spreadsheet' | 'doc' | 'other';
 
 export interface MyDocument {
@@ -37,6 +44,8 @@ export interface MyDocument {
   uploadedBy: string;
   category: string;
   previewUrl?: string;
+  /** Set for company documents, so a driver's licence can show its details. */
+  type?: DocumentType;
 }
 
 export function inferFileKind(mimeType: string): DocumentFileKind {

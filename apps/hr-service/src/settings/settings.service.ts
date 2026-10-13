@@ -17,8 +17,6 @@ const DEFAULT_PAYROLL_TIER3_ENABLED = false;
 const DEFAULT_PAYROLL_TIER3_RATE: number | null = null;
 const DEFAULT_PAYROLL_TIER3_SCHEME_NAME: string | null = null;
 const DEFAULT_PAYROLL_COUNTRY = PayrollCountry.GH;
-const DEFAULT_LINKED_TO_ACCOUNTING = false;
-const DEFAULT_AUTO_POST_ON_APPROVAL = false;
 const DEFAULT_APPRAISAL_CYCLE_RECIPIENTS = [
   AppraisalCycleRecipientGroup.ALL,
 ] as const;
@@ -264,8 +262,6 @@ export class SettingsService {
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
-        linkedToAccounting: true,
-        autoPostOnApproval: true,
       },
     });
 
@@ -283,10 +279,6 @@ export class SettingsService {
           : DEFAULT_PAYROLL_TIER3_RATE,
       payrollTier3SchemeName:
         config?.payrollTier3SchemeName ?? DEFAULT_PAYROLL_TIER3_SCHEME_NAME,
-      linkedToAccounting:
-        config?.linkedToAccounting ?? DEFAULT_LINKED_TO_ACCOUNTING,
-      autoPostOnApproval:
-        config?.autoPostOnApproval ?? DEFAULT_AUTO_POST_ON_APPROVAL,
     };
   }
 
@@ -414,8 +406,6 @@ export class SettingsService {
       payrollTier3Enabled?: boolean;
       payrollTier3Rate?: number;
       payrollTier3SchemeName?: string;
-      linkedToAccounting?: boolean;
-      autoPostOnApproval?: boolean;
     },
     adminUserId?: string | null,
     adminEmail?: string | null,
@@ -429,8 +419,6 @@ export class SettingsService {
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
-        linkedToAccounting: true,
-        autoPostOnApproval: true,
       },
     });
     const payrollCountryProvided = payrollSettings.payrollCountry !== undefined;
@@ -467,14 +455,6 @@ export class SettingsService {
       payrollSettings.payrollTier3SchemeName !== undefined
         ? payrollSettings.payrollTier3SchemeName?.trim() || null
         : (existing?.payrollTier3SchemeName ?? null);
-    const linkedToAccounting =
-      payrollSettings.linkedToAccounting ??
-      existing?.linkedToAccounting ??
-      DEFAULT_LINKED_TO_ACCOUNTING;
-    const autoPostOnApproval =
-      payrollSettings.autoPostOnApproval ??
-      existing?.autoPostOnApproval ??
-      DEFAULT_AUTO_POST_ON_APPROVAL;
 
     if (tier3Enabled) {
       if (normalizedTier3Rate == null) {
@@ -490,12 +470,6 @@ export class SettingsService {
       }
     }
 
-    if (autoPostOnApproval && !linkedToAccounting) {
-      throw new BadRequestException(
-        'Payroll must be linked to accounting before auto-post on approval can be enabled.',
-      );
-    }
-
     const config = await this.prisma.tenantConfig.upsert({
       where: { tenantId },
       create: {
@@ -508,8 +482,6 @@ export class SettingsService {
         payrollTier3Enabled: tier3Enabled,
         payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
         payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,
-        linkedToAccounting,
-        autoPostOnApproval,
       },
       update: {
         payrollCountry,
@@ -518,8 +490,6 @@ export class SettingsService {
         payrollTier3Enabled: tier3Enabled,
         payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
         payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,
-        linkedToAccounting,
-        autoPostOnApproval,
         ...(adminUserId ? { adminUserId } : {}),
         ...(adminEmail ? { adminEmail } : {}),
       },
@@ -530,8 +500,6 @@ export class SettingsService {
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
-        linkedToAccounting: true,
-        autoPostOnApproval: true,
       },
     });
 
@@ -546,8 +514,6 @@ export class SettingsService {
           ? Number(config.payrollTier3Rate.toString())
           : null,
       payrollTier3SchemeName: config.payrollTier3SchemeName,
-      linkedToAccounting: config.linkedToAccounting,
-      autoPostOnApproval: config.autoPostOnApproval,
     };
   }
 

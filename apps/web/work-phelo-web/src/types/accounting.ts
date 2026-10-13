@@ -92,6 +92,13 @@ export interface BulkImportRowResult {
   message?: string;
 }
 
+export interface BulkDeleteAccountResult {
+  id: string;
+  code?: string;
+  status: 'deleted' | 'skipped' | 'failed';
+  message?: string;
+}
+
 export interface BulkImportAccountsResult {
   classifications: BulkImportRowResult[];
   groups: BulkImportRowResult[];
@@ -101,6 +108,11 @@ export interface BulkImportAccountsResult {
 export interface GLAccountLedgerEntry {
   id: string;
   description: string | null;
+  glAccountId: string;
+  journalEntryId: string;
+  /** Amounts in the journal's own currency; the base amounts are what the running balance uses. */
+  transactionDebit: string;
+  transactionCredit: string;
   baseDebit: string;
   baseCredit: string;
   runningBalance: string;
@@ -110,6 +122,7 @@ export interface GLAccountLedgerEntry {
     transactionDate: string;
     reference: string | null;
     description: string;
+    transactionCurrency: string;
     baseCurrency: string;
   };
 }
@@ -282,6 +295,8 @@ export interface TransactionTypeDefinition {
    *  note (payable) — it must reference an original posted invoice/bill and reduces its
    *  outstanding balance. Its rule is written in the note's own direction. */
   isLinked: boolean;
+  /** The New Transaction form asks for quantity × unit price (true) or a straight amount. */
+  usesQuantityPrice: boolean;
   createdAt: string;
   rulesCount: number;
 }
@@ -297,6 +312,7 @@ export interface CreateTransactionTypePayload {
   description?: string;
   postsToCashbook?: boolean;
   isLinked?: boolean;
+  usesQuantityPrice?: boolean;
 }
 
 export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>;
@@ -339,6 +355,40 @@ export interface SeedPayrollAccountsResult {
   entityType: { id: string; name: string };
   entity: { id: string; code: string; name: string };
   sourceType: { id: string; module: SourceModule; name: string };
+}
+
+/** One job payroll needs an account for, and the account the accountant chose for it. */
+export interface PayrollAccountRoleSetup {
+  key: string;
+  label: string;
+  description: string;
+  category: GLAccountCategory;
+  /** Every payroll run needs it, so payroll cannot be linked without it. */
+  core: boolean;
+  /** Raises its own open item to settle. */
+  isLiability: boolean;
+  account: { id: string; code: string; name: string } | null;
+  /** Unpaid payroll items still sitting on the account this was chosen as before. */
+  openItemCount: number;
+}
+
+export type PayrollNotReadyReason = 'NOT_LINKED' | 'NO_BASE_CURRENCY' | 'ACCOUNTS_MISSING';
+
+export interface PayrollSetup {
+  sourceTypeId: string;
+  sourceName: string;
+  linked: boolean;
+  /** Linked and every core account chosen. */
+  ready: boolean;
+  /** Everything needed before it can be linked is in place. */
+  readyToLink: boolean;
+  reason: PayrollNotReadyReason | null;
+  baseCurrency: string | null;
+  autoPostOnApproval: boolean;
+  /** Payroll items (across all runs) still unpaid. Unlinking is blocked while there are any. */
+  openLiabilityCount: number;
+  wagePaymentType: { id: string; code: string; name: string } | null;
+  roles: PayrollAccountRoleSetup[];
 }
 
 export type SourceLedgerPaymentState = 'OPEN' | 'PARTIALLY_PAID' | 'PAID';
@@ -413,6 +463,10 @@ export interface TaxType {
   effectiveFrom: string;
   effectiveTo: string | null;
   isActive: boolean;
+  /** Default account on the payables side — input tax on a bill, or tax withheld when paying. */
+  payableAccountId: string | null;
+  /** Default account on the receivables side — output tax on an invoice, or tax a customer withholds. */
+  receivableAccountId: string | null;
 }
 
 export interface CreateTaxTypePayload {
@@ -421,6 +475,9 @@ export interface CreateTaxTypePayload {
   rate: number;
   effectiveFrom: string;
   effectiveTo?: string;
+  /** Null clears the default. */
+  payableAccountId?: string | null;
+  receivableAccountId?: string | null;
 }
 
 export type UpdateTaxTypePayload = Partial<CreateTaxTypePayload> & { isActive?: boolean };
@@ -431,7 +488,31 @@ export interface TransactionTypeRuleLine {
   id: string;
   sequence: number;
   direction: PostingLineDirection;
-  account: { id: string; code: string; name: string };
+  /** Null on a scoped main line — the user picks the account on the transaction form. */
+  account: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+    classificationId: string | null;
+  } | null;
+  /** Set when the main line lets the user choose the account: the account may come from any
+   *  one of these (a whole category, or one classification inside it). Empty on a fixed line. */
+  scopes: {
+    id: string;
+    category: GLAccountCategory;
+    classification: {
+      id: string;
+      code: string;
+      name: string;
+      category: GLAccountCategory;
+    } | null;
+    /** Set when this scope is one specific account rather than a category or classification. */
+    account: { id: string; code: string; name: string; category: GLAccountCategory } | null;
+  }[];
+  /** Set on a line that applies when the document is settled, not when it is raised: a
+   *  deduction reduces the cash that moves (discount, withholding tax), a charge adds to it. */
+  settlementKind: RuleLineSettlementKind | null;
   /** Set only on a tax line — which TaxType drives this line's computed amount. */
   taxType: { id: string; name: string; rate: number } | null;
   /** Set only when this line also posts to a party's subledger account under the
@@ -456,9 +537,14 @@ export interface TransactionTypeRule {
   lines: TransactionTypeRuleLine[];
 }
 
+export type RuleLineSettlementKind = 'DEDUCTION' | 'CHARGE';
+
 export interface TransactionTypeRuleLineInput {
   direction: PostingLineDirection;
-  accountId: string;
+  settlementKind?: RuleLineSettlementKind;
+  /** Either a fixed accountId or one or more scopes to choose from. */
+  accountId?: string;
+  scopes?: { category: GLAccountCategory; classificationId?: string; accountId?: string }[];
   taxTypeId?: string;
   subledgerType?: SubledgerType;
   description?: string;
@@ -685,7 +771,7 @@ export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   ],
 };
 
-export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'VOIDED';
 
 export type SourceEventStatus = 'RECEIVED' | 'PROCESSING' | 'POSTED' | 'FAILED' | 'IGNORED';
 
@@ -758,7 +844,18 @@ export interface JournalSource {
   kind: string;
   /** The originating transaction's own number, when it has one. */
   number: string | null;
+  /** The record that posted it, so it can be opened. Null for manual and integration journals. */
+  record: { type: JournalSourceRecordType; id: string } | null;
 }
+
+export type JournalSourceRecordType =
+  | 'INVOICE'
+  | 'CREDIT_NOTE'
+  | 'RECEIPT'
+  | 'BILL'
+  | 'DEBIT_NOTE'
+  | 'PAYMENT'
+  | 'CASHBOOK';
 
 export interface JournalEntryRecord {
   id: string;
@@ -785,6 +882,11 @@ export interface JournalEntryRecord {
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set while the journal is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  /** Set on a voided reversal: the journal it reversed, kept so a restore can put the link back. */
+  voidedReversalOfJournalId?: string | null;
   lines: JournalLineRecord[];
 }
 
@@ -901,11 +1003,12 @@ export const INVOICE_DEFAULTS: InvoiceFormValues = {
 };
 
 export type AccountingTradeSide = 'RECEIVABLE' | 'PAYABLE';
-export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type AccountingTradeDocumentStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED' | 'VOIDED';
 export type AccountingTradeDocumentKind = 'INVOICE' | 'CREDIT_NOTE' | 'BILL';
 export type AccountingTradeDocumentPaymentState =
   | 'DRAFT'
   | 'REVERSED'
+  | 'REJECTED'
   | 'PAID'
   | 'PARTIALLY_PAID'
   | 'OPEN';
@@ -973,10 +1076,18 @@ export interface AccountingTradeDocument {
   /** What is still owed on a posted document, after payments and credit/debit notes.
    *  Only present on list rows. */
   outstandingAmount: string | null;
+  /** Invoices only, on list rows: payment requests from another module waiting for the accountant. */
+  pendingPaymentRequestCount: number;
   createdAt: string;
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set when a draft was turned down - it never posts, and the reason is kept. */
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  /** Set while the document is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
   postedJournalEntryId: string | null;
   reversalJournalEntryId: string | null;
   reversalOfDocumentId: string | null;
@@ -986,10 +1097,33 @@ export interface AccountingTradeDocument {
   /** The Receivable (AR) or Payable (AP) account this document actually posts to —
    *  resolved once from the Transaction Type Rule at creation, not a fixed setting. */
   controlAccount: AccountingTradeGLAccountRef;
+  /** The items on the document, each with its own account. Empty on documents made before items
+   *  existed — read those as one item from `offsetGlAccount`, `subtotalAmount` and `costCentre`. */
+  lines: {
+    id: string;
+    sequence: number;
+    glAccountId: string;
+    glAccount: AccountingTradeGLAccountRef;
+    amount: string;
+    quantity: string | null;
+    unitPrice: string | null;
+    description: string | null;
+    costCentreId: string | null;
+    costCentre: AccountingTradeGLAccountRef | null;
+  }[];
   /** Present only when the document's Rule split tax onto its own account(s); each
    *  entry's account isn't enriched server-side, so the panel resolves it against the
    *  GL account list. */
-  taxBreakdown: { glAccountId: string; taxTypeId: string; amount: string }[];
+  taxBreakdown: {
+    glAccountId: string;
+    taxTypeId: string;
+    amount: string;
+    /** Absent on documents made before deductions and charges existed — those are all taxes. */
+    kind?: 'TAX' | 'DEDUCTION' | 'CHARGE';
+    description?: string;
+    /** The side the line posts to; absent on older documents, where it follows the offset. */
+    direction?: 'DR' | 'CR';
+  }[];
   postedJournalEntry: AccountingTradeJournalRef | null;
   reversalJournalEntry: AccountingTradeJournalRef | null;
   originalDocument: AccountingTradeOriginalDocumentRef | null;
@@ -1008,26 +1142,123 @@ export interface QueryTradeDocumentsParams {
   limit?: number;
 }
 
+/** A tax added on a bill or invoice form: the server works the amount out from the tax type. */
+export interface DocumentTaxPayload {
+  taxTypeId: string;
+  glAccountId: string;
+}
+
+/** A deduction (reduces what is owed) or a charge (adds to it) typed on a bill or invoice form. */
+export interface DocumentAdjustmentPayload {
+  kind: 'DEDUCTION' | 'CHARGE';
+  glAccountId: string;
+  amount: number;
+  description?: string;
+}
+
+/** One item on a bill or invoice. */
+export interface DocumentLinePayload {
+  /** Inside the rule's scope; leave out when the rule fixes one account. */
+  glAccountId?: string;
+  amount: number;
+  quantity?: number;
+  unitPrice?: number;
+  description?: string;
+  costCentreId?: string;
+}
+
 export interface CreateTradeInvoicePayload {
   partyId: string;
   documentDate: string;
   dueDate?: string;
   currency: string;
-  /** The subtotal (quantity × unitPrice, rounded to 2 decimals), before any tax lines the
-   *  rule adds on top. */
-  amount: number;
+  /** The subtotal (quantity × unitPrice, rounded to 2 decimals), before any taxes, deductions
+   *  or charges. Required unless `lines` is sent, which makes it their sum. */
+  amount?: number;
+  /** The items on the document, each with its own account, amount and cost centre. */
+  lines?: DocumentLinePayload[];
   quantity?: number;
   unitPrice?: number;
   exchangeRate?: number;
   /** The Receivable/Payable-category Transaction Type driving this document — its
    *  Rule resolves the offset account and any tax lines. A Rule must exist for it. */
   transactionTypeId: string;
+  /** Required when the rule scopes its main line to a category or classification: the
+   *  account picked on the form, which the backend re-checks against that scope. */
+  offsetGlAccountId?: string;
   /** Which of the Rule's Deduction (tax) lines to apply, by TaxType id. */
   selectedTaxTypeIds?: string[];
+  /** Taxes, deductions and charges added on the form. The total is the amount, plus taxes and
+   *  charges, less deductions. */
+  taxes?: DocumentTaxPayload[];
+  adjustments?: DocumentAdjustmentPayload[];
   /** Optional active cost centre (department) — tags the offset (P&L) line, not the AR/AP or tax lines. */
   costCentreId?: string;
   description?: string;
   externalReference?: string;
+}
+
+export type PaymentRequestStatus = 'PENDING' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
+
+/** A request from another module (e.g. Marketing) to record a client's payment against an invoice. */
+export interface PaymentRequest {
+  id: string;
+  status: PaymentRequestStatus;
+  sourceModule: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  entity: { id: string; name: string; code: string } | null;
+  amount: string;
+  currency: string;
+  /** YYYY-MM-DD */
+  paymentDate: string;
+  reference: string | null;
+  note: string | null;
+  requestedByUserId: string;
+  requestedByName: string | null;
+  receiptId: string | null;
+  receiptNumber: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  rejectedAt: string | null;
+  cancelledAt: string | null;
+}
+
+/** What the accountant chooses when recording a requested payment; the amount is the request's. */
+export interface CompletePaymentRequestPayload {
+  cashAccountId: string;
+  settlementMethod: AccountingCashbookSettlementMethod;
+  receiptDate: string;
+}
+
+/** Why a draft is being turned down. Kept on the record and shown to whoever raised it. */
+export interface RejectDraftPayload {
+  reason: string;
+}
+
+/** What can still be changed on a draft invoice - the amount, quantity, unit price, customer and
+ *  transaction type are fixed when it is raised. */
+export interface UpdateInvoiceDraftPayload {
+  documentDate?: string;
+  dueDate?: string;
+  /** Null clears the cost centre. */
+  costCentreId?: string | null;
+  description?: string;
+  externalReference?: string;
+}
+
+/** What can still be changed on a draft direct receipt or payment. Its amount only changes by
+ *  replacing its `lines` (and then equals their sum). */
+export interface UpdateCashbookDraftPayload {
+  transactionDate?: string;
+  cashAccountId?: string;
+  settlementMethod?: AccountingCashbookSettlementMethod;
+  offsetGlAccountId?: string;
+  lines?: CreateCashbookEntryLinePayload[];
+  reference?: string;
+  externalReference?: string;
+  description?: string;
 }
 
 export interface ReverseTradeDocumentPayload {
@@ -1040,6 +1271,21 @@ export interface AccountingTradeDocumentBalance {
   originalAmount: string;
   appliedSettlements: string;
   appliedCreditNotes: string;
+  /** Each credit/debit note applied, with the transaction type it was raised under. */
+  appliedNotes: {
+    allocationId: string;
+    creditNoteId: string | null;
+    documentNumber: string | null;
+    transactionType: string | null;
+    amount: string;
+  }[];
+  /** Each receipt/payment applied, so it can be opened from the invoice or bill. */
+  appliedSettlementDetails: {
+    allocationId: string;
+    settlementId: string | null;
+    settlementNumber: string | null;
+    amount: string;
+  }[];
   outstandingAmount: string;
   paymentState: AccountingTradeDocumentPaymentState;
 }
@@ -1051,6 +1297,8 @@ export interface AccountingCurrencyTotal {
 
 export interface AccountsReceivableSummary {
   outstandingByCurrency: AccountingCurrencyTotal[];
+  /** Still unpaid from invoices raised in the requested window; empty without a window. */
+  raisedInPeriodByCurrency: AccountingCurrencyTotal[];
   overdueInvoices: number;
   dueThisWeek: number;
   collectedMtdByCurrency: AccountingCurrencyTotal[];
@@ -1058,6 +1306,8 @@ export interface AccountsReceivableSummary {
 
 export interface AccountsPayableSummary {
   outstandingByCurrency: AccountingCurrencyTotal[];
+  /** Still unpaid from bills raised in the requested window; empty without a window. */
+  raisedInPeriodByCurrency: AccountingCurrencyTotal[];
   overdueInvoices: number;
   dueThisWeek: number;
   pendingApproval: number;
@@ -1068,8 +1318,11 @@ export interface CreateTradeCreditNotePayload {
   partyId: string;
   documentDate: string;
   currency: string;
-  amount: number;
-  /** Manual path only — omitted when a linked `transactionTypeId` drives the posting. */
+  /** Required unless `lines` is sent (a Rule-driven note). */
+  amount?: number;
+  lines?: DocumentLinePayload[];
+  /** Manual path: the offset account. Linked path: only when the rule scopes its main line,
+   *  the account picked within that scope. */
   offsetGlAccountId?: string;
   /** Posts to the AR (Receivable) or AP (Payable) account, whichever this side is —
    *  manually picked on the manual path only. */
@@ -1080,6 +1333,8 @@ export interface CreateTradeCreditNotePayload {
   quantity?: number;
   unitPrice?: number;
   selectedTaxTypeIds?: string[];
+  taxes?: DocumentTaxPayload[];
+  adjustments?: DocumentAdjustmentPayload[];
   costCentreId?: string;
   originalDocumentId?: string;
   description?: string;
@@ -1104,6 +1359,9 @@ export interface AccountingTradeSettlement {
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set while the receipt or payment is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
   reversalOfSettlementId: string | null;
   party: AccountingTradePartyRef;
   cashbookTransaction: {
@@ -1112,6 +1370,14 @@ export interface AccountingTradeSettlement {
     reference: string | null;
     postedJournalEntryId: string | null;
     reversalJournalEntryId: string | null;
+    /** The cash entry that reverses this one, while the receipt or payment is reversed. */
+    reversalTransaction?: {
+      id: string;
+      status: string;
+      reference: string | null;
+      transactionNumber: string | null;
+      transactionDate: string;
+    } | null;
   };
 }
 
@@ -1127,6 +1393,15 @@ export interface QueryTradeSettlementsParams {
   limit?: number;
 }
 
+/** A deduction (reduces the cash that moves) or charge (adds to it) taken when a document is
+ *  settled. The form works any percentage out; the API takes the amount. */
+export interface SettlementAdjustmentPayload {
+  kind: RuleLineSettlementKind;
+  glAccountId: string;
+  amount: number;
+  description?: string;
+}
+
 export interface CreateTradeSettlementPayload {
   partyId: string;
   /** The posted invoice/bill this settlement is being recorded to pay. The settlement
@@ -1140,6 +1415,9 @@ export interface CreateTradeSettlementPayload {
   reference?: string;
   description?: string;
   exchangeRate?: number;
+  /** `amount` is what is settled against the document; the cash that moves is that amount less
+   *  deductions plus charges. */
+  adjustments?: SettlementAdjustmentPayload[];
 }
 
 export type AccountingTradeAllocationSource = 'RECEIPT' | 'PAYMENT' | 'CREDIT_NOTE';
@@ -1234,7 +1512,7 @@ export interface UpdateCashAccountPayload extends Partial<CreateCashAccountPaylo
 
 export type CashbookTransactionType = 'RECEIPT' | 'PAYMENT' | 'TRANSFER' | 'CHARGE' | 'ADJUSTMENT';
 export type CashbookDirection = 'INFLOW' | 'OUTFLOW' | 'TRANSFER';
-export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+export type CashbookTransactionStatus = 'DRAFT' | 'POSTED' | 'REVERSED' | 'REJECTED' | 'VOIDED';
 export type AccountingCashbookSettlementMethod =
   | 'BANK_TRANSFER'
   | 'CHEQUE'
@@ -1282,6 +1560,9 @@ export interface CashbookTransaction {
    *  (e.g. RCPT26-00001). Null for older rows and non-transaction cashbook entries. */
   transactionNumber: string | null;
   amount: string;
+  /** Set when a single-account entry was keyed as quantity × unit price. */
+  quantity: string | null;
+  unitPrice: string | null;
   currency: string;
   transactionDate: string;
   settlementMethod: AccountingCashbookSettlementMethod;
@@ -1308,17 +1589,56 @@ export interface CashbookTransaction {
   updatedAt: string;
   postedAt: string | null;
   reversedAt: string | null;
+  /** Set when a draft was turned down - it never posts, and the reason is kept. */
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  /** Set while the entry is voided (it then lives in the archive). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  /** Set on a voided reversal: the entry it reversed, kept so a restore can put the link back. */
+  voidedReversalOfTransactionId?: string | null;
   postedJournalEntryId: string | null;
   reversalJournalEntryId: string | null;
   reversalOfTransactionId: string | null;
+  /** The customer receipt or vendor payment this entry settles, when it does. */
+  receivableReceipt?: { id: string } | null;
+  payablePayment?: { id: string } | null;
   cashAccount: CashbookAccountRef;
   destinationCashAccount: CashbookAccountRef | null;
   offsetGlAccount: CashbookGLAccountRef | null;
   offsetSubledgerAccount: (CashbookGLAccountRef & { type: string }) | null;
+  /** The accounts the entry posts to. `amount` is the net cash: items + charges − deductions.
+   *  Empty on entries made before lines existed — read those as one item from `offsetGlAccount`. */
+  lines: CashbookTransactionLine[];
   postedJournalEntry: CashbookJournalRef | null;
   reversalJournalEntry: CashbookJournalRef | null;
   reversalOfTransaction: CashbookTransactionRef | null;
   reversalTransaction: CashbookTransactionRef | null;
+}
+
+/** ITEM is what the entry is for; a DEDUCTION (discount, withholding tax) takes away from the cash
+ *  that moves, a CHARGE (input VAT, bank charge) adds to it. */
+export type CashbookLineKind = 'ITEM' | 'DEDUCTION' | 'CHARGE';
+
+export interface CashbookTransactionLine {
+  id: string;
+  sequence: number;
+  kind: CashbookLineKind;
+  glAccountId: string;
+  glAccount: CashbookGLAccountRef;
+  amount: string;
+  quantity: string | null;
+  unitPrice: string | null;
+  description: string | null;
+}
+
+export interface CreateCashbookEntryLinePayload {
+  kind?: CashbookLineKind;
+  glAccountId: string;
+  amount: number;
+  quantity?: number;
+  unitPrice?: number;
+  description?: string;
 }
 
 export interface QueryCashbookParams {
@@ -1326,6 +1646,8 @@ export interface QueryCashbookParams {
   transactionType?: CashbookTransactionType;
   status?: CashbookTransactionStatus;
   currency?: string;
+  /** Only entries that name this entity. */
+  counterpartyId?: string;
   fromDate?: string;
   toDate?: string;
   page?: number;
@@ -1336,8 +1658,9 @@ export interface CreateCashbookEntryPayload {
   cashAccountId: string;
   /** The Transaction Type the entry is made under — its code builds the transaction number. */
   transactionTypeId?: string;
-  /** quantity × unitPrice, rounded to 2 decimals. */
-  amount: number;
+  /** quantity × unitPrice, rounded to 2 decimals. Send this with `offsetGlAccountId`, or `lines`
+   *  instead — the entry amount is then the sum of the lines. */
+  amount?: number;
   quantity?: number;
   unitPrice?: number;
   currency: string;
@@ -1348,7 +1671,9 @@ export interface CreateCashbookEntryPayload {
   counterpartyId?: string;
   externalReference?: string;
   description: string;
-  offsetGlAccountId: string;
+  offsetGlAccountId?: string;
+  /** Post to several accounts against one cash line. */
+  lines?: CreateCashbookEntryLinePayload[];
   offsetSubledgerAccountId?: string;
   exchangeRate?: number;
 }
@@ -1617,6 +1942,7 @@ export interface AccountClassification {
   code: string;
   name: string;
   category: GLAccountCategory;
+  description: string | null;
   displayOrder: number;
   isSystemTemplate: boolean;
   isActive: boolean;
@@ -1630,6 +1956,7 @@ export interface CreateAccountClassificationPayload {
   code: string;
   name: string;
   category: GLAccountCategory;
+  description?: string;
   displayOrder?: number;
   isSystemTemplate?: boolean;
   cashFlowCategory?: CashFlowCategory;
@@ -1661,6 +1988,7 @@ export interface AccountGroup {
     category: GLAccountCategory;
     cashFlowCategory: CashFlowCategory | null;
   };
+  description: string | null;
   displayOrder: number;
   isActive: boolean;
   /** Overrides the classification's cash-flow default for every account in this group. */
@@ -1673,6 +2001,7 @@ export interface CreateAccountGroupPayload {
   classificationId: string;
   code: string;
   name: string;
+  description?: string;
   displayOrder?: number;
   cashFlowCategory?: CashFlowCategory;
 }
@@ -1828,3 +2157,92 @@ export interface UpdatePostingRulePayload {
 
 export type CreatePostingRuleLinePayload = PostingRuleLineInput;
 export type UpdatePostingRuleLinePayload = Partial<PostingRuleLineInput>;
+
+/** What is left to set up before a module can raise transactions in Accounting. */
+export type SourceSetupReason =
+  | 'SOURCE_NOT_LINKED'
+  | 'NO_BASE_CURRENCY'
+  | 'NO_TRANSACTION_TYPES'
+  | 'NO_ENTITY_TYPE';
+
+export type SourceTypeSetup =
+  | { supported: false }
+  | {
+      supported: true;
+      module: SourceModule;
+      sourceName: string;
+      linked: boolean;
+      baseCurrency: string | null;
+      /** Entity types named on the usable linked transaction types - what the module's form offers. */
+      entityTypes: { id: string; name: string }[];
+      /** Every transaction type linked to the source, and why an unusable one cannot be used. */
+      transactionTypes: { id: string; name: string; usable: boolean; problem: string | null }[];
+      ready: boolean;
+      reason: SourceSetupReason | null;
+    };
+
+/* ---- The archive: voided entries of every kind ---- */
+
+export type ArchiveKind =
+  | 'JOURNAL'
+  | 'CASHBOOK'
+  | 'INVOICE'
+  | 'CREDIT_NOTE'
+  | 'RECEIPT'
+  | 'BILL'
+  | 'DEBIT_NOTE'
+  | 'PAYMENT';
+
+export interface ArchiveItem {
+  kind: ArchiveKind;
+  id: string;
+  number: string;
+  date: string;
+  amount: string | null;
+  currency: string | null;
+  party: string | null;
+  description: string | null;
+  voidedAt: string | null;
+  voidedByUserId: string | null;
+  voidReason: string | null;
+  /** True while the entry's period is open - the only time it can be restored. */
+  restorable: boolean;
+}
+
+export interface ArchiveListResult {
+  items: ArchiveItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface QueryArchiveParams {
+  kind?: ArchiveKind;
+  from?: string;
+  to?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export type TransactionsPageType = 'RECEIVABLE' | 'PAYABLE' | 'CASHBOOK' | 'TRANSFER';
+
+export interface QueryTransactionsParams {
+  type?: TransactionsPageType;
+  status?: string;
+  search?: string;
+  /** Only this customer/vendor/entity. */
+  partyId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export type TransactionsPageItem =
+  | { kind: 'document'; document: AccountingTradeDocument }
+  | { kind: 'cashbook'; transaction: CashbookTransaction }
+  /** A receipt or payment made against invoices or bills, with the ones it is applied to. */
+  | {
+      kind: 'settlement';
+      settlement: AccountingTradeSettlement;
+      linkedDocuments: { id: string; documentNumber: string }[];
+    };

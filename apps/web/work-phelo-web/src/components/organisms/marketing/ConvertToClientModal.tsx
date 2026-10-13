@@ -5,8 +5,15 @@ import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
-import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
-import { useConvertProspectToClient } from '@/hooks/marketing/useClients';
+import { BillingSection } from '@/components/organisms/marketing/BillingSection';
+import {
+  ClientBillingErrors,
+  ClientBillingValues,
+  EMPTY_BILLING,
+  toBillingInput,
+  validateBilling,
+} from '@/components/molecules/marketing/ClientBillingFields';
+import { useBillingOptions, useConvertProspectToClient } from '@/hooks/marketing/useClients';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
 import type { ProspectDetail } from '@/types/marketing';
@@ -20,19 +27,41 @@ interface ConvertToClientModalProps {
 export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToClientModalProps) {
   const toast = useToast();
   const convert = useConvertProspectToClient(prospect.id);
-  const [billable, setBillable] = useState(false);
+  const [raiseBilling, setRaiseBilling] = useState(false);
+  const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
+  const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
   const [converted, setConverted] = useState(false);
+  // Generated up front, so trying again after a failure reuses the same client (and Accounting entity).
+  const [clientId] = useState(() => crypto.randomUUID());
+  const { data: billingOptions } = useBillingOptions();
+  const billingProductOptions = prospect.products.map((p) => ({
+    value: p.product.id,
+    label: p.product.name,
+  }));
   const contact = prospect.contacts.find((c) => c.isPrimary) ?? prospect.contacts[0];
 
   function handleClose() {
-    setBillable(false);
+    setRaiseBilling(false);
+    setBilling(EMPTY_BILLING);
+    setBillingErrors({});
     setConverted(false);
     onClose();
   }
 
   function handleConfirm() {
+    if (raiseBilling && billingOptions) {
+      const next = validateBilling(billing, billingOptions);
+      setBillingErrors(next);
+      if (Object.keys(next).length > 0) return;
+    }
+
     convert.mutate(
-      { isBillable: billable },
+      {
+        clientId,
+        ...(raiseBilling && billingOptions
+          ? { billing: toBillingInput(billing, billingOptions) }
+          : {}),
+      },
       {
         onSuccess: () => setConverted(true),
         onError: (error) => toast.error(apiErrorMessage(error, 'Failed to convert prospect')),
@@ -46,7 +75,7 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
         isOpen={isOpen}
         onClose={handleClose}
         title="Converted to Client"
-        message={`${prospect.companyName} is now a client${billable ? ' and marked as billable' : ''}.`}
+        message={`${prospect.companyName} is now a client${raiseBilling ? ', and its first transaction was sent to Accounting' : ''}.`}
       />
     );
   }
@@ -82,11 +111,13 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
         </div>
 
         <div className="border-t border-gray-100 pt-4">
-          <ToggleRow
-            label="Make billable"
-            description="Mark this client as billable once converted."
-            enabled={billable}
-            onChange={setBillable}
+          <BillingSection
+            enabled={raiseBilling}
+            onEnabledChange={setRaiseBilling}
+            values={billing}
+            onValuesChange={setBilling}
+            errors={billingErrors}
+            productOptions={billingProductOptions}
           />
         </div>
       </div>

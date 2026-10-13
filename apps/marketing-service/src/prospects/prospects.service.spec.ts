@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import {
   MarketingProspectFollowUpStatus,
   Prisma,
 } from '../../prisma/generated/client';
+import { AssigneesService } from '../assignees/assignees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { CreateProspectDto } from './dto/create-prospect.dto';
@@ -200,6 +202,12 @@ describe('ProspectsService', () => {
 
   let prisma: ReturnType<typeof makePrisma>;
   let service: ProspectsService;
+  let assignees: {
+    forCreate: jest.Mock;
+    forUpdate: jest.Mock;
+    nameFor: jest.Mock;
+    namesFor: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = makePrisma();
@@ -239,11 +247,52 @@ describe('ProspectsService', () => {
     prisma.marketingProspectFollowUp.updateMany.mockResolvedValue({ count: 1 });
     prisma.marketingPipelineStage.findMany.mockResolvedValue([]);
     prisma.marketingCrmSettingOption.findMany.mockResolvedValue([]);
-    service = new ProspectsService(prisma as unknown as PrismaService);
+    assignees = {
+      forCreate: jest
+        .fn()
+        .mockImplementation((u: RequestUser, _r: string, requested?: string) =>
+          Promise.resolve(requested ?? u.id),
+        ),
+      forUpdate: jest.fn().mockResolvedValue(null),
+      nameFor: jest.fn().mockResolvedValue('Ada Lovelace'),
+      namesFor: jest
+        .fn()
+        .mockResolvedValue(new Map([['user-1', 'Ada Lovelace']])),
+    };
+    service = new ProspectsService(
+      prisma as unknown as PrismaService,
+      assignees as unknown as AssigneesService,
+    );
   });
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('assigns the prospect to whoever the assignment rules choose', async () => {
+    assignees.forCreate.mockResolvedValue('user-9');
+
+    await service.create(user, { ...makeDto(), assignedUserId: 'user-9' });
+
+    expect(assignees.forCreate).toHaveBeenCalledWith(
+      user,
+      'prospect',
+      'user-9',
+    );
+    expect(prisma.marketingProspect.create.mock.calls[0][0].data).toMatchObject(
+      {
+        assignedUserId: 'user-9',
+      },
+    );
+  });
+
+  it('creates nothing when the assignment is refused', async () => {
+    assignees.forCreate.mockRejectedValue(new ForbiddenException());
+
+    await expect(
+      service.create(user, { ...makeDto(), assignedUserId: 'user-9' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.marketingProspect.create).not.toHaveBeenCalled();
   });
 
   it('creates a tenant-scoped prospect aggregate in one transaction', async () => {
@@ -499,6 +548,8 @@ describe('ProspectsService', () => {
     it('allows the owner to view complete prospect details', async () => {
       const result = await service.findOne(user, 'prospect-a');
 
+      expect(result.assignedUserName).toBe('Ada Lovelace');
+
       expect(prisma.marketingProspect.findFirst).toHaveBeenCalledWith({
         where: {
           id: 'prospect-a',
@@ -541,6 +592,7 @@ describe('ProspectsService', () => {
         businessType: { id: 'business-type-1', name: 'Enterprise' },
         sourceType: { id: 'source-type-1', name: 'Referral' },
         assignedUserId: 'user-1',
+        assignedUserName: 'Ada Lovelace',
         clientId: null,
         location: {
           label: 'Accra, Ghana',
@@ -1042,6 +1094,50 @@ describe('ProspectsService', () => {
     });
   });
 
+  describe('update assignment', () => {
+    it('moves the prospect to the new assignee and still shows the result to the editor', async () => {
+      const existing = makeExistingProspect();
+      prisma.marketingProspect.findFirst.mockResolvedValue(existing);
+      assignees.forUpdate.mockResolvedValue('user-9');
+
+      await service.update(user, 'prospect-a', { assignedUserId: 'user-9' });
+
+      expect(assignees.forUpdate).toHaveBeenCalledWith(
+        user,
+        'prospect',
+        existing.assignedUserId,
+        'user-9',
+      );
+      expect(prisma.marketingProspect.update).toHaveBeenCalledWith({
+        where: { id: 'prospect-a' },
+        data: expect.objectContaining({ assignedUserId: 'user-9' }),
+      });
+    });
+
+    it('changes nothing when the assignee is not changing', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(
+        makeExistingProspect(),
+      );
+
+      await service.update(user, 'prospect-a', { assignedUserId: 'user-1' });
+
+      const data = prisma.marketingProspect.update.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('assignedUserId');
+    });
+
+    it('does not update anything when the assignment is refused', async () => {
+      prisma.marketingProspect.findFirst.mockResolvedValue(
+        makeExistingProspect(),
+      );
+      assignees.forUpdate.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.update(user, 'prospect-a', { assignedUserId: 'user-9' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.marketingProspect.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('update', () => {
     it('updates an assigned prospect aggregate and returns the detail response shape', async () => {
       const existing = makeExistingProspect();
@@ -1326,6 +1422,22 @@ describe('ProspectsService', () => {
 
       expect(prisma.marketingCrmSettingOption.findFirst).not.toHaveBeenCalled();
       expect(prisma.marketingPipelineStage.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the phone and email of the primary contact when they are null', async () => {
+      const existing = makeExistingProspect();
+      prisma.marketingProspect.findFirst
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(existing);
+
+      await service.update(user, 'prospect-a', {
+        primaryContact: { phone: null, email: null },
+      });
+
+      expect(prisma.marketingProspectContact.update).toHaveBeenCalledWith({
+        where: { id: 'contact-primary' },
+        data: { phone: null, email: null },
+      });
     });
 
     it('propagates transaction failures so aggregate child updates roll back', async () => {
@@ -1744,6 +1856,7 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-a',
           _max: { occurredAt: new Date('2026-10-01T10:30:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
       prisma.marketingCrmSettingOption.findMany.mockResolvedValueOnce([
@@ -1895,6 +2008,7 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-a',
           _max: { occurredAt: new Date('2026-10-01T10:30:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
 
@@ -2108,6 +2222,7 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-a',
           _max: { occurredAt: new Date('2026-09-30T10:00:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
 
@@ -2151,10 +2266,12 @@ describe('ProspectsService', () => {
         {
           prospectId: 'prospect-explicit',
           _max: { occurredAt: new Date('2026-09-29T10:00:00.000Z') },
+          _count: { _all: 1 },
         },
         {
           prospectId: 'prospect-default',
           _max: { occurredAt: new Date('2026-09-30T10:00:00.000Z') },
+          _count: { _all: 1 },
         },
       ]);
 
@@ -2281,6 +2398,7 @@ describe('ProspectsService', () => {
           _max: {
             occurredAt: new Date('2026-09-29T11:00:00.000Z'),
           },
+          _count: { _all: 3 },
         },
       ]);
       prisma.marketingPipelineStage.findMany.mockResolvedValue([
@@ -2421,8 +2539,10 @@ describe('ProspectsService', () => {
             },
             progress: 60,
             lastInteractionDate: new Date('2026-09-29T11:00:00.000Z'),
+            interactionCount: 3,
             expectedCloseDate: new Date('2026-10-15T00:00:00.000Z'),
             assignedUserId: 'user-1',
+            assignedUserName: 'Ada Lovelace',
             createdAt: new Date('2026-09-28T10:00:00.000Z'),
           },
         ],

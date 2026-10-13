@@ -228,104 +228,115 @@ function BranchFormInner({ isOpen, onClose, branch, employees }: BranchFormPanel
           </div>
         }
       >
-        <FormField
-          label="Branch Name"
-          registration={form.register('name', { required: 'Name is required' })}
-          error={form.formState.errors.name}
-          placeholder="e.g. Accra Central"
-        />
-        <FormField
-          label="Branch Code"
-          registration={form.register('code')}
-          placeholder="e.g. BR-001"
-        />
-
-        {/* Location */}
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Location</p>
-        <Controller
-          control={form.control}
-          name="country"
-          render={({ field }) => (
-            <SearchSelect
-              label="Country"
-              placeholder="Select country"
-              options={COUNTRY_OPTIONS}
-              value={field.value}
-              onChange={(v) => {
-                field.onChange(v);
-                form.setValue('region', '');
-              }}
+        <div className="flex flex-col gap-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+            Branch Details
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4">
+            <FormField
+              label="Branch Name"
+              registration={form.register('name', { required: 'Name is required' })}
+              error={form.formState.errors.name}
+              placeholder="e.g. Accra Central"
             />
-          )}
-        />
-        <FormField
-          label="Street Address"
-          registration={form.register('address')}
-          placeholder="e.g. 12 Independence Ave"
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="City" registration={form.register('city')} placeholder="e.g. Accra" />
-          {regionOptions.length > 0 ? (
+            <FormField
+              label="Branch Code"
+              registration={form.register('code')}
+              placeholder="e.g. BR-001"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Location</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Controller
               control={form.control}
-              name="region"
+              name="country"
               render={({ field }) => (
                 <SearchSelect
-                  label="Region"
-                  placeholder="Select region"
-                  options={regionOptions}
+                  label="Country"
+                  placeholder="Select country"
+                  options={COUNTRY_OPTIONS}
                   value={field.value}
-                  onChange={(v) => field.onChange(v)}
+                  onChange={(v) => {
+                    field.onChange(v);
+                    form.setValue('region', '');
+                  }}
                 />
               )}
             />
-          ) : (
-            <FormField
-              label="Region / State"
-              registration={form.register('region')}
-              placeholder="e.g. Greater Accra"
-            />
-          )}
+            {regionOptions.length > 0 ? (
+              <Controller
+                control={form.control}
+                name="region"
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Region"
+                    placeholder="Select region"
+                    options={regionOptions}
+                    value={field.value}
+                    onChange={(v) => field.onChange(v)}
+                  />
+                )}
+              />
+            ) : (
+              <FormField
+                label="Region / State"
+                registration={form.register('region')}
+                placeholder="e.g. Greater Accra"
+              />
+            )}
+            <FormField label="City" registration={form.register('city')} placeholder="e.g. Accra" />
+          </div>
+          <FormField
+            label="Street Address"
+            registration={form.register('address')}
+            placeholder="e.g. 12 Independence Ave"
+          />
         </div>
 
-        {/* Contact */}
-        <Controller
-          control={form.control}
-          name="phone"
-          render={({ field, fieldState }) => (
-            <PhoneInput
-              label="Phone"
-              value={field.value}
-              onChange={field.onChange}
-              error={fieldState.error?.message}
-              placeholder="30 000 0000"
+        <div className="flex flex-col gap-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Contact</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Controller
+              control={form.control}
+              name="phone"
+              render={({ field, fieldState }) => (
+                <PhoneInput
+                  label="Phone"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message}
+                  placeholder="30 000 0000"
+                />
+              )}
             />
-          )}
-        />
-        <FormField
-          label="Email"
-          registration={form.register('email', {
-            pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email address' },
-          })}
-          error={form.formState.errors.email}
-          placeholder="e.g. accra@company.com"
-          type="email"
-        />
-
-        {/* Manager — controlled via Controller since SearchSelect isn't a native input */}
-        <Controller
-          control={form.control}
-          name="managerId"
-          render={({ field }) => (
-            <SearchSelect
-              label="Branch Manager"
-              placeholder="Select manager"
-              value={field.value}
-              onChange={field.onChange}
-              options={managerOptions}
+            <FormField
+              label="Email"
+              registration={form.register('email', {
+                pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email address' },
+              })}
+              error={form.formState.errors.email}
+              placeholder="e.g. accra@company.com"
+              type="email"
             />
-          )}
-        />
+            {/* Manager — controlled via Controller since SearchSelect isn't a native input */}
+            <Controller
+              control={form.control}
+              name="managerId"
+              render={({ field }) => (
+                <SearchSelect
+                  label="Branch Manager"
+                  placeholder="Select manager"
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={managerOptions}
+                />
+              )}
+            />
+          </div>
+        </div>
 
         <div className="flex items-center gap-3">
           <input

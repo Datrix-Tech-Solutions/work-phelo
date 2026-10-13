@@ -9,6 +9,7 @@ import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { extractError } from '@/lib/extractError';
 import { Employee, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
@@ -119,6 +120,8 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
 
   const { mutateAsync: createEmployee, isPending } = useCreateEmployee();
 
+  const entry = useMultiEntryPanel({ isOpen, onStop: onClose, onContinue: () => {} });
+
   const onSubmit = async (d: InviteForm) => {
     const normalized = { ...d };
     if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
@@ -136,6 +139,8 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
           permissionSetId: selectedPermissionSetId,
         });
       }
+      // The form is cleared as soon as the invite goes out, so Stop and Continue both
+      // start from a blank form.
       reset({
         firstName: '',
         lastName: '',
@@ -154,8 +159,18 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
         compensationType: 'SALARY',
       });
       setSelectedPermissionSetId('');
-      onClose();
-      onSuccess(`${d.firstName} ${d.lastName}`);
+      const fullName = `${d.firstName} ${d.lastName}`;
+      // Locked: the panel's Continue / Stop prompt replaces the directory's success modal.
+      entry.finishSave(
+        {
+          title: 'Employee Invited!',
+          message: `An invite has been sent to ${fullName}. They will receive an email to set up their account.`,
+        },
+        () => {
+          onClose();
+          onSuccess(fullName);
+        },
+      );
     } catch (err) {
       toast.error(extractError(err, 'Failed to invite employee'));
     }
@@ -165,6 +180,7 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
+      {...entry.panelProps}
       title="Add New Employee"
       description="Add a new employee to onboard them onto WorkPhelo."
       footer={
@@ -187,44 +203,48 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Personal Information
         </p>
-        <FormField
-          label="First Name"
-          registration={register('firstName', { required: 'Required' })}
-          error={errors.firstName}
-          placeholder="eg; Kofi"
-        />
-        <FormField
-          label="Last Name"
-          registration={register('lastName', { required: 'Required' })}
-          error={errors.lastName}
-          placeholder="eg; Boateng"
-        />
-        <FormField
-          label="Work Email"
-          registration={register('email', {
-            required: 'Required',
-            pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
-          })}
-          error={errors.email}
-          type="email"
-          placeholder="eg; kofi@acmecorp.com"
-        />
-        <PhoneInput
-          label="Phone Number"
-          placeholder="00 000 0000"
-          value={phoneValue}
-          onChange={(v) => setValue('phone', v)}
-        />
-        <SearchSelect
-          label="Gender"
-          placeholder="Select gender"
-          value={genderValue}
-          onChange={(v) => setValue('gender', v)}
-          options={[
-            { value: 'MALE', label: 'Male' },
-            { value: 'FEMALE', label: 'Female' },
-          ]}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField
+            label="Last Name"
+            registration={register('lastName', { required: 'Required' })}
+            error={errors.lastName}
+            placeholder="eg; Boateng"
+          />
+          <FormField
+            label="First Name"
+            registration={register('firstName', { required: 'Required' })}
+            error={errors.firstName}
+            placeholder="eg; Kofi"
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <FormField
+            label="Work Email"
+            registration={register('email', {
+              required: 'Required',
+              pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
+            })}
+            error={errors.email}
+            type="email"
+            placeholder="eg; kofi@acmecorp.com"
+          />
+          <PhoneInput
+            label="Phone Number"
+            placeholder="00 000 0000"
+            value={phoneValue}
+            onChange={(v) => setValue('phone', v)}
+          />
+          <SearchSelect
+            label="Gender"
+            placeholder="Select gender"
+            value={genderValue}
+            onChange={(v) => setValue('gender', v)}
+            options={[
+              { value: 'MALE', label: 'Male' },
+              { value: 'FEMALE', label: 'Female' },
+            ]}
+          />
+        </div>
       </div>
 
       {/* Job Information */}
@@ -232,111 +252,119 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Job Information
         </p>
-        {departments.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <SearchSelect
-            label="Department"
-            placeholder="Select department"
-            value={deptFormValue}
-            onChange={(v) => setValue('departmentId', v)}
-            options={departments.map((d) => ({ value: d.id, label: d.name }))}
+            label="Reporting Manager"
+            placeholder="Select manager (optional)"
+            value={managerValue}
+            onChange={(v) => setValue('managerId', v)}
+            options={employees.map((e) => ({
+              value: e.id,
+              label: `${e.firstName} ${e.lastName}`,
+              sublabel: e.jobTitle,
+            }))}
           />
-        )}
+          {departments.length > 0 && (
+            <SearchSelect
+              label="Department"
+              placeholder="Select department"
+              value={deptFormValue}
+              onChange={(v) => setValue('departmentId', v)}
+              options={departments.map((d) => ({ value: d.id, label: d.name }))}
+            />
+          )}
+          <FormField
+            label="Job Title"
+            registration={register('jobTitle', { required: 'Required' })}
+            error={errors.jobTitle}
+            placeholder="eg; UI/UX Engineer"
+          />
+        </div>
         {branches.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <SearchSelect
+              label="Branch"
+              placeholder="Select branch (optional)"
+              value={branchFormValue}
+              onChange={(v) => setValue('branchId', v)}
+              options={branches.map((b) => ({ value: b.id, label: b.name }))}
+            />
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <SearchSelect
-            label="Branch"
-            placeholder="Select branch (optional)"
-            value={branchFormValue}
-            onChange={(v) => setValue('branchId', v)}
-            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+            label="Employment Type"
+            placeholder="Select employment type"
+            value={employmentTypeValue}
+            onChange={(v) => setValue('employmentType', v)}
+            options={[
+              { value: 'FULL_TIME', label: 'Full Time' },
+              { value: 'PART_TIME', label: 'Part Time' },
+              { value: 'CONTRACT', label: 'Contract' },
+              { value: 'INTERN', label: 'Intern' },
+            ]}
           />
-        )}
-        <FormField
-          label="Job Title"
-          registration={register('jobTitle', { required: 'Required' })}
-          error={errors.jobTitle}
-          placeholder="eg; UI/UX Engineer"
-        />
-        <SearchSelect
-          label="Reporting Manager"
-          placeholder="Select manager (optional)"
-          value={managerValue}
-          onChange={(v) => setValue('managerId', v)}
-          options={employees.map((e) => ({
-            value: e.id,
-            label: `${e.firstName} ${e.lastName}`,
-            sublabel: e.jobTitle,
-          }))}
-        />
-        <DatePicker
-          label="Date Hired"
-          value={hireDateValue}
-          onChange={(v) => setValue('hireDate', v, { shouldValidate: true })}
-          error={errors.hireDate?.message}
-          disableFuture
-        />
-        <SearchSelect
-          label="Employment Type"
-          placeholder="Select employment type"
-          value={employmentTypeValue}
-          onChange={(v) => setValue('employmentType', v)}
-          options={[
-            { value: 'FULL_TIME', label: 'Full Time' },
-            { value: 'PART_TIME', label: 'Part Time' },
-            { value: 'CONTRACT', label: 'Contract' },
-            { value: 'INTERN', label: 'Intern' },
-          ]}
-        />
-        {employmentTypeValue !== 'CONTRACT' && employmentTypeValue !== 'INTERN' && (
-          <MonthPicker
-            label="Probation End Date"
-            value={probationDateValue}
-            onChange={(v) => setValue('probationEndsAt', v)}
-            disablePast={true}
+          {permissionSetsRaw.length > 0 && (
+            <SearchSelect
+              label="Role"
+              placeholder="Select role"
+              value={selectedPermissionSetId}
+              onChange={setSelectedPermissionSetId}
+              options={permissionSetsRaw.map((s) => ({ value: s.id, label: s.name }))}
+            />
+          )}
+          <DatePicker
+            label="Date Hired"
+            value={hireDateValue}
+            onChange={(v) => setValue('hireDate', v, { shouldValidate: true })}
+            error={errors.hireDate?.message}
+            disableFuture
           />
-        )}
-        {(employmentTypeValue === 'CONTRACT' || employmentTypeValue === 'INTERN') && (
-          <MonthPicker
-            label={employmentTypeValue === 'INTERN' ? 'Internship End Date' : 'Contract End Date'}
-            value={contractDateValue}
-            onChange={(v) => setValue('contractEndDate', v)}
-            disablePast={true}
-          />
-        )}
-        {permissionSetsRaw.length > 0 && (
-          <SearchSelect
-            label="Roles"
-            placeholder="Select roles"
-            value={selectedPermissionSetId}
-            onChange={setSelectedPermissionSetId}
-            options={permissionSetsRaw.map((s) => ({ value: s.id, label: s.name }))}
-          />
-        )}
+          {employmentTypeValue !== 'CONTRACT' && employmentTypeValue !== 'INTERN' && (
+            <MonthPicker
+              label="Probation End Date"
+              value={probationDateValue}
+              onChange={(v) => setValue('probationEndsAt', v)}
+              disablePast={true}
+            />
+          )}
+          {(employmentTypeValue === 'CONTRACT' || employmentTypeValue === 'INTERN') && (
+            <MonthPicker
+              label={employmentTypeValue === 'INTERN' ? 'Internship End Date' : 'Contract End Date'}
+              value={contractDateValue}
+              onChange={(v) => setValue('contractEndDate', v)}
+              disablePast={true}
+            />
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Payroll Profile
         </p>
-        <SearchSelect
-          label="Compensation Type"
-          placeholder="Select compensation type"
-          value={compensationTypeValue}
-          onChange={(v) => setValue('compensationType', v as EmployeeCompensationType)}
-          options={[
-            { value: 'SALARY', label: 'Salary' },
-            { value: 'COMMISSION', label: 'Commission' },
-            { value: 'SALARY_PLUS_COMMISSION', label: 'Salary + Commission' },
-          ]}
-        />
-        {(compensationTypeValue === 'SALARY' ||
-          compensationTypeValue === 'SALARY_PLUS_COMMISSION') && (
-          <NumberField
-            label={`Basic Salary (${tenantCurrency})`}
-            value={basicSalaryValue ?? 0}
-            onChange={(n) => setValue('basicSalary', n === 0 ? undefined : n)}
-            placeholder="0.00"
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SearchSelect
+            label="Compensation Type"
+            placeholder="Select compensation type"
+            value={compensationTypeValue}
+            onChange={(v) => setValue('compensationType', v as EmployeeCompensationType)}
+            options={[
+              { value: 'SALARY', label: 'Salary' },
+              { value: 'COMMISSION', label: 'Commission' },
+              { value: 'SALARY_PLUS_COMMISSION', label: 'Salary + Commission' },
+            ]}
           />
-        )}
+          {(compensationTypeValue === 'SALARY' ||
+            compensationTypeValue === 'SALARY_PLUS_COMMISSION') && (
+            <NumberField
+              label={`Basic Salary (${tenantCurrency})`}
+              value={basicSalaryValue ?? 0}
+              onChange={(n) => setValue('basicSalary', n === 0 ? undefined : n)}
+              placeholder="0.00"
+            />
+          )}
+        </div>
       </div>
     </SidePanel>
   );

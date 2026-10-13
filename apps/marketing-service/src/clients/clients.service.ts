@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   MarketingClientProductStatus,
@@ -11,7 +12,10 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
+import { AssigneesService } from '../assignees/assignees.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClientBillingService } from './client-billing.service';
+import { ClientBillingDto } from './dto/billing.dto';
 import {
   AddClientProductDto,
   ConvertProspectToClientDto,
@@ -24,6 +28,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 const INVALID_REFERENCE_MESSAGE = 'Invalid client reference';
 const DUPLICATE_PRODUCT_MESSAGE =
   'A product or service can only be listed once per client';
+const PRODUCTS_AND_IDS_MESSAGE = 'Send either products or productIds, not both';
 const PRODUCT_EXISTS_MESSAGE =
   'This client already has that product or service';
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
@@ -33,6 +38,10 @@ const ALREADY_CONVERTED_MESSAGE = 'This prospect has already been converted';
 const NOT_CONVERTIBLE_MESSAGE =
   'Only prospects at 100% progress can be converted to a client';
 const CONTACT_NAME_REQUIRED_MESSAGE = 'A contact name is required';
+const INVALID_BILLING_PRODUCT_MESSAGE =
+  'The billing product must be one of the client’s products.';
+const HAS_BILLING_MESSAGE =
+  'This client has billing in Accounting and cannot be deleted.';
 
 type SettingReference = {
   id: string | null | undefined;
@@ -43,12 +52,16 @@ type NamedSettings = Map<string, { id: string; name: string }>;
 
 @Injectable()
 export class ClientsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billing: ClientBillingService,
+    private readonly assignees: AssigneesService,
+  ) {}
 
   async list(user: RequestUser, query: QueryClientsDto = {}) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const canViewAll = this.hasAll(
+    const canViewAll = this.hasPermission(
       user,
       MarketingCrmSettingsPermission.CLIENTS_VIEW_ALL,
     );
@@ -83,6 +96,11 @@ export class ClientsService {
       }),
     ]);
 
+    const achieved = await this.billing.totalsForClients(
+      user.tenantId,
+      clients.map((client) => client.id),
+    );
+
     const settings = await this.findSettingsByIds(user.tenantId, [
       ...clients.map((client) => client.businessTypeId),
       ...clients.flatMap((client) =>
@@ -92,6 +110,11 @@ export class ClientsService {
         client.products.map((product) => product.productId),
       ),
     ]);
+
+    const assigneeNames = await this.assignees.namesFor(
+      user.tenantId,
+      clients.map((client) => client.assignedUserId),
+    );
 
     return {
       data: clients.map((client) => {
@@ -108,6 +131,8 @@ export class ClientsService {
             : null,
           locationLabel: client.locationLabel,
           isBillable: client.isBillable,
+          hasAccountingEntity: Boolean(client.accountingEntityId),
+          achievedRevenue: achieved.get(client.id) ?? null,
           primaryContact: primary
             ? {
                 name: primary.name,
@@ -132,6 +157,7 @@ export class ClientsService {
             status: product.status,
           })),
           assignedUserId: client.assignedUserId,
+          assignedUserName: assigneeNames.get(client.assignedUserId) ?? null,
           convertedFromProspectId: client.convertedFromProspectId,
           createdAt: client.createdAt,
         };
@@ -144,15 +170,36 @@ export class ClientsService {
     return this.findClientDetail(
       user,
       id,
-      this.hasAll(user, MarketingCrmSettingsPermission.CLIENTS_VIEW_ALL),
+      this.hasPermission(user, MarketingCrmSettingsPermission.CLIENTS_VIEW_ALL),
     );
   }
 
   async create(user: RequestUser, dto: CreateClientDto) {
-    const productIds = dto.productIds ?? [];
+    const clientId = dto.id ?? randomUUID();
+    if (dto.id) {
+      // A retry of a create that already went through: hand back what exists.
+      const existing = await this.prisma.marketingClient.findFirst({
+        where: { id: dto.id, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (existing) return this.findClientDetail(user, existing.id, true);
+    }
+
+    if (dto.products?.length && dto.productIds?.length) {
+      throw new BadRequestException(PRODUCTS_AND_IDS_MESSAGE);
+    }
+    const productInputs: AddClientProductDto[] =
+      dto.products ??
+      (dto.productIds ?? []).map((productId) => ({ productId }));
+    const productIds = productInputs.map((p) => p.productId);
     if (new Set(productIds).size !== productIds.length) {
       throw new BadRequestException(DUPLICATE_PRODUCT_MESSAGE);
     }
+    const assignedUserId = await this.assignees.forCreate(
+      user,
+      'client',
+      dto.assignedUserId,
+    );
 
     await this.assertReferences(user.tenantId, [
       {
@@ -173,18 +220,31 @@ export class ClientsService {
       })),
     ]);
 
+    // Accounting first: if it cannot take the transaction, no client is created. If saving the
+    // client then fails, a retry with the same client id finds the same entity and draft.
+    const firstBilling = await this.sendFirstBilling(user, {
+      billing: dto.billing,
+      productIds,
+      clientId,
+      clientName: this.formatText(dto.companyName),
+      assignedUserId,
+    });
+
     const client = await this.prisma.marketingClient.create({
       data: {
+        id: clientId,
         tenantId: user.tenantId,
         companyName: this.formatText(dto.companyName),
         normalizedCompanyName: this.normalizeText(dto.companyName),
         businessTypeId: dto.businessTypeId ?? null,
         sourceTypeId: dto.sourceTypeId ?? null,
-        assignedUserId: user.id,
+        assignedUserId,
         locationLabel: this.formatText(dto.location.label),
         latitude: dto.location.latitude,
         longitude: dto.location.longitude,
-        isBillable: dto.isBillable ?? false,
+        isBillable: Boolean(firstBilling),
+        accountingEntityId: firstBilling?.created.entityId ?? null,
+        accountingEntityTypeId: firstBilling?.created.entityTypeId ?? null,
         createdByUserId: user.id,
         updatedByUserId: user.id,
         contacts: {
@@ -198,14 +258,28 @@ export class ClientsService {
           },
         },
         products: {
-          create: productIds.map((productId) => ({
+          create: productInputs.map((product) => ({
             tenantId: user.tenantId,
-            productId,
+            productId: product.productId,
+            ...this.newProductTerms(product),
           })),
         },
       },
       select: { id: true },
     });
+
+    if (firstBilling) {
+      await this.prisma.$transaction((tx) =>
+        this.billing.record(tx, user, {
+          clientId: client.id,
+          productId: firstBilling.billing.productId,
+          transactionId: firstBilling.created.transactionId,
+          state: firstBilling.created.state,
+          amount: firstBilling.billing.amount,
+          idempotencyKey: firstBilling.idempotencyKey,
+        }),
+      );
+    }
 
     return this.findClientDetail(user, client.id, true);
   }
@@ -215,7 +289,7 @@ export class ClientsService {
       throw new BadRequestException(EMPTY_PATCH_MESSAGE);
     }
 
-    const canEditAll = this.hasAll(
+    const canEditAll = this.hasPermission(
       user,
       MarketingCrmSettingsPermission.CLIENTS_EDIT_ALL,
     );
@@ -255,11 +329,19 @@ export class ClientsService {
       throw new BadRequestException(CONTACT_NAME_REQUIRED_MESSAGE);
     }
 
+    const newAssignee = await this.assignees.forUpdate(
+      user,
+      'client',
+      existing.assignedUserId,
+      dto.assignedUserId,
+    );
+
     await this.prisma.$transaction(async (tx) => {
       await tx.marketingClient.update({
         where: { id: existing.id },
         data: {
           updatedByUserId: user.id,
+          ...(newAssignee ? { assignedUserId: newAssignee } : {}),
           ...(dto.companyName !== undefined
             ? {
                 companyName: this.formatRequiredText(
@@ -274,9 +356,6 @@ export class ClientsService {
             : {}),
           ...(dto.sourceTypeId !== undefined
             ? { sourceTypeId: dto.sourceTypeId }
-            : {}),
-          ...(dto.isBillable !== undefined
-            ? { isBillable: dto.isBillable }
             : {}),
           ...(dto.location?.label !== undefined
             ? {
@@ -339,11 +418,12 @@ export class ClientsService {
       }
     });
 
-    return this.findClientDetail(user, id, canEditAll);
+    // Someone who just handed a record on can still see the result of their edit.
+    return this.findClientDetail(user, id, canEditAll || !!newAssignee);
   }
 
   async remove(user: RequestUser, id: string): Promise<void> {
-    const canDeleteAll = this.hasAll(
+    const canDeleteAll = this.hasPermission(
       user,
       MarketingCrmSettingsPermission.CLIENTS_DELETE_ALL,
     );
@@ -353,9 +433,13 @@ export class ClientsService {
         tenantId: user.tenantId,
         ...this.visibilityWhere(user, canDeleteAll),
       },
-      select: { id: true },
+      select: { id: true, accountingEntityId: true },
     });
     if (!existing) throw new NotFoundException('Client not found');
+    // Accounting keeps its postings, so a client that has been billed stays.
+    if (existing.accountingEntityId) {
+      throw new ConflictException(HAS_BILLING_MESSAGE);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       // Rows that also belong to the originating prospect keep their prospect link (the FK
@@ -371,7 +455,7 @@ export class ClientsService {
   }
 
   async addProduct(user: RequestUser, id: string, dto: AddClientProductDto) {
-    const canEditAll = this.hasAll(
+    const canEditAll = this.hasPermission(
       user,
       MarketingCrmSettingsPermission.CLIENTS_EDIT_ALL,
     );
@@ -395,6 +479,7 @@ export class ClientsService {
           tenantId: user.tenantId,
           clientId: client.id,
           productId: dto.productId,
+          ...this.newProductTerms(dto),
         },
       });
       const settings = await this.findSettingsByIds(user.tenantId, [
@@ -428,7 +513,7 @@ export class ClientsService {
       throw new BadRequestException(FOLLOW_UP_COMPLETION_MESSAGE);
     }
 
-    const canCreateAll = this.hasAll(
+    const canCreateAll = this.hasPermission(
       user,
       MarketingCrmSettingsPermission.PROSPECT_INTERACTIONS_CREATE_ALL,
     );
@@ -487,7 +572,7 @@ export class ClientsService {
     prospectId: string,
     dto: ConvertProspectToClientDto,
   ) {
-    const canEditAll = this.hasAll(
+    const canEditAll = this.hasPermission(
       user,
       MarketingCrmSettingsPermission.PROSPECTS_EDIT_ALL,
     );
@@ -504,7 +589,13 @@ export class ClientsService {
       },
     });
     if (!prospect) throw new NotFoundException('Prospect not found');
-    if (prospect.client) throw new ConflictException(ALREADY_CONVERTED_MESSAGE);
+    if (prospect.client) {
+      // A retry of a conversion that already went through gets the same client back.
+      if (dto.clientId && prospect.client.id === dto.clientId) {
+        return this.findClientDetail(user, prospect.client.id, true);
+      }
+      throw new ConflictException(ALREADY_CONVERTED_MESSAGE);
+    }
 
     const stage = await this.prisma.marketingPipelineStage.findFirst({
       where: { id: prospect.pipelineStageId, tenantId: user.tenantId },
@@ -514,10 +605,20 @@ export class ClientsService {
       throw new BadRequestException(NOT_CONVERTIBLE_MESSAGE);
     }
 
+    const clientId = dto.clientId ?? randomUUID();
+    const firstBilling = await this.sendFirstBilling(user, {
+      billing: dto.billing,
+      productIds: prospect.products.map((p) => p.productId),
+      clientId,
+      clientName: prospect.companyName,
+      assignedUserId: prospect.assignedUserId,
+    });
+
     try {
       const client = await this.prisma.$transaction(async (tx) => {
         const created = await tx.marketingClient.create({
           data: {
+            id: clientId,
             tenantId: user.tenantId,
             companyName: prospect.companyName,
             normalizedCompanyName: prospect.normalizedCompanyName,
@@ -527,7 +628,9 @@ export class ClientsService {
             locationLabel: prospect.locationLabel,
             latitude: prospect.latitude,
             longitude: prospect.longitude,
-            isBillable: dto.isBillable ?? false,
+            isBillable: Boolean(firstBilling),
+            accountingEntityId: firstBilling?.created.entityId ?? null,
+            accountingEntityTypeId: firstBilling?.created.entityTypeId ?? null,
             convertedFromProspectId: prospect.id,
             convertedAt: new Date(),
             convertedByUserId: user.id,
@@ -572,6 +675,17 @@ export class ClientsService {
           data: { clientId: created.id },
         });
 
+        if (firstBilling) {
+          await this.billing.record(tx, user, {
+            clientId: created.id,
+            productId: firstBilling.billing.productId,
+            transactionId: firstBilling.created.transactionId,
+            state: firstBilling.created.state,
+            amount: firstBilling.billing.amount,
+            idempotencyKey: firstBilling.idempotencyKey,
+          });
+        }
+
         return created;
       });
 
@@ -582,6 +696,48 @@ export class ClientsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * A client can be created together with its first billing transaction. This sends it to
+   * Accounting (which creates the entity and the draft) before anything is saved here.
+   */
+  private async sendFirstBilling(
+    user: RequestUser,
+    input: {
+      billing: ClientBillingDto | undefined;
+      productIds: string[];
+      clientId: string;
+      clientName: string;
+      /** Who the new client belongs to - they can bill it without the billing permission. */
+      assignedUserId: string;
+    },
+  ) {
+    // The first transaction is optional: a client without one is simply not billed yet.
+    if (!input.billing) return null;
+    this.billing.assertCanBill(user, input.assignedUserId);
+    if (
+      input.billing.productId &&
+      !input.productIds.includes(input.billing.productId)
+    ) {
+      throw new BadRequestException(INVALID_BILLING_PRODUCT_MESSAGE);
+    }
+
+    const idempotencyKey = `client-create:${input.clientId}`;
+    const created = await this.billing.submit(user, {
+      tenantId: user.tenantId,
+      clientId: input.clientId,
+      clientName: input.clientName,
+      entityId: null,
+      entityTypeId: input.billing.entityTypeId,
+      transactionTypeId: input.billing.transactionTypeId,
+      amount: input.billing.amount,
+      description: input.billing.description,
+      productId: input.billing.productId,
+      idempotencyKey,
+      assignedUserId: input.assignedUserId,
+    });
+    return { created, idempotencyKey, billing: input.billing };
   }
 
   private async findClientDetail(
@@ -613,6 +769,10 @@ export class ClientsService {
       },
     });
     if (!client) throw new NotFoundException('Client not found');
+    const assignedUserName = await this.assignees.nameFor(
+      user.tenantId,
+      client.assignedUserId,
+    );
 
     const settings = await this.findSettingsByIds(user.tenantId, [
       client.businessTypeId,
@@ -642,7 +802,10 @@ export class ClientsService {
           )
         : null,
       assignedUserId: client.assignedUserId,
+      assignedUserName,
       isBillable: client.isBillable,
+      hasAccountingEntity: Boolean(client.accountingEntityId),
+      accountingEntityTypeId: client.accountingEntityTypeId,
       location: {
         label: client.locationLabel,
         latitude: client.latitude.toString(),
@@ -680,6 +843,25 @@ export class ClientsService {
       convertedAt: client.convertedAt,
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
+    };
+  }
+
+  /** Terms typed in for a product: commission is the rate's share of the expected value. */
+  private newProductTerms(product: AddClientProductDto) {
+    return {
+      expectedValue: product.expectedValue ?? null,
+      commissionRate: product.commissionRate ?? null,
+      commissionAmount:
+        product.expectedValue !== undefined &&
+        product.commissionRate !== undefined
+          ? new Prisma.Decimal(product.expectedValue)
+              .mul(product.commissionRate)
+              .div(100)
+              .toDecimalPlaces(2)
+          : null,
+      expectedCloseDate: product.expectedCloseDate
+        ? new Date(product.expectedCloseDate)
+        : null,
     };
   }
 
@@ -801,7 +983,7 @@ export class ClientsService {
     return { id, name: setting?.name ?? fallbackName };
   }
 
-  private hasAll(user: RequestUser, permission: string): boolean {
+  private hasPermission(user: RequestUser, permission: string): boolean {
     if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
       return true;
     }
@@ -831,8 +1013,8 @@ export class ClientsService {
     return this.formatText(value).toLocaleLowerCase();
   }
 
-  private formatOptionalText(value: string | undefined): string | null {
-    if (value === undefined) return null;
+  private formatOptionalText(value: string | null | undefined): string | null {
+    if (value === undefined || value === null) return null;
     const normalized = this.formatText(value);
     return normalized.length > 0 ? normalized : null;
   }

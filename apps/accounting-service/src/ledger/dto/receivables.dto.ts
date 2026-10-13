@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -12,11 +14,18 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import {
   AccountingReceivableStatus,
   AccountingSettlementMethod,
 } from '../../../prisma/generated/client';
+import { SettlementAdjustmentDto } from './cashbook.dto';
+import {
+  DocumentAdjustmentDto,
+  DocumentTaxDto,
+} from './document-adjustments.dto';
+import { DocumentLineDto } from './document-lines.dto';
 
 const uppercase = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toUpperCase() : value;
@@ -44,15 +53,30 @@ export class CreateReceivableInvoiceDto {
   @Length(3, 3)
   currency!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 1000,
     minimum: 0.0001,
-    description: 'The subtotal, before any tax lines the rule adds on top.',
+    description:
+      'The subtotal, before any taxes, deductions or charges. Required unless `lines` is sent; with `lines` it is optional and, when sent, must equal their sum.',
   })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
-  amount!: number;
+  amount?: number;
+
+  @ApiPropertyOptional({
+    type: [DocumentLineDto],
+    description:
+      "The items on the document, each with its own account (inside the rule's scope), amount and optional cost centre. The subtotal is their sum. Send this instead of `amount`, `quantity`, `unitPrice`, `offsetGlAccountId` and `costCentreId`.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentLineDto)
+  lines?: DocumentLineDto[];
 
   @ApiPropertyOptional({
     example: 2,
@@ -88,6 +112,41 @@ export class CreateReceivableInvoiceDto {
   })
   @IsUUID()
   transactionTypeId!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      "Required when the type's rule scopes its main line to a category or classification " +
+      'instead of one fixed account: the account picked on the form, which must sit inside ' +
+      'that scope. Ignored (and must match) when the rule fixes the account.',
+  })
+  @IsOptional()
+  @IsUUID()
+  offsetGlAccountId?: string;
+
+  @ApiPropertyOptional({
+    type: [DocumentTaxDto],
+    description:
+      'Taxes added on the form: a tax type and the account it posts to. Each amount is the tax type rate × the amount, worked out by the server.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentTaxDto)
+  taxes?: DocumentTaxDto[];
+
+  @ApiPropertyOptional({
+    type: [DocumentAdjustmentDto],
+    description:
+      'Deductions (reduce what is owed) and charges (add to it) added on the form. The total is the amount, plus taxes and charges, less deductions.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentAdjustmentDto)
+  adjustments?: DocumentAdjustmentDto[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -157,11 +216,17 @@ export class CreateReceivableCreditNoteDto extends PartialType(
   @Length(3, 3)
   currency!: string;
 
-  @ApiProperty({ example: 250, minimum: 0.0001 })
+  @ApiPropertyOptional({
+    example: 250,
+    minimum: 0.0001,
+    description:
+      'Required unless `lines` is sent (a Rule-driven note); with `lines` it must equal their sum.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)
-  amount!: number;
+  amount?: number;
 
   @ApiPropertyOptional({ example: 0, minimum: 0 })
   @IsOptional()
@@ -279,6 +344,18 @@ export class CreateReceivableReceiptDto {
   @IsString()
   @MaxLength(120)
   sourceRecordId?: string;
+
+  @ApiPropertyOptional({
+    type: [SettlementAdjustmentDto],
+    description:
+      'Deductions (discount, withholding tax) and charges (bank charge) taken at settlement. `amount` is what is settled against the document; the cash that moves is that amount less deductions plus charges, and must stay above zero.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => SettlementAdjustmentDto)
+  adjustments?: SettlementAdjustmentDto[];
 }
 
 export class QueryReceivableDocumentsDto {
@@ -445,4 +522,110 @@ export class ReverseAllocationDto {
   @IsString()
   @MaxLength(500)
   reason!: string;
+}
+
+/** A posted invoice edited while its period is open: the whole form again, plus an optional reason. */
+export class EditReceivableInvoiceDto {
+  @ApiProperty({ type: CreateReceivableInvoiceDto })
+  @ValidateNested()
+  @Type(() => CreateReceivableInvoiceDto)
+  invoice!: CreateReceivableInvoiceDto;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** Restoring a voided invoice: send the form to correct it, or nothing to bring it back as it was. */
+export class RestoreReceivableInvoiceDto {
+  @ApiPropertyOptional({ type: CreateReceivableInvoiceDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateReceivableInvoiceDto)
+  invoice?: CreateReceivableInvoiceDto;
+}
+
+/** What can change on a posted credit note - its amount stays, since it is applied against an invoice. */
+export class EditReceivableNoteDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  documentDate?: string;
+
+  @ApiPropertyOptional({ example: 1.25, minimum: 0.00000001 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 8 })
+  @Min(0.00000001)
+  exchangeRate?: number;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  externalReference?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** What can change on a posted receipt. Its amount stays - void it and record it again to change that. */
+export class EditReceivableReceiptDto {
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  receiptDate?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  cashAccountId?: string;
+
+  @ApiPropertyOptional({ enum: AccountingSettlementMethod })
+  @IsOptional()
+  @IsEnum(AccountingSettlementMethod)
+  settlementMethod?: AccountingSettlementMethod;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  reference?: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  externalReference?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }

@@ -1,0 +1,113 @@
+import {
+  canComplete,
+  isOverdue,
+  minutesBetween,
+  strongestState,
+  tripState,
+  wallClockNow,
+} from './trip-schedule';
+
+const trip = {
+  travelDate: '2026-10-20',
+  departureTime: '10:00',
+  returnTime: '12:00',
+  started: true,
+};
+const clock = (date: string, time: string) => ({ date, time });
+
+describe('tripState', () => {
+  it('is on route only once started, never by the clock', () => {
+    expect(tripState({ started: false })).toBe('BOOKED');
+    expect(tripState({ started: true })).toBe('ON_ROUTE');
+  });
+});
+
+describe('isOverdue', () => {
+  it.each([
+    ['before it departs', '2026-10-20', '09:00', false],
+    ['while it is out within its window', '2026-10-20', '11:59', false],
+    ['the minute it is due back', '2026-10-20', '12:00', true],
+    ['later the same day', '2026-10-20', '18:00', true],
+    ['on a later day', '2026-10-21', '08:00', true],
+    ['a future trip', '2026-10-19', '23:59', false],
+  ])('is %s → %s', (_label, date, time, expected) => {
+    expect(isOverdue(clock(date, time), trip)).toBe(expected);
+  });
+});
+
+describe('trips with no return time', () => {
+  const open = { ...trip, returnTime: null };
+
+  it('is never overdue, however long ago it left', () => {
+    expect(isOverdue(clock('2026-10-20', '23:59'), open)).toBe(false);
+    expect(isOverdue(clock('2026-12-01', '09:00'), open)).toBe(false);
+  });
+});
+
+describe('canComplete', () => {
+  it('needs the return time to have passed when there is one', () => {
+    expect(canComplete(clock('2026-10-20', '09:00'), trip)).toBe(false);
+    expect(canComplete(clock('2026-10-20', '11:59'), trip)).toBe(false);
+    expect(canComplete(clock('2026-10-20', '12:00'), trip)).toBe(true);
+    expect(canComplete(clock('2026-10-21', '08:00'), trip)).toBe(true);
+  });
+
+  it('needs only the trip to be started when there is no return time', () => {
+    const open = { ...trip, returnTime: null };
+    expect(canComplete(clock('2026-10-20', '09:59'), open)).toBe(true);
+    expect(canComplete(clock('2026-10-25', '08:00'), open)).toBe(true);
+  });
+
+  it('never allows a trip that was not started', () => {
+    const idle = { ...trip, started: false };
+    expect(canComplete(clock('2026-10-21', '08:00'), idle)).toBe(false);
+    expect(
+      canComplete(clock('2026-10-25', '08:00'), { ...idle, returnTime: null }),
+    ).toBe(false);
+  });
+});
+
+describe('minutesBetween', () => {
+  it('measures late, early and on time', () => {
+    expect(minutesBetween('12:00', '12:40')).toBe(40);
+    expect(minutesBetween('12:00', '11:45')).toBe(-15);
+    expect(minutesBetween('12:00', '12:00')).toBe(0);
+    expect(minutesBetween('09:30', '17:05')).toBe(455);
+  });
+});
+
+describe('strongestState', () => {
+  it('prefers on route over booked, and booked over nothing', () => {
+    expect(strongestState(['BOOKED', 'ON_ROUTE'])).toBe('ON_ROUTE');
+    expect(strongestState(['BOOKED', 'BOOKED'])).toBe('BOOKED');
+    expect(strongestState([])).toBeNull();
+  });
+});
+
+describe('wallClockNow', () => {
+  const instant = new Date('2026-10-20T23:30:00.000Z');
+
+  it('reads the date and time in the given timezone', () => {
+    expect(wallClockNow('UTC', instant)).toEqual({
+      date: '2026-10-20',
+      time: '23:30',
+    });
+    // Accra is UTC+0 all year, so it matches UTC.
+    expect(wallClockNow('Africa/Accra', instant)).toEqual({
+      date: '2026-10-20',
+      time: '23:30',
+    });
+  });
+
+  it('rolls the date forward for zones ahead of UTC', () => {
+    expect(wallClockNow('Africa/Lagos', instant)).toEqual({
+      date: '2026-10-21',
+      time: '00:30',
+    });
+  });
+
+  it('never renders midnight as 24:00', () => {
+    const midnight = new Date('2026-10-21T00:05:00.000Z');
+    expect(wallClockNow('UTC', midnight).time).toBe('00:05');
+  });
+});

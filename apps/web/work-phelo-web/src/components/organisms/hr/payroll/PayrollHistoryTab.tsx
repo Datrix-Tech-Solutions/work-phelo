@@ -21,6 +21,7 @@ import {
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
+import { PAYSLIP_TYPES, type PayslipTypeKey } from '@/lib/payroll-engine';
 
 function DownloadMenu({ run }: { run: PayrollRun }) {
   const isPaid = run.status === 'PAID';
@@ -209,7 +210,16 @@ export function PayrollHistoryTab() {
       label: 'Month',
       width: 'minmax(200px, 1fr)',
       render: (row) => (
-        <span className="font-medium text-gray-900">{payrollMonthLabel(row.month, row.year)}</span>
+        <span className="flex flex-col">
+          <span className="font-medium text-gray-900">
+            {payrollMonthLabel(row.month, row.year)}
+          </span>
+          {row.payslipKey && row.payslipKey !== 'legacy' && row.payslipKey in PAYSLIP_TYPES && (
+            <span className="text-xs text-gray-500">
+              {PAYSLIP_TYPES[row.payslipKey as PayslipTypeKey].label}
+            </span>
+          )}
+        </span>
       ),
     },
     {

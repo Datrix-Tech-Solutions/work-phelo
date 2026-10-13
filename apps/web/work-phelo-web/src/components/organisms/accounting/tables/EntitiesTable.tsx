@@ -10,6 +10,7 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { ImportEntitiesDialog } from '@/components/organisms/accounting/ImportEntitiesDialog';
 import { AddEntityPanel } from '@/components/organisms/accounting/panels/AddEntityPanel';
 import { SUBLEDGER_TYPE_LABELS, SubledgerAccount } from '@/types/accounting';
 import {
@@ -41,6 +42,7 @@ export function EntitiesTable() {
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelTarget, setPanelTarget] = useState<SubledgerAccount | null | undefined>(undefined);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<SubledgerAccount | null>(null);
   const toast = useToast();
 
@@ -194,6 +196,7 @@ export function EntitiesTable() {
         }}
         extraFilters={extraFilters}
         onRowClick={(row) => router.push(`/${tenantSlug}/accounting/entities/${row.id}`)}
+        secondaryButton={{ label: 'Import', onClick: () => setIsImportOpen(true) }}
         actionButton={{ label: 'Add Entity', onClick: () => setPanelTarget(null) }}
         emptyMessage="No entities found"
         currentPage={page}
@@ -201,6 +204,8 @@ export function EntitiesTable() {
         onPageChange={setPage}
         noInternalScroll
       />
+
+      <ImportEntitiesDialog isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
 
       <AddEntityPanel
         isOpen={panelTarget !== undefined}

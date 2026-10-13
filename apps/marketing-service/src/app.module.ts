@@ -1,11 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AssigneesModule } from './assignees/assignees.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { ClientsModule } from './clients/clients.module';
 import { FleetModule } from './fleet/fleet.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { CrmSettingsModule } from './crm-settings/crm-settings.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProspectsModule } from './prospects/prospects.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { RequestsModule } from './requests/requests.module';
+import { SalesTargetsModule } from './sales-targets/sales-targets.module';
+import { SmsModule } from './sms/sms.module';
+import { TransportOfficersModule } from './transport-officers/transport-officers.module';
 
 @Module({
   imports: [
@@ -15,7 +23,15 @@ import { ProspectsModule } from './prospects/prospects.module';
     CrmSettingsModule,
     ProspectsModule,
     ClientsModule,
+    AssigneesModule,
+    CampaignsModule,
     FleetModule,
+    AppointmentsModule,
+    RequestsModule,
+    SalesTargetsModule,
+    DashboardModule,
+    SmsModule,
+    TransportOfficersModule,
   ],
 })
 export class AppModule {}

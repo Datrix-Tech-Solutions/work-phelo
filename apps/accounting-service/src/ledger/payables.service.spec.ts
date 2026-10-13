@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
@@ -261,6 +262,365 @@ const setup = () => {
 };
 
 describe('PayablesService', () => {
+  describe('summary', () => {
+    const posted = (overrides: Record<string, unknown>) =>
+      bill({ status: AccountingPayableStatus.POSTED, ...overrides });
+
+    it('reports what was raised in the window and is still unpaid, alongside the full balance', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableDocument.findMany.mockResolvedValue([
+        posted({
+          id: 'jan',
+          documentDate: new Date('2026-01-15'),
+          totalAmount: new Prisma.Decimal(1000),
+        }),
+        posted({
+          id: 'mar',
+          documentDate: new Date('2026-03-20'),
+          totalAmount: new Prisma.Decimal(1500),
+        }),
+        posted({
+          id: 'apr',
+          documentDate: new Date('2026-04-30'),
+          totalAmount: new Prisma.Decimal(800),
+        }),
+      ]);
+      // 500 of the March invoice has been paid
+      prisma.accountingPayableAllocation.findMany.mockResolvedValue([
+        { billId: 'mar', amount: new Prisma.Decimal(500) },
+      ]);
+
+      const april = await service.summary(actor.tenantId, {
+        fromDate: '2026-04-01',
+        toDate: '2026-04-30',
+      });
+      const wholeYear = await service.summary(actor.tenantId, {
+        fromDate: '2026-01-01',
+        toDate: '2026-04-30',
+      });
+
+      expect(april.outstandingByCurrency).toEqual([
+        { currency: 'GHS', amount: '2800.0000' },
+      ]);
+      expect(april.raisedInPeriodByCurrency).toEqual([
+        { currency: 'GHS', amount: '800.0000' },
+      ]);
+      expect(wholeYear.raisedInPeriodByCurrency).toEqual([
+        { currency: 'GHS', amount: '2800.0000' },
+      ]);
+    });
+
+    it('leaves out bills that are fully paid and ones raised outside the window', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableDocument.findMany.mockResolvedValue([
+        posted({
+          id: 'paid',
+          documentDate: new Date('2026-04-10'),
+          totalAmount: new Prisma.Decimal(300),
+        }),
+        posted({
+          id: 'next-month',
+          documentDate: new Date('2026-05-01'),
+          totalAmount: new Prisma.Decimal(700),
+        }),
+      ]);
+      prisma.accountingPayableAllocation.findMany.mockResolvedValue([
+        { billId: 'paid', amount: new Prisma.Decimal(300) },
+      ]);
+
+      const result = await service.summary(actor.tenantId, {
+        fromDate: '2026-04-01',
+        toDate: '2026-04-30',
+      });
+
+      expect(result.raisedInPeriodByCurrency).toEqual([]);
+      expect(result.outstandingByCurrency).toEqual([
+        { currency: 'GHS', amount: '700.0000' },
+      ]);
+    });
+
+    it('reports nothing raised when no window is given', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableDocument.findMany.mockResolvedValue([
+        posted({ id: 'a', totalAmount: new Prisma.Decimal(100) }),
+      ]);
+
+      const result = await service.summary(actor.tenantId);
+
+      expect(result.raisedInPeriodByCurrency).toEqual([]);
+      expect(result.outstandingByCurrency).toEqual([
+        { currency: 'GHS', amount: '100.0000' },
+      ]);
+    });
+  });
+  describe('taxes, deductions and charges added on the form', () => {
+    const input = {
+      vendorId: vendor.id,
+      documentDate: '2026-08-10',
+      currency: 'GHS',
+      amount: 1000,
+      transactionTypeId,
+    };
+    const vat = {
+      id: 'tax-vat',
+      name: 'VAT',
+      rate: new Prisma.Decimal(15),
+      isActive: true,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null as Date | null,
+    };
+
+    const withTax = (prisma: Record<string, any>, tax = vat) => {
+      prisma.taxType = { findMany: jest.fn().mockResolvedValue([tax]) };
+    };
+
+    it('adds the tax and the charge and takes off the deduction', async () => {
+      const { prisma, service } = setup();
+      withTax(prisma);
+
+      await service.createBill(actor, {
+        ...input,
+        taxes: [{ taxTypeId: 'tax-vat', glAccountId: 'acct-vat' }],
+        adjustments: [
+          { kind: 'DEDUCTION', glAccountId: 'acct-discount', amount: 50 },
+          {
+            kind: 'CHARGE',
+            glAccountId: 'acct-delivery',
+            amount: 20,
+            description: 'Delivery',
+          },
+        ],
+      });
+
+      const data = (
+        prisma.accountingPayableDocument.create.mock.calls[0] as [
+          { data: Record<string, any> },
+        ]
+      )[0].data;
+      // 1,000 + 150 tax + 20 charge − 50 deduction
+      expect(data.totalAmount.toString()).toBe('1120');
+      expect(data.taxAmount.toString()).toBe('150');
+      expect(data.taxBreakdown).toEqual([
+        expect.objectContaining({
+          kind: 'TAX',
+          glAccountId: 'acct-vat',
+          amount: '150',
+          direction: 'DR',
+          source: 'FORM',
+        }),
+        expect.objectContaining({
+          kind: 'DEDUCTION',
+          glAccountId: 'acct-discount',
+          amount: '50',
+          direction: 'CR',
+        }),
+        expect.objectContaining({
+          kind: 'CHARGE',
+          glAccountId: 'acct-delivery',
+          amount: '20',
+          direction: 'DR',
+          description: 'Delivery',
+        }),
+      ]);
+    });
+
+    it('refuses deductions that leave nothing owed', async () => {
+      const { prisma, service } = setup();
+      await expect(
+        service.createBill(actor, {
+          ...input,
+          adjustments: [
+            { kind: 'DEDUCTION', glAccountId: 'acct-discount', amount: 1000 },
+          ],
+        }),
+      ).rejects.toThrow('nothing owed');
+      expect(prisma.accountingPayableDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a line on the document’s own control account', async () => {
+      const { service } = setup();
+      await expect(
+        service.createBill(actor, {
+          ...input,
+          adjustments: [
+            { kind: 'CHARGE', glAccountId: apControlAccountId, amount: 10 },
+          ],
+        }),
+      ).rejects.toThrow('own accounts');
+    });
+
+    it('refuses a tax that is not in force on the document date', async () => {
+      const { prisma, service } = setup();
+      withTax(prisma, { ...vat, effectiveTo: new Date('2026-06-30') });
+      await expect(
+        service.createBill(actor, {
+          ...input,
+          taxes: [{ taxTypeId: 'tax-vat', glAccountId: 'acct-vat' }],
+        }),
+      ).rejects.toThrow('not in force');
+    });
+
+    it('takes the tax rate from the tax type, not the client', async () => {
+      const { prisma, service } = setup();
+      withTax(prisma);
+      await service.createBill(actor, {
+        ...input,
+        taxes: [{ taxTypeId: 'tax-vat', glAccountId: 'acct-vat' }],
+      });
+      const data = (
+        prisma.accountingPayableDocument.create.mock.calls[0] as [
+          { data: Record<string, any> },
+        ]
+      )[0].data;
+      expect(data.taxAmount.toString()).toBe('150');
+    });
+  });
+
+  describe('several items on one document', () => {
+    const input = {
+      vendorId: vendor.id,
+      documentDate: '2026-08-10',
+      currency: 'GHS',
+      transactionTypeId,
+    };
+    const dataOf = (prisma: Record<string, any>) =>
+      (
+        prisma.accountingPayableDocument.create.mock.calls[0] as [
+          { data: Record<string, any> },
+        ]
+      )[0].data;
+
+    it('stores each item and sums them into the subtotal', async () => {
+      const { prisma, service } = setup();
+      await service.createBill(actor, {
+        ...input,
+        lines: [
+          {
+            glAccountId: offsetAccountId,
+            amount: 600,
+            quantity: 2,
+            unitPrice: 300,
+            description: 'Chairs',
+          },
+          { glAccountId: offsetAccountId, amount: 400, costCentreId },
+        ],
+      });
+      const data = dataOf(prisma);
+      expect(data.subtotalAmount.toString()).toBe('1000');
+      expect(data.totalAmount.toString()).toBe('1000');
+      expect(data.offsetGlAccountId).toBe(offsetAccountId);
+      // With several items, quantity × price lives on each line, not the document.
+      expect(data.quantity).toBeUndefined();
+      expect(data.costCentreId).toBeNull();
+      expect(data.lines.create).toEqual([
+        expect.objectContaining({
+          sequence: 1,
+          glAccountId: offsetAccountId,
+          quantity: 2,
+          unitPrice: 300,
+          description: 'Chairs',
+          costCentreId: null,
+        }),
+        expect.objectContaining({
+          sequence: 2,
+          glAccountId: offsetAccountId,
+          costCentreId,
+        }),
+      ]);
+    });
+
+    it('checks every item against the rule, so one outside it is refused', async () => {
+      const { prisma, service } = setup();
+      await expect(
+        service.createBill(actor, {
+          ...input,
+          lines: [
+            { glAccountId: offsetAccountId, amount: 600 },
+            { glAccountId: 'some-other-account', amount: 400 },
+          ],
+        }),
+      ).rejects.toThrow('fixed by its rule');
+      expect(prisma.accountingPayableDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('puts the account and cost centre on each item, not on the document', async () => {
+      const { service } = setup();
+      await expect(
+        service.createBill(actor, {
+          ...input,
+          offsetGlAccountId: offsetAccountId,
+          lines: [{ glAccountId: offsetAccountId, amount: 600 }],
+        }),
+      ).rejects.toThrow('on each line');
+    });
+
+    it('refuses an amount that is not the sum of the items', async () => {
+      const { service } = setup();
+      await expect(
+        service.createBill(actor, {
+          ...input,
+          amount: 999,
+          lines: [
+            { glAccountId: offsetAccountId, amount: 600 },
+            { glAccountId: offsetAccountId, amount: 400 },
+          ],
+        }),
+      ).rejects.toThrow('sum of the lines');
+    });
+
+    it('looks up each item’s cost centre', async () => {
+      const { prisma, service } = setup();
+      await service.createBill(actor, {
+        ...input,
+        lines: [{ glAccountId: offsetAccountId, amount: 600, costCentreId }],
+      });
+      expect(prisma.costCentre.findFirst).toHaveBeenCalledWith({
+        where: { id: costCentreId, tenantId: actor.tenantId },
+      });
+    });
+
+    it('posts one line per item, each with its own cost centre', async () => {
+      const { journals, prisma, service } = setup();
+      prisma.accountingPayableDocument.findFirst.mockResolvedValueOnce(
+        bill({
+          lines: [
+            {
+              glAccountId: 'acct-chairs',
+              amount: new Prisma.Decimal(600),
+              costCentreId,
+              description: null,
+            },
+            {
+              glAccountId: 'acct-desks',
+              amount: new Prisma.Decimal(400),
+              costCentreId: null,
+              description: 'Desks',
+            },
+          ],
+        }),
+      );
+      await service.postBill(actor, 'bill-1');
+      const lines = (
+        journals.createPostedInTransaction.mock.calls[0] as unknown[]
+      )[2] as { lines: Record<string, any>[] };
+      expect(lines.lines).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            glAccountId: 'acct-chairs',
+            debit: 600,
+            costCentreId,
+          }),
+          expect.objectContaining({
+            glAccountId: 'acct-desks',
+            debit: 400,
+            description: 'Desks',
+          }),
+        ]),
+      );
+      expect(lines.lines).toHaveLength(3);
+    });
+  });
+
   it('stores an optional cost centre on a draft bill', async () => {
     const { prisma, service } = setup();
 
@@ -538,6 +898,53 @@ describe('PayablesService', () => {
     });
   });
 
+  describe('applied debit notes on the balance', () => {
+    it('lists each applied debit note with its transaction type and amount', async () => {
+      const { prisma, service } = setup();
+      prisma.accountingPayableAllocation.findMany.mockResolvedValue([
+        {
+          id: 'alloc-1',
+          amount: new Prisma.Decimal(1000),
+          creditNote: {
+            documentNumber: 'CN-1',
+            transactionTypeId: 'type-disc',
+          },
+        },
+        {
+          id: 'alloc-2',
+          amount: new Prisma.Decimal(200),
+          creditNote: { documentNumber: 'CN-2', transactionTypeId: null },
+        },
+      ]);
+      (prisma.transactionType as Record<string, unknown>).findMany = jest
+        .fn()
+        .mockResolvedValue([{ id: 'type-disc', name: 'Discount Received' }]);
+
+      const balance = await service.billBalance(actor.tenantId, 'bill-1');
+
+      expect(balance.appliedNotes).toEqual([
+        {
+          allocationId: 'alloc-1',
+          documentNumber: 'CN-1',
+          transactionType: 'Discount Received',
+          amount: '1000.0000',
+        },
+        {
+          allocationId: 'alloc-2',
+          documentNumber: 'CN-2',
+          transactionType: null,
+          amount: '200.0000',
+        },
+      ]);
+    });
+
+    it('is an empty list when no debit note has been applied', async () => {
+      const { service } = setup();
+      const balance = await service.billBalance(actor.tenantId, 'bill-1');
+      expect(balance.appliedNotes).toEqual([]);
+    });
+  });
+
   it('posts a bill as Dr offset account and Cr AP control', async () => {
     const { journals, prisma, service } = setup();
     prisma.accountingPayableDocument.findFirst.mockResolvedValueOnce(bill());
@@ -589,6 +996,77 @@ describe('PayablesService', () => {
         counterpartyId: vendor.id,
       }),
     ]);
+  });
+
+  it('settles the full amount but pays the net when a discount and a bank charge are taken', async () => {
+    const { cashbook, prisma, service } = setup();
+
+    await service.createPayment(actor, {
+      vendorId: vendor.id,
+      billId: 'bill-1',
+      cashAccountId: 'cash-account-1',
+      amount: 600,
+      currency: 'GHS',
+      paymentDate: '2026-08-10',
+      settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+      adjustments: [
+        { kind: 'DEDUCTION' as never, glAccountId: 'discount-gl', amount: 50 },
+        { kind: 'CHARGE' as never, glAccountId: 'bank-charge-gl', amount: 5 },
+      ],
+    });
+
+    const sent = (
+      cashbook.createPayment.mock.calls[0] as unknown[]
+    )[1] as Record<string, unknown>;
+    expect(sent.offsetGlAccountId).toBeUndefined();
+    expect(sent.amount).toBeUndefined();
+    expect(sent.offsetSubledgerAccountId).toBe(subledgerAccountId);
+    expect(sent.lines).toEqual([
+      expect.objectContaining({
+        kind: 'ITEM',
+        glAccountId: apControlAccountId,
+        amount: 600,
+      }),
+      expect.objectContaining({
+        kind: 'DEDUCTION',
+        glAccountId: 'discount-gl',
+        amount: 50,
+      }),
+      expect.objectContaining({
+        kind: 'CHARGE',
+        glAccountId: 'bank-charge-gl',
+        amount: 5,
+      }),
+    ]);
+    // The payment keeps what was settled, so it can be allocated to the bill in full.
+    const created = (
+      prisma.accountingPayablePayment.create.mock.calls[0] as [
+        { data: { amount: number } },
+      ]
+    )[0];
+    expect(created.data.amount).toBe(600);
+  });
+
+  it('refuses an adjustment that posts to the bill’s own AP account', async () => {
+    const { service } = setup();
+    await expect(
+      service.createPayment(actor, {
+        vendorId: vendor.id,
+        billId: 'bill-1',
+        cashAccountId: 'cash-account-1',
+        amount: 600,
+        currency: 'GHS',
+        paymentDate: '2026-08-10',
+        settlementMethod: AccountingSettlementMethod.BANK_TRANSFER,
+        adjustments: [
+          {
+            kind: 'DEDUCTION' as never,
+            glAccountId: apControlAccountId,
+            amount: 10,
+          },
+        ],
+      }),
+    ).rejects.toThrow('control account');
   });
 
   it('posts AP payments through the transactional Cashbook path', async () => {
