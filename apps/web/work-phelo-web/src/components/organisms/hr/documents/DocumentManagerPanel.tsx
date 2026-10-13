@@ -27,6 +27,8 @@ interface Props {
    *  lets a caller react, e.g. collapsing a sibling folder rail once the
    *  preview column appears. */
   onSelectionChange?: (doc: MyDocument | null) => void;
+  /** Extra detail content for the selected document (e.g. a licence's details). */
+  renderDetails?: (doc: MyDocument) => React.ReactNode;
 }
 
 export function DocumentManagerPanel({
@@ -37,6 +39,7 @@ export function DocumentManagerPanel({
   isLoading,
   renderUploadModal,
   onSelectionChange,
+  renderDetails,
 }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [search, setSearch] = useState('');
@@ -170,6 +173,7 @@ export function DocumentManagerPanel({
           onDownload={handleDownload}
           onDelete={allowDelete ? handleDelete : undefined}
           canDelete={allowDelete}
+          details={renderDetails?.(selected)}
           onClose={() => selectDocument(null)}
         />
       )}

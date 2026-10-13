@@ -6,17 +6,26 @@ import { Button } from '@/components/atoms/Button';
 import { inputClass } from '@/lib/utils';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DocumentFileDropzone } from '@/components/molecules/hr/documents/DocumentFileDropzone';
-import { PERSONAL_DOCUMENT_CATEGORIES } from './types';
+import {
+  DriverLicenceFields,
+  emptyLicenceDetails,
+  licenceDetailsError,
+} from '@/components/molecules/hr/documents/DriverLicenceFields';
+import type { DriverLicenceDetails } from '@/types/hr';
+import { DRIVER_LICENCE_CATEGORY, PERSONAL_DOCUMENT_CATEGORIES } from './types';
 
-const CATEGORY_OPTIONS = PERSONAL_DOCUMENT_CATEGORIES.map((label) => ({
-  value: label,
-  label,
-}));
+// The driver's licence sits just before "Other", which stays last.
+const CATEGORY_OPTIONS = [
+  DRIVER_LICENCE_CATEGORY,
+  ...PERSONAL_DOCUMENT_CATEGORIES.filter((label) => label !== 'Other'),
+  'Other',
+].map((label) => ({ value: label, label }));
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (input: { file: File; category: string }) => void;
+  /** `licence` is set when the category is Driver's Licence. */
+  onUpload: (input: { file: File; category: string; licence?: DriverLicenceDetails }) => void;
   isUploading?: boolean;
 }
 
@@ -24,11 +33,13 @@ export function UploadPersonalDocumentModal({ isOpen, onClose, onUpload, isUploa
   const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
+  const [licence, setLicence] = useState<DriverLicenceDetails>(emptyLicenceDetails);
 
   const reset = () => {
     setFile(null);
     setCategory('');
     setCustomCategory('');
+    setLicence(emptyLicenceDetails());
   };
 
   const handleClose = () => {
@@ -37,11 +48,22 @@ export function UploadPersonalDocumentModal({ isOpen, onClose, onUpload, isUploa
   };
 
   const isOther = category === 'Other';
-  const isValid = Boolean(file) && Boolean(category) && (!isOther || customCategory.trim());
+  const isLicence = category === DRIVER_LICENCE_CATEGORY;
+  const isValid =
+    Boolean(file) &&
+    Boolean(category) &&
+    (!isOther || Boolean(customCategory.trim())) &&
+    (!isLicence || licenceDetailsError(licence) === null);
 
   const handleSubmit = () => {
     if (!file || !isValid) return;
-    onUpload({ file, category: isOther ? customCategory.trim() : category });
+    onUpload({
+      file,
+      category: isOther ? customCategory.trim() : category,
+      ...(isLicence
+        ? { licence: { ...licence, licenceNumber: licence.licenceNumber.trim() } }
+        : {}),
+    });
   };
 
   return (
@@ -83,6 +105,8 @@ export function UploadPersonalDocumentModal({ isOpen, onClose, onUpload, isUploa
             />
           </div>
         )}
+
+        {isLicence && <DriverLicenceFields value={licence} onChange={setLicence} />}
       </div>
     </Modal>
   );

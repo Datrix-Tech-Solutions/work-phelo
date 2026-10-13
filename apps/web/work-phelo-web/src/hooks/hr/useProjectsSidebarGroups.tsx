@@ -14,7 +14,7 @@ export function useProjectsSidebarGroups(tenantSlug: string): { groups: NavGroup
 
   const groups: NavGroup[] = [
     {
-      label: 'Project Management',
+      label: labels.management,
       items: [
         {
           key: 'projects',

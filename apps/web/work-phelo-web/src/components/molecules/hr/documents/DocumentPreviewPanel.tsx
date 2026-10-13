@@ -13,6 +13,8 @@ interface Props {
   /** Deselects the document without touching a sibling folder rail's
    *  collapsed state — that only resets when the folder itself changes. */
   onClose?: () => void;
+  /** Extra content under the metadata, e.g. a driver's licence's details. */
+  details?: React.ReactNode;
 }
 
 function MetaRow({ label, value }: { label: string; value: string }) {
@@ -30,6 +32,7 @@ export function DocumentPreviewPanel({
   onDelete,
   canDelete = true,
   onClose,
+  details,
 }: Props) {
   const canRenderInline = document.fileKind === 'pdf' || document.fileKind === 'image';
 
@@ -89,6 +92,7 @@ export function DocumentPreviewPanel({
           <MetaRow label="Uploaded" value={formatDate(document.uploadedAt)} />
           <MetaRow label="Uploaded by" value={document.uploadedBy} />
         </div>
+        {details}
       </div>
 
       <div className="p-4 pt-0 flex items-center gap-2 shrink-0">

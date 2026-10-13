@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { DocumentManagerPanel } from '@/components/organisms/hr/documents/DocumentManagerPanel';
 import { UploadCompanyDocumentModal } from '@/components/organisms/hr/documents/UploadCompanyDocumentModal';
-import { DriverLicenceCard } from '@/components/molecules/hr/documents/DriverLicenceCard';
+import { DriverLicenceDetails } from '@/components/molecules/hr/documents/DriverLicenceDetails';
 import { useDriverLicence, useSaveDriverLicence } from '@/hooks/hr/useDriverLicence';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import {
@@ -32,6 +32,7 @@ function fromEmployeeDocument(doc: EmployeeDocument): MyDocument {
     category:
       doc.type === 'OTHER' && doc.customType ? doc.customType : DOCUMENT_TYPE_LABELS[doc.type],
     previewUrl: doc.url,
+    type: doc.type,
   };
 }
 
@@ -61,14 +62,16 @@ export function EmployeeDocumentsTab({ employee }: Props) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <DriverLicenceCard scope={employee.id} />
+    <>
       <DocumentManagerPanel
         documents={documents}
         isLoading={isLoading}
         allowUpload
         allowDelete
         onDelete={handleDelete}
+        renderDetails={(doc) =>
+          doc.type === 'DRIVER_LICENCE' ? <DriverLicenceDetails scope={employee.id} /> : null
+        }
         renderUploadModal={({ isOpen, onClose }) => (
           <UploadCompanyDocumentModal
             isOpen={isOpen}
@@ -108,6 +111,6 @@ export function EmployeeDocumentsTab({ employee }: Props) {
         title="Document Uploaded!"
         message={`Document added to ${employee.firstName} ${employee.lastName}'s Company Documents.`}
       />
-    </div>
+    </>
   );
 }
