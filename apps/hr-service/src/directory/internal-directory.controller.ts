@@ -10,8 +10,10 @@ import {
   INTERNAL_SERVICE_AUTH_HEADERS,
   InternalServiceAuthGuard,
 } from '@work-phelo/internal-auth';
+import { DriverLicenceService } from '../employees/driver-licence.service';
 import { DirectoryService } from './directory.service';
 import {
+  InternalDriverLicenceCheckDto,
   InternalDirectoryQueryDto,
   InternalResolveDirectoryDto,
 } from './dto/internal-directory.dto';
@@ -24,7 +26,10 @@ import {
 @ApiHeader({ name: INTERNAL_SERVICE_AUTH_HEADERS.signature, required: true })
 @ApiUnauthorizedResponse({ description: 'Invalid service credentials.' })
 export class InternalDirectoryController {
-  constructor(private readonly directory: DirectoryService) {}
+  constructor(
+    private readonly directory: DirectoryService,
+    private readonly driverLicences: DriverLicenceService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List active employees (id, name, department)' })
@@ -43,5 +48,18 @@ export class InternalDirectoryController {
       employeeIds: dto.employeeIds,
       userIds: dto.userIds,
     });
+  }
+
+  @Post('driver-licence')
+  @ApiOperation({
+    summary:
+      "Whether a user may drive themselves: an unexpired driver's licence and its image on file",
+  })
+  driverLicence(@Body() dto: InternalDriverLicenceCheckDto) {
+    return this.driverLicences.checkForUser(
+      dto.tenantId,
+      dto.userId,
+      dto.onDate?.slice(0, 10),
+    );
   }
 }

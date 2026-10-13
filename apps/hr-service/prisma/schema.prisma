@@ -212,6 +212,7 @@ enum DocumentType {
   CERTIFICATE
   OFFER_LETTER
   NDA
+  DRIVER_LICENCE
   OTHER
 
   @@schema("hr")
@@ -525,6 +526,7 @@ model Employee {
   appraisals            Appraisal[]                 @relation("AppraisalEmployee")
   managedAppraisals     Appraisal[]                 @relation("AppraisalManager")
   documents             EmployeeDocument[]
+  driverLicence        EmployeeDriverLicence?
   agreementSignatures   CompanyAgreementSignature[]
   allowances            EmployeeAllowance[]
   deductions            EmployeeDeduction[]
@@ -994,6 +996,26 @@ model EmployeeDocument {
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
+  @@schema("hr")
+}
+
+/// The licence details behind an employee's right to drive themselves on company trips. The
+/// licence image is a separate EmployeeDocument (type DRIVER_LICENCE); the ability to drive needs
+/// both this record (unexpired) and at least one such image on file.
+model EmployeeDriverLicence {
+  id            String   @id @default(uuid())
+  tenantId      String
+  employeeId    String   @unique
+  /// Encrypted at rest, like the other personal ids.
+  licenceNumber String
+  issuedAt      DateTime @db.Date
+  expiresAt     DateTime @db.Date
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
   @@schema("hr")
 }
 

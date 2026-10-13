@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { DocumentFoldersRail } from '@/components/molecules/hr/documents/DocumentFoldersRail';
 import { DocumentManagerPanel } from './DocumentManagerPanel';
 import { UploadPersonalDocumentModal } from './UploadPersonalDocumentModal';
+import { DriverLicenceCard } from '@/components/molecules/hr/documents/DriverLicenceCard';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { useMyDocuments, useUploadMyDocument, useDeleteMyDocument } from '@/hooks/useMyDocuments';
 import { useMyEmployeeDocuments } from '@/hooks/hr/useEmployees';
@@ -106,39 +107,42 @@ export function MyDocumentsContent() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 items-start">
-      <DocumentFoldersRail
-        active={folder}
-        onSelect={handleFolderSelect}
-        counts={counts}
-        collapsed={railCollapsed}
-      />
-      <DocumentManagerPanel
-        key={folder}
-        documents={documents}
-        isLoading={isLoading}
-        allowUpload={folder === 'personal'}
-        allowDelete={folder === 'personal'}
-        onDelete={handleDelete}
-        onSelectionChange={(doc) => {
-          if (doc) setRailCollapsed(true);
-        }}
-        renderUploadModal={({ isOpen, onClose }) => (
-          <UploadPersonalDocumentModal
-            isOpen={isOpen}
-            onClose={onClose}
-            isUploading={isUploading}
-            onUpload={(input) => handleUpload(input, onClose)}
-          />
-        )}
-      />
+    <div className="flex flex-col gap-4">
+      <DriverLicenceCard scope={null} />
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
+        <DocumentFoldersRail
+          active={folder}
+          onSelect={handleFolderSelect}
+          counts={counts}
+          collapsed={railCollapsed}
+        />
+        <DocumentManagerPanel
+          key={folder}
+          documents={documents}
+          isLoading={isLoading}
+          allowUpload={folder === 'personal'}
+          allowDelete={folder === 'personal'}
+          onDelete={handleDelete}
+          onSelectionChange={(doc) => {
+            if (doc) setRailCollapsed(true);
+          }}
+          renderUploadModal={({ isOpen, onClose }) => (
+            <UploadPersonalDocumentModal
+              isOpen={isOpen}
+              onClose={onClose}
+              isUploading={isUploading}
+              onUpload={(input) => handleUpload(input, onClose)}
+            />
+          )}
+        />
 
-      <SuccessModal
-        isOpen={uploadSuccess}
-        onClose={() => setUploadSuccess(false)}
-        title="Document Uploaded!"
-        message="Your document has been added to Personal Documents."
-      />
+        <SuccessModal
+          isOpen={uploadSuccess}
+          onClose={() => setUploadSuccess(false)}
+          title="Document Uploaded!"
+          message="Your document has been added to Personal Documents."
+        />
+      </div>
     </div>
   );
 }

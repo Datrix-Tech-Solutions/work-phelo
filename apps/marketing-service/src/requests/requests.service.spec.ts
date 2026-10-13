@@ -141,7 +141,11 @@ describe('RequestsService', () => {
     marketingTransportRequestStop: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
-  const directory = { list: jest.fn(), resolve: jest.fn() };
+  const directory = {
+    list: jest.fn(),
+    resolve: jest.fn(),
+    driverLicence: jest.fn(),
+  };
   const fleet = {
     getVehicle: jest.fn(),
     listVehicles: jest.fn(),
@@ -176,6 +180,15 @@ describe('RequestsService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     officers.assertActiveOfficer.mockResolvedValue(undefined);
+    // By default the requester may drive themselves: an unexpired licence with its image on file.
+    directory.driverLicence.mockResolvedValue({
+      hasEmployeeRecord: true,
+      canDrive: true,
+      status: 'VALID',
+      expiresAt: '2030-01-01',
+      daysLeft: 1000,
+      imageOnFile: true,
+    });
     prisma.marketingClient.findMany.mockResolvedValue([]);
     prisma.marketingProspect.findMany.mockResolvedValue([]);
     prisma.marketingTransportRequestStop.findMany.mockResolvedValue([]);
@@ -2928,6 +2941,14 @@ describe('RequestsService', () => {
       expect(result.requester).toEqual({
         name: 'Ama Mensah',
         department: 'Operations',
+        canDriveSelf: true,
+        licence: {
+          hasEmployeeRecord: true,
+          status: 'VALID',
+          expiresAt: '2030-01-01',
+          daysLeft: 1000,
+          imageOnFile: true,
+        },
       });
       expect(result.employees).toEqual([kofi]);
     });
@@ -3003,6 +3024,32 @@ describe('RequestsService', () => {
         preferredDriverEmployeeId: null,
       });
       expect(officers.assertActiveOfficer).not.toHaveBeenCalled();
+    });
+
+    it("refuses self-drive without a usable driver's licence", async () => {
+      directory.driverLicence.mockResolvedValue({
+        hasEmployeeRecord: true,
+        canDrive: false,
+        status: 'VALID',
+        expiresAt: '2030-01-01',
+        daysLeft: 1000,
+        imageOnFile: false,
+      });
+
+      await expect(
+        service.create(user(), { ...createDto, preferredSelfDriven: true }),
+      ).rejects.toThrow(/no image of the driver's licence/);
+      expect(prisma.marketingTransportRequest.create).not.toHaveBeenCalled();
+    });
+
+    it("checks the licence on the trip's travel date", async () => {
+      await service.create(user(), { ...createDto, preferredSelfDriven: true });
+
+      expect(directory.driverLicence).toHaveBeenCalledWith(
+        TENANT,
+        'user-1',
+        createDto.travelDate,
+      );
     });
 
     it('refuses a driver together with self-drive', async () => {

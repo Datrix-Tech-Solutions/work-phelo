@@ -8,6 +8,7 @@ import { RequestPanel } from '@/components/organisms/marketing/RequestPanel';
 import { RequestDetailPanel } from '@/components/organisms/marketing/RequestDetailPanel';
 import { ApproveRequestModal } from '@/components/organisms/marketing/ApproveRequestModal';
 import { RejectRequestModal } from '@/components/organisms/marketing/RejectRequestModal';
+import { ApprovedTripModal } from '@/components/organisms/marketing/ApprovedTripModal';
 import { StartTripModal } from '@/components/organisms/marketing/StartTripModal';
 import { CompleteTripModal } from '@/components/organisms/marketing/CompleteTripModal';
 import { useCancelRequest, useRequest, useRequests } from '@/hooks/marketing/useRequests';
@@ -65,6 +66,7 @@ export function RequestsView({ statuses, allowCreate = false, showViewAction = t
   const [rejecting, setRejecting] = useState<TransportRequest | null>(null);
   const [rescheduling, setRescheduling] = useState<TransportRequest | null>(null);
   const [starting, setStarting] = useState<TransportRequest | null>(null);
+  const [justApproved, setJustApproved] = useState<TransportRequest | null>(null);
   const [completing, setCompleting] = useState<TransportRequest | null>(null);
   const [cancelling, setCancelling] = useState<TransportRequest | null>(null);
 
@@ -140,7 +142,19 @@ export function RequestsView({ statuses, allowCreate = false, showViewAction = t
         />
       </div>
 
-      <RequestPanel isOpen={addOpen} onClose={() => setAddOpen(false)} />
+      <RequestPanel
+        isOpen={addOpen}
+        onClose={() => setAddOpen(false)}
+        onApproved={setJustApproved}
+      />
+      <ApprovedTripModal
+        request={justApproved}
+        onClose={() => setJustApproved(null)}
+        onStart={(row) => {
+          setJustApproved(null);
+          setStarting(row);
+        }}
+      />
       <RequestPanel isOpen={!!editing} request={editing} onClose={() => setEditing(null)} />
       <RequestDetailPanel
         request={detail}

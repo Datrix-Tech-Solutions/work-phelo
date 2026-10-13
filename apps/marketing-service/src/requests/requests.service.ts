@@ -183,7 +183,7 @@ export class RequestsService {
    * requester may ask for. Availability is not checked here; the approver decides the allocation.
    */
   async formOptions(user: RequestUser) {
-    const [people, resolved, vehicles, fleetDetails, drivers] =
+    const [people, resolved, vehicles, fleetDetails, drivers, licence] =
       await Promise.all([
         this.callHr(() => this.directory.list(user.tenantId)),
         this.callHr(() =>
@@ -194,6 +194,7 @@ export class RequestsService {
           where: { tenantId: user.tenantId },
         }),
         this.officers.activeDrivers(user.tenantId),
+        this.callHr(() => this.directory.driverLicence(user.tenantId, user.id)),
       ]);
     const requester = this.requesterFrom(user, resolved.person);
     const detailsByAsset = new Map(
@@ -203,6 +204,15 @@ export class RequestsService {
       requester: {
         name: requester.name,
         department: requester.department,
+        // Driving oneself needs an unexpired driver's licence with its image on file.
+        canDriveSelf: licence.canDrive,
+        licence: {
+          hasEmployeeRecord: licence.hasEmployeeRecord,
+          status: licence.status,
+          expiresAt: licence.expiresAt,
+          daysLeft: licence.daysLeft,
+          imageOnFile: licence.imageOnFile,
+        },
       },
       employees: people.filter(
         (person) => person.employeeId !== requester.employeeId,
@@ -233,6 +243,30 @@ export class RequestsService {
    * preference fields. `undefined` leaves a field alone, `null` clears it. The vehicle must be
    * usable and the driver an active transport officer, but availability is left to the approver.
    */
+  /**
+   * Driving oneself needs an unexpired driver's licence (on the travel date) with its image on
+   * file. People with no employee record, such as tenant admins, are not covered by the rule.
+   */
+  private async assertCanDriveSelf(
+    tenantId: string,
+    requesterUserId: string,
+    travelDate: string,
+  ) {
+    const check = await this.callHr(() =>
+      this.directory.driverLicence(tenantId, requesterUserId, travelDate),
+    );
+    if (check.canDrive) return;
+    const reason =
+      check.status === 'NONE'
+        ? "there is no driver's licence on record"
+        : !check.imageOnFile
+          ? "there is no image of the driver's licence on file"
+          : `the driver's licence expires on ${check.expiresAt}, before the trip`;
+    throw new BadRequestException(
+      `Driving yourself isn't available: ${reason}.`,
+    );
+  }
+
   private async preferenceData(
     tenantId: string,
     input: {
@@ -323,6 +357,9 @@ export class RequestsService {
     const passengers = resolved.people.filter(
       (person) => person.employeeId !== requester.employeeId,
     );
+    if (dto.preferredSelfDriven === true) {
+      await this.assertCanDriveSelf(user.tenantId, user.id, dto.travelDate);
+    }
     const preferences = await this.preferenceData(user.tenantId, {
       vehicleAssetId: dto.preferredVehicleAssetId,
       driverEmployeeId: dto.preferredDriverEmployeeId,
@@ -347,6 +384,10 @@ export class RequestsService {
         destination: appointment
           ? this.summarize(stops)
           : dto.destination || this.summarize(stops),
+        // What a miscellaneous trip is for; appointment trips are marketing and carry none.
+        ...(!appointment && dto.businessPurpose
+          ? { businessPurpose: dto.businessPurpose }
+          : {}),
         notes: dto.notes || null,
         ...preferences,
         passengers: {
@@ -440,6 +481,15 @@ export class RequestsService {
       dto.travelDate !== undefined,
     );
 
+    // The trip may stay self-driven while its date moves, so the licence is checked for the new day.
+    if (dto.preferredSelfDriven ?? existing.preferredSelfDriven) {
+      await this.assertCanDriveSelf(
+        user.tenantId,
+        existing.requesterUserId,
+        schedule.travelDate,
+      );
+    }
+
     let passengers:
       | { employeeId: string; name: string; department: string | null }[]
       | undefined;
@@ -498,6 +548,9 @@ export class RequestsService {
             ? { returnTime: dto.returnTime }
             : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
+          ...(dto.businessPurpose !== undefined
+            ? { businessPurpose: dto.businessPurpose || null }
+            : {}),
           ...preferences,
           ...(passengers
             ? {
@@ -1105,6 +1158,13 @@ export class RequestsService {
       await this.officers.assertActiveOfficer(
         user.tenantId,
         dto.driverEmployeeId,
+      );
+    }
+    if (selfDriven) {
+      await this.assertCanDriveSelf(
+        user.tenantId,
+        existing.requesterUserId,
+        this.fromDate(window.travelDate),
       );
     }
 

@@ -450,6 +450,9 @@ export function useUploadEmployeeDocument(employeeId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'documents'] });
       queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'documents'] });
+      // A licence image going or coming changes whether the licence counts.
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'driver-licence'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'driver-licence'] });
     },
   });
 }
@@ -463,6 +466,9 @@ export function useDeleteEmployeeDocument(employeeId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'documents'] });
       queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'documents'] });
+      // A licence image going or coming changes whether the licence counts.
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'driver-licence'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me', 'driver-licence'] });
     },
   });
 }

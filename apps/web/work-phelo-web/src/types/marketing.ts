@@ -719,7 +719,19 @@ export interface TransportRequestListResponse {
 }
 
 export interface TransportRequestFormOptions {
-  requester: { name: string; department: string | null };
+  requester: {
+    name: string;
+    department: string | null;
+    /** An unexpired driver's licence with its image on file; people with no employee record are not held to it. */
+    canDriveSelf: boolean;
+    licence: {
+      hasEmployeeRecord: boolean;
+      status: 'NONE' | 'VALID' | 'EXPIRING' | 'EXPIRED';
+      expiresAt: string | null;
+      daysLeft: number | null;
+      imageOnFile: boolean;
+    };
+  };
   employees: TransportRequestPerson[];
   /** Vehicles that can be asked for. Availability is the approver's call. */
   vehicles: { assetId: string; name: string; assetNumber: string }[];
@@ -740,8 +752,10 @@ export interface CreateTransportRequestPayload {
   departureTime: string;
   returnTime?: string;
   stops?: TransportStopRef[];
-  /** Typed destination and purpose, used for personal trips instead of stops. */
+  /** Searched destination, used for miscellaneous trips instead of stops. */
   destination?: string;
+  /** What a miscellaneous trip is for; an empty string clears it on update. */
+  businessPurpose?: string;
   passengerIds?: string[];
   notes?: string;
   /** What the requester would like; the approver decides the real allocation. */
