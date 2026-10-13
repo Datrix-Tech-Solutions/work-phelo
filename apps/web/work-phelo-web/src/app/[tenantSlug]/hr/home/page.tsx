@@ -36,6 +36,7 @@ import { AnnouncementCard } from '@/components/molecules/dashboard/announcmentCa
 import { BirthdaysCard } from '@/components/molecules/dashboard/birthdayCard';
 import { UpcomingHolidaysCard } from '@/components/molecules/dashboard/UpcomingHolidaysCard';
 import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
+import { PendingLeavePanel } from '@/components/organisms/dashboard/PendingLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
 import { MySchedulesPanel } from '@/components/organisms/dashboard/MySchedulesPanel';
@@ -115,6 +116,7 @@ export default function EmployeeDashboardPage({
     );
   }, [myLeave]);
   const onLeaveToday = Boolean(currentLeave);
+  const pendingLeave = useMemo(() => myLeave.filter((r) => r.status === 'PENDING'), [myLeave]);
 
   const upcomingLeave = useMemo(() => {
     if (currentLeave) return undefined;
@@ -218,6 +220,7 @@ export default function EmployeeDashboardPage({
   const [payslipsOpen, setPayslipsOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [myLeaveOpen, setMyLeaveOpen] = useState(false);
+  const [pendingLeaveOpen, setPendingLeaveOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
 
@@ -398,6 +401,8 @@ export default function EmployeeDashboardPage({
             <RequestLeaveCard
               annualBalance={annualLeaveBalance}
               onRequestLeave={() => openApplyLeave(annualLeaveBalance?.leaveTypeId)}
+              pendingRequestCount={pendingLeave.length}
+              onViewPending={() => setPendingLeaveOpen(true)}
             />
             <UpcomingLeaveCard request={currentLeave ?? upcomingLeave} isCurrent={onLeaveToday} />
           </div>
@@ -463,6 +468,11 @@ export default function EmployeeDashboardPage({
           openApplyLeave();
         }}
         requests={myLeave}
+      />
+      <PendingLeavePanel
+        isOpen={pendingLeaveOpen}
+        onClose={() => setPendingLeaveOpen(false)}
+        requests={pendingLeave}
       />
       <MyPayslipsPanel
         isOpen={payslipsOpen}
