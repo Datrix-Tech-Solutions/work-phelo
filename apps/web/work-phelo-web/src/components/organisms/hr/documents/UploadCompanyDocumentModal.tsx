@@ -34,18 +34,30 @@ interface Props {
   onClose: () => void;
   onUpload: (input: UploadCompanyDocumentInput) => void;
   isUploading?: boolean;
+  /** Limits the categories on offer, e.g. employees may only add a driver's licence. */
+  onlyTypes?: DocumentType[];
 }
 
-export function UploadCompanyDocumentModal({ isOpen, onClose, onUpload, isUploading }: Props) {
+export function UploadCompanyDocumentModal({
+  isOpen,
+  onClose,
+  onUpload,
+  isUploading,
+  onlyTypes,
+}: Props) {
+  const typeOptions = onlyTypes
+    ? TYPE_OPTIONS.filter((option) => onlyTypes.includes(option.value))
+    : TYPE_OPTIONS;
+  const defaultType: DocumentType = typeOptions[0]?.value ?? 'CONTRACT';
   const [file, setFile] = useState<File | null>(null);
-  const [type, setType] = useState<DocumentType>('CONTRACT');
+  const [type, setType] = useState<DocumentType>(defaultType);
   const [customType, setCustomType] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [licence, setLicence] = useState<DriverLicenceDetails>(emptyLicenceDetails);
 
   const reset = () => {
     setFile(null);
-    setType('CONTRACT');
+    setType(defaultType);
     setCustomType('');
     setExpiresAt('');
     setLicence(emptyLicenceDetails());
@@ -97,7 +109,7 @@ export function UploadCompanyDocumentModal({ isOpen, onClose, onUpload, isUpload
         <SearchSelect
           label="Document type"
           placeholder="Select document type"
-          options={TYPE_OPTIONS}
+          options={typeOptions}
           value={type}
           onChange={(value) => setType(value as DocumentType)}
           clearable={false}
