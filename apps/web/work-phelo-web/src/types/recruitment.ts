@@ -173,3 +173,131 @@ export interface JobOpeningFormValues {
   requestGithub: boolean;
   questions: JobOpeningQuestionRow[];
 }
+
+export interface RecruitmentStage {
+  id: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  isDefault: boolean;
+}
+
+/** A submitted application as listed on the candidates page. */
+export interface RecruitmentCandidate {
+  id: string;
+  vacancyId: string;
+  currentStageId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  city: string | null;
+  yearsOfExperience: number | null;
+  currentJobTitle: string | null;
+  currentEmployer: string | null;
+  resumeUrl: string | null;
+  appliedAt: string;
+  submittedAt: string | null;
+  vacancy: { id: string; title: string | null };
+  currentStage: RecruitmentStage | null;
+}
+
+export interface RecruitmentCandidatePage {
+  items: RecruitmentCandidate[];
+  meta: { page: number; limit: number; total: number };
+}
+
+export interface CandidateExperience {
+  role: string;
+  company: string | null;
+  /** YYYY-MM, null when unknown. */
+  startDate: string | null;
+  /** YYYY-MM; null means the candidate still works there. */
+  endDate: string | null;
+  description: string | null;
+}
+
+export interface CandidateEducation {
+  school: string;
+  level: string | null;
+  startYear: number | null;
+  /** Null while still studying. */
+  endYear: number | null;
+}
+
+export interface RecruitmentCandidateAnswer {
+  id: string;
+  question: string;
+  answer: string;
+  selectedOptions: string[];
+}
+
+/** A single candidate with everything the application collected. */
+export interface RecruitmentCandidateDetail extends RecruitmentCandidate {
+  professionalSummary: string | null;
+  skills: string[];
+  languages: string[];
+  /** School entries for the overview; derived from `education` when the API has no structure. */
+  educationHistory: CandidateEducation[];
+  /** Work history, newest first; derived from the current role when the API has no structure. */
+  experienceHistory: CandidateExperience[];
+  education: string | null;
+  highestEducationLevel: string | null;
+  expectedSalary: number | null;
+  expectedSalaryCurrency: string | null;
+  noticePeriod: string | null;
+  resumeFileName: string | null;
+  coverLetterUrl: string | null;
+  coverLetterFileName: string | null;
+  portfolioUrl: string | null;
+  githubUrl: string | null;
+  answers: RecruitmentCandidateAnswer[];
+}
+
+export interface RecruitmentStageHistoryEntry {
+  id: string;
+  previousStage: { id: string; name: string } | null;
+  newStage: { id: string; name: string };
+  changedByEmployee: { id: string; firstName: string; lastName: string } | null;
+  note: string | null;
+  changedAt: string;
+}
+
+export type InterviewMode = 'IN_PERSON' | 'VIDEO' | 'PHONE';
+export type InterviewStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+
+export interface CandidateInterview {
+  id: string;
+  title: string;
+  mode: InterviewMode;
+  status: InterviewStatus;
+  /** ISO date-time of the start. */
+  scheduledAt: string;
+  durationMinutes: number;
+  location: string | null;
+  interviewers: string[];
+  feedback: string | null;
+  /** Video: the meeting platform and join link. Phone: the number to call. */
+  platform?: string | null;
+  meetingLink?: string | null;
+  phone?: string | null;
+  /** Instructions or context the recruiter left for the interview. */
+  notes?: string | null;
+}
+
+/** What the schedule interview form collects. */
+export interface ScheduleInterviewInput {
+  candidateId: string;
+  mode: InterviewMode;
+  platform: string | null;
+  meetingLink: string | null;
+  phone: string | null;
+  location: string | null;
+  /** YYYY-MM-DD */
+  date: string;
+  /** HH:mm, 24-hour */
+  startTime: string;
+  durationMinutes: number;
+  notes: string | null;
+}

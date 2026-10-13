@@ -486,3 +486,45 @@ export class QueryPublicRecruitmentVacanciesDto {
   @Max(100)
   limit?: number;
 }
+
+export class QueryPublicRecruitmentBoardDto {
+  @ApiPropertyOptional({
+    description: 'Search title, company, city or location',
+    example: 'engineer',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ enum: EmploymentType })
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  jobType?: EmploymentType;
+
+  @ApiPropertyOptional({ enum: WorkMode })
+  @IsOptional()
+  @IsEnum(WorkMode)
+  workMode?: WorkMode;
+
+  @ApiPropertyOptional({ description: 'Page number', minimum: 1, example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({
+    description: 'Page size',
+    minimum: 1,
+    maximum: 100,
+    example: 25,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}

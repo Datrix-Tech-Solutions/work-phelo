@@ -44,11 +44,16 @@ import {
   UpdateRecruitmentCandidateStageDto,
 } from './dto/candidate.dto';
 import {
+  CreateRecruitmentInterviewDto,
+  UpdateRecruitmentInterviewDto,
+} from './dto/interview.dto';
+import {
   CreateRecruitmentStageDto,
   UpdateRecruitmentStageDto,
 } from './dto/stage.dto';
 import {
   CreateRecruitmentVacancyDto,
+  QueryPublicRecruitmentBoardDto,
   QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
   UpdateRecruitmentVacancyDto,
@@ -88,6 +93,22 @@ export class RecruitmentPublicController {
   @ApiOkResponse({ description: 'Paginated public vacancy list' })
   listPublicVacancies(@Query() query: QueryPublicRecruitmentVacanciesDto) {
     return this.recruitmentService.listPublicVacancies(query);
+  }
+
+  @Get('board')
+  @ApiOperation({
+    summary: 'List open vacancies across all companies',
+    description:
+      'Public job board feed. Every OPEN vacancy that is still accepting applications is listed. Each item carries tenantId and id, which the vacancy detail and application endpoints require.',
+  })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'jobType', required: false })
+  @ApiQuery({ name: 'workMode', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiOkResponse({ description: 'Paginated public job board' })
+  listPublicBoard(@Query() query: QueryPublicRecruitmentBoardDto) {
+    return this.recruitmentService.listPublicBoard(query);
   }
 
   @Get('vacancies/:vacancyId')
@@ -625,6 +646,85 @@ export class RecruitmentController {
     return this.recruitmentService.getCandidateStageHistory(
       req.user.tenantId,
       candidateId,
+    );
+  }
+
+  @Get('candidates/:candidateId/interviews')
+  @ApiTags('HR Recruitment - Interviews')
+  @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
+  @ApiOperation({
+    summary: 'List interviews for a recruitment candidate',
+    description:
+      'Returns every interview scheduled for a submitted candidate, soonest first.',
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiOkResponse({ description: 'Candidate interview list' })
+  listCandidateInterviews(
+    @Param('candidateId') candidateId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.listCandidateInterviews(
+      req.user.tenantId,
+      candidateId,
+    );
+  }
+
+  @Post('candidates/:candidateId/interviews')
+  @ApiTags('HR Recruitment - Interviews')
+  @RequirePermissions(Permission.SCHEDULE_RECRUITMENT_INTERVIEW)
+  @ApiOperation({
+    summary: 'Schedule an interview for a recruitment candidate',
+    description:
+      'Video interviews need a platform and an http(s) link, phone interviews a phone number, in-person interviews a location. The start time must be in the future.',
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiBody({ type: CreateRecruitmentInterviewDto })
+  @ApiCreatedResponse({ description: 'Interview scheduled' })
+  scheduleCandidateInterview(
+    @Param('candidateId') candidateId: string,
+    @Body() dto: CreateRecruitmentInterviewDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.scheduleCandidateInterview(
+      req.user.tenantId,
+      req.user,
+      candidateId,
+      dto,
+    );
+  }
+
+  @Patch('candidates/:candidateId/interviews/:interviewId')
+  @ApiTags('HR Recruitment - Interviews')
+  @RequirePermissions(Permission.SCHEDULE_RECRUITMENT_INTERVIEW)
+  @ApiOperation({
+    summary: 'Reschedule, complete or cancel a candidate interview',
+    description:
+      'Scheduled interviews can be rescheduled, edited, completed or cancelled. Completed interviews only accept feedback. Cancelled interviews are final.',
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiParam({ name: 'interviewId', description: 'Interview UUID' })
+  @ApiBody({ type: UpdateRecruitmentInterviewDto })
+  @ApiOkResponse({ description: 'Interview updated' })
+  updateCandidateInterview(
+    @Param('candidateId') candidateId: string,
+    @Param('interviewId') interviewId: string,
+    @Body() dto: UpdateRecruitmentInterviewDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.updateCandidateInterview(
+      req.user.tenantId,
+      candidateId,
+      interviewId,
+      dto,
     );
   }
 }

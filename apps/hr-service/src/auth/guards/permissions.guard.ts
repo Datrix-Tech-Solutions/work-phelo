@@ -74,6 +74,9 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE]: [
     { resource: 'recruitment.candidates', actions: ['EDIT'] },
   ],
+  [Permission.SCHEDULE_RECRUITMENT_INTERVIEW]: [
+    { resource: 'recruitment.candidates', actions: ['EDIT'] },
+  ],
   [Permission.READ_RECRUITMENT_STAGES]: [
     { resource: 'recruitment.stages', actions: ['VIEW'] },
   ],
