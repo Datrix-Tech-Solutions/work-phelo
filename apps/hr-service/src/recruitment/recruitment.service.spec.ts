@@ -8,7 +8,10 @@ import {
 import { jest, describe, beforeEach, it, expect } from '@jest/globals';
 import {
   EmploymentType,
+  WorkMode,
   RecruitmentApplicationStatus,
+  RecruitmentInterviewMode,
+  RecruitmentInterviewStatus,
   RecruitmentQuestionType,
   RecruitmentSalaryType,
   RecruitmentVacancyStatus,
@@ -65,6 +68,12 @@ function createPrismaMock() {
       count: jest.fn(),
       create: jest.fn(),
       findMany: jest.fn(),
+    },
+    recruitmentInterview: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
     },
     employee: {
       findFirst: jest.fn(),
@@ -147,6 +156,34 @@ function stage(overrides: Record<string, unknown> = {}) {
     sortOrder: 1,
     isDefault: true,
     description: null,
+    createdAt: new Date('2026-10-01T00:00:00Z'),
+    updatedAt: new Date('2026-10-01T00:00:00Z'),
+    ...overrides,
+  };
+}
+
+function interview(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'interview-1',
+    tenantId: 'tenant-1',
+    applicationId: 'candidate-1',
+    mode: RecruitmentInterviewMode.VIDEO,
+    status: RecruitmentInterviewStatus.SCHEDULED,
+    scheduledAt: new Date('2099-01-01T10:00:00Z'),
+    durationMinutes: 45,
+    platform: 'Google Meet',
+    meetingLink: 'https://meet.google.com/abc',
+    phone: null,
+    location: null,
+    notes: null,
+    feedback: null,
+    createdByUserId: 'user-1',
+    createdByEmployeeId: 'employee-1',
+    createdByEmployee: {
+      id: 'employee-1',
+      firstName: 'Efua',
+      lastName: 'Sarpong',
+    },
     createdAt: new Date('2026-10-01T00:00:00Z'),
     updatedAt: new Date('2026-10-01T00:00:00Z'),
     ...overrides,
@@ -737,6 +774,35 @@ describe('RecruitmentService', () => {
         }),
       );
       expect(result.items[0]).not.toHaveProperty('createdByUserId');
+    });
+
+    it('lists open vacancies across tenants on the public board', async () => {
+      prisma.recruitmentVacancy.findMany.mockResolvedValue([
+        vacancy({ companyName: 'Acme Ghana Ltd' }),
+      ]);
+      prisma.recruitmentVacancy.count.mockResolvedValue(1);
+
+      const result = await service.listPublicBoard({
+        search: 'officer',
+        workMode: WorkMode.REMOTE,
+      });
+
+      const args = prisma.recruitmentVacancy.findMany.mock.calls[0][0];
+      expect(args.where).not.toHaveProperty('tenantId');
+      expect(args.where.workMode).toBe(WorkMode.REMOTE);
+      expect(JSON.stringify(args.where.AND)).toContain('OPEN');
+      expect(JSON.stringify(args.where.AND)).toContain('officer');
+      expect(result.items[0]).toEqual(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          companyName: 'Acme Ghana Ltd',
+        }),
+      );
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: expect.any(Number),
+        total: 1,
+      });
     });
 
     it('returns public detail for an open vacancy', async () => {
@@ -1590,6 +1656,281 @@ describe('RecruitmentService', () => {
       await expect(
         service.moveCandidateStage('tenant-1', user, 'candidate-1', 'stage-2'),
       ).rejects.toThrow('rollback');
+    });
+  });
+
+  describe('interviews', () => {
+    const future = '2099-01-01T10:00:00.000Z';
+
+    beforeEach(() => {
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(candidate());
+      prisma.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    });
+
+    it('lists interviews for a submitted candidate within the tenant', async () => {
+      prisma.recruitmentInterview.findMany.mockResolvedValue([interview()]);
+
+      const result = await service.listCandidateInterviews(
+        'tenant-1',
+        'candidate-1',
+      );
+
+      expect(prisma.recruitmentApplication.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: 'tenant-1',
+            status: RecruitmentApplicationStatus.SUBMITTED,
+          }),
+        }),
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          id: 'interview-1',
+          candidateId: 'candidate-1',
+          scheduledBy: {
+            id: 'employee-1',
+            firstName: 'Efua',
+            lastName: 'Sarpong',
+          },
+        }),
+      );
+    });
+
+    it('does not list interviews for a draft or missing candidate', async () => {
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.listCandidateInterviews('tenant-1', 'candidate-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.recruitmentInterview.findMany).not.toHaveBeenCalled();
+    });
+
+    it('schedules a video interview with its platform and link', async () => {
+      prisma.recruitmentInterview.create.mockResolvedValue(interview());
+
+      await service.scheduleCandidateInterview(
+        'tenant-1',
+        user,
+        'candidate-1',
+        {
+          mode: RecruitmentInterviewMode.VIDEO,
+          scheduledAt: future,
+          durationMinutes: 45,
+          platform: ' Google Meet ',
+          meetingLink: 'https://meet.google.com/abc',
+          notes: '  Bring a laptop ',
+        },
+      );
+
+      expect(prisma.recruitmentInterview.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tenantId: 'tenant-1',
+            applicationId: 'candidate-1',
+            mode: RecruitmentInterviewMode.VIDEO,
+            platform: 'Google Meet',
+            meetingLink: 'https://meet.google.com/abc',
+            phone: null,
+            location: null,
+            notes: 'Bring a laptop',
+            createdByUserId: 'user-1',
+            createdByEmployeeId: 'employee-1',
+          }),
+        }),
+      );
+    });
+
+    it('drops fields that do not belong to the chosen mode', async () => {
+      prisma.recruitmentInterview.create.mockResolvedValue(
+        interview({ mode: RecruitmentInterviewMode.PHONE }),
+      );
+
+      await service.scheduleCandidateInterview(
+        'tenant-1',
+        user,
+        'candidate-1',
+        {
+          mode: RecruitmentInterviewMode.PHONE,
+          scheduledAt: future,
+          durationMinutes: 30,
+          phone: '+233201234567',
+          platform: 'Zoom',
+          meetingLink: 'https://zoom.us/j/1',
+          location: 'Accra',
+        },
+      );
+
+      expect(prisma.recruitmentInterview.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            phone: '+233201234567',
+            platform: null,
+            meetingLink: null,
+            location: null,
+          }),
+        }),
+      );
+    });
+
+    it.each([
+      [
+        'a video interview without a link',
+        {
+          mode: RecruitmentInterviewMode.VIDEO,
+          platform: 'Zoom',
+        },
+      ],
+      [
+        'a video interview with a non-http link',
+        {
+          mode: RecruitmentInterviewMode.VIDEO,
+          platform: 'Zoom',
+          meetingLink: 'ftp://example.com',
+        },
+      ],
+      [
+        'a phone interview without a number',
+        { mode: RecruitmentInterviewMode.PHONE },
+      ],
+      [
+        'an in-person interview without a location',
+        { mode: RecruitmentInterviewMode.IN_PERSON },
+      ],
+    ])('rejects %s', async (_label, channel) => {
+      await expect(
+        service.scheduleCandidateInterview('tenant-1', user, 'candidate-1', {
+          scheduledAt: future,
+          durationMinutes: 30,
+          ...channel,
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.recruitmentInterview.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects an interview that starts in the past', async () => {
+      await expect(
+        service.scheduleCandidateInterview('tenant-1', user, 'candidate-1', {
+          mode: RecruitmentInterviewMode.IN_PERSON,
+          scheduledAt: '2000-01-01T10:00:00.000Z',
+          durationMinutes: 30,
+          location: 'Head Office',
+        }),
+      ).rejects.toThrow('future');
+    });
+
+    it('reschedules a scheduled interview and keeps the stored channel', async () => {
+      prisma.recruitmentInterview.findFirst.mockResolvedValue(interview());
+      prisma.recruitmentInterview.update.mockResolvedValue(interview());
+
+      await service.updateCandidateInterview(
+        'tenant-1',
+        'candidate-1',
+        'interview-1',
+        { scheduledAt: future, durationMinutes: 60 },
+      );
+
+      expect(prisma.recruitmentInterview.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'interview-1' },
+          data: expect.not.objectContaining({ status: expect.anything() }),
+        }),
+      );
+      expect(prisma.recruitmentInterview.update.mock.calls[0][0].data).toEqual(
+        expect.objectContaining({
+          durationMinutes: 60,
+          platform: 'Google Meet',
+          meetingLink: 'https://meet.google.com/abc',
+        }),
+      );
+    });
+
+    it('requires the new mode details when the mode changes', async () => {
+      prisma.recruitmentInterview.findFirst.mockResolvedValue(interview());
+
+      await expect(
+        service.updateCandidateInterview(
+          'tenant-1',
+          'candidate-1',
+          'interview-1',
+          { mode: RecruitmentInterviewMode.PHONE },
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.recruitmentInterview.update).not.toHaveBeenCalled();
+    });
+
+    it('completes an interview with feedback', async () => {
+      prisma.recruitmentInterview.findFirst.mockResolvedValue(interview());
+      prisma.recruitmentInterview.update.mockResolvedValue(
+        interview({ status: RecruitmentInterviewStatus.COMPLETED }),
+      );
+
+      await service.updateCandidateInterview(
+        'tenant-1',
+        'candidate-1',
+        'interview-1',
+        {
+          status: RecruitmentInterviewStatus.COMPLETED,
+          feedback: ' Strong answers ',
+        },
+      );
+
+      expect(prisma.recruitmentInterview.update.mock.calls[0][0].data).toEqual({
+        status: RecruitmentInterviewStatus.COMPLETED,
+        feedback: 'Strong answers',
+      });
+    });
+
+    it('does not let a cancelled interview change again', async () => {
+      prisma.recruitmentInterview.findFirst.mockResolvedValue(
+        interview({ status: RecruitmentInterviewStatus.CANCELLED }),
+      );
+
+      await expect(
+        service.updateCandidateInterview(
+          'tenant-1',
+          'candidate-1',
+          'interview-1',
+          { feedback: 'Too late' },
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('only accepts feedback on a completed interview', async () => {
+      prisma.recruitmentInterview.findFirst.mockResolvedValue(
+        interview({ status: RecruitmentInterviewStatus.COMPLETED }),
+      );
+      prisma.recruitmentInterview.update.mockResolvedValue(interview());
+
+      await expect(
+        service.updateCandidateInterview(
+          'tenant-1',
+          'candidate-1',
+          'interview-1',
+          { durationMinutes: 90 },
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      await service.updateCandidateInterview(
+        'tenant-1',
+        'candidate-1',
+        'interview-1',
+        { feedback: 'Recommended' },
+      );
+      expect(prisma.recruitmentInterview.update).toHaveBeenCalled();
+    });
+
+    it('returns not found for an interview that is not on this candidate', async () => {
+      prisma.recruitmentInterview.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateCandidateInterview(
+          'tenant-1',
+          'candidate-1',
+          'other-interview',
+          { notes: 'x' },
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

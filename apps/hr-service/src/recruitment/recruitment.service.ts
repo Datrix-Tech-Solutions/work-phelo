@@ -9,6 +9,8 @@ import { RequestUser } from '@work-phelo/types';
 import {
   Prisma,
   RecruitmentApplicationStatus,
+  RecruitmentInterviewMode,
+  RecruitmentInterviewStatus,
   RecruitmentQuestionType,
   RecruitmentSalaryType,
   RecruitmentVacancyStatus,
@@ -22,11 +24,16 @@ import {
   UpdateRecruitmentApplicationProfessionalInfoDto,
 } from './dto/candidate.dto';
 import {
+  CreateRecruitmentInterviewDto,
+  UpdateRecruitmentInterviewDto,
+} from './dto/interview.dto';
+import {
   CreateRecruitmentStageDto,
   UpdateRecruitmentStageDto,
 } from './dto/stage.dto';
 import {
   CreateRecruitmentVacancyDto,
+  QueryPublicRecruitmentBoardDto,
   QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
   RecruitmentVacancyQuestionDto,
@@ -60,6 +67,12 @@ const RECRUITMENT_CANDIDATE_INCLUDE = {
   },
   _count: { select: { stageHistory: true } },
 } satisfies Prisma.RecruitmentApplicationInclude;
+
+const RECRUITMENT_INTERVIEW_INCLUDE = {
+  createdByEmployee: {
+    select: { id: true, firstName: true, lastName: true },
+  },
+} satisfies Prisma.RecruitmentInterviewInclude;
 
 const RECRUITMENT_PUBLIC_APPLICATION_INCLUDE = {
   vacancy: {
@@ -159,6 +172,7 @@ export class RecruitmentService {
       const created = await tx.recruitmentVacancy.create({
         data: {
           tenantId,
+          companyName: this.optionalTrim(user.tenantName),
           title: this.optionalTrim(dto.title),
           departmentId: dto.departmentId ?? undefined,
           branchId: dto.branchId ?? undefined,
@@ -248,6 +262,58 @@ export class RecruitmentService {
     };
   }
 
+  /** Open vacancies across every company, for the public job board. */
+  async listPublicBoard(query: QueryPublicRecruitmentBoardDto) {
+    const page = this.page(query.page);
+    const limit = this.limit(query.limit);
+    const search = query.search?.trim();
+    const where: Prisma.RecruitmentVacancyWhereInput = {
+      AND: [
+        this.acceptingApplicationsWhere(),
+        ...(search
+          ? [
+              {
+                OR: [
+                  { title: { contains: search, mode: 'insensitive' as const } },
+                  {
+                    location: {
+                      contains: search,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                  { city: { contains: search, mode: 'insensitive' as const } },
+                  {
+                    companyName: {
+                      contains: search,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+      ...(query.jobType ? { jobType: query.jobType } : {}),
+      ...(query.workMode ? { workMode: query.workMode } : {}),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.recruitmentVacancy.findMany({
+        where,
+        include: RECRUITMENT_VACANCY_INCLUDE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.recruitmentVacancy.count({ where }),
+    ]);
+
+    return {
+      items: items.map((item) => this.serializePublicVacancy(item)),
+      meta: { page, limit, total },
+    };
+  }
+
   async getPublicVacancy(tenantId: string, vacancyId: string) {
     const publicTenantId = this.requirePublicTenantId(tenantId);
     const vacancy = await this.prisma.recruitmentVacancy.findFirst({
@@ -308,6 +374,9 @@ export class RecruitmentService {
       await tx.recruitmentVacancy.update({
         where: { id: vacancyId },
         data: {
+          ...(user.tenantName?.trim()
+            ? { companyName: user.tenantName.trim() }
+            : {}),
           ...(dto.title !== undefined
             ? { title: this.optionalTrim(dto.title) ?? null }
             : {}),
@@ -649,6 +718,152 @@ export class RecruitmentService {
       },
       orderBy: [{ changedAt: 'asc' }, { id: 'asc' }],
     });
+  }
+
+  async listCandidateInterviews(tenantId: string, candidateId: string) {
+    await this.getCandidateForInterviews(tenantId, candidateId);
+    const interviews = await this.prisma.recruitmentInterview.findMany({
+      where: { tenantId, applicationId: candidateId },
+      include: RECRUITMENT_INTERVIEW_INCLUDE,
+      orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
+    });
+    return interviews.map((interview) => this.serializeInterview(interview));
+  }
+
+  async scheduleCandidateInterview(
+    tenantId: string,
+    user: RequestUser,
+    candidateId: string,
+    dto: CreateRecruitmentInterviewDto,
+  ) {
+    await this.getCandidateForInterviews(tenantId, candidateId);
+    const scheduledAt = this.parseInterviewTime(dto.scheduledAt);
+    const channel = this.resolveInterviewChannel({
+      mode: dto.mode,
+      platform: dto.platform,
+      meetingLink: dto.meetingLink,
+      phone: dto.phone,
+      location: dto.location,
+    });
+
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: user.id },
+      select: { id: true },
+    });
+
+    const created = await this.prisma.recruitmentInterview.create({
+      data: {
+        tenantId,
+        applicationId: candidateId,
+        mode: dto.mode,
+        scheduledAt,
+        durationMinutes: dto.durationMinutes,
+        ...channel,
+        notes: this.optionalTrim(dto.notes) ?? null,
+        createdByUserId: user.id,
+        createdByEmployeeId: actorEmployee?.id,
+      },
+      include: RECRUITMENT_INTERVIEW_INCLUDE,
+    });
+    return this.serializeInterview(created);
+  }
+
+  async updateCandidateInterview(
+    tenantId: string,
+    candidateId: string,
+    interviewId: string,
+    dto: UpdateRecruitmentInterviewDto,
+  ) {
+    await this.getCandidateForInterviews(tenantId, candidateId);
+    const existing = await this.prisma.recruitmentInterview.findFirst({
+      where: { tenantId, applicationId: candidateId, id: interviewId },
+    });
+    if (!existing) throw new NotFoundException('Interview not found');
+
+    const data: Prisma.RecruitmentInterviewUpdateInput = {};
+    const isScheduled =
+      existing.status === RecruitmentInterviewStatus.SCHEDULED;
+
+    if (dto.status === RecruitmentInterviewStatus.SCHEDULED && !isScheduled) {
+      throw new ConflictException(
+        'A completed or cancelled interview cannot be scheduled again',
+      );
+    }
+
+    const changesDetails =
+      dto.mode !== undefined ||
+      dto.scheduledAt !== undefined ||
+      dto.durationMinutes !== undefined ||
+      dto.platform !== undefined ||
+      dto.meetingLink !== undefined ||
+      dto.phone !== undefined ||
+      dto.location !== undefined ||
+      dto.notes !== undefined;
+
+    if (!isScheduled) {
+      // Finished interviews keep their schedule; only the feedback can still be written.
+      if (changesDetails || dto.status !== undefined) {
+        throw new ConflictException('Only scheduled interviews can be changed');
+      }
+      if (existing.status !== RecruitmentInterviewStatus.COMPLETED) {
+        throw new ConflictException(
+          'Feedback can only be added to a completed interview',
+        );
+      }
+    }
+
+    if (changesDetails) {
+      const mode = dto.mode ?? existing.mode;
+      const modeChanged = dto.mode !== undefined && dto.mode !== existing.mode;
+      // Values for the new mode must be sent when the mode changes; otherwise unsent fields keep
+      // what is stored.
+      const channel = this.resolveInterviewChannel({
+        mode,
+        platform: this.pickChannelValue(
+          dto.platform,
+          existing.platform,
+          modeChanged,
+        ),
+        meetingLink: this.pickChannelValue(
+          dto.meetingLink,
+          existing.meetingLink,
+          modeChanged,
+        ),
+        phone: this.pickChannelValue(dto.phone, existing.phone, modeChanged),
+        location: this.pickChannelValue(
+          dto.location,
+          existing.location,
+          modeChanged,
+        ),
+      });
+      data.mode = mode;
+      data.platform = channel.platform;
+      data.meetingLink = channel.meetingLink;
+      data.phone = channel.phone;
+      data.location = channel.location;
+    }
+    if (dto.scheduledAt !== undefined) {
+      data.scheduledAt = this.parseInterviewTime(dto.scheduledAt);
+    }
+    if (dto.durationMinutes !== undefined) {
+      data.durationMinutes = dto.durationMinutes;
+    }
+    if (dto.notes !== undefined) {
+      data.notes = this.optionalTrim(dto.notes) ?? null;
+    }
+    if (dto.feedback !== undefined) {
+      data.feedback = this.optionalTrim(dto.feedback) ?? null;
+    }
+    if (dto.status !== undefined && dto.status !== existing.status) {
+      data.status = dto.status;
+    }
+
+    const updated = await this.prisma.recruitmentInterview.update({
+      where: { id: interviewId },
+      data,
+      include: RECRUITMENT_INTERVIEW_INCLUDE,
+    });
+    return this.serializeInterview(updated);
   }
 
   async createApplication(
@@ -1579,6 +1794,7 @@ export class RecruitmentService {
     return {
       id: vacancy.id,
       tenantId: vacancy.tenantId,
+      companyName: vacancy.companyName,
       title: vacancy.title,
       department: vacancy.department?.name ?? null,
       branch: vacancy.branch?.name ?? null,
@@ -2010,6 +2226,128 @@ export class RecruitmentService {
 
   private hashAccessToken(accessToken: string) {
     return createHash('sha256').update(accessToken).digest('hex');
+  }
+
+  private async getCandidateForInterviews(
+    tenantId: string,
+    candidateId: string,
+  ) {
+    const candidate = await this.prisma.recruitmentApplication.findFirst({
+      where: {
+        tenantId,
+        id: candidateId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+      },
+      select: { id: true },
+    });
+    if (!candidate)
+      throw new NotFoundException('Recruitment candidate not found');
+    return candidate;
+  }
+
+  private parseInterviewTime(value: string) {
+    const scheduledAt = new Date(value);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      throw new BadRequestException('scheduledAt must be a valid date-time');
+    }
+    if (scheduledAt.getTime() <= Date.now()) {
+      throw new BadRequestException(
+        'Interviews must be scheduled in the future',
+      );
+    }
+    return scheduledAt;
+  }
+
+  /** On a mode change nothing from the previous mode carries over; otherwise unsent keeps stored. */
+  private pickChannelValue(
+    sent: string | null | undefined,
+    stored: string | null,
+    modeChanged: boolean,
+  ) {
+    if (sent !== undefined) return sent;
+    return modeChanged ? null : stored;
+  }
+
+  /**
+   * Each mode needs one set of details and drops the rest, so an interview never carries a
+   * stale link or number from a different mode.
+   */
+  private resolveInterviewChannel(input: {
+    mode: RecruitmentInterviewMode;
+    platform?: string | null;
+    meetingLink?: string | null;
+    phone?: string | null;
+    location?: string | null;
+  }) {
+    const none = {
+      platform: null as string | null,
+      meetingLink: null as string | null,
+      phone: null as string | null,
+      location: null as string | null,
+    };
+
+    if (input.mode === RecruitmentInterviewMode.VIDEO) {
+      const platform = this.optionalTrim(input.platform);
+      const meetingLink = this.optionalTrim(input.meetingLink);
+      if (!platform) {
+        throw new BadRequestException(
+          'platform is required for a video interview',
+        );
+      }
+      if (!meetingLink) {
+        throw new BadRequestException(
+          'meetingLink is required for a video interview',
+        );
+      }
+      if (!/^https?:\/\/\S+$/i.test(meetingLink)) {
+        throw new BadRequestException(
+          'meetingLink must be a valid http or https link',
+        );
+      }
+      return { ...none, platform, meetingLink };
+    }
+
+    if (input.mode === RecruitmentInterviewMode.PHONE) {
+      const phone = this.optionalTrim(input.phone);
+      if (!phone) {
+        throw new BadRequestException(
+          'phone is required for a phone interview',
+        );
+      }
+      return { ...none, phone };
+    }
+
+    const location = this.optionalTrim(input.location);
+    if (!location) {
+      throw new BadRequestException(
+        'location is required for an in-person interview',
+      );
+    }
+    return { ...none, location };
+  }
+
+  private serializeInterview(
+    interview: Prisma.RecruitmentInterviewGetPayload<{
+      include: typeof RECRUITMENT_INTERVIEW_INCLUDE;
+    }>,
+  ) {
+    return {
+      id: interview.id,
+      candidateId: interview.applicationId,
+      mode: interview.mode,
+      status: interview.status,
+      scheduledAt: interview.scheduledAt,
+      durationMinutes: interview.durationMinutes,
+      platform: interview.platform,
+      meetingLink: interview.meetingLink,
+      phone: interview.phone,
+      location: interview.location,
+      notes: interview.notes,
+      feedback: interview.feedback,
+      scheduledBy: interview.createdByEmployee,
+      createdAt: interview.createdAt,
+      updatedAt: interview.updatedAt,
+    };
   }
 
   private optionalTrim(value?: string | null) {

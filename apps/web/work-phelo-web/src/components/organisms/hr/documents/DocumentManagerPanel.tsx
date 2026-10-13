@@ -29,6 +29,8 @@ interface Props {
   onSelectionChange?: (doc: MyDocument | null) => void;
   /** Extra detail content for the selected document (e.g. a licence's details). */
   renderDetails?: (doc: MyDocument) => React.ReactNode;
+  /** Shows only the card grid and hides the table/grid switch. */
+  gridOnly?: boolean;
 }
 
 export function DocumentManagerPanel({
@@ -40,8 +42,10 @@ export function DocumentManagerPanel({
   renderUploadModal,
   onSelectionChange,
   renderDetails,
+  gridOnly = false,
 }: Props) {
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [chosenView, setViewMode] = useState<ViewMode>('table');
+  const viewMode: ViewMode = gridOnly ? 'card' : chosenView;
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -104,30 +108,32 @@ export function DocumentManagerPanel({
             className={inputClass(undefined, 'flex-1 min-w-52 max-w-sm')}
           />
           <div className="flex-1" />
-          <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={cn(
-                'p-1.5 rounded-md transition-colors',
-                viewMode === 'table' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400',
-              )}
-              aria-label="Table view"
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('card')}
-              className={cn(
-                'p-1.5 rounded-md transition-colors',
-                viewMode === 'card' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400',
-              )}
-              aria-label="Card view"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-          </div>
+          {!gridOnly && (
+            <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={cn(
+                  'p-1.5 rounded-md transition-colors',
+                  viewMode === 'table' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400',
+                )}
+                aria-label="Table view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('card')}
+                className={cn(
+                  'p-1.5 rounded-md transition-colors',
+                  viewMode === 'card' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400',
+                )}
+                aria-label="Card view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           {allowUpload && (
             <Button size="sm" onClick={() => setUploadOpen(true)}>
               Upload Document

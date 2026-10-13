@@ -399,6 +399,22 @@ enum RecruitmentApplicationStatus {
   @@schema("hr")
 }
 
+enum RecruitmentInterviewMode {
+  VIDEO
+  PHONE
+  IN_PERSON
+
+  @@schema("hr")
+}
+
+enum RecruitmentInterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+
+  @@schema("hr")
+}
+
 // ── Branch ───────────────────────────────────────────────────────────────
 
 model Branch {
@@ -536,6 +552,7 @@ model Employee {
   projectMemberships    ProjectMember[]
   assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
   recruitmentStageMoves RecruitmentStageHistory[]   @relation("RecruitmentStageChangedBy")
+  scheduledInterviews   RecruitmentInterview[]      @relation("RecruitmentInterviewScheduledBy")
   offboarding           OffboardingRecord?
   resignation           ResignationRecord?
 
@@ -643,6 +660,9 @@ model ProjectActivity {
 model RecruitmentVacancy {
   id               String                   @id @default(uuid())
   tenantId         String
+  /// Snapshot of the tenant's name when the vacancy was saved; shown on the public job board,
+  /// which lists openings across companies.
+  companyName      String?
   title            String?
   departmentId     String?
   branchId         String?
@@ -689,6 +709,7 @@ model RecruitmentVacancy {
   @@index([tenantId, departmentId])
   @@index([tenantId, branchId])
   @@index([tenantId, closingDate])
+  @@index([status, createdAt])
   @@schema("hr")
 }
 
@@ -773,6 +794,7 @@ model RecruitmentApplication {
   currentStage RecruitmentStage?              @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
   stageHistory RecruitmentStageHistory[]
   answers      RecruitmentApplicationAnswer[]
+  interviews   RecruitmentInterview[]
 
   @@index([tenantId, vacancyId])
   @@index([tenantId, currentStageId])
@@ -822,6 +844,33 @@ model RecruitmentStageHistory {
 
   @@index([tenantId, applicationId, changedAt])
   @@index([tenantId, newStageId])
+  @@schema("hr")
+}
+
+model RecruitmentInterview {
+  id                  String                     @id @default(uuid())
+  tenantId            String
+  applicationId       String
+  mode                RecruitmentInterviewMode
+  status              RecruitmentInterviewStatus @default(SCHEDULED)
+  scheduledAt         DateTime
+  durationMinutes     Int
+  platform            String?
+  meetingLink         String?
+  phone               String?
+  location            String?
+  notes               String?
+  feedback            String?
+  createdByUserId     String?
+  createdByEmployeeId String?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  application       RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  createdByEmployee Employee?              @relation("RecruitmentInterviewScheduledBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, applicationId, scheduledAt])
+  @@index([tenantId, status, scheduledAt])
   @@schema("hr")
 }
 

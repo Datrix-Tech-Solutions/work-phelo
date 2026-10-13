@@ -36,6 +36,7 @@ export enum Permission {
   CLOSE_RECRUITMENT_VACANCY = 'close:recruitment_vacancy',
   READ_RECRUITMENT_CANDIDATES = 'read:recruitment_candidates',
   UPDATE_RECRUITMENT_CANDIDATE_STAGE = 'update:recruitment_candidate_stage',
+  SCHEDULE_RECRUITMENT_INTERVIEW = 'schedule:recruitment_interview',
   READ_RECRUITMENT_STAGES = 'read:recruitment_stages',
   CREATE_RECRUITMENT_STAGE = 'create:recruitment_stage',
   UPDATE_RECRUITMENT_STAGE = 'update:recruitment_stage',
