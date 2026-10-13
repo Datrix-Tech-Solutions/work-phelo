@@ -12,7 +12,9 @@ import { Icons } from '@/components/atoms/icons';
 import { MapPin } from 'lucide-react';
 import { useGeocodeSearch } from '@/hooks';
 import { useDestinationPicker } from '@/hooks/marketing/useDestinationPicker';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import {
+  useApproveRequest,
   useCreateRequest,
   useRequestAvailability,
   useRequestFormOptions,
@@ -23,7 +25,7 @@ import { apiErrorMessage } from '@/lib/apiError';
 import { formatAppointmentTime } from '@/lib/appointments';
 import { formatDate } from '@/lib/formatters';
 import { ALLOCATION_BLOCK_TAGS, PURPOSE_OPTIONS } from '@/lib/requestOptions';
-import { inputClass } from '@/lib/utils';
+import { cn, inputClass } from '@/lib/utils';
 import type {
   Appointment,
   DestinationOption,
@@ -33,8 +35,10 @@ import type {
 
 interface FormValues {
   purpose: TransportPurpose;
-  /** Typed destination and purpose, used instead of the client/prospect picker on personal trips. */
+  /** Place searched for on miscellaneous trips, used instead of the client/prospect picker. Optional. */
   destination: string;
+  /** What a miscellaneous trip is for. Optional. */
+  tripPurpose: string;
   travelDate: string;
   departureTime: string;
   /** Optional: blank means no planned return, and the trip stays out until it is completed. */
@@ -48,7 +52,7 @@ interface FormValues {
 }
 
 type FormErrors = Partial<
-  Record<'destination' | 'travelDate' | 'departureTime' | 'returnTime', string>
+  Record<'travelDate' | 'departureTime' | 'returnTime' | 'vehicle' | 'driver', string>
 >;
 
 /** Local today as YYYY-MM-DD. */
@@ -63,6 +67,7 @@ const todayIso = () => {
 const emptyValues = (): FormValues => ({
   purpose: 'MARKETING',
   destination: '',
+  tripPurpose: '',
   travelDate: todayIso(),
   departureTime: '',
   returnTime: '',
@@ -103,17 +108,30 @@ interface Props {
    * marketing and its prospect is a fixed destination, with room to add more.
    */
   appointment?: Appointment | null;
+  /**
+   * When given, and the person can approve, the panel offers Send & Approve: the request is raised
+   * and approved with the chosen vehicle and driver in one go, then handed to this.
+   */
+  onApproved?: (request: TransportRequest) => void;
 }
 
-export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
+export function RequestPanel({ isOpen, onClose, request, appointment, onApproved }: Props) {
   const toast = useToast();
   const createRequest = useCreateRequest();
   const updateRequest = useUpdateRequest();
+  const approveRequest = useApproveRequest();
+  const canApprove = usePermissionRule('marketing.requests.all:APPROVE');
+  const [isApproving, setIsApproving] = useState(false);
   const { data: options } = useRequestFormOptions(isOpen);
   const isEdit = !!request;
-  const isPending = createRequest.isPending || updateRequest.isPending;
+  const isPending = createRequest.isPending || updateRequest.isPending || isApproving;
 
   const [values, setValues] = useState<FormValues>(emptyValues);
+  // Driving yourself needs an unexpired driver's licence with its image on file, which the server
+  // works out; until it has answered the toggle stays off.
+  const canDriveSelf = options?.requester.canDriveSelf ?? false;
+  const licence = options?.requester.licence;
+  const selfDriven = canDriveSelf && values.selfDriven;
   const [errors, setErrors] = useState<FormErrors>({});
   // The appointment's prospect is already a destination, so it can't be picked again.
   const appointmentProspectId = appointment?.prospectId;
@@ -134,8 +152,10 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
     setValues(
       request
         ? {
-            purpose: request.purpose,
+            // Operations and personal trips are both miscellaneous now.
+            purpose: request.purpose === 'MARKETING' ? 'MARKETING' : 'OPERATIONS',
             destination: request.purpose !== 'MARKETING' ? request.destination : '',
+            tripPurpose: request.businessPurpose ?? '',
             travelDate: request.travelDate,
             departureTime: request.departureTime,
             returnTime: request.returnTime ?? '',
@@ -267,14 +287,12 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
     ? values.driverEmployeeId
     : '';
   const vehicleLost = !!values.vehicleAssetId && !!availability && !pickedVehicle;
-  const driverLost =
-    !!values.driverEmployeeId && !values.selfDriven && !!availability && !pickedDriver;
+  const driverLost = !!values.driverEmployeeId && !selfDriven && !!availability && !pickedDriver;
 
-  const isPersonal = values.purpose === 'PERSONAL';
-  // Personal and operations trips store a typed or searched destination instead of clients/prospects.
+  // Miscellaneous trips store a searched destination instead of clients/prospects.
   const usesPlaceText = values.purpose !== 'MARKETING';
 
-  // Operations trips pick a place by searching as they type, like the prospect location search.
+  // Miscellaneous trips pick a place by searching as they type, like the prospect location search.
   const [placeQuery, setPlaceQuery] = useState('');
   const { data: placeSuggestions = [] } = useGeocodeSearch(placeQuery);
   const placeOptions = useMemo(() => {
@@ -292,18 +310,20 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function validate(): boolean {
+  /** `forApproval` also needs the vehicle and driver, since approving allocates them. */
+  function validate(forApproval = false): boolean {
     const next: FormErrors = {};
-    if (usesPlaceText && !values.destination.trim()) {
-      next.destination = isPersonal
-        ? 'Destination and purpose is required.'
-        : 'Destination is required.';
-    }
     if (!values.travelDate) next.travelDate = 'Travel date is required.';
     if (!values.departureTime) next.departureTime = 'Departure time is required.';
     // The return time is optional, but when given it must come after the departure.
     if (values.departureTime && values.returnTime && values.returnTime <= values.departureTime) {
       next.returnTime = 'Return time must be after the departure time.';
+    }
+    if (forApproval) {
+      if (!pickedVehicle) next.vehicle = 'Select a vehicle to approve the trip.';
+      if (!selfDriven && !pickedDriver) {
+        next.driver = 'Select a driver, or mark the trip as self-driven.';
+      }
     }
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -319,7 +339,7 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
     };
     const notes = values.notes.trim();
     // Self-driving and a named driver exclude each other.
-    const driverAsk = values.selfDriven
+    const driverAsk = selfDriven
       ? { preferredSelfDriven: true }
       : pickedDriver
         ? { preferredDriverEmployeeId: pickedDriver }
@@ -335,10 +355,12 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
           returnTime: values.returnTime || null,
           // Clearing a choice removes it.
           preferredVehicleAssetId: pickedVehicle || null,
-          preferredSelfDriven: values.selfDriven,
-          preferredDriverEmployeeId: values.selfDriven ? null : pickedDriver || null,
-          // Personal trips type their destination; picked places are dropped.
+          preferredSelfDriven: selfDriven,
+          preferredDriverEmployeeId: selfDriven ? null : pickedDriver || null,
+          // Miscellaneous trips search for a destination and say what the trip is for; picked
+          // places are dropped. A marketing trip clears any purpose text left from before.
           // Otherwise stops are only sent when changed, so an older request's typed destination is left alone.
+          businessPurpose: usesPlaceText ? values.tripPurpose.trim() : '',
           ...(usesPlaceText
             ? { destination: values.destination.trim(), stops: [] }
             : destinations.touched || request.purpose !== 'MARKETING'
@@ -365,7 +387,10 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
         ...(pickedVehicle ? { preferredVehicleAssetId: pickedVehicle } : {}),
         ...driverAsk,
         ...(usesPlaceText
-          ? { destination: values.destination.trim() }
+          ? {
+              ...(values.destination.trim() ? { destination: values.destination.trim() } : {}),
+              ...(values.tripPurpose.trim() ? { businessPurpose: values.tripPurpose.trim() } : {}),
+            }
           : destinations.refs.length
             ? { stops: destinations.refs }
             : {}),
@@ -378,6 +403,56 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
         onError: (error) => toast.error(apiErrorMessage(error, 'Failed to submit request')),
       },
     );
+  }
+
+  async function handleSendAndApprove() {
+    if (!validate(true)) return;
+    const notes = values.notes.trim();
+    setIsApproving(true);
+    let created: TransportRequest;
+    try {
+      created = await createRequest.mutateAsync({
+        purpose: values.purpose,
+        travelDate: values.travelDate,
+        departureTime: values.departureTime,
+        passengerIds: values.passengerIds,
+        ...(notes ? { notes } : {}),
+        ...(values.returnTime ? { returnTime: values.returnTime } : {}),
+        preferredVehicleAssetId: pickedVehicle,
+        ...(selfDriven
+          ? { preferredSelfDriven: true }
+          : { preferredDriverEmployeeId: pickedDriver }),
+        ...(usesPlaceText
+          ? {
+              ...(values.destination.trim() ? { destination: values.destination.trim() } : {}),
+              ...(values.tripPurpose.trim() ? { businessPurpose: values.tripPurpose.trim() } : {}),
+            }
+          : destinations.refs.length
+            ? { stops: destinations.refs }
+            : {}),
+      });
+    } catch (error) {
+      setIsApproving(false);
+      toast.error(apiErrorMessage(error, 'Failed to submit request'));
+      return;
+    }
+    try {
+      const approved = await approveRequest.mutateAsync({
+        id: created.id,
+        vehicleAssetId: pickedVehicle,
+        ...(selfDriven ? { selfDriven: true } : { driverEmployeeId: pickedDriver }),
+      });
+      onClose();
+      onApproved?.(approved);
+    } catch (error) {
+      // The request exists and is pending, so it can still be approved from the list.
+      toast.error(
+        `Request sent, but it could not be approved: ${apiErrorMessage(error, 'try again from the list')}`,
+      );
+      onClose();
+    } finally {
+      setIsApproving(false);
+    }
   }
 
   return (
@@ -395,29 +470,36 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
           <Button variant="outline" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} isLoading={isPending} loadingText="Saving…">
+
+          <Button
+            onClick={handleSubmit}
+            disabled={isApproving}
+            isLoading={createRequest.isPending || updateRequest.isPending}
+            loadingText="Saving…"
+          >
             {isEdit ? 'Save Changes' : 'Send Request'}
           </Button>
+          {!isEdit && canApprove && onApproved && (
+            <Button
+              variant="primary"
+              className="bg-green-600 hover:bg-green-700 focus:ring-green-500"
+              onClick={handleSendAndApprove}
+              disabled={isPending}
+              isLoading={isApproving}
+              loadingText="Approving…"
+            >
+              Send &amp; Approve
+            </Button>
+          )}
         </div>
       }
     >
       <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <SectionTitle>Requester</SectionTitle>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-            <label className="text-sm font-bold text-gray-900">Name</label>
-            <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-600 select-none">
-              {requester?.name ?? '…'}
-            </div>
-          </div>
-          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-            <label className="text-sm font-bold text-gray-900">Department</label>
-            <div className="px-4 py-3 border border-gray-200 rounded-input bg-gray-50 text-sm text-gray-600 select-none">
-              {requester ? (requester.department ?? '—') : '…'}
-            </div>
-          </div>
-        </div>
+        <p className="text-sm text-gray-900">
+          {requester ? [requester.name, requester.department].filter(Boolean).join(' - ') : '…'}
+        </p>
 
         <SectionTitle>Trip</SectionTitle>
 
@@ -437,31 +519,33 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
         </div>
 
         {values.purpose === 'OPERATIONS' ? (
-          <SearchSelect
-            label="Destination"
-            placeholder="Search for a location..."
-            options={placeOptions}
-            value={values.destination}
-            onChange={(v) => {
-              set('destination', v);
-              setPlaceQuery('');
-            }}
-            onQueryChange={setPlaceQuery}
-            error={errors.destination}
-          />
-        ) : isPersonal ? (
-          <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-            <label className="text-sm font-bold text-gray-900">Destination and purpose</label>
-            <input
-              type="text"
-              placeholder="Where are you going and why?"
-              value={values.destination}
-              onChange={(e) => set('destination', e.target.value)}
-              maxLength={500}
-              className={inputClass(errors.destination)}
-            />
-            {errors.destination && <p className="text-xs text-red-500">{errors.destination}</p>}
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-4 items-start">
+              <SearchSelect
+                label="Destination (optional)"
+                placeholder="Search for a location..."
+                options={placeOptions}
+                value={values.destination}
+                onChange={(v) => {
+                  set('destination', v);
+                  setPlaceQuery('');
+                }}
+                onQueryChange={setPlaceQuery}
+              />
+
+              <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+                <label className="text-sm font-bold text-gray-900">Purpose (optional)</label>
+                <input
+                  type="text"
+                  placeholder="What is the trip for?"
+                  value={values.tripPurpose}
+                  onChange={(e) => set('tripPurpose', e.target.value)}
+                  maxLength={500}
+                  className={inputClass()}
+                />
+              </div>
+            </div>
+          </>
         ) : (
           <>
             {appointment && (
@@ -482,11 +566,7 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
             )}
 
             <MultiSelect
-              label={
-                appointment
-                  ? 'Add more destinations (optional)'
-                  : 'Destination (client or prospect)'
-              }
+              label={appointment ? 'Add more destinations (optional)' : 'Destination'}
               placeholder={destinations.isLoading ? 'Loading…' : 'Search clients and prospects'}
               options={destinations.options}
               value={destinations.selectedKeys}
@@ -541,18 +621,17 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
           </>
         )}
 
-        <DatePicker
-          label="Travel Date"
-          value={values.travelDate}
-          onChange={(v) => set('travelDate', v)}
-          error={errors.travelDate}
-          // Keep a saved past date selectable when editing; only block new past dates.
-          minDate={
-            isEdit && request && request.travelDate < todayIso() ? request.travelDate : todayIso()
-          }
-        />
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <DatePicker
+            label="Travel Date"
+            value={values.travelDate}
+            onChange={(v) => set('travelDate', v)}
+            error={errors.travelDate}
+            // Keep a saved past date selectable when editing; only block new past dates.
+            minDate={
+              isEdit && request && request.travelDate < todayIso() ? request.travelDate : todayIso()
+            }
+          />
           <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
             <label className="text-sm font-bold text-gray-900">Expected Departure</label>
             <input
@@ -564,7 +643,7 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
             {errors.departureTime && <p className="text-xs text-red-500">{errors.departureTime}</p>}
           </div>
           <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
-            <label className="text-sm font-bold text-gray-900">Expected Return (optional)</label>
+            <label className="text-sm font-bold text-gray-900">Estimated Return (optional)</label>
             <input
               type="time"
               value={values.returnTime}
@@ -575,19 +654,44 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
           </div>
         </div>
 
-        <SectionTitle>Vehicle and driver</SectionTitle>
+        <SectionTitle>Vehicle, driver and passengers</SectionTitle>
 
-        <p className="text-xs text-gray-500 -mt-2">
-          Optional. The approver starts from your choice and can keep or change it.
-        </p>
-
-        <SearchSelect
-          label="Vehicle (optional)"
-          placeholder={options ? 'Select a vehicle' : 'Loading vehicles…'}
-          options={vehicleOptions}
-          value={pickedVehicle}
-          onChange={(v) => set('vehicleAssetId', v)}
-        />
+        <div className="grid grid-cols-5 items-end gap-4">
+          <div className={cn('min-w-0', canDriveSelf ? 'col-span-3' : 'col-span-5')}>
+            <SearchSelect
+              label="Vehicle"
+              placeholder={options ? 'Select a vehicle' : 'Loading vehicles…'}
+              options={vehicleOptions}
+              value={pickedVehicle}
+              onChange={(v) => set('vehicleAssetId', v)}
+              error={errors.vehicle}
+            />
+          </div>
+          {canDriveSelf && (
+            <div className="col-span-2 py-3">
+              <ToggleRow
+                label="I will drive myself"
+                enabled={selfDriven}
+                onChange={(enabled) => {
+                  set('selfDriven', enabled);
+                  if (enabled) set('driverEmployeeId', '');
+                }}
+              />
+            </div>
+          )}
+        </div>
+        {canDriveSelf && licence?.status === 'EXPIRING' && licence.daysLeft !== null && (
+          <p className="text-xs text-amber-600 -mt-2">
+            Your driver&apos;s licence expires in {licence.daysLeft} day
+            {licence.daysLeft === 1 ? '' : 's'}. Update it once renewed to keep driving yourself.
+          </p>
+        )}
+        {options && !canDriveSelf && licence?.hasEmployeeRecord && (
+          <p className="text-xs text-gray-400 -mt-2">
+            Driving yourself needs an unexpired driver&apos;s licence with its image on file. Add it
+            under My Documents.
+          </p>
+        )}
         {!windowValid && (
           <p className="text-xs text-gray-400 -mt-2">
             Set the travel date and departure time to see which vehicles and drivers are free.
@@ -599,41 +703,33 @@ export function RequestPanel({ isOpen, onClose, request, appointment }: Props) {
           </p>
         )}
 
-        <ToggleRow
-          label="I will drive myself"
-          description="No driver is needed for this trip."
-          enabled={values.selfDriven}
-          onChange={(enabled) => {
-            set('selfDriven', enabled);
-            if (enabled) set('driverEmployeeId', '');
-          }}
-        />
-
-        {!values.selfDriven && (
-          <SearchSelect
-            label="Driver (optional)"
-            placeholder={options ? 'Select a driver' : 'Loading drivers…'}
-            options={driverOptions}
-            value={pickedDriver}
-            onChange={(v) => set('driverEmployeeId', v)}
-          />
-        )}
-        {!values.selfDriven && driverLost && (
+        <div className="grid grid-cols-2 gap-4 items-start">
+          {!selfDriven && (
+            <SearchSelect
+              label="Driver"
+              placeholder={options ? 'Select a driver' : 'Loading drivers…'}
+              options={driverOptions}
+              value={pickedDriver}
+              onChange={(v) => set('driverEmployeeId', v)}
+              error={errors.driver}
+            />
+          )}
+          <div className={selfDriven ? 'col-span-2' : undefined}>
+            <MultiSelect
+              label="Travelling With (optional)"
+              placeholder="Select colleagues"
+              options={passengerOptions}
+              value={values.passengerIds}
+              onChange={(v) => set('passengerIds', v)}
+              hideChips
+            />
+          </div>
+        </div>
+        {!selfDriven && driverLost && (
           <p className="text-xs text-amber-600 -mt-2">
             That driver isn&apos;t free for this date and time, so they won&apos;t be requested.
           </p>
         )}
-
-        <SectionTitle>Passengers</SectionTitle>
-
-        <MultiSelect
-          label="Travelling With (optional)"
-          placeholder="Select colleagues"
-          options={passengerOptions}
-          value={values.passengerIds}
-          onChange={(v) => set('passengerIds', v)}
-          hideChips
-        />
 
         {selectedPassengers.length > 0 && (
           <div className="flex flex-col gap-2">

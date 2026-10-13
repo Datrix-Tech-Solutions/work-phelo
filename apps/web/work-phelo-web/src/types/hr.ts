@@ -57,6 +57,7 @@ export type DocumentType =
   | 'CERTIFICATE'
   | 'OFFER_LETTER'
   | 'NDA'
+  | 'DRIVER_LICENCE'
   | 'OTHER';
 
 // ── Employee ─────────────────────────────────────────────
@@ -176,6 +177,34 @@ export interface EmployeeDocument {
   uploadedBy: string;
   expiresAt?: string | null;
   createdAt: string;
+}
+
+export type DriverLicenceStatus = 'NONE' | 'VALID' | 'EXPIRING' | 'EXPIRED';
+
+/**
+ * A driver's licence and what it amounts to. Driving yourself on a company trip needs the licence
+ * unexpired and an image of it on file; removing the image switches it off without losing details.
+ */
+export interface DriverLicenceView {
+  licence: {
+    id: string;
+    licenceNumber: string;
+    /** YYYY-MM-DD */
+    issuedAt: string;
+    /** YYYY-MM-DD */
+    expiresAt: string;
+  } | null;
+  imageOnFile: boolean;
+  status: DriverLicenceStatus;
+  /** Negative once expired; null when there is no licence. */
+  daysLeft: number | null;
+  canDrive: boolean;
+}
+
+export interface DriverLicenceDetails {
+  licenceNumber: string;
+  issuedAt: string;
+  expiresAt: string;
 }
 
 export interface AddAllowancePayload {

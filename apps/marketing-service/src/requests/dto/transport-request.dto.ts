@@ -98,13 +98,22 @@ export class CreateTransportRequestDto {
 
   @ApiPropertyOptional({
     description:
-      'Free-text destination and purpose, used for personal trips instead of picking clients or prospects.',
+      'Free-text destination, used for miscellaneous trips instead of picking clients or prospects.',
   })
   @IsOptional()
   @Transform(trim)
   @IsString()
   @MaxLength(500)
   destination?: string;
+
+  @ApiPropertyOptional({
+    description: 'What a miscellaneous trip is for, in the requester’s words.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  businessPurpose?: string;
 
   @ApiPropertyOptional({
     type: [TransportStopDto],
@@ -188,13 +197,23 @@ export class UpdateTransportRequestDto {
 
   @ApiPropertyOptional({
     description:
-      'Free-text destination and purpose, used for personal trips. Replaces the saved destination.',
+      'Free-text destination, used for miscellaneous trips. Replaces the saved destination.',
   })
   @IsOptional()
   @Transform(trim)
   @IsString()
   @MaxLength(500)
   destination?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'What a miscellaneous trip is for. Replaces the saved purpose text; blank clears it.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  businessPurpose?: string;
 
   @ApiPropertyOptional({
     type: [TransportStopDto],

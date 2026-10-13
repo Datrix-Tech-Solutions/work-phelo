@@ -83,14 +83,14 @@ export const CONDITION_LABELS: Record<VehicleCondition, string> = {
 
 export const PURPOSE_OPTIONS: { value: TransportPurpose; label: string }[] = [
   { value: 'MARKETING', label: 'Marketing' },
-  { value: 'OPERATIONS', label: 'Operations' },
-  { value: 'PERSONAL', label: 'Personal' },
+  // Operations and personal trips are combined; new ones are stored as operations.
+  { value: 'OPERATIONS', label: 'Miscellaneous' },
 ];
 
 export const PURPOSE_LABELS: Record<TransportPurpose, string> = {
   MARKETING: 'Marketing',
-  OPERATIONS: 'Operations',
-  PERSONAL: 'Personal',
+  OPERATIONS: 'Miscellaneous',
+  PERSONAL: 'Miscellaneous',
 };
 
 /** "08:00 AM – 05:00 PM", or "08:00 AM · no return time" when none was given. */

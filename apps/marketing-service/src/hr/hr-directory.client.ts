@@ -17,6 +17,17 @@ export interface ResolvedDirectory {
   people: DirectoryPerson[];
 }
 
+/** Whether someone may drive themselves, from their driver's licence record and image. */
+export interface DriverLicenceCheck {
+  /** False for users with no employee record (e.g. tenant admins), who the rule does not cover. */
+  hasEmployeeRecord: boolean;
+  canDrive: boolean;
+  status: 'NONE' | 'VALID' | 'EXPIRING' | 'EXPIRED';
+  expiresAt: string | null;
+  daysLeft: number | null;
+  imageOnFile: boolean;
+}
+
 const BASE = '/internal/employee-directory';
 
 /** Typed wrapper over hr-service's internal employee directory routes. */
@@ -31,6 +42,12 @@ export class HrDirectoryClient {
 
   list(tenantId: string) {
     return this.http.get<DirectoryPerson[]>(BASE, { query: { tenantId } });
+  }
+
+  driverLicence(tenantId: string, userId: string, onDate?: string) {
+    return this.http.post<DriverLicenceCheck>(`${BASE}/driver-licence`, {
+      body: { tenantId, userId, ...(onDate ? { onDate } : {}) },
+    });
   }
 
   resolve(

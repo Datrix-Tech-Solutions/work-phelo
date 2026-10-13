@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsOptional, IsUUID } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsDateString,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 
 export class InternalDirectoryQueryDto {
   @ApiProperty({ description: 'Tenant the request is made on behalf of' })
@@ -36,4 +42,18 @@ export class InternalResolveDirectoryDto extends InternalDirectoryQueryDto {
   @ArrayMaxSize(50)
   @IsUUID('all', { each: true })
   userIds?: string[];
+}
+
+export class InternalDriverLicenceCheckDto extends InternalDirectoryQueryDto {
+  @ApiProperty({ description: 'Auth user ID of the person who would drive.' })
+  @IsUUID()
+  userId!: string;
+
+  @ApiPropertyOptional({
+    description: 'Day the licence must cover (YYYY-MM-DD). Defaults to today.',
+    example: '2026-10-20',
+  })
+  @IsOptional()
+  @IsDateString()
+  onDate?: string;
 }

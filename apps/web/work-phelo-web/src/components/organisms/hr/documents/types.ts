@@ -9,6 +9,7 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   CERTIFICATE: 'Certificate',
   OFFER_LETTER: 'Offer Letter',
   NDA: 'NDA',
+  DRIVER_LICENCE: "Driver's Licence",
   OTHER: 'Other',
 };
 

@@ -8,7 +8,12 @@ import { inputClass } from '@/lib/utils';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DocumentFileDropzone } from '@/components/molecules/hr/documents/DocumentFileDropzone';
 import { DOCUMENT_TYPE_LABELS } from './types';
-import type { DocumentType } from '@/types/hr';
+import {
+  DriverLicenceFields,
+  emptyLicenceDetails,
+  licenceDetailsError,
+} from '@/components/molecules/hr/documents/DriverLicenceFields';
+import type { DocumentType, DriverLicenceDetails } from '@/types/hr';
 
 const TYPE_OPTIONS = Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => ({
   value: value as DocumentType,
@@ -20,6 +25,8 @@ export interface UploadCompanyDocumentInput {
   type: DocumentType;
   customType?: string;
   expiresAt?: string;
+  /** Set for a driver's licence: its details are saved alongside the image. */
+  licence?: DriverLicenceDetails;
 }
 
 interface Props {
@@ -34,12 +41,14 @@ export function UploadCompanyDocumentModal({ isOpen, onClose, onUpload, isUpload
   const [type, setType] = useState<DocumentType>('CONTRACT');
   const [customType, setCustomType] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
+  const [licence, setLicence] = useState<DriverLicenceDetails>(emptyLicenceDetails);
 
   const reset = () => {
     setFile(null);
     setType('CONTRACT');
     setCustomType('');
     setExpiresAt('');
+    setLicence(emptyLicenceDetails());
   };
 
   const handleClose = () => {
@@ -47,7 +56,11 @@ export function UploadCompanyDocumentModal({ isOpen, onClose, onUpload, isUpload
     onClose();
   };
 
-  const isValid = Boolean(file) && (type !== 'OTHER' || customType.trim().length > 0);
+  const isLicence = type === 'DRIVER_LICENCE';
+  const isValid =
+    Boolean(file) &&
+    (type !== 'OTHER' || customType.trim().length > 0) &&
+    (!isLicence || licenceDetailsError(licence) === null);
 
   const handleSubmit = () => {
     if (!file || !isValid) return;
@@ -55,7 +68,10 @@ export function UploadCompanyDocumentModal({ isOpen, onClose, onUpload, isUpload
       file,
       type,
       customType: type === 'OTHER' ? customType.trim() : undefined,
-      expiresAt: expiresAt || undefined,
+      expiresAt: isLicence ? undefined : expiresAt || undefined,
+      ...(isLicence
+        ? { licence: { ...licence, licenceNumber: licence.licenceNumber.trim() } }
+        : {}),
     });
   };
 
@@ -100,9 +116,13 @@ export function UploadCompanyDocumentModal({ isOpen, onClose, onUpload, isUpload
           </div>
         )}
 
-        <div>
-          <DatePicker label="Expires on (optional)" value={expiresAt} onChange={setExpiresAt} />
-        </div>
+        {isLicence ? (
+          <DriverLicenceFields value={licence} onChange={setLicence} />
+        ) : (
+          <div>
+            <DatePicker label="Expires on (optional)" value={expiresAt} onChange={setExpiresAt} />
+          </div>
+        )}
       </div>
     </Modal>
   );
