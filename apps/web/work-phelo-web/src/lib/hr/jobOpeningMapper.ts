@@ -34,7 +34,8 @@ export function toVacancyPayload(
 
   const details: VacancyDetails = {
     documents: {
-      resume: values.requireResume,
+      // Resume details are read from the applicant's resume, so it is never requested.
+      resume: false,
       coverLetter: values.requireCoverLetter,
       portfolio: values.requestPortfolio,
       github: values.requestGithub,
@@ -153,7 +154,6 @@ export function toFormValues(vacancy: RecruitmentVacancy): JobOpeningFormValues 
     salaryMin: vacancy.salaryMin !== null ? String(vacancy.salaryMin) : '',
     salaryMax: vacancy.salaryMax !== null ? String(vacancy.salaryMax) : '',
     salaryCurrency: vacancy.salaryCurrency ?? DEFAULT_CURRENCY,
-    requireResume: documents?.resume ?? true,
     requireCoverLetter: documents?.coverLetter ?? false,
     requestPortfolio: documents?.portfolio ?? false,
     requestGithub: documents?.github ?? false,

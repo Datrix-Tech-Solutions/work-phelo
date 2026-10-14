@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { educationLevelLabel } from '@/lib/hr/educationLevels';
 import type {
   JobOpeningStatus,
   RecruitmentCandidate,
@@ -169,40 +170,72 @@ export function useMoveCandidateStage() {
   });
 }
 
+interface ApiEducationEntry {
+  level?: string;
+  qualification?: string;
+  institution?: string;
+}
+
+interface ApiWorkEntry {
+  role?: string;
+  company?: string;
+  start?: string;
+  end?: string;
+}
+
 type ApiCandidateDetail = Omit<
   RecruitmentCandidateDetail,
-  'languages' | 'educationHistory' | 'experienceHistory'
+  'languages' | 'certificates' | 'educationHistory' | 'experienceHistory'
 > & {
-  metadata?: { languages?: unknown } | null;
+  languages?: string[] | null;
+  certificates?: string[] | null;
+  educationHistory?: ApiEducationEntry[] | null;
+  workHistory?: ApiWorkEntry[] | null;
 };
 
-/**
- * The API stores education as one text field and has no languages yet, so the overview's
- * school entries and languages are derived here until the application form collects them.
- */
+/** Applications made before structured history existed only have the single-value fields. */
 function normalizeCandidate(raw: ApiCandidateDetail): RecruitmentCandidateDetail {
-  const languages = Array.isArray(raw.metadata?.languages)
-    ? (raw.metadata.languages as unknown[]).filter((l): l is string => typeof l === 'string')
-    : [];
   const school = raw.education?.trim();
   const role = raw.currentJobTitle?.trim();
+
+  const structuredEducation = (raw.educationHistory ?? []).map((entry) => ({
+    school: [entry.qualification, entry.institution].filter(Boolean).join(', ') || 'Not specified',
+    level: entry.level ? educationLevelLabel(entry.level) : null,
+    startYear: null,
+    endYear: null,
+  }));
+  const structuredExperience = (raw.workHistory ?? []).map((entry) => ({
+    role: entry.role ?? '',
+    company: entry.company || null,
+    startDate: entry.start || null,
+    endDate: entry.end || null,
+    description: null,
+  }));
+
   return {
     ...raw,
-    languages,
-    educationHistory: school
-      ? [{ school, level: raw.highestEducationLevel, startYear: null, endYear: null }]
-      : [],
-    experienceHistory: role
-      ? [
-          {
-            role,
-            company: raw.currentEmployer,
-            startDate: null,
-            endDate: null,
-            description: null,
-          },
-        ]
-      : [],
+    languages: raw.languages ?? [],
+    certificates: raw.certificates ?? [],
+    educationHistory:
+      structuredEducation.length > 0
+        ? structuredEducation
+        : school
+          ? [{ school, level: raw.highestEducationLevel, startYear: null, endYear: null }]
+          : [],
+    experienceHistory:
+      structuredExperience.length > 0
+        ? structuredExperience
+        : role
+          ? [
+              {
+                role,
+                company: raw.currentEmployer,
+                startDate: null,
+                endDate: null,
+                description: null,
+              },
+            ]
+          : [],
   };
 }
 

@@ -1489,6 +1489,118 @@ describe('RecruitmentService', () => {
       );
     });
 
+    it('only requires what the vacancy setup marked as required', async () => {
+      const base = {
+        firstName: 'Ama',
+        lastName: 'Mensah',
+        email: 'ama@example.com',
+        phone: '+233201234567',
+        country: 'Ghana',
+        city: 'Accra',
+        currentJobTitle: 'HR Officer',
+        noticePeriod: 'One month',
+        yearsOfExperience: null,
+        highestEducationLevel: null,
+        skills: [],
+        languages: [],
+        certificates: [],
+        answers: [],
+      };
+
+      // Nothing marked required: skills, experience and education are optional.
+      prisma.recruitmentApplication.findFirst.mockResolvedValueOnce(
+        draftApplication({
+          ...base,
+          vacancy: vacancy({ details: null, _count: { applications: 0 } }),
+        }),
+      );
+      const optional = await service.reviewPublicApplication(
+        'application-1',
+        'token',
+      );
+      expect(optional.canSubmit).toBe(true);
+
+      // The same answers fail once the setup marks them required.
+      prisma.recruitmentApplication.findFirst.mockResolvedValueOnce(
+        draftApplication({
+          ...base,
+          vacancy: vacancy({
+            details: {
+              education: { levels: ['BACHELORS'], required: true },
+              experience: { minYears: 2, required: true },
+              skills: { items: ['Payroll'], required: true },
+              languages: { items: ['English'], required: true },
+              certificates: { items: ['ACCA'], required: false },
+            },
+            _count: { applications: 0 },
+          }),
+        }),
+      );
+      const strict = await service.reviewPublicApplication(
+        'application-1',
+        'token',
+      );
+      expect(strict.canSubmit).toBe(false);
+      expect(
+        strict.missing.map((item: { field: string }) => item.field),
+      ).toEqual(
+        expect.arrayContaining([
+          'highestEducationLevel',
+          'yearsOfExperience',
+          'skills',
+          'languages',
+        ]),
+      );
+      expect(
+        strict.missing.map((item: { field: string }) => item.field),
+      ).not.toContain('certificates');
+    });
+
+    it('stores selected languages, certificates and structured history on a draft', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue(
+        vacancy({ questions: [] }),
+      );
+      prisma.recruitmentApplication.create.mockResolvedValue(
+        draftApplication({ id: 'application-1' }),
+      );
+      prisma.recruitmentApplication.findFirstOrThrow.mockResolvedValue(
+        draftApplication({
+          id: 'application-1',
+          vacancy: vacancy({ _count: { applications: 0 } }),
+        }),
+      );
+
+      await service.createPublicApplication('tenant-1', 'vacancy-1', {
+        languages: [' English ', 'English', 'Twi'],
+        certificates: ['ACCA'],
+        educationHistory: [
+          {
+            level: 'BACHELORS',
+            qualification: 'BSc Accounting',
+            institution: 'UG',
+          },
+        ],
+        workHistory: [
+          { role: 'Accountant', company: 'GCB', start: '2019-01', end: '' },
+          { role: '  ', company: 'Ignored', start: '2018-01', end: '2018-06' },
+        ],
+      });
+
+      const data = prisma.recruitmentApplication.create.mock.calls[0][0].data;
+      expect(data.languages).toEqual(['English', 'Twi']);
+      expect(data.certificates).toEqual(['ACCA']);
+      expect(data.educationHistory).toEqual([
+        {
+          level: 'BACHELORS',
+          qualification: 'BSc Accounting',
+          institution: 'UG',
+        },
+      ]);
+      expect(data.workHistory).toEqual([
+        { role: 'Accountant', company: 'GCB', start: '2019-01', end: '' },
+      ]);
+    });
+
     it('submits a complete public draft and assigns the default stage atomically', async () => {
       prisma.recruitmentApplication.findFirst
         .mockResolvedValueOnce(

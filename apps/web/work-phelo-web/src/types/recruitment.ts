@@ -167,7 +167,6 @@ export interface JobOpeningFormValues {
   salaryMax: string;
   salaryCurrency: string;
   /** What applicants are asked to provide. */
-  requireResume: boolean;
   requireCoverLetter: boolean;
   requestPortfolio: boolean;
   requestGithub: boolean;
@@ -238,6 +237,7 @@ export interface RecruitmentCandidateDetail extends RecruitmentCandidate {
   professionalSummary: string | null;
   skills: string[];
   languages: string[];
+  certificates: string[];
   /** School entries for the overview; derived from `education` when the API has no structure. */
   educationHistory: CandidateEducation[];
   /** Work history, newest first; derived from the current role when the API has no structure. */

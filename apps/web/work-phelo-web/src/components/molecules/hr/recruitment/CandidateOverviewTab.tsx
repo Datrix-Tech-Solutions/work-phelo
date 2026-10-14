@@ -158,6 +158,12 @@ export function CandidateOverviewTab({ candidate, stages, history, match }: Over
           {candidate.languages.length > 0 ? <Chips items={candidate.languages} /> : EMPTY}
         </SummarySection>
 
+        {candidate.certificates.length > 0 && (
+          <SummarySection title="Certificates">
+            <Chips items={candidate.certificates} />
+          </SummarySection>
+        )}
+
         <SummarySection title="Links">
           {links.length > 0 ? (
             <div className="flex flex-wrap gap-2">
