@@ -58,18 +58,13 @@ const TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
   { value: 'INTERN', label: 'Intern' },
 ];
 
-type DocumentRequestKey =
-  | 'requireResume'
-  | 'requireCoverLetter'
-  | 'requestPortfolio'
-  | 'requestGithub';
+type DocumentRequestKey = 'requireCoverLetter' | 'requestPortfolio' | 'requestGithub';
 
 const DOCUMENT_REQUESTS: { key: DocumentRequestKey; label: string; hint: string }[] = [
-  { key: 'requireResume', label: 'Resume', hint: 'Applicants must upload a resume.' },
   {
     key: 'requireCoverLetter',
     label: 'Cover letter',
-    hint: 'Applicants must upload a cover letter.',
+    hint: 'Ask applicants for a cover letter.',
   },
   {
     key: 'requestPortfolio',
@@ -170,7 +165,6 @@ const EMPTY_VALUES: JobOpeningFormValues = {
   salaryMin: '',
   salaryMax: '',
   salaryCurrency: 'GHS',
-  requireResume: true,
   requireCoverLetter: false,
   requestPortfolio: false,
   requestGithub: false,
@@ -716,7 +710,7 @@ export function JobOpeningWizard({
                 />
               </JobOpeningFormSection>
               <JobOpeningFormSection
-                title="Resume & Documents"
+                title="Documents"
                 description="Choose what applicants are asked to provide when they apply."
               >
                 {DOCUMENT_REQUESTS.map(({ key, label, hint }) => (

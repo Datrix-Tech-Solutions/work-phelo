@@ -771,6 +771,13 @@ model RecruitmentApplication {
   city                   String?
   professionalSummary    String?
   skills                 String[]                     @default([])
+  /// Languages and certificates the applicant selected from the vacancy's lists.
+  languages              String[]                     @default([])
+  certificates           String[]                     @default([])
+  /// Structured qualifications: [{ level, qualification, institution }].
+  educationHistory       Json?
+  /// Structured work history: [{ role, company, start, end }] with `YYYY-MM` dates.
+  workHistory            Json?
   education              String?
   yearsOfExperience      Int?
   currentJobTitle        String?

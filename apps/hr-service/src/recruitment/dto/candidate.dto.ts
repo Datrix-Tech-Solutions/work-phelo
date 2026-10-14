@@ -1,9 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { RECRUITMENT_EDUCATION_LEVEL_CODES } from '../vacancy-requirements';
 import {
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEmail,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -121,6 +124,56 @@ export class RecruitmentApplicationAnswerDto {
   @IsString({ each: true })
   @MaxLength(240, { each: true })
   selectedOptions?: string[];
+}
+
+export class ApplicationEducationEntryDto {
+  @ApiProperty({
+    description: 'Education level code from the vacancy setup list',
+    example: 'BACHELORS',
+  })
+  @IsIn(RECRUITMENT_EDUCATION_LEVEL_CODES)
+  level!: string;
+
+  @ApiPropertyOptional({ example: 'BSc Accounting', maxLength: 160 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  qualification?: string;
+
+  @ApiPropertyOptional({ example: 'University of Ghana', maxLength: 160 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  institution?: string;
+}
+
+export class ApplicationWorkEntryDto {
+  @ApiProperty({ example: 'Senior Accountant', maxLength: 160 })
+  @IsString()
+  @MaxLength(160)
+  role!: string;
+
+  @ApiPropertyOptional({ example: 'Ecobank Ghana', maxLength: 160 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  company?: string;
+
+  @ApiPropertyOptional({
+    description: 'Start month, YYYY-MM',
+    example: '2020-01',
+  })
+  @IsOptional()
+  @Matches(/^(?:19|20)\d{2}-(?:0[1-9]|1[0-2])$/)
+  start?: string;
+
+  @ApiPropertyOptional({
+    description: 'End month, YYYY-MM. Empty or omitted for a current role',
+    example: '2023-06',
+  })
+  @IsOptional()
+  @Matches(/^(?:(?:19|20)\d{2}-(?:0[1-9]|1[0-2]))?$/)
+  end?: string;
 }
 
 export class CreateRecruitmentApplicationDto {
@@ -343,6 +396,44 @@ export class CreateRecruitmentApplicationDto {
   @MaxLength(1000)
   githubUrl?: string;
 
+  @ApiPropertyOptional({
+    description: 'Languages selected from the vacancy list',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  @ArrayMaxSize(30)
+  languages?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Certificates selected from the vacancy list',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  @ArrayMaxSize(30)
+  certificates?: string[];
+
+  @ApiPropertyOptional({ type: [ApplicationEducationEntryDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => ApplicationEducationEntryDto)
+  educationHistory?: ApplicationEducationEntryDto[];
+
+  @ApiPropertyOptional({ type: [ApplicationWorkEntryDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => ApplicationWorkEntryDto)
+  workHistory?: ApplicationWorkEntryDto[];
+
   @ApiPropertyOptional({ type: [RecruitmentApplicationAnswerDto] })
   @IsOptional()
   @IsArray()
@@ -494,6 +585,44 @@ export class UpdateRecruitmentApplicationProfessionalInfoDto {
   @IsString()
   @MaxLength(1000)
   githubUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Languages selected from the vacancy list',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  @ArrayMaxSize(30)
+  languages?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Certificates selected from the vacancy list',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  @ArrayMaxSize(30)
+  certificates?: string[];
+
+  @ApiPropertyOptional({ type: [ApplicationEducationEntryDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => ApplicationEducationEntryDto)
+  educationHistory?: ApplicationEducationEntryDto[];
+
+  @ApiPropertyOptional({ type: [ApplicationWorkEntryDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => ApplicationWorkEntryDto)
+  workHistory?: ApplicationWorkEntryDto[];
 }
 
 export class UpdateRecruitmentApplicationAnswersDto {

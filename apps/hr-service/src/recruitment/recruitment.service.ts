@@ -919,7 +919,7 @@ export class RecruitmentService {
     });
     if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
 
-    this.assertApplicationComplete(dto, vacancy.questions);
+    this.assertApplicationComplete(dto, vacancy.questions, vacancy.details);
     await this.assertNoSubmittedDuplicate(
       tenantId,
       vacancyId,
@@ -973,6 +973,12 @@ export class RecruitmentService {
           coverLetterFileName: this.optionalTrim(dto.coverLetterFileName),
           portfolioUrl: this.optionalTrim(dto.portfolioUrl),
           githubUrl: this.optionalTrim(dto.githubUrl),
+          languages: this.cleanList(dto.languages ?? []),
+          certificates: this.cleanList(dto.certificates ?? []),
+          ...this.professionalInfoData({
+            educationHistory: dto.educationHistory,
+            workHistory: dto.workHistory,
+          }),
         },
       });
       if (answers.length > 0) {
@@ -1143,6 +1149,7 @@ export class RecruitmentService {
     const missing = this.applicationMissingFields(
       draft,
       draft.vacancy.questions,
+      draft.vacancy.details,
     );
     return {
       application: this.serializePublicApplication(draft),
@@ -1159,6 +1166,7 @@ export class RecruitmentService {
     const missing = this.applicationMissingFields(
       draft,
       draft.vacancy.questions,
+      draft.vacancy.details,
     );
     if (missing.length > 0) {
       throw new BadRequestException({
@@ -1399,8 +1407,48 @@ export class RecruitmentService {
     coverLetterFileName?: string;
     portfolioUrl?: string;
     githubUrl?: string;
+    languages?: string[];
+    certificates?: string[];
+    educationHistory?: Array<{
+      level: string;
+      qualification?: string;
+      institution?: string;
+    }>;
+    workHistory?: Array<{
+      role: string;
+      company?: string;
+      start?: string;
+      end?: string;
+    }>;
   }) {
     return {
+      ...(dto.languages !== undefined
+        ? { languages: this.cleanList(dto.languages) }
+        : {}),
+      ...(dto.certificates !== undefined
+        ? { certificates: this.cleanList(dto.certificates) }
+        : {}),
+      ...(dto.educationHistory !== undefined
+        ? {
+            educationHistory: dto.educationHistory.map((entry) => ({
+              level: entry.level,
+              qualification: entry.qualification?.trim() ?? '',
+              institution: entry.institution?.trim() ?? '',
+            })) as Prisma.InputJsonValue,
+          }
+        : {}),
+      ...(dto.workHistory !== undefined
+        ? {
+            workHistory: dto.workHistory
+              .filter((entry) => entry.role.trim())
+              .map((entry) => ({
+                role: entry.role.trim(),
+                company: entry.company?.trim() ?? '',
+                start: entry.start ?? '',
+                end: entry.end ?? '',
+              })) as Prisma.InputJsonValue,
+          }
+        : {}),
       ...(dto.professionalSummary !== undefined
         ? { professionalSummary: this.optionalTrim(dto.professionalSummary) }
         : {}),
@@ -1613,6 +1661,7 @@ export class RecruitmentService {
       options: Prisma.JsonValue | null;
       required: boolean;
     }>,
+    vacancyDetails: Prisma.JsonValue | null,
   ) {
     const missing = this.applicationMissingFields(
       {
@@ -1625,6 +1674,7 @@ export class RecruitmentService {
         })),
       },
       questions,
+      vacancyDetails,
     );
     if (missing.length > 0) {
       throw new BadRequestException({
@@ -1632,6 +1682,28 @@ export class RecruitmentService {
         missing,
       });
     }
+  }
+
+  /** Which requirements the vacancy setup marked as required. A missing key is not required. */
+  private requiredRequirements(details: Prisma.JsonValue | null) {
+    const read = (key: string) => {
+      const value =
+        details && typeof details === 'object' && !Array.isArray(details)
+          ? (details as Record<string, unknown>)[key]
+          : undefined;
+      return (
+        !!value &&
+        typeof value === 'object' &&
+        (value as { required?: unknown }).required === true
+      );
+    };
+    return {
+      education: read('education'),
+      experience: read('experience'),
+      skills: read('skills'),
+      languages: read('languages'),
+      certificates: read('certificates'),
+    };
   }
 
   private applicationMissingFields(
@@ -1646,6 +1718,8 @@ export class RecruitmentService {
       currentJobTitle?: string | null;
       highestEducationLevel?: string | null;
       skills?: string[];
+      languages?: string[];
+      certificates?: string[];
       noticePeriod?: string | null;
       answers?: Array<{
         questionId: string;
@@ -1661,40 +1735,63 @@ export class RecruitmentService {
       options: Prisma.JsonValue | null;
       required: boolean;
     }>,
+    vacancyDetails: Prisma.JsonValue | null = null,
   ) {
     const missing: Array<{ field: string; label: string }> = [];
+    // Contact details, current job and notice period are asked on every application. The
+    // rest is only required when the vacancy setup marked that requirement as required.
+    const required = this.requiredRequirements(vacancyDetails);
     const requiredTextFields: Array<
-      [string, string, string | null | undefined]
+      [string, string, string | null | undefined, boolean]
     > = [
-      ['firstName', 'First name', application.firstName],
-      ['lastName', 'Last name', application.lastName],
-      ['email', 'Email', application.email],
-      ['phone', 'Phone', application.phone],
-      ['country', 'Country', application.country],
-      ['city', 'City', application.city],
-      ['currentJobTitle', 'Current job title', application.currentJobTitle],
+      ['firstName', 'First name', application.firstName, true],
+      ['lastName', 'Last name', application.lastName, true],
+      ['email', 'Email', application.email, true],
+      ['phone', 'Phone', application.phone, true],
+      ['country', 'Country', application.country, true],
+      ['city', 'City', application.city, true],
+      [
+        'currentJobTitle',
+        'Current job title',
+        application.currentJobTitle,
+        true,
+      ],
+      ['noticePeriod', 'Notice period', application.noticePeriod, true],
       [
         'highestEducationLevel',
         'Highest education level',
         application.highestEducationLevel,
+        required.education,
       ],
-      ['noticePeriod', 'Notice period', application.noticePeriod],
     ];
 
-    for (const [field, label, value] of requiredTextFields) {
-      if (!value?.trim()) missing.push({ field, label });
+    for (const [field, label, value, isRequired] of requiredTextFields) {
+      if (isRequired && !value?.trim()) missing.push({ field, label });
     }
     if (
-      application.yearsOfExperience === undefined ||
-      application.yearsOfExperience === null
+      required.experience &&
+      (application.yearsOfExperience === undefined ||
+        application.yearsOfExperience === null)
     ) {
       missing.push({
         field: 'yearsOfExperience',
         label: 'Years of experience',
       });
     }
-    if (!application.skills || application.skills.length === 0) {
-      missing.push({ field: 'skills', label: 'Skills' });
+    const lists: Array<[string, string, string[] | undefined, boolean]> = [
+      ['skills', 'Skills', application.skills, required.skills],
+      ['languages', 'Languages', application.languages, required.languages],
+      [
+        'certificates',
+        'Certificates',
+        application.certificates,
+        required.certificates,
+      ],
+    ];
+    for (const [field, label, value, isRequired] of lists) {
+      if (isRequired && (!value || value.length === 0)) {
+        missing.push({ field, label });
+      }
     }
 
     const answersByQuestionId = new Map(
@@ -1716,6 +1813,10 @@ export class RecruitmentService {
     }
 
     return missing;
+  }
+
+  private cleanList(values: string[]): string[] {
+    return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
   }
 
   private async assertNoSubmittedDuplicate(
