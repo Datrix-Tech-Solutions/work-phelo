@@ -10,6 +10,7 @@ import { Input } from '@/components/atoms/Input';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { candidateFullName } from '@/components/molecules/hr/recruitment/candidateUtils';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useScheduleInterview, useUpdateInterview } from '@/hooks/hr/useRecruitment';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -32,26 +33,50 @@ const DURATIONS = [15, 30, 45, 60, 90, 120].map((m) => ({
 }));
 
 interface Props {
-  candidate: RecruitmentCandidate | null;
+  /** The candidate to schedule for; the panel is open while this is set. */
+  candidate?: RecruitmentCandidate | null;
   /** When set, the panel edits this scheduled interview instead of creating a new one. */
   interview?: CandidateInterview | null;
+  /** Instead of a fixed candidate, let the user pick one of these. Opened with `open`. */
+  choices?: RecruitmentCandidate[];
+  open?: boolean;
   onClose: () => void;
 }
 
-export function ScheduleInterviewPanel({ candidate, interview = null, onClose }: Props) {
-  // Keep the last candidate so the form stays populated while the panel slides out.
-  const [shown, setShown] = useState({ candidate, interview });
-  if (candidate && (candidate !== shown.candidate || interview !== shown.interview)) {
-    setShown({ candidate, interview });
+export function ScheduleInterviewPanel({
+  candidate = null,
+  interview = null,
+  choices,
+  open = false,
+  onClose,
+}: Props) {
+  const isOpen = choices ? open : !!candidate;
+
+  // Keep the last values so the form stays populated while the panel slides out, and count
+  // openings so a picker form starts blank each time.
+  const [shown, setShown] = useState({
+    candidate,
+    interview,
+    choices,
+    openings: 0,
+    wasOpen: false,
+  });
+  if (isOpen && !shown.wasOpen) {
+    setShown({ candidate, interview, choices, openings: shown.openings + 1, wasOpen: true });
+  } else if (isOpen && (candidate !== shown.candidate || interview !== shown.interview)) {
+    setShown({ ...shown, candidate, interview });
+  } else if (!isOpen && shown.wasOpen) {
+    setShown({ ...shown, wasOpen: false });
   }
-  if (!shown.candidate) return null;
+  if (shown.openings === 0) return null;
 
   return (
     <ScheduleInterviewContent
-      key={`${shown.candidate.id}:${shown.interview?.id ?? 'new'}`}
+      key={`${shown.openings}:${shown.candidate?.id ?? 'pick'}:${shown.interview?.id ?? 'new'}`}
       candidate={shown.candidate}
+      choices={shown.choices}
       interview={shown.interview}
-      isOpen={!!candidate}
+      isOpen={isOpen}
       onClose={onClose}
     />
   );
@@ -69,23 +94,35 @@ function localDateTime(iso: string): { date: string; time: string } {
 
 type Errors = Partial<
   Record<
-    'platform' | 'otherPlatform' | 'link' | 'phone' | 'location' | 'date' | 'time' | 'duration',
+    | 'candidate'
+    | 'platform'
+    | 'otherPlatform'
+    | 'link'
+    | 'phone'
+    | 'location'
+    | 'date'
+    | 'time'
+    | 'duration',
     string
   >
 >;
 
 function ScheduleInterviewContent({
-  candidate,
+  candidate: fixedCandidate,
+  choices,
   interview,
   isOpen,
   onClose,
 }: {
-  candidate: RecruitmentCandidate;
+  candidate: RecruitmentCandidate | null;
+  choices?: RecruitmentCandidate[];
   interview: CandidateInterview | null;
   isOpen: boolean;
   onClose: () => void;
 }) {
   const toast = useToast();
+  const [chosenId, setChosenId] = useState('');
+  const candidate = fixedCandidate ?? choices?.find((c) => c.id === chosenId) ?? null;
   const { mutate: schedule, isPending: isScheduling } = useScheduleInterview();
   const { mutate: update, isPending: isUpdating } = useUpdateInterview();
   const mutate = interview
@@ -125,8 +162,29 @@ function ScheduleInterviewContent({
 
   const clear = (key: keyof Errors) => setErrors((e) => ({ ...e, [key]: undefined }));
 
+  // Lock mode lets several interviews be scheduled in one sitting; Continue clears the form.
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: onClose,
+    onContinue: () => {
+      setChosenId('');
+      setMode('VIDEO');
+      setPlatform('');
+      setOtherPlatform('');
+      setLink('');
+      setPhone('');
+      setLocation('');
+      setDate('');
+      setStartTime('');
+      setDuration('');
+      setNotes('');
+      setErrors({});
+    },
+  });
+
   const validate = () => {
     const e: Errors = {};
+    if (!candidate) e.candidate = 'Select a candidate';
     if (mode === 'VIDEO') {
       if (!platform) e.platform = 'Select a meeting platform';
       if (platform === 'Other' && !otherPlatform.trim())
@@ -145,7 +203,7 @@ function ScheduleInterviewContent({
   };
 
   const submit = () => {
-    if (!validate()) return;
+    if (!validate() || !candidate) return;
     mutate(
       {
         candidateId: candidate.id,
@@ -162,8 +220,19 @@ function ScheduleInterviewContent({
       },
       {
         onSuccess: () => {
-          toast.success(interview ? 'Interview updated' : 'Interview scheduled');
-          onClose();
+          if (interview) {
+            toast.success('Interview updated');
+            onClose();
+            return;
+          }
+          const who = candidateFullName(candidate);
+          entry.finishSave(
+            { title: 'Interview Scheduled!', message: `An interview has been set up for ${who}.` },
+            () => {
+              toast.success('Interview scheduled');
+              onClose();
+            },
+          );
         },
         onError: (err) =>
           toast.error(
@@ -183,6 +252,7 @@ function ScheduleInterviewContent({
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
+      {...(interview ? {} : entry.panelProps)}
       title={interview ? 'Edit Interview' : 'Schedule Interview'}
       description={
         interview
@@ -206,8 +276,39 @@ function ScheduleInterviewContent({
     >
       <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <div className="grid grid-cols-2 gap-4">
-          <Input label="Candidate" value={candidateFullName(candidate)} disabled readOnly />
-          <Input label="Job Position" value={candidate.vacancy.title ?? '—'} disabled readOnly />
+          {choices ? (
+            <div>
+              <SearchSelect
+                label="Candidate"
+                placeholder="Select candidate"
+                options={choices.map((c) => ({
+                  value: c.id,
+                  label: candidateFullName(c),
+                  sublabel: c.currentStage?.name ?? c.email ?? undefined,
+                }))}
+                value={chosenId}
+                clearable={false}
+                onChange={(v) => {
+                  setChosenId(v);
+                  clear('candidate');
+                }}
+              />
+              {fieldError(errors.candidate)}
+            </div>
+          ) : (
+            <Input
+              label="Candidate"
+              value={candidate ? candidateFullName(candidate) : ''}
+              disabled
+              readOnly
+            />
+          )}
+          <Input
+            label="Job Position"
+            value={candidate?.vacancy.title ?? choices?.[0]?.vacancy.title ?? '—'}
+            disabled
+            readOnly
+          />
         </div>
 
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">

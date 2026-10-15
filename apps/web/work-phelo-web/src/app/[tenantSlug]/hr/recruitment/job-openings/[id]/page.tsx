@@ -1,17 +1,18 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { Badge, type BadgeProps } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Skeleton } from '@/components/atoms/Skeleton';
+import { ScheduleInterviewPanel } from '@/components/organisms/hr/recruitment/ScheduleInterviewPanel';
 import { JobOpeningPipeline } from '@/components/organisms/hr/recruitment/JobOpeningPipeline';
 import { JobOpeningOverview } from '@/components/molecules/hr/recruitment/JobOpeningOverview';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useRedirectWhenDenied } from '@/hooks/hr/useRedirectWhenDenied';
-import { useJobOpening } from '@/hooks/hr/useRecruitment';
+import { useCandidates, useJobOpening } from '@/hooks/hr/useRecruitment';
 import { pageBreadcrumb, pageContent, pagePx } from '@/lib/layout';
 import { Permission } from '@/lib/permissionMap';
 import type { JobOpeningStatus } from '@/types/recruitment';
@@ -35,7 +36,13 @@ export default function JobOpeningDetailPage({
   const canUpdate = usePermission(Permission.UPDATE_RECRUITMENT_VACANCY);
   useRedirectWhenDenied(canView === false, `/${tenantSlug}/hr/recruitment`);
 
+  const canSchedule = usePermission(Permission.SCHEDULE_RECRUITMENT_INTERVIEW);
+  const canReadCandidates = usePermission(Permission.READ_RECRUITMENT_CANDIDATES);
+  const [scheduling, setScheduling] = useState(false);
+
   const { data: vacancy, isLoading } = useJobOpening(canView ? id : '');
+  const { data: candidatePage } = useCandidates({ vacancyId: id, limit: 100 });
+  const candidates = canReadCandidates ? (candidatePage?.items ?? []) : [];
 
   if (!canView) return null;
 
@@ -84,11 +91,23 @@ export default function JobOpeningDetailPage({
                 </h1>
                 <Badge label={label} variant={variant} />
               </div>
-              {canUpdate && (
-                <Button size="sm" onClick={() => router.push(`${listPath}/${vacancy.id}/edit`)}>
-                  Edit
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {canSchedule && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={candidates.length === 0}
+                    onClick={() => setScheduling(true)}
+                  >
+                    Schedule Interview
+                  </Button>
+                )}
+                {canUpdate && (
+                  <Button size="sm" onClick={() => router.push(`${listPath}/${vacancy.id}/edit`)}>
+                    Edit
+                  </Button>
+                )}
+              </div>
             </div>
 
             <JobOpeningOverview vacancy={vacancy} />
@@ -100,6 +119,12 @@ export default function JobOpeningDetailPage({
           </div>
         </div>
       </div>
+
+      <ScheduleInterviewPanel
+        choices={candidates}
+        open={scheduling}
+        onClose={() => setScheduling(false)}
+      />
     </div>
   );
 }
