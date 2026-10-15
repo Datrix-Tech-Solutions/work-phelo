@@ -10,10 +10,10 @@ import { Input } from '@/components/atoms/Input';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { candidateFullName } from '@/components/molecules/hr/recruitment/candidateUtils';
-import { useScheduleInterview } from '@/hooks/hr/useRecruitment';
+import { useScheduleInterview, useUpdateInterview } from '@/hooks/hr/useRecruitment';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { InterviewMode, RecruitmentCandidate } from '@/types/recruitment';
+import type { CandidateInterview, InterviewMode, RecruitmentCandidate } from '@/types/recruitment';
 
 const MEETING_TYPES: { value: InterviewMode; label: string; icon: LucideIcon }[] = [
   { value: 'VIDEO', label: 'Video Interview', icon: Video },
@@ -33,23 +33,38 @@ const DURATIONS = [15, 30, 45, 60, 90, 120].map((m) => ({
 
 interface Props {
   candidate: RecruitmentCandidate | null;
+  /** When set, the panel edits this scheduled interview instead of creating a new one. */
+  interview?: CandidateInterview | null;
   onClose: () => void;
 }
 
-export function ScheduleInterviewPanel({ candidate, onClose }: Props) {
+export function ScheduleInterviewPanel({ candidate, interview = null, onClose }: Props) {
   // Keep the last candidate so the form stays populated while the panel slides out.
-  const [shown, setShown] = useState(candidate);
-  if (candidate && candidate !== shown) setShown(candidate);
-  if (!shown) return null;
+  const [shown, setShown] = useState({ candidate, interview });
+  if (candidate && (candidate !== shown.candidate || interview !== shown.interview)) {
+    setShown({ candidate, interview });
+  }
+  if (!shown.candidate) return null;
 
   return (
     <ScheduleInterviewContent
-      key={shown.id}
-      candidate={shown}
+      key={`${shown.candidate.id}:${shown.interview?.id ?? 'new'}`}
+      candidate={shown.candidate}
+      interview={shown.interview}
       isOpen={!!candidate}
       onClose={onClose}
     />
   );
+}
+
+/** Splits an ISO instant into the local date (YYYY-MM-DD) and time (HH:mm) the form edits. */
+function localDateTime(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
 }
 
 type Errors = Partial<
@@ -61,26 +76,51 @@ type Errors = Partial<
 
 function ScheduleInterviewContent({
   candidate,
+  interview,
   isOpen,
   onClose,
 }: {
   candidate: RecruitmentCandidate;
+  interview: CandidateInterview | null;
   isOpen: boolean;
   onClose: () => void;
 }) {
   const toast = useToast();
-  const { mutate, isPending } = useScheduleInterview();
+  const { mutate: schedule, isPending: isScheduling } = useScheduleInterview();
+  const { mutate: update, isPending: isUpdating } = useUpdateInterview();
+  const mutate = interview
+    ? (input: Parameters<typeof schedule>[0], opts: Parameters<typeof schedule>[1]) =>
+        update({ ...input, interviewId: interview.id }, opts)
+    : schedule;
+  const isPending = isScheduling || isUpdating;
 
-  const [mode, setMode] = useState<InterviewMode>('VIDEO');
-  const [platform, setPlatform] = useState('');
-  const [otherPlatform, setOtherPlatform] = useState('');
-  const [link, setLink] = useState('');
-  const [phone, setPhone] = useState('');
-  const [location, setLocation] = useState('');
-  const [date, setDate] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [duration, setDuration] = useState('');
-  const [notes, setNotes] = useState('');
+  const initial = interview ? localDateTime(interview.scheduledAt) : null;
+  const knownPlatform = PLATFORMS.some((p) => p.value === interview?.platform);
+  const durationOptions =
+    interview && !DURATIONS.some((d) => d.value === String(interview.durationMinutes))
+      ? [
+          ...DURATIONS,
+          {
+            value: String(interview.durationMinutes),
+            label: `${interview.durationMinutes} minutes`,
+          },
+        ].sort((a, b) => Number(a.value) - Number(b.value))
+      : DURATIONS;
+
+  const [mode, setMode] = useState<InterviewMode>(interview?.mode ?? 'VIDEO');
+  const [platform, setPlatform] = useState(
+    interview?.platform ? (knownPlatform ? interview.platform : 'Other') : '',
+  );
+  const [otherPlatform, setOtherPlatform] = useState(
+    interview?.platform && !knownPlatform ? interview.platform : '',
+  );
+  const [link, setLink] = useState(interview?.meetingLink ?? '');
+  const [phone, setPhone] = useState(interview?.phone ?? '');
+  const [location, setLocation] = useState(interview?.location ?? '');
+  const [date, setDate] = useState(initial?.date ?? '');
+  const [startTime, setStartTime] = useState(initial?.time ?? '');
+  const [duration, setDuration] = useState(interview ? String(interview.durationMinutes) : '');
+  const [notes, setNotes] = useState(interview?.notes ?? '');
   const [errors, setErrors] = useState<Errors>({});
 
   const clear = (key: keyof Errors) => setErrors((e) => ({ ...e, [key]: undefined }));
@@ -122,10 +162,16 @@ function ScheduleInterviewContent({
       },
       {
         onSuccess: () => {
-          toast.success('Interview scheduled');
+          toast.success(interview ? 'Interview updated' : 'Interview scheduled');
           onClose();
         },
-        onError: (err) => toast.error(extractError(err, 'Failed to schedule interview')),
+        onError: (err) =>
+          toast.error(
+            extractError(
+              err,
+              interview ? 'Failed to update interview' : 'Failed to schedule interview',
+            ),
+          ),
       },
     );
   };
@@ -137,15 +183,23 @@ function ScheduleInterviewContent({
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title="Schedule Interview"
-      description="Set up an interview with this candidate."
+      title={interview ? 'Edit Interview' : 'Schedule Interview'}
+      description={
+        interview
+          ? 'Change the details of this interview.'
+          : 'Set up an interview with this candidate.'
+      }
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} isLoading={isPending} loadingText="Scheduling…">
-            Schedule Interview
+          <Button
+            onClick={submit}
+            isLoading={isPending}
+            loadingText={interview ? 'Saving…' : 'Scheduling…'}
+          >
+            {interview ? 'Save Changes' : 'Schedule Interview'}
           </Button>
         </div>
       }
@@ -276,7 +330,7 @@ function ScheduleInterviewContent({
             <SearchSelect
               label="Duration"
               placeholder="Select"
-              options={DURATIONS}
+              options={durationOptions}
               value={duration}
               clearable={false}
               onChange={(v) => {

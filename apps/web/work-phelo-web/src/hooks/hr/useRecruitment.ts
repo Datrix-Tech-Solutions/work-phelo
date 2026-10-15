@@ -374,6 +374,33 @@ export function useCandidateInterviews(id: string) {
   });
 }
 
+/** Changes the details of a scheduled interview. */
+export function useUpdateInterview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      interviewId,
+      ...input
+    }: ScheduleInterviewInput & { interviewId: string }): Promise<CandidateInterview> => {
+      const res = await api.patch<ApiInterview>(
+        `/hr/recruitment/candidates/${input.candidateId}/interviews/${interviewId}`,
+        {
+          mode: input.mode,
+          scheduledAt: new Date(`${input.date}T${input.startTime}:00`).toISOString(),
+          durationMinutes: input.durationMinutes,
+          platform: input.platform,
+          meetingLink: input.meetingLink,
+          phone: input.phone,
+          location: input.location,
+          notes: input.notes,
+        },
+      );
+      return toCandidateInterview(res.data);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CANDIDATES_KEY }),
+  });
+}
+
 /** Completes or cancels an interview. The API moves the candidate's stage as part of it. */
 export function useUpdateInterviewStatus() {
   const queryClient = useQueryClient();
