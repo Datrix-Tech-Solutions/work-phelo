@@ -70,6 +70,7 @@ function createPrismaMock() {
       findMany: jest.fn(),
     },
     recruitmentInterview: {
+      count: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -1827,6 +1828,206 @@ describe('RecruitmentService', () => {
     });
   });
 
+  describe('cut-off', () => {
+    const details = {
+      skills: { items: ['Excel', 'Payroll'], required: false },
+    };
+    const applied = stage();
+    const rejected = stage({
+      id: 'stage-rejected',
+      name: 'Rejected',
+      normalizedName: 'rejected',
+      sortOrder: 2,
+      isDefault: false,
+    });
+
+    function mockStages() {
+      prisma.recruitmentStage.findMany.mockResolvedValue([applied, rejected]);
+      prisma.recruitmentStage.findFirst.mockImplementation(({ where }: any) =>
+        Promise.resolve(where.isDefault ? applied : rejected),
+      );
+      prisma.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    }
+
+    const strong = {
+      id: 'strong',
+      currentStageId: 'stage-1',
+      autoRejectedAt: null,
+      skills: ['Excel', 'Payroll'],
+      languages: [],
+      yearsOfExperience: 3,
+    };
+    const weak = { ...strong, id: 'weak', skills: ['Excel'] };
+    const weakRejected = {
+      ...weak,
+      id: 'weak-rejected',
+      currentStageId: 'stage-rejected',
+      autoRejectedAt: new Date('2026-10-02T00:00:00Z'),
+    };
+
+    it('moves applicants below the cut-off to Rejected and records why', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        details,
+      });
+      mockStages();
+      prisma.recruitmentApplication.findMany.mockResolvedValue([strong, weak]);
+
+      const result = await service.setVacancyCutoff(
+        'tenant-1',
+        user,
+        'vacancy-1',
+        { cutoffScore: 80 },
+      );
+
+      expect(result).toEqual({
+        cutoffScore: 80,
+        rejected: 1,
+        restored: 0,
+        applied: true,
+      });
+      expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+        where: { id: 'weak' },
+        data: expect.objectContaining({
+          currentStageId: 'stage-rejected',
+          autoRejectedScore: 50,
+        }),
+      });
+      expect(prisma.recruitmentStageHistory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          applicationId: 'weak',
+          newStageId: 'stage-rejected',
+          note: 'Auto-rejected: 50% match, cut-off 80%',
+        }),
+      });
+    });
+
+    it('only reports the counts on a dry run', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        details,
+      });
+      mockStages();
+      prisma.recruitmentApplication.findMany.mockResolvedValue([strong, weak]);
+
+      const result = await service.setVacancyCutoff(
+        'tenant-1',
+        user,
+        'vacancy-1',
+        { cutoffScore: 80, dryRun: true },
+      );
+
+      expect(result).toEqual({
+        cutoffScore: 80,
+        rejected: 1,
+        restored: 0,
+        applied: false,
+      });
+      expect(prisma.recruitmentVacancy.update).not.toHaveBeenCalled();
+      expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('brings back auto-rejected applicants when the cut-off is cleared', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        details,
+      });
+      mockStages();
+      prisma.recruitmentApplication.findMany.mockResolvedValue([
+        strong,
+        weakRejected,
+      ]);
+
+      const result = await service.setVacancyCutoff(
+        'tenant-1',
+        user,
+        'vacancy-1',
+        { cutoffScore: null },
+      );
+
+      expect(result).toEqual({
+        cutoffScore: null,
+        rejected: 0,
+        restored: 1,
+        applied: true,
+      });
+      expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+        where: { id: 'weak-rejected' },
+        data: {
+          currentStageId: 'stage-1',
+          autoRejectedAt: null,
+          autoRejectedScore: null,
+        },
+      });
+    });
+
+    it('keeps auto-rejected applicants who are still below a lowered cut-off', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        details,
+      });
+      mockStages();
+      prisma.recruitmentApplication.findMany.mockResolvedValue([weakRejected]);
+
+      const result = await service.setVacancyCutoff(
+        'tenant-1',
+        user,
+        'vacancy-1',
+        { cutoffScore: 60 },
+      );
+
+      expect(result.restored).toBe(0);
+      expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a cut-off when the opening has nothing to score against', async () => {
+      prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+        id: 'vacancy-1',
+        details: {},
+      });
+
+      await expect(
+        service.setVacancyCutoff('tenant-1', user, 'vacancy-1', {
+          cutoffScore: 50,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a new applicant who scores below the cut-off on submit', async () => {
+      prisma.recruitmentApplication.findFirst
+        .mockResolvedValueOnce(
+          draftApplication({
+            ...applicationDto(),
+            id: 'application-1',
+            skills: ['Excel'],
+            vacancy: vacancy({
+              details,
+              cutoffScore: 80,
+              questions: [],
+              _count: { applications: 0 },
+            }),
+          }),
+        )
+        .mockResolvedValueOnce(null);
+      mockStages();
+      prisma.recruitmentApplication.update.mockResolvedValue({});
+      prisma.recruitmentStageHistory.create.mockResolvedValue({});
+      prisma.recruitmentApplication.findFirstOrThrow.mockResolvedValue(
+        candidate({ id: 'application-1', currentStageId: 'stage-rejected' }),
+      );
+
+      await service.submitPublicApplication('application-1', 'token');
+
+      expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+        where: { id: 'application-1' },
+        data: expect.objectContaining({
+          currentStageId: 'stage-rejected',
+          autoRejectedScore: 50,
+        }),
+      });
+    });
+  });
+
   describe('interviews', () => {
     const future = '2099-01-01T10:00:00.000Z';
 
@@ -1907,6 +2108,113 @@ describe('RecruitmentService', () => {
           }),
         }),
       );
+    });
+
+    describe('moving the candidate to the Interview stage', () => {
+      const interviewStage = stage({
+        id: 'stage-interview',
+        name: 'Interview',
+        normalizedName: 'interview',
+        sortOrder: 3,
+        isDefault: false,
+      });
+      const dto = {
+        mode: RecruitmentInterviewMode.PHONE,
+        scheduledAt: future,
+        durationMinutes: 30,
+        phone: '+233200000000',
+      };
+
+      function candidateAt(name: string, sortOrder: number, id = 'stage-x') {
+        return candidate({
+          currentStageId: id,
+          currentStage: { normalizedName: name, sortOrder },
+        });
+      }
+
+      beforeEach(() => {
+        prisma.recruitmentStage.findFirst.mockResolvedValue(interviewStage);
+        prisma.recruitmentInterview.create.mockResolvedValue(
+          interview({ mode: RecruitmentInterviewMode.PHONE }),
+        );
+      });
+
+      it('moves an earlier-stage candidate and records why', async () => {
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(
+          candidateAt('applied', 1, 'stage-1'),
+        );
+
+        await service.scheduleCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          dto,
+        );
+
+        expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+          where: { id: 'candidate-1' },
+          data: expect.objectContaining({ currentStageId: 'stage-interview' }),
+        });
+        expect(prisma.recruitmentStageHistory.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            previousStageId: 'stage-1',
+            newStageId: 'stage-interview',
+            note: 'Moved automatically: interview scheduled',
+          }),
+        });
+      });
+
+      it('also moves a rejected candidate', async () => {
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(
+          candidateAt('rejected', 6, 'stage-rejected'),
+        );
+
+        await service.scheduleCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          dto,
+        );
+
+        expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+          where: { id: 'candidate-1' },
+          data: expect.objectContaining({
+            currentStageId: 'stage-interview',
+            autoRejectedAt: null,
+          }),
+        });
+      });
+
+      it('leaves a candidate who is already past the Interview stage', async () => {
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(
+          candidateAt('offer', 4, 'stage-offer'),
+        );
+
+        await service.scheduleCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          dto,
+        );
+
+        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+        expect(prisma.recruitmentInterview.create).toHaveBeenCalled();
+      });
+
+      it('leaves a candidate already in the Interview stage', async () => {
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(
+          candidateAt('interview', 3, 'stage-interview'),
+        );
+
+        await service.scheduleCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          dto,
+        );
+
+        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+      });
     });
 
     it('drops fields that do not belong to the chosen mode', async () => {
@@ -1993,6 +2301,7 @@ describe('RecruitmentService', () => {
 
       await service.updateCandidateInterview(
         'tenant-1',
+        user,
         'candidate-1',
         'interview-1',
         { scheduledAt: future, durationMinutes: 60 },
@@ -2019,6 +2328,7 @@ describe('RecruitmentService', () => {
       await expect(
         service.updateCandidateInterview(
           'tenant-1',
+          user,
           'candidate-1',
           'interview-1',
           { mode: RecruitmentInterviewMode.PHONE },
@@ -2035,6 +2345,7 @@ describe('RecruitmentService', () => {
 
       await service.updateCandidateInterview(
         'tenant-1',
+        user,
         'candidate-1',
         'interview-1',
         {
@@ -2057,6 +2368,7 @@ describe('RecruitmentService', () => {
       await expect(
         service.updateCandidateInterview(
           'tenant-1',
+          user,
           'candidate-1',
           'interview-1',
           { feedback: 'Too late' },
@@ -2073,6 +2385,7 @@ describe('RecruitmentService', () => {
       await expect(
         service.updateCandidateInterview(
           'tenant-1',
+          user,
           'candidate-1',
           'interview-1',
           { durationMinutes: 90 },
@@ -2081,11 +2394,163 @@ describe('RecruitmentService', () => {
 
       await service.updateCandidateInterview(
         'tenant-1',
+        user,
         'candidate-1',
         'interview-1',
         { feedback: 'Recommended' },
       );
       expect(prisma.recruitmentInterview.update).toHaveBeenCalled();
+    });
+
+    describe('stage changes when an interview finishes', () => {
+      const interviewStage = stage({
+        id: 'stage-interview',
+        name: 'Interview',
+        normalizedName: 'interview',
+        sortOrder: 3,
+        isDefault: false,
+      });
+      const screening = stage({
+        id: 'stage-screening',
+        name: 'Screening',
+        normalizedName: 'screening',
+        sortOrder: 2,
+        isDefault: false,
+      });
+      const offer = stage({
+        id: 'stage-offer',
+        name: 'Offer',
+        normalizedName: 'offer',
+        sortOrder: 4,
+        isDefault: false,
+      });
+
+      beforeEach(() => {
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(
+          candidate({
+            currentStageId: 'stage-interview',
+            currentStage: { normalizedName: 'interview', sortOrder: 3 },
+          }),
+        );
+        prisma.recruitmentInterview.findFirst.mockResolvedValue(interview());
+        prisma.recruitmentInterview.update.mockResolvedValue(
+          interview({ status: RecruitmentInterviewStatus.COMPLETED }),
+        );
+        prisma.recruitmentInterview.count.mockResolvedValue(0);
+        prisma.recruitmentStage.findFirst.mockImplementation(({ where }: any) =>
+          Promise.resolve(
+            [interviewStage, screening, offer].find(
+              (s) =>
+                s.id === where.id || s.normalizedName === where.normalizedName,
+            ) ?? null,
+          ),
+        );
+      });
+
+      it('sends the candidate back to Screening when the interview is cancelled', async () => {
+        await service.updateCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'interview-1',
+          { status: RecruitmentInterviewStatus.CANCELLED },
+        );
+
+        expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+          where: { id: 'candidate-1' },
+          data: expect.objectContaining({ currentStageId: 'stage-screening' }),
+        });
+      });
+
+      it('keeps the candidate in Interview when another interview is still booked', async () => {
+        prisma.recruitmentInterview.count.mockResolvedValue(1);
+
+        await service.updateCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'interview-1',
+          { status: RecruitmentInterviewStatus.CANCELLED },
+        );
+
+        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+      });
+
+      it('does not move a candidate who has already left Interview', async () => {
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(
+          candidate({
+            currentStageId: 'stage-offer',
+            currentStage: { normalizedName: 'offer', sortOrder: 4 },
+          }),
+        );
+
+        await service.updateCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'interview-1',
+          { status: RecruitmentInterviewStatus.CANCELLED },
+        );
+
+        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+      });
+
+      it('keeps the candidate in Interview when it is completed without a stage', async () => {
+        await service.updateCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'interview-1',
+          { status: RecruitmentInterviewStatus.COMPLETED },
+        );
+
+        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+      });
+
+      it('moves the candidate to the stage chosen on completion', async () => {
+        await service.updateCandidateInterview(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'interview-1',
+          {
+            status: RecruitmentInterviewStatus.COMPLETED,
+            stageId: 'stage-offer',
+          },
+        );
+
+        expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+          where: { id: 'candidate-1' },
+          data: expect.objectContaining({ currentStageId: 'stage-offer' }),
+        });
+      });
+
+      it('refuses Applied and Screening as a completion stage', async () => {
+        await expect(
+          service.updateCandidateInterview(
+            'tenant-1',
+            user,
+            'candidate-1',
+            'interview-1',
+            {
+              status: RecruitmentInterviewStatus.COMPLETED,
+              stageId: 'stage-screening',
+            },
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('refuses a stage unless the interview is being completed', async () => {
+        await expect(
+          service.updateCandidateInterview(
+            'tenant-1',
+            user,
+            'candidate-1',
+            'interview-1',
+            { stageId: 'stage-offer' },
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
     });
 
     it('returns not found for an interview that is not on this candidate', async () => {
@@ -2094,6 +2559,7 @@ describe('RecruitmentService', () => {
       await expect(
         service.updateCandidateInterview(
           'tenant-1',
+          user,
           'candidate-1',
           'other-interview',
           { notes: 'x' },

@@ -695,6 +695,9 @@ model RecruitmentVacancy {
   updatedByUserId  String?
   closedAt         DateTime?
   closedByUserId   String?
+  /// Minimum match score (0-100). Applicants scoring below it are moved to the Rejected stage
+  /// automatically. Null means no cut-off.
+  cutoffScore      Int?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
@@ -760,6 +763,10 @@ model RecruitmentApplication {
   tenantId               String
   vacancyId              String
   currentStageId         String?
+  /// Set while the applicant sits in Rejected because of the vacancy's cut-off; cleared as soon
+  /// as a person moves them, so the cut-off never undoes a recruiter's decision.
+  autoRejectedAt         DateTime?
+  autoRejectedScore      Int?
   status                 RecruitmentApplicationStatus @default(DRAFT)
   accessTokenHash        String?                      @unique
   submittedAt            DateTime?

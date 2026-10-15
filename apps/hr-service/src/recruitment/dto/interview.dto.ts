@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -168,4 +169,12 @@ export class UpdateRecruitmentInterviewDto {
   @IsString()
   @MaxLength(4000)
   feedback?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Only with status COMPLETED: the stage to move the candidate to. Omit to keep them in the Interview stage. Applied and Screening are not allowed.',
+  })
+  @IsOptional()
+  @IsUUID()
+  stageId?: string;
 }

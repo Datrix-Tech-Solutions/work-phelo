@@ -16,6 +16,7 @@ import {
   RecruitmentVacancyStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { computeMatchScore } from './candidate-match';
 import {
   CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
@@ -37,6 +38,7 @@ import {
   QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
   RecruitmentVacancyQuestionDto,
+  SetRecruitmentCutoffDto,
   UpdateRecruitmentVacancyDto,
 } from './dto/vacancy.dto';
 import {
@@ -483,6 +485,163 @@ export class RecruitmentService {
     return this.serializeVacancy(vacancy);
   }
 
+  /**
+   * Sets or clears the vacancy's match-score cut-off and applies it to the applicants already
+   * waiting in the entry stage: those below it move to Rejected, and applicants the cut-off
+   * itself rejected earlier come back when they now clear it. Nobody a person has moved is
+   * touched. With `dryRun` it only reports the counts.
+   */
+  async setVacancyCutoff(
+    tenantId: string,
+    user: RequestUser,
+    vacancyId: string,
+    dto: SetRecruitmentCutoffDto,
+  ) {
+    const vacancy = await this.prisma.recruitmentVacancy.findFirst({
+      where: { tenantId, id: vacancyId },
+      select: { id: true, details: true },
+    });
+    if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
+
+    const cutoff = dto.cutoffScore;
+    if (cutoff !== null) {
+      const scoreable = computeMatchScore(
+        { skills: [], languages: [], yearsOfExperience: null },
+        vacancy.details,
+      );
+      if (scoreable === null) {
+        throw new BadRequestException(
+          'Add skills, minimum experience or languages to this opening before setting a cut-off',
+        );
+      }
+    }
+
+    const [defaultStage, rejectedStage] = await Promise.all([
+      this.getDefaultStage(tenantId),
+      this.findRejectedStage(tenantId),
+    ]);
+    if (!rejectedStage) {
+      throw new ConflictException(
+        'A "Rejected" recruitment stage is required to use a cut-off',
+      );
+    }
+
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: user.id },
+      select: { id: true },
+    });
+
+    const applicants = await this.prisma.recruitmentApplication.findMany({
+      where: {
+        tenantId,
+        vacancyId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+        OR: [
+          { currentStageId: defaultStage.id, autoRejectedAt: null },
+          { currentStageId: rejectedStage.id, autoRejectedAt: { not: null } },
+        ],
+      },
+      select: {
+        id: true,
+        currentStageId: true,
+        autoRejectedAt: true,
+        skills: true,
+        languages: true,
+        yearsOfExperience: true,
+      },
+    });
+
+    const toReject: Array<{ id: string; score: number }> = [];
+    const toRestore: Array<{ id: string; score: number | null }> = [];
+    for (const applicant of applicants) {
+      const score = computeMatchScore(applicant, vacancy.details);
+      if (applicant.autoRejectedAt) {
+        if (cutoff === null || score === null || score >= cutoff) {
+          toRestore.push({ id: applicant.id, score });
+        }
+      } else if (cutoff !== null && score !== null && score < cutoff) {
+        toReject.push({ id: applicant.id, score });
+      }
+    }
+
+    if (dto.dryRun) {
+      return {
+        cutoffScore: cutoff,
+        rejected: toReject.length,
+        restored: toRestore.length,
+        applied: false,
+      };
+    }
+
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.recruitmentVacancy.update({
+        where: { id: vacancyId },
+        data: { cutoffScore: cutoff, updatedByUserId: user.id },
+      });
+
+      for (const { id, score } of toReject) {
+        await tx.recruitmentApplication.update({
+          where: { id },
+          data: {
+            currentStageId: rejectedStage.id,
+            autoRejectedAt: now,
+            autoRejectedScore: score,
+          },
+        });
+        await tx.recruitmentStageHistory.create({
+          data: {
+            tenantId,
+            applicationId: id,
+            previousStageId: defaultStage.id,
+            newStageId: rejectedStage.id,
+            changedByUserId: user.id,
+            changedByEmployeeId: actorEmployee?.id,
+            note: `Auto-rejected: ${score}% match, cut-off ${cutoff}%`,
+          },
+        });
+      }
+
+      for (const { id, score } of toRestore) {
+        await tx.recruitmentApplication.update({
+          where: { id },
+          data: {
+            currentStageId: defaultStage.id,
+            autoRejectedAt: null,
+            autoRejectedScore: null,
+          },
+        });
+        await tx.recruitmentStageHistory.create({
+          data: {
+            tenantId,
+            applicationId: id,
+            previousStageId: rejectedStage.id,
+            newStageId: defaultStage.id,
+            changedByUserId: user.id,
+            changedByEmployeeId: actorEmployee?.id,
+            note:
+              cutoff === null
+                ? 'Cut-off cleared'
+                : `Back above cut-off: ${score}% match, cut-off ${cutoff}%`,
+          },
+        });
+      }
+    });
+
+    return {
+      cutoffScore: cutoff,
+      rejected: toReject.length,
+      restored: toRestore.length,
+      applied: true,
+    };
+  }
+
+  private findRejectedStage(tenantId: string) {
+    return this.prisma.recruitmentStage.findFirst({
+      where: { tenantId, normalizedName: this.normalizeName('Rejected') },
+    });
+  }
+
   async closeVacancy(tenantId: string, user: RequestUser, vacancyId: string) {
     await this.getVacancy(tenantId, vacancyId);
     const vacancy = await this.prisma.recruitmentVacancy.update({
@@ -712,7 +871,11 @@ export class RecruitmentService {
     return this.prisma.$transaction(async (tx) => {
       await tx.recruitmentApplication.update({
         where: { id: candidateId },
-        data: { currentStageId: stageId },
+        data: {
+          currentStageId: stageId,
+          autoRejectedAt: null,
+          autoRejectedScore: null,
+        },
       });
       await tx.recruitmentStageHistory.create({
         data: {
@@ -765,7 +928,10 @@ export class RecruitmentService {
     candidateId: string,
     dto: CreateRecruitmentInterviewDto,
   ) {
-    await this.getCandidateForInterviews(tenantId, candidateId);
+    const candidate = await this.getCandidateForInterviews(
+      tenantId,
+      candidateId,
+    );
     const scheduledAt = this.parseInterviewTime(dto.scheduledAt);
     const channel = this.resolveInterviewChannel({
       mode: dto.mode,
@@ -774,36 +940,68 @@ export class RecruitmentService {
       phone: dto.phone,
       location: dto.location,
     });
+    const interviewStage = await this.stageForNewInterview(
+      tenantId,
+      candidate.currentStage,
+    );
 
     const actorEmployee = await this.prisma.employee.findFirst({
       where: { tenantId, userId: user.id },
       select: { id: true },
     });
 
-    const created = await this.prisma.recruitmentInterview.create({
-      data: {
-        tenantId,
-        applicationId: candidateId,
-        mode: dto.mode,
-        scheduledAt,
-        durationMinutes: dto.durationMinutes,
-        ...channel,
-        notes: this.optionalTrim(dto.notes) ?? null,
-        createdByUserId: user.id,
-        createdByEmployeeId: actorEmployee?.id,
-      },
-      include: RECRUITMENT_INTERVIEW_INCLUDE,
+    const created = await this.prisma.$transaction(async (tx) => {
+      const interview = await tx.recruitmentInterview.create({
+        data: {
+          tenantId,
+          applicationId: candidateId,
+          mode: dto.mode,
+          scheduledAt,
+          durationMinutes: dto.durationMinutes,
+          ...channel,
+          notes: this.optionalTrim(dto.notes) ?? null,
+          createdByUserId: user.id,
+          createdByEmployeeId: actorEmployee?.id,
+        },
+        include: RECRUITMENT_INTERVIEW_INCLUDE,
+      });
+      if (interviewStage) {
+        await tx.recruitmentApplication.update({
+          where: { id: candidateId },
+          data: {
+            currentStageId: interviewStage.id,
+            autoRejectedAt: null,
+            autoRejectedScore: null,
+          },
+        });
+        await tx.recruitmentStageHistory.create({
+          data: {
+            tenantId,
+            applicationId: candidateId,
+            previousStageId: candidate.currentStageId,
+            newStageId: interviewStage.id,
+            changedByUserId: user.id,
+            changedByEmployeeId: actorEmployee?.id,
+            note: 'Moved automatically: interview scheduled',
+          },
+        });
+      }
+      return interview;
     });
     return this.serializeInterview(created);
   }
 
   async updateCandidateInterview(
     tenantId: string,
+    user: RequestUser,
     candidateId: string,
     interviewId: string,
     dto: UpdateRecruitmentInterviewDto,
   ) {
-    await this.getCandidateForInterviews(tenantId, candidateId);
+    const candidate = await this.getCandidateForInterviews(
+      tenantId,
+      candidateId,
+    );
     const existing = await this.prisma.recruitmentInterview.findFirst({
       where: { tenantId, applicationId: candidateId, id: interviewId },
     });
@@ -887,12 +1085,113 @@ export class RecruitmentService {
       data.status = dto.status;
     }
 
-    const updated = await this.prisma.recruitmentInterview.update({
-      where: { id: interviewId },
-      data,
-      include: RECRUITMENT_INTERVIEW_INCLUDE,
+    const finishing = data.status as RecruitmentInterviewStatus | undefined;
+    if (
+      dto.stageId !== undefined &&
+      finishing !== RecruitmentInterviewStatus.COMPLETED
+    ) {
+      throw new BadRequestException(
+        'A stage can only be chosen when completing an interview',
+      );
+    }
+    const completionStage =
+      dto.stageId !== undefined
+        ? await this.requireCompletionStage(tenantId, dto.stageId)
+        : null;
+
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: user.id },
+      select: { id: true },
+    });
+    const moveTo = async (
+      tx: Prisma.TransactionClient,
+      stageId: string,
+      note: string,
+    ) => {
+      await tx.recruitmentApplication.update({
+        where: { id: candidateId },
+        data: {
+          currentStageId: stageId,
+          autoRejectedAt: null,
+          autoRejectedScore: null,
+        },
+      });
+      await tx.recruitmentStageHistory.create({
+        data: {
+          tenantId,
+          applicationId: candidateId,
+          previousStageId: candidate.currentStageId,
+          newStageId: stageId,
+          changedByUserId: user.id,
+          changedByEmployeeId: actorEmployee?.id,
+          note,
+        },
+      });
+    };
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const interview = await tx.recruitmentInterview.update({
+        where: { id: interviewId },
+        data,
+        include: RECRUITMENT_INTERVIEW_INCLUDE,
+      });
+
+      if (completionStage && completionStage.id !== candidate.currentStageId) {
+        await moveTo(
+          tx,
+          completionStage.id,
+          `Moved to ${completionStage.name}: interview completed`,
+        );
+      } else if (finishing === RecruitmentInterviewStatus.CANCELLED) {
+        // Cancelling sends the candidate back to Screening, unless they have moved on from
+        // Interview or another interview is still booked.
+        const inInterview =
+          candidate.currentStage?.normalizedName ===
+          this.normalizeName('Interview');
+        if (inInterview) {
+          const stillBooked = await tx.recruitmentInterview.count({
+            where: {
+              tenantId,
+              applicationId: candidateId,
+              status: RecruitmentInterviewStatus.SCHEDULED,
+              id: { not: interviewId },
+            },
+          });
+          const screening = await tx.recruitmentStage.findFirst({
+            where: {
+              tenantId,
+              normalizedName: this.normalizeName('Screening'),
+            },
+          });
+          if (stillBooked === 0 && screening) {
+            await moveTo(
+              tx,
+              screening.id,
+              'Moved to Screening: interview cancelled',
+            );
+          }
+        }
+      }
+      return interview;
     });
     return this.serializeInterview(updated);
+  }
+
+  /** The stages a completed interview can move a candidate to: anything after Screening. */
+  private async requireCompletionStage(tenantId: string, stageId: string) {
+    const stage = await this.prisma.recruitmentStage.findFirst({
+      where: { tenantId, id: stageId },
+    });
+    if (!stage) throw new NotFoundException('Recruitment stage not found');
+    if (
+      stage.isDefault ||
+      stage.normalizedName === this.normalizeName('Screening')
+    ) {
+      throw new BadRequestException(
+        'A completed interview cannot move a candidate back to Applied or Screening',
+      );
+    }
+    return stage;
   }
 
   async createApplication(
@@ -1180,8 +1479,18 @@ export class RecruitmentService {
       draft.email?.trim().toLowerCase(),
       draft.id,
     );
-    const initialStage = await this.getDefaultStage(draft.tenantId);
+    const defaultStage = await this.getDefaultStage(draft.tenantId);
     const now = new Date();
+
+    // A vacancy cut-off sends applicants who score below it straight to Rejected. If the tenant
+    // has no Rejected stage the applicant is kept in the default stage rather than refused.
+    const score = computeMatchScore(draft, draft.vacancy.details);
+    const cutoff = draft.vacancy.cutoffScore;
+    const rejectedStage =
+      cutoff !== null && score !== null && score < cutoff
+        ? await this.findRejectedStage(draft.tenantId)
+        : null;
+    const initialStage = rejectedStage ?? defaultStage;
 
     return this.prisma.$transaction(async (tx) => {
       await tx.recruitmentApplication.update({
@@ -1192,6 +1501,9 @@ export class RecruitmentService {
           submittedAt: now,
           appliedAt: now,
           accessTokenHash: null,
+          ...(rejectedStage
+            ? { autoRejectedAt: now, autoRejectedScore: score }
+            : {}),
         },
       });
       await tx.recruitmentStageHistory.create({
@@ -1202,7 +1514,9 @@ export class RecruitmentService {
           newStageId: initialStage.id,
           changedByUserId: null,
           changedByEmployeeId: null,
-          note: 'Initial application stage',
+          note: rejectedStage
+            ? `Auto-rejected: ${score}% match, cut-off ${cutoff}%`
+            : 'Initial application stage',
         },
       });
 
@@ -2368,11 +2682,37 @@ export class RecruitmentService {
         id: candidateId,
         status: RecruitmentApplicationStatus.SUBMITTED,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        currentStageId: true,
+        currentStage: { select: { normalizedName: true, sortOrder: true } },
+      },
     });
     if (!candidate)
       throw new NotFoundException('Recruitment candidate not found');
     return candidate;
+  }
+
+  /**
+   * The Interview stage a candidate moves to when an interview is scheduled, or null to leave
+   * them where they are: no Interview stage, already in it, or already past it (Offer, Hired).
+   * A rejected candidate does move, since scheduling an interview is a recruiter's decision.
+   */
+  private async stageForNewInterview(
+    tenantId: string,
+    current: { normalizedName: string; sortOrder: number } | null,
+  ) {
+    const interview = await this.prisma.recruitmentStage.findFirst({
+      where: { tenantId, normalizedName: this.normalizeName('Interview') },
+    });
+    if (!interview) return null;
+    if (current) {
+      if (current.normalizedName === interview.normalizedName) return null;
+      const rejected =
+        current.normalizedName === this.normalizeName('Rejected');
+      if (!rejected && current.sortOrder > interview.sortOrder) return null;
+    }
+    return interview;
   }
 
   private parseInterviewTime(value: string) {

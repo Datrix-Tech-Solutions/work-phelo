@@ -114,7 +114,14 @@ export default function CandidateDetailPage({
           )}
           {activeTab === 'documents' && <CandidateDocumentsTab candidate={candidate} />}
           {activeTab === 'interviews' && (
-            <CandidateInterviewsTab interviews={interviews} isLoading={interviewsLoading} />
+            <CandidateInterviewsTab
+              candidateId={candidate.id}
+              interviews={interviews}
+              isLoading={interviewsLoading}
+              canManage={canScheduleInterview === true}
+              stages={stages}
+              currentStageId={candidate.currentStageId}
+            />
           )}
         </div>
       </div>

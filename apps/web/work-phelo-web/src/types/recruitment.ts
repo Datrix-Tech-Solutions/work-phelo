@@ -58,6 +58,8 @@ export interface RecruitmentVacancy {
   salaryCurrency: string | null;
   status: JobOpeningStatus;
   applicantCount: number;
+  /** Minimum match score; applicants below it are rejected automatically. Null means none. */
+  cutoffScore: number | null;
   questions: RecruitmentVacancyQuestion[];
   createdAt: string;
   updatedAt: string;
@@ -195,6 +197,8 @@ export interface RecruitmentCandidate {
   yearsOfExperience: number | null;
   currentJobTitle: string | null;
   currentEmployer: string | null;
+  skills: string[];
+  languages: string[];
   resumeUrl: string | null;
   appliedAt: string;
   submittedAt: string | null;
@@ -300,4 +304,12 @@ export interface ScheduleInterviewInput {
   startTime: string;
   durationMinutes: number;
   notes: string | null;
+}
+
+/** Result of setting a cut-off: how many applicants moved (or would move on a dry run). */
+export interface CutoffResult {
+  cutoffScore: number | null;
+  rejected: number;
+  restored: number;
+  applied: boolean;
 }

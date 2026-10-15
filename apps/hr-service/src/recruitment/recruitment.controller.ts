@@ -56,6 +56,7 @@ import {
   QueryPublicRecruitmentBoardDto,
   QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
+  SetRecruitmentCutoffDto,
   UpdateRecruitmentVacancyDto,
 } from './dto/vacancy.dto';
 import { RecruitmentService } from './recruitment.service';
@@ -450,6 +451,36 @@ export class RecruitmentController {
     );
   }
 
+  @Post('vacancies/:vacancyId/cutoff')
+  @ApiTags('HR Recruitment - Vacancies')
+  @RequirePermissions(Permission.UPDATE_RECRUITMENT_VACANCY)
+  @ApiOperation({
+    summary: 'Set or clear the match-score cut-off of a vacancy',
+    description:
+      'Applicants below the cut-off are moved to Rejected, now and as they apply. Applicants the cut-off rejected earlier return to the entry stage once they clear it. Use dryRun to preview the counts.',
+  })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  @ApiBody({ type: SetRecruitmentCutoffDto })
+  @ApiOkResponse({
+    description: 'Cut-off applied, with the number of applicants moved',
+  })
+  @ApiBadRequestResponse({
+    description: 'The vacancy has nothing to score against',
+  })
+  @ApiConflictResponse({ description: 'The tenant has no Rejected stage' })
+  setCutoff(
+    @Param('vacancyId') vacancyId: string,
+    @Body() dto: SetRecruitmentCutoffDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.setVacancyCutoff(
+      req.user.tenantId,
+      req.user,
+      vacancyId,
+      dto,
+    );
+  }
+
   @Post('vacancies/:vacancyId/close')
   @ApiTags('HR Recruitment - Vacancies')
   @RequirePermissions(Permission.CLOSE_RECRUITMENT_VACANCY)
@@ -743,6 +774,7 @@ export class RecruitmentController {
   ) {
     return this.recruitmentService.updateCandidateInterview(
       req.user.tenantId,
+      req.user,
       candidateId,
       interviewId,
       dto,
