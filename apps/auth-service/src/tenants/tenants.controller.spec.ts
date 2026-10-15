@@ -1,9 +1,16 @@
 import { ForbiddenException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { RequestUser } from '@work-phelo/types';
 import { TenantsController } from './tenants.controller';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 
 function makeController() {
-  const lifecycle = {};
+  const lifecycle = {
+    register: jest.fn().mockResolvedValue({ status: 'PENDING_VERIFICATION' }),
+  };
   const config = {};
   const admin = {};
   const branding = {
@@ -15,6 +22,7 @@ function makeController() {
 
   return {
     branding,
+    lifecycle,
     controller: new TenantsController(
       lifecycle as never,
       config as never,
@@ -23,6 +31,43 @@ function makeController() {
     ),
   };
 }
+
+describe('TenantsController registration access', () => {
+  const methodMetadata = (key: string, method: string) =>
+    Reflect.getMetadata(
+      key,
+      Object.getOwnPropertyDescriptor(TenantsController.prototype, method)!
+        .value,
+    );
+
+  it('accepts anonymous registration while keeping management guards', async () => {
+    const { controller, lifecycle } = makeController();
+    expect(methodMetadata(GUARDS_METADATA, 'register')).toEqual([
+      OptionalJwtAuthGuard,
+    ]);
+    expect(methodMetadata(ROLES_KEY, 'register')).toBeUndefined();
+    expect(methodMetadata('THROTTLER:LIMITshort', 'register')).toBe(2);
+    expect(methodMetadata('THROTTLER:LIMITmedium', 'register')).toBe(5);
+    await controller.register({ name: 'Acme' } as never, {} as never);
+    expect(lifecycle.register).toHaveBeenCalledWith({ name: 'Acme' }, false);
+
+    expect(methodMetadata(GUARDS_METADATA, 'findAll')).toEqual([JwtAuthGuard]);
+    expect(methodMetadata(GUARDS_METADATA, 'approve')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(methodMetadata(ROLES_KEY, 'approve')).toEqual(['SUPER_ADMIN']);
+  });
+
+  it('keeps a verified Super Admin registration in the managed flow', async () => {
+    const { controller, lifecycle } = makeController();
+    await controller.register(
+      { name: 'Acme' } as never,
+      { user: requestUser({ role: 'SUPER_ADMIN' }) } as never,
+    );
+    expect(lifecycle.register).toHaveBeenCalledWith({ name: 'Acme' }, true);
+  });
+});
 
 function requestUser(overrides: Partial<RequestUser> = {}) {
   return {

@@ -74,6 +74,21 @@ describe('ProxyController Reinsurance foundation', () => {
     });
   });
 
+  it('allows only the exact tenant registration path without gateway auth', () => {
+    const controller = new ProxyController() as unknown as {
+      isPublicPath(path: string): boolean;
+    };
+
+    expect(controller.isPublicPath('/api/v1/auth/tenants/register')).toBe(true);
+    expect(controller.isPublicPath('/api/v1/auth/tenants')).toBe(false);
+    expect(
+      controller.isPublicPath('/api/v1/auth/tenants/tenant-1/approve'),
+    ).toBe(false);
+    expect(controller.isPublicPath('/api/v1/auth/tenants/register/extra')).toBe(
+      false,
+    );
+  });
+
   it('maps the Accounting route to the Accounting service boundary', () => {
     const controller = new ProxyController() as unknown as {
       resolveDownstream(pathParts: string[]): {

@@ -489,6 +489,7 @@ export class UsersService {
         tenantId: updated.tenantId,
         tenantSlug: updated.tenant.slug,
         tenantName: updated.tenant.name,
+        moduleConfig: updated.tenant.moduleConfig,
       },
     };
   }
