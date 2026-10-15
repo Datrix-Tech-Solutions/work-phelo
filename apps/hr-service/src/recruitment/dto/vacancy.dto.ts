@@ -16,6 +16,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -527,4 +528,26 @@ export class QueryPublicRecruitmentBoardDto {
   @Min(1)
   @Max(100)
   limit?: number;
+}
+
+export class SetRecruitmentCutoffDto {
+  @ApiProperty({
+    nullable: true,
+    minimum: 0,
+    maximum: 100,
+    description:
+      'Minimum match score. Applicants below it are moved to Rejected. Null clears the cut-off.',
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  cutoffScore!: number | null;
+
+  @ApiPropertyOptional({
+    description: 'When true, report who would move without changing anything.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }

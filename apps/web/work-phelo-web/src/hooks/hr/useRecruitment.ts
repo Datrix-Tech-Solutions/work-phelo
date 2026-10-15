@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { educationLevelLabel } from '@/lib/hr/educationLevels';
 import type {
+  CutoffResult,
   JobOpeningStatus,
   RecruitmentCandidate,
   CandidateInterview,
@@ -98,6 +99,33 @@ export function useReopenJobOpening() {
   });
 }
 
+/** Sets the match-score cut-off; with `dryRun` it only reports who would move. */
+export function useSetCutoff() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      cutoffScore,
+      dryRun,
+    }: {
+      id: string;
+      cutoffScore: number | null;
+      dryRun?: boolean;
+    }) => {
+      const res = await api.post<CutoffResult>(`/hr/recruitment/vacancies/${id}/cutoff`, {
+        cutoffScore,
+        dryRun,
+      });
+      return res.data;
+    },
+    onSuccess: (result) => {
+      if (!result.applied) return;
+      queryClient.invalidateQueries({ queryKey: VACANCIES_KEY });
+      queryClient.invalidateQueries({ queryKey: ['recruitment', 'candidates'] });
+    },
+  });
+}
+
 export function useCloseJobOpening() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -153,6 +181,38 @@ export function useRecruitmentStages(enabled = true) {
       return res.data;
     },
     enabled,
+  });
+}
+
+export function useCreateStage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { name: string; description?: string }) => {
+      const res = await api.post<RecruitmentStage>('/hr/recruitment/stages', payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: STAGES_KEY }),
+  });
+}
+
+export function useUpdateStage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: { id: string; name?: string; description?: string }) => {
+      const res = await api.patch<RecruitmentStage>(`/hr/recruitment/stages/${id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: STAGES_KEY }),
+  });
+}
+
+export function useDeleteStage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/hr/recruitment/stages/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: STAGES_KEY }),
   });
 }
 
@@ -314,6 +374,33 @@ export function useCandidateInterviews(id: string) {
   });
 }
 
+/** Completes or cancels an interview. The API moves the candidate's stage as part of it. */
+export function useUpdateInterviewStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidateId,
+      interviewId,
+      status,
+      feedback,
+      stageId,
+    }: {
+      candidateId: string;
+      interviewId: string;
+      status: 'COMPLETED' | 'CANCELLED';
+      feedback?: string;
+      stageId?: string;
+    }) => {
+      const res = await api.patch<ApiInterview>(
+        `/hr/recruitment/candidates/${candidateId}/interviews/${interviewId}`,
+        { status, feedback: feedback || undefined, stageId: stageId || undefined },
+      );
+      return toCandidateInterview(res.data);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CANDIDATES_KEY }),
+  });
+}
+
 export function useScheduleInterview() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -334,10 +421,8 @@ export function useScheduleInterview() {
       );
       return toCandidateInterview(res.data);
     },
-    onSuccess: (_interview, input) =>
-      queryClient.invalidateQueries({
-        queryKey: [...CANDIDATES_KEY, 'interviews', input.candidateId],
-      }),
+    // Scheduling also moves the candidate to the Interview stage, so refresh every candidate view.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CANDIDATES_KEY }),
   });
 }
 

@@ -189,6 +189,7 @@ export function JobOpeningsTable() {
             onClick: () => router.push(`${basePath}/new`),
           },
         })}
+        onRowClick={(row) => router.push(`${basePath}/${row.id}`)}
         rowActions={rowActions}
         singleActionAsButton={false}
         emptyMessage="No job openings found"
