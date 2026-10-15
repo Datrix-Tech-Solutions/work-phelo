@@ -22,6 +22,7 @@ import { CandidateDocumentsTab } from '@/components/molecules/hr/recruitment/Can
 import { CandidateInterviewsTab } from '@/components/molecules/hr/recruitment/CandidateInterviewsTab';
 import { ScheduleInterviewPanel } from '@/components/organisms/hr/recruitment/ScheduleInterviewPanel';
 import { ChangeCandidateStageModal } from '@/components/molecules/hr/recruitment/ChangeCandidateStageModal';
+import type { CandidateInterview } from '@/types/recruitment';
 import { candidateFullName } from '@/components/molecules/hr/recruitment/candidateUtils';
 
 type CandidateTab = 'overview' | 'documents' | 'interviews';
@@ -42,6 +43,7 @@ export default function CandidateDetailPage({
   const [activeTab, setActiveTab] = useState<CandidateTab>('overview');
   const [changingStage, setChangingStage] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [editingInterview, setEditingInterview] = useState<CandidateInterview | null>(null);
 
   const { data: candidate, isLoading } = useCandidate(canView ? id : '');
   const canReadStages = usePermission(Permission.READ_RECRUITMENT_STAGES);
@@ -121,14 +123,19 @@ export default function CandidateDetailPage({
               canManage={canScheduleInterview === true}
               stages={stages}
               currentStageId={candidate.currentStageId}
+              onEdit={setEditingInterview}
             />
           )}
         </div>
       </div>
 
       <ScheduleInterviewPanel
-        candidate={scheduling ? candidate : null}
-        onClose={() => setScheduling(false)}
+        candidate={scheduling || editingInterview ? candidate : null}
+        interview={editingInterview}
+        onClose={() => {
+          setScheduling(false);
+          setEditingInterview(null);
+        }}
       />
 
       <ChangeCandidateStageModal

@@ -13,13 +13,32 @@ import { ViewModeToggle, type ViewMode } from '@/components/atoms/ViewModeToggle
 import { Avatar } from '@/components/atoms/Avatar';
 import { Badge, BadgeProps } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
+import {
+  InviteEmployeePanel,
+  type InviteEmployeeDefaults,
+} from '@/components/organisms/hr/employee/inviteEmployeePanel';
+import { useAllEmployees } from '@/hooks/hr/useEmployees';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { useCandidates, useJobOpenings, useRecruitmentStages } from '@/hooks/hr/useRecruitment';
+import {
+  useCandidates,
+  useJobOpening,
+  useJobOpenings,
+  useMoveCandidateStage,
+  useRecruitmentStages,
+} from '@/hooks/hr/useRecruitment';
 import { Permission } from '@/lib/permissionMap';
 import { formatDate } from '@/lib/formatters';
 import type { RecruitmentCandidate } from '@/types/recruitment';
 
 const PAGE_SIZE = 10;
+
+function isHired(c: RecruitmentCandidate): boolean {
+  return c.currentStage?.name.trim().toLowerCase() === 'hired';
+}
 
 function stageVariant(name: string): BadgeProps['variant'] {
   switch (name.toLowerCase()) {
@@ -71,6 +90,8 @@ export function CandidatesTable() {
   const canSchedule = usePermission(Permission.SCHEDULE_RECRUITMENT_INTERVIEW);
   const canReadStages = usePermission(Permission.READ_RECRUITMENT_STAGES);
   const canReadVacancies = usePermission(Permission.READ_RECRUITMENT_VACANCIES);
+  const canOnboard = usePermission(Permission.CREATE_EMPLOYEE);
+  const toast = useToast();
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -81,6 +102,8 @@ export function CandidatesTable() {
 
   const [scheduleTarget, setScheduleTarget] = useState<RecruitmentCandidate | null>(null);
   const [moveTarget, setMoveTarget] = useState<RecruitmentCandidate | null>(null);
+  const [onboardTarget, setOnboardTarget] = useState<RecruitmentCandidate | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<RecruitmentCandidate | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -96,6 +119,39 @@ export function CandidatesTable() {
   });
   const { data: stages = [] } = useRecruitmentStages(canReadStages === true);
   const { data: vacancies } = useJobOpenings({ limit: 100 });
+
+  const { data: onboardVacancy } = useJobOpening(onboardTarget?.vacancyId ?? '');
+  const { data: allEmployees } = useAllEmployees(undefined, { enabled: !!onboardTarget });
+  const { mutate: moveStage, isPending: isRejecting } = useMoveCandidateStage();
+  const rejectedStage = stages.find((s) => s.name.trim().toLowerCase() === 'rejected');
+
+  const onboardDefaults = useMemo<InviteEmployeeDefaults | undefined>(() => {
+    if (!onboardTarget) return undefined;
+    return {
+      firstName: onboardTarget.firstName ?? '',
+      lastName: onboardTarget.lastName ?? '',
+      email: onboardTarget.email ?? '',
+      phone: onboardTarget.phone ?? '',
+      jobTitle: onboardVacancy?.title ?? onboardTarget.vacancy.title ?? '',
+      departmentId: onboardVacancy?.departmentId ?? undefined,
+      branchId: onboardVacancy?.branchId ?? undefined,
+      employmentType: onboardVacancy?.jobType ?? 'FULL_TIME',
+    };
+  }, [onboardTarget, onboardVacancy]);
+
+  const confirmReject = () => {
+    if (!rejectTarget || !rejectedStage) return;
+    moveStage(
+      { id: rejectTarget.id, stageId: rejectedStage.id },
+      {
+        onSuccess: () => {
+          toast.success('Candidate rejected');
+          setRejectTarget(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to reject candidate')),
+      },
+    );
+  };
 
   const candidates = data?.items ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.meta.total ?? 0) / PAGE_SIZE));
@@ -167,44 +223,77 @@ export function CandidatesTable() {
     },
   ];
 
-  const rowActions = (row: RecruitmentCandidate): RowAction[] => [
-    ...(canMoveStage && canReadStages
-      ? [
-          {
-            label: 'Change Stage',
-            onClick: () => openMoveModal(row),
-          },
-        ]
-      : []),
-    ...(canSchedule
-      ? [{ label: 'Schedule Interview', onClick: () => setScheduleTarget(row) }]
-      : []),
+  const canReject = canMoveStage && canReadStages && !!rejectedStage;
+
+  // A hired candidate only has two ways forward: onboard them as an employee, or reject.
+  const hiredRowActions = (row: RecruitmentCandidate): RowAction[] => [
+    ...(canOnboard ? [{ label: 'Onboard', onClick: () => setOnboardTarget(row) }] : []),
+    ...(canReject ? [{ label: 'Reject', danger: true, onClick: () => setRejectTarget(row) }] : []),
   ];
+
+  const rowActions = (row: RecruitmentCandidate): RowAction[] =>
+    isHired(row)
+      ? hiredRowActions(row)
+      : [
+          ...(canMoveStage && canReadStages
+            ? [
+                {
+                  label: 'Change Stage',
+                  onClick: () => openMoveModal(row),
+                },
+              ]
+            : []),
+          ...(canSchedule
+            ? [{ label: 'Schedule Interview', onClick: () => setScheduleTarget(row) }]
+            : []),
+        ];
 
   const openMoveModal = (row: RecruitmentCandidate) => {
     setMoveTarget(row);
   };
 
-  const cardActions = (row: RecruitmentCandidate): DataCardAction[] => [
-    ...(canMoveStage && canReadStages
+  const cardActions = (row: RecruitmentCandidate): DataCardAction[] =>
+    isHired(row)
       ? [
-          {
-            label: 'Change Stage',
-            onClick: () => openMoveModal(row),
-            className: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
-          },
+          ...(canOnboard
+            ? [
+                {
+                  label: 'Onboard',
+                  onClick: () => setOnboardTarget(row),
+                  className: 'bg-green-50 text-green-700 hover:bg-green-100',
+                },
+              ]
+            : []),
+          ...(canReject
+            ? [
+                {
+                  label: 'Reject',
+                  onClick: () => setRejectTarget(row),
+                  className: 'bg-red-50 text-red-600 hover:bg-red-100',
+                },
+              ]
+            : []),
         ]
-      : []),
-    ...(canSchedule
-      ? [
-          {
-            label: 'Schedule Interview',
-            onClick: () => setScheduleTarget(row),
-            className: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
-          },
-        ]
-      : []),
-  ];
+      : [
+          ...(canMoveStage && canReadStages
+            ? [
+                {
+                  label: 'Change Stage',
+                  onClick: () => openMoveModal(row),
+                  className: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
+                },
+              ]
+            : []),
+          ...(canSchedule
+            ? [
+                {
+                  label: 'Schedule Interview',
+                  onClick: () => setScheduleTarget(row),
+                  className: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                },
+              ]
+            : []),
+        ];
 
   const closeMoveModal = () => setMoveTarget(null);
 
@@ -311,6 +400,41 @@ export function CandidatesTable() {
 
       <ScheduleInterviewPanel candidate={scheduleTarget} onClose={() => setScheduleTarget(null)} />
       <ChangeCandidateStageModal candidate={moveTarget} onClose={closeMoveModal} />
+
+      {canOnboard && (
+        <InviteEmployeePanel
+          isOpen={!!onboardTarget}
+          onClose={() => setOnboardTarget(null)}
+          onSuccess={() => {
+            toast.success('Employee invited');
+            setOnboardTarget(null);
+          }}
+          employees={allEmployees?.data ?? []}
+          initialValues={onboardDefaults}
+        />
+      )}
+
+      <Modal
+        isOpen={!!rejectTarget}
+        onClose={() => setRejectTarget(null)}
+        title="Reject Candidate"
+        description={`Reject ${rejectTarget ? candidateName(rejectTarget) : 'this candidate'}? They will be moved to Rejected.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setRejectTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isRejecting}
+              loadingText="Rejecting…"
+              onClick={confirmReject}
+            >
+              Reject
+            </Button>
+          </div>
+        }
+      />
     </div>
   );
 }

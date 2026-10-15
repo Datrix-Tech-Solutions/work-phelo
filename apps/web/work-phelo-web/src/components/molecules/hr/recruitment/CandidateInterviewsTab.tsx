@@ -39,6 +39,8 @@ interface Props {
   canManage?: boolean;
   stages?: RecruitmentStage[];
   currentStageId?: string | null;
+  /** Opens the edit form for a scheduled interview. */
+  onEdit?: (interview: CandidateInterview) => void;
 }
 
 export function CandidateInterviewsTab({
@@ -48,6 +50,7 @@ export function CandidateInterviewsTab({
   canManage = false,
   stages = [],
   currentStageId = null,
+  onEdit,
 }: Props) {
   const toast = useToast();
   const { mutate: updateStatus, isPending: isCancelling } = useUpdateInterviewStatus();
@@ -91,6 +94,11 @@ export function CandidateInterviewsTab({
                     <Badge label={status.label} variant={status.variant} />
                     {canManage && iv.status === 'SCHEDULED' && (
                       <div className="ml-auto flex items-center gap-2">
+                        {onEdit && (
+                          <TableButton variant="blue" onClick={() => onEdit(iv)}>
+                            Edit
+                          </TableButton>
+                        )}
                         <TableButton variant="green" onClick={() => setCompleting(iv)}>
                           Complete
                         </TableButton>
