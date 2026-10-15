@@ -7,6 +7,7 @@ import {
   Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class CreateTenantDto {
   @ApiProperty({
@@ -29,17 +30,20 @@ export class CreateTenantDto {
 
   @ApiProperty({
     description:
-      'Workspace slug — unique identifier used in all workspace URLs (/t/:slug/login). Lowercase letters, numbers and hyphens only.',
+      'Workspace slug used in /:slug/login. Trimmed and lowercased by the server; letters, numbers, and interior hyphens only.',
     example: 'acme-ghana',
     minLength: 2,
     maxLength: 50,
-    pattern: '^[a-z0-9-]+$',
+    pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$',
   })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  @Matches(/^[a-z0-9-]+$/, {
-    message: 'Slug can only contain lowercase letters, numbers and hyphens',
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+    message: 'Slug must contain letters, numbers, or interior hyphens',
   })
   slug!: string;
 
@@ -64,19 +68,6 @@ export class CreateTenantDto {
   @MinLength(2)
   @MaxLength(50)
   lastName!: string;
-
-  @ApiPropertyOptional({
-    description:
-      'Admin password — if omitted, an invite email is sent and admin sets password on first login',
-    example: 'Admin123!',
-    minLength: 8,
-    maxLength: 100,
-  })
-  @IsOptional()
-  @IsString()
-  @MinLength(8)
-  @MaxLength(100)
-  password?: string;
 
   @ApiPropertyOptional({
     description: 'Company phone number',

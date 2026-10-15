@@ -95,7 +95,11 @@ export default function ModulesPage({ params }: { params: Promise<{ tenantSlug: 
         <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col items-center gap-8">
           <div className="text-center">
             <h2 className="text-xl font-semibold text-gray-900">Your Modules</h2>
-            <p className="text-sm text-gray-400 mt-1">Click on a module to get started</p>
+            <p className="text-sm text-gray-400 mt-1">
+              {enabledKeys.size === 0
+                ? 'Your workspace is ready. Module access is pending setup; contact your platform administrator to enable a module.'
+                : 'Click on a module to get started'}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 w-full">

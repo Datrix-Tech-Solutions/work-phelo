@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  BadRequestException,
   ForbiddenException,
   NotFoundException,
   Logger,
@@ -14,7 +15,31 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { generateSecureToken } from '../common/otp.helper';
 import { normalizeEmail } from '../common/email.helper';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
-import { seedDefaultPermissionTemplates } from '../permissions/system-permission-sets';
+import {
+  ensurePermissionResources,
+  seedDefaultPermissionTemplates,
+} from '../permissions/system-permission-sets';
+import { RESOURCES } from '../permissions/resource-definitions';
+
+const RESERVED_WORKSPACE_SLUGS = new Set([
+  'api',
+  'auth',
+  'dashboard',
+  'forgot-password',
+  'health',
+  'login',
+  'platform',
+  'register',
+  'signup',
+  'super-admin',
+  'admin',
+  'system',
+  'support',
+  'www',
+]);
+
+const REGISTRATION_CONFLICT_MESSAGE =
+  'Company registration details are unavailable';
 
 @Injectable()
 export class TenantLifecycleService {
@@ -26,62 +51,101 @@ export class TenantLifecycleService {
     private readonly audit: AuditService,
   ) {}
 
-  async register(dto: CreateTenantDto) {
+  async register(dto: CreateTenantDto, isPlatformAdmin = false) {
     const normalizedEmail = normalizeEmail(dto.email);
+    const slug = dto.slug.trim().toLowerCase();
+    if (
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ||
+      slug.length < 2 ||
+      slug.length > 50
+    ) {
+      throw new BadRequestException('Invalid workspace slug');
+    }
+    if (RESERVED_WORKSPACE_SLUGS.has(slug)) {
+      throw new BadRequestException('This workspace slug is reserved');
+    }
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
     if (!superAdminEmail) throw new Error('SUPER_ADMIN_EMAIL is required');
     if (normalizedEmail === normalizeEmail(superAdminEmail)) {
-      throw new ForbiddenException(
-        'This email address cannot be used to register a company',
-      );
+      throw new ConflictException(REGISTRATION_CONFLICT_MESSAGE);
     }
 
     const existingTenant = await this.prisma.tenant.findFirst({
-      where: { OR: [{ email: normalizedEmail }, { slug: dto.slug }] },
+      where: { OR: [{ email: normalizedEmail }, { slug }] },
     });
     if (existingTenant) {
-      throw new ConflictException(
-        existingTenant.email === normalizedEmail
-          ? 'A company with this email already exists'
-          : 'This company slug is already taken',
-      );
+      throw new ConflictException(REGISTRATION_CONFLICT_MESSAGE);
     }
-
-    const tenant = await this.prisma.tenant.create({
-      data: {
-        name: dto.name,
-        slug: dto.slug,
-        email: normalizedEmail,
-        phone: dto.phone,
-        address: dto.address,
-        country: dto.country || 'GH',
-        currency: dto.currency || 'GHS',
-        industry: dto.industry,
-        size: dto.size,
-        status: 'PENDING',
-      },
-    });
-
-    await seedDefaultPermissionTemplates(this.prisma, tenant.id, this.logger);
-
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-    const user = await this.prisma.user.create({
-      data: {
-        tenantId: tenant.id,
-        email: normalizedEmail,
-        password: '',
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        phone: dto.phone,
-        role: 'TENANT_ADMIN',
-        status: 'PENDING_VERIFICATION',
-        forcePasswordReset: true,
-        inviteToken,
-        inviteExpiresAt,
-      },
+    // Global resources are idempotent and tenant-independent. Keep the tenant,
+    // templates, and first admin together in one transaction.
+    const existingResources = await this.prisma.resource.findMany({
+      where: { name: { in: RESOURCES.map((resource) => resource.name) } },
+      select: { id: true, name: true },
     });
+    const resourceIds =
+      existingResources.length === RESOURCES.length
+        ? Object.fromEntries(
+            existingResources.map((resource) => [resource.name, resource.id]),
+          )
+        : await ensurePermissionResources(this.prisma);
+    let tenant: Awaited<ReturnType<typeof this.prisma.tenant.create>>;
+    let user: Awaited<ReturnType<typeof this.prisma.user.create>>;
+    try {
+      ({ tenant, user } = await this.prisma.$transaction(
+        async (tx) => {
+          const tenant = await tx.tenant.create({
+            data: {
+              name: dto.name,
+              slug,
+              email: normalizedEmail,
+              phone: dto.phone,
+              address: dto.address,
+              country: dto.country || 'GH',
+              currency: dto.currency || 'GHS',
+              industry: dto.industry,
+              size: dto.size,
+              status: 'PENDING',
+              selfRegistered: !isPlatformAdmin,
+            },
+          });
+          await seedDefaultPermissionTemplates(
+            tx,
+            tenant.id,
+            this.logger,
+            resourceIds,
+          );
+          const user = await tx.user.create({
+            data: {
+              tenantId: tenant.id,
+              email: normalizedEmail,
+              password: '',
+              firstName: dto.firstName,
+              lastName: dto.lastName,
+              phone: dto.phone,
+              role: 'TENANT_ADMIN',
+              status: 'PENDING_VERIFICATION',
+              forcePasswordReset: true,
+              inviteToken,
+              inviteExpiresAt,
+            },
+          });
+          return { tenant, user };
+        },
+        { timeout: 30_000 },
+      ));
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(REGISTRATION_CONFLICT_MESSAGE);
+      }
+      throw error;
+    }
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
@@ -94,7 +158,7 @@ export class TenantLifecycleService {
         inviteKind: 'TENANT_ADMIN',
       })
       .catch((err) =>
-        this.logger.error(`Failed to emit invite for ${user.email}`, err),
+        this.logger.error('Failed to emit tenant admin invite', err),
       );
 
     await this.audit.log({
@@ -107,6 +171,13 @@ export class TenantLifecycleService {
       },
       status: 'SUCCESS',
     });
+
+    if (!isPlatformAdmin) {
+      return {
+        status: 'PENDING_VERIFICATION',
+        message: 'Registration received. Check your email to continue setup.',
+      };
+    }
 
     return {
       message: 'Company registered. Invite email sent to tenant admin.',
@@ -185,8 +256,26 @@ export class TenantLifecycleService {
 
     const tenantAdmin = await this.prisma.user.findFirst({
       where: { tenantId: id, role: 'TENANT_ADMIN' },
-      select: { id: true },
+      select: {
+        id: true,
+        status: true,
+        emailVerifiedAt: true,
+        password: true,
+        inviteToken: true,
+      },
     });
+
+    if (
+      tenant.selfRegistered &&
+      (!tenantAdmin?.emailVerifiedAt ||
+        tenantAdmin.status !== 'ACTIVE' ||
+        !tenantAdmin.password ||
+        tenantAdmin.inviteToken !== null)
+    ) {
+      throw new ConflictException(
+        'Tenant admin must accept the email invitation before activation',
+      );
+    }
 
     await this.rabbitmq.hrProvisionTenantWorkspace({
       tenantId: id,
@@ -201,10 +290,12 @@ export class TenantLifecycleService {
       data: { status: 'ACTIVE' },
     });
 
-    await this.prisma.user.updateMany({
-      where: { tenantId: id, role: 'TENANT_ADMIN' },
-      data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
-    });
+    if (!tenant.selfRegistered) {
+      await this.prisma.user.updateMany({
+        where: { tenantId: id, role: 'TENANT_ADMIN' },
+        data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
+      });
+    }
 
     await this.audit.log({
       tenantId: id,

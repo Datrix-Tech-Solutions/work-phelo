@@ -406,9 +406,11 @@ export async function seedDefaultPermissionTemplates(
   prisma: AuthPrisma,
   tenantId: string,
   logger?: LoggerLike,
+  preseededResources?: Record<string, string>,
 ): Promise<Record<string, string>> {
   const log = getLogger(logger);
-  const resources = await ensurePermissionResources(prisma);
+  const resources =
+    preseededResources ?? (await ensurePermissionResources(prisma));
   const seeded: Record<string, string> = {};
 
   // Migrate "Basic Employee" → "Employee" if the old name still exists
