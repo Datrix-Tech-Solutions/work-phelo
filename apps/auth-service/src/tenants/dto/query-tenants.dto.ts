@@ -7,10 +7,19 @@ export enum TenantStatusQuery {
   CANCELLED = 'CANCELLED',
 }
 
+export enum TenantSourceQuery {
+  PLATFORM = 'PLATFORM',
+  WEBSITE = 'WEBSITE',
+}
+
 export class QueryTenantsDto {
   @IsOptional()
   @IsEnum(TenantStatusQuery)
   status?: TenantStatusQuery;
+
+  @IsOptional()
+  @IsEnum(TenantSourceQuery)
+  source?: TenantSourceQuery;
 
   @IsOptional()
   @IsString()

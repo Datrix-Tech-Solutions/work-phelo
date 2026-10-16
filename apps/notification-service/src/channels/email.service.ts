@@ -15,6 +15,7 @@ import {
   renderPasswordResetLinkTemplate,
   renderPayrollApprovalRequestedTemplate,
   renderPayrollDecisionTemplate,
+  renderRecruiterConfirmationEmailTemplate,
   renderResignationSubmittedTemplate,
   renderSchedulePublishedTemplate,
   renderShiftSwapTemplate,
@@ -187,6 +188,23 @@ export class EmailService {
         firstName: this.escapeHtml(firstName),
         tenantName: this.escapeHtml(tenantName),
         acceptInviteUrl: this.sanitizeUrl(acceptInviteUrl),
+      }),
+    );
+  }
+
+  async sendRecruiterConfirmationEmail(
+    to: string,
+    firstName: string,
+    companyName: string,
+    confirmUrl: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Confirm your email — ${this.appName}`,
+      renderRecruiterConfirmationEmailTemplate({
+        firstName: this.escapeHtml(firstName),
+        companyName: this.escapeHtml(companyName),
+        confirmUrl: this.sanitizeUrl(confirmUrl),
       }),
     );
   }

@@ -551,6 +551,53 @@ export async function seedDefaultPermissionTemplates(
   return seeded;
 }
 
+export const RECRUITER_PERMISSION_SET_NAME = 'Recruiter';
+
+const RECRUITER_PERMISSIONS: PermissionResourceMap = {
+  'recruitment.vacancies': [
+    PermissionAction.VIEW,
+    PermissionAction.CREATE,
+    PermissionAction.EDIT,
+  ],
+  'recruitment.candidates': [PermissionAction.VIEW],
+  'recruitment.stages': [PermissionAction.VIEW],
+};
+
+/**
+ * The only access a recruiter who signed up on the careers site has:
+ * post and manage job openings and read their applicants.
+ */
+export async function seedRecruiterPermissionSet(
+  prisma: AuthPrisma,
+  tenantId: string,
+  resources: Record<string, string>,
+): Promise<string> {
+  const entries = Object.entries(RECRUITER_PERMISSIONS).flatMap(
+    ([resourceName, actions]) => {
+      const resourceId = resources[resourceName];
+      if (!resourceId) {
+        throw new Error(
+          `Resource "${resourceName}" is not seeded but is required by ${RECRUITER_PERMISSION_SET_NAME}`,
+        );
+      }
+      return actions.map((action) => ({ resourceId, action }));
+    },
+  );
+
+  const created = await prisma.permissionSet.create({
+    data: {
+      tenantId,
+      name: RECRUITER_PERMISSION_SET_NAME,
+      description:
+        'Job posting and applicant access for recruiters who signed up on the careers site.',
+      isSystem: false,
+      resources: { create: entries },
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 export function resolveSystemPermissionSetName(
   role: string,
 ): SystemPermissionSetName | null {

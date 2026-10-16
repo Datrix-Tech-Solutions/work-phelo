@@ -231,7 +231,7 @@ export class RecruitmentService {
     const tenantId = this.requirePublicTenantId(query.tenantId);
     const where: Prisma.RecruitmentVacancyWhereInput = {
       tenantId,
-      ...this.acceptingApplicationsWhere(),
+      ...(await this.acceptingApplicationsWhere()),
       ...(query.search?.trim()
         ? {
             OR: [
@@ -259,7 +259,7 @@ export class RecruitmentService {
     ]);
 
     return {
-      items: items.map((item) => this.serializePublicVacancy(item)),
+      items: await this.serializePublicVacancies(items),
       meta: { page, limit, total },
     };
   }
@@ -271,7 +271,7 @@ export class RecruitmentService {
     const search = query.search?.trim();
     const where: Prisma.RecruitmentVacancyWhereInput = {
       AND: [
-        this.acceptingApplicationsWhere(),
+        await this.acceptingApplicationsWhere(),
         ...(search
           ? [
               {
@@ -311,7 +311,7 @@ export class RecruitmentService {
     ]);
 
     return {
-      items: items.map((item) => this.serializePublicVacancy(item)),
+      items: await this.serializePublicVacancies(items),
       meta: { page, limit, total },
     };
   }
@@ -322,12 +322,13 @@ export class RecruitmentService {
       where: {
         tenantId: publicTenantId,
         id: vacancyId,
-        ...this.acceptingApplicationsWhere(),
+        ...(await this.acceptingApplicationsWhere()),
       },
       include: RECRUITMENT_VACANCY_INCLUDE,
     });
     if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
-    return this.serializePublicVacancy(vacancy);
+    const [serialized] = await this.serializePublicVacancies([vacancy]);
+    return serialized;
   }
 
   async updateVacancy(
@@ -1207,7 +1208,7 @@ export class RecruitmentService {
       where: {
         tenantId,
         id: vacancyId,
-        ...this.acceptingApplicationsWhere(),
+        ...(await this.acceptingApplicationsWhere()),
       },
       include: {
         questions: {
@@ -1323,7 +1324,7 @@ export class RecruitmentService {
       where: {
         tenantId: publicTenantId,
         id: vacancyId,
-        ...this.acceptingApplicationsWhere(),
+        ...(await this.acceptingApplicationsWhere()),
       },
       include: {
         questions: {
@@ -2230,6 +2231,28 @@ export class RecruitmentService {
     };
   }
 
+  /** Public vacancies plus whether each company carries the verified check mark. */
+  private async serializePublicVacancies(
+    vacancies: Prisma.RecruitmentVacancyGetPayload<{
+      include: typeof RECRUITMENT_VACANCY_INCLUDE;
+    }>[],
+  ) {
+    const tenantIds = [...new Set(vacancies.map((v) => v.tenantId))];
+    const employers =
+      tenantIds.length > 0
+        ? await this.prisma.recruitmentEmployer.findMany({
+            where: { tenantId: { in: tenantIds } },
+            select: { tenantId: true, isVerified: true },
+          })
+        : [];
+    const verified = new Map(employers.map((e) => [e.tenantId, e.isVerified]));
+    return vacancies.map((vacancy) => ({
+      ...this.serializePublicVacancy(vacancy),
+      // Companies HR has no record of were set up by the platform.
+      companyVerified: verified.get(vacancy.tenantId) ?? true,
+    }));
+  }
+
   private serializePublicVacancy(
     vacancy: Prisma.RecruitmentVacancyGetPayload<{
       include: typeof RECRUITMENT_VACANCY_INCLUDE;
@@ -2587,8 +2610,16 @@ export class RecruitmentService {
   }
 
   /** Open, and not past its closing date: the vacancies applicants can see and apply to. */
-  private acceptingApplicationsWhere(): Prisma.RecruitmentVacancyWhereInput {
+  /** Open, unexpired vacancies of companies that are not blocked. */
+  private async acceptingApplicationsWhere(): Promise<Prisma.RecruitmentVacancyWhereInput> {
+    const blocked = await this.prisma.recruitmentEmployer.findMany({
+      where: { isBlocked: true },
+      select: { tenantId: true },
+    });
     return {
+      ...(blocked.length > 0
+        ? { NOT: { tenantId: { in: blocked.map((b) => b.tenantId) } } }
+        : {}),
       status: RecruitmentVacancyStatus.OPEN,
       OR: [
         { closingDate: null },

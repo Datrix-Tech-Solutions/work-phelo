@@ -6,7 +6,11 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
-import { Prisma, TenantStatus } from '../../prisma/generated/client';
+import {
+  Prisma,
+  TenantSource,
+  TenantStatus,
+} from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -52,6 +56,11 @@ export class TenantLifecycleService {
   ) {}
 
   async register(dto: CreateTenantDto, isPlatformAdmin = false) {
+    if (!isPlatformAdmin && process.env.PUBLIC_TENANT_REGISTRATION !== 'true') {
+      throw new ForbiddenException(
+        'Company registration is by invitation only. Please contact Workphelo.',
+      );
+    }
     const normalizedEmail = normalizeEmail(dto.email);
     const slug = dto.slug.trim().toLowerCase();
     if (
@@ -108,6 +117,7 @@ export class TenantLifecycleService {
               size: dto.size,
               status: 'PENDING',
               selfRegistered: !isPlatformAdmin,
+              isVerified: isPlatformAdmin,
             },
           });
           await seedDefaultPermissionTemplates(
@@ -191,6 +201,7 @@ export class TenantLifecycleService {
 
   async findAll(filters: {
     status?: string;
+    source?: string;
     search?: string;
     tenantId?: string;
   }) {
@@ -198,6 +209,7 @@ export class TenantLifecycleService {
       slug: { not: 'datrix-internal' },
       ...(filters.tenantId ? { id: filters.tenantId } : {}),
       ...(filters.status ? { status: filters.status as TenantStatus } : {}),
+      ...(filters.source ? { source: filters.source as TenantSource } : {}),
       ...(filters.search
         ? {
             OR: [
@@ -229,6 +241,8 @@ export class TenantLifecycleService {
         industry: t.industry,
         size: t.size,
         status: t.status,
+        source: t.source,
+        isVerified: t.isVerified,
         userCount: t._count.users,
         createdAt: t.createdAt,
       })),
@@ -287,7 +301,11 @@ export class TenantLifecycleService {
 
     const updated = await this.prisma.tenant.update({
       where: { id },
-      data: { status: 'ACTIVE' },
+      // Approving a website recruiter only unblocks them; the check mark is set separately.
+      data: {
+        status: 'ACTIVE',
+        ...(tenant.source === 'WEBSITE' ? {} : { isVerified: true }),
+      },
     });
 
     if (!tenant.selfRegistered) {
@@ -296,6 +314,8 @@ export class TenantLifecycleService {
         data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
       });
     }
+
+    await this.syncRecruitmentEmployer(updated);
 
     await this.audit.log({
       tenantId: id,
@@ -351,9 +371,39 @@ export class TenantLifecycleService {
     });
 
     await this.revokeAllSessions(id);
+    await this.syncRecruitmentEmployer(updated);
 
     return {
       message: 'Tenant suspended. All active sessions revoked.',
+      tenant: updated,
+    };
+  }
+
+  async setVerified(id: string, isVerified: boolean) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const updated = await this.prisma.tenant.update({
+      where: { id },
+      data: { isVerified },
+    });
+
+    await this.audit.log({
+      tenantId: id,
+      action: 'UPDATE',
+      resource: 'tenants',
+      resourceId: id,
+      changes: {
+        before: { isVerified: tenant.isVerified },
+        after: { isVerified },
+      },
+      status: 'SUCCESS',
+    });
+
+    await this.syncRecruitmentEmployer(updated);
+
+    return {
+      message: isVerified ? 'Company verified' : 'Company verification removed',
       tenant: updated,
     };
   }
@@ -368,6 +418,7 @@ export class TenantLifecycleService {
     });
 
     await this.revokeAllSessions(id);
+    await this.syncRecruitmentEmployer(updated);
 
     return {
       message: 'Tenant deactivated. All active sessions revoked.',
@@ -380,6 +431,11 @@ export class TenantLifecycleService {
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     await this.prisma.tenant.delete({ where: { id } });
+    await this.syncRecruitmentEmployer({
+      id,
+      status: 'CANCELLED',
+      isVerified: tenant.isVerified,
+    });
 
     return { message: 'Company deleted successfully' };
   }
@@ -412,6 +468,29 @@ export class TenantLifecycleService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundException('Tenant not found');
     return this.audit.query(id, filters);
+  }
+
+  /**
+   * Tells HR whether a company's jobs may show on the public board and with a
+   * check mark. A failed sync must not undo the admin action, so it only logs.
+   */
+  private async syncRecruitmentEmployer(tenant: {
+    id: string;
+    status: string;
+    isVerified: boolean;
+  }) {
+    try {
+      await this.rabbitmq.hrRecruitmentEmployerUpdated({
+        tenantId: tenant.id,
+        isVerified: tenant.isVerified,
+        isBlocked: tenant.status !== 'ACTIVE',
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync recruitment employer ${tenant.id} to HR`,
+        error,
+      );
+    }
   }
 
   private async revokeAllSessions(tenantId: string) {

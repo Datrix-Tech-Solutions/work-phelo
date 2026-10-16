@@ -50,14 +50,6 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
     label: 'Campaign',
     items: [
       {
-        key: 'clients',
-        label: 'Clients',
-        icon: <ClientsIcon />,
-        href: 'clients',
-        enabled: true,
-        active: true,
-      },
-      {
         key: 'campaigns',
         label: 'Campaigns',
         icon: <CampaignsIcon />,
@@ -76,13 +68,21 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Prospecting',
+    label: 'Sales CRM',
     items: [
       {
         key: 'prospects',
         label: 'Prospects',
         icon: <ProspectIcon />,
         href: 'prospects',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'clients',
+        label: 'Clients',
+        icon: <ClientsIcon />,
+        href: 'clients',
         enabled: true,
         active: true,
       },
@@ -167,7 +167,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
  */
 export const MARKETING_TABS = [
   { key: 'campaign', label: 'Campaign', groupLabel: 'Campaign' },
-  { key: 'prospecting', label: 'Prospecting', groupLabel: 'Prospecting' },
+  { key: 'prospecting', label: 'Sales CRM', groupLabel: 'Sales CRM' },
   { key: 'transport', label: 'Transport', groupLabel: 'Transport' },
 ] as const;
 

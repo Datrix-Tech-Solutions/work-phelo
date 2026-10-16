@@ -27,6 +27,9 @@ const user = {
 
 function createPrismaMock() {
   const prisma: any = {
+    recruitmentEmployer: {
+      findMany: jest.fn(),
+    },
     recruitmentVacancy: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -90,6 +93,7 @@ function createPrismaMock() {
       return input(prisma);
     }),
   };
+  prisma.recruitmentEmployer.findMany.mockResolvedValue([]);
   return prisma;
 }
 
@@ -860,6 +864,29 @@ describe('RecruitmentService', () => {
         limit: expect.any(Number),
         total: 1,
       });
+    });
+
+    it('hides blocked companies from the board and marks unverified ones', async () => {
+      prisma.recruitmentEmployer.findMany
+        .mockResolvedValueOnce([{ tenantId: 'blocked-tenant' }])
+        .mockResolvedValueOnce([{ tenantId: 'tenant-1', isVerified: false }]);
+      prisma.recruitmentVacancy.findMany.mockResolvedValue([vacancy()]);
+      prisma.recruitmentVacancy.count.mockResolvedValue(1);
+
+      const result = await service.listPublicBoard({});
+
+      const where = prisma.recruitmentVacancy.findMany.mock.calls[0][0].where;
+      expect(JSON.stringify(where.AND)).toContain('blocked-tenant');
+      expect(result.items[0].companyVerified).toBe(false);
+    });
+
+    it('treats companies HR has no record of as verified', async () => {
+      prisma.recruitmentVacancy.findMany.mockResolvedValue([vacancy()]);
+      prisma.recruitmentVacancy.count.mockResolvedValue(1);
+
+      const result = await service.listPublicBoard({});
+
+      expect(result.items[0].companyVerified).toBe(true);
     });
 
     it('returns public detail for an open vacancy', async () => {

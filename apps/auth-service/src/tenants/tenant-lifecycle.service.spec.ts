@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { TenantLifecycleService } from './tenant-lifecycle.service';
@@ -56,6 +60,7 @@ function setup() {
   const rabbitmq = {
     notificationInviteUser: jest.fn().mockResolvedValue(undefined),
     hrProvisionTenantWorkspace: jest.fn(),
+    hrRecruitmentEmployerUpdated: jest.fn().mockResolvedValue(undefined),
   };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
   const service = new TenantLifecycleService(
@@ -69,7 +74,120 @@ function setup() {
 describe('TenantLifecycleService public registration', () => {
   beforeEach(() => {
     process.env.SUPER_ADMIN_EMAIL = 'platform@workphelo.test';
+    process.env.PUBLIC_TENANT_REGISTRATION = 'true';
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.PUBLIC_TENANT_REGISTRATION;
+  });
+
+  it('refuses public registration unless it is switched on, but still lets the platform register companies', async () => {
+    const { service, prisma, tx } = setup();
+    delete process.env.PUBLIC_TENANT_REGISTRATION;
+
+    await expect(service.register(dto)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+
+    await service.register(dto, true);
+    expect(tx.tenant.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ isVerified: true }),
+      }),
+    );
+  });
+
+  it('marks a company verified on approval but leaves a website recruiter unverified', async () => {
+    const { service, prisma } = setup();
+    prisma.user.findFirst.mockResolvedValue({ id: 'user-1' });
+    prisma.tenant.update.mockResolvedValue({ id: 'tenant-1' });
+
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 'tenant-1',
+      selfRegistered: false,
+      source: 'PLATFORM',
+    });
+    await service.approveTenant('tenant-1');
+    expect(prisma.tenant.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: { status: 'ACTIVE', isVerified: true },
+      }),
+    );
+
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 'tenant-2',
+      selfRegistered: false,
+      source: 'WEBSITE',
+    });
+    await service.approveTenant('tenant-2');
+    expect(prisma.tenant.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: { status: 'ACTIVE' } }),
+    );
+  });
+
+  it('tells HR to hide a suspended company and to show the check mark once verified', async () => {
+    const { service, prisma, rabbitmq } = setup();
+    prisma.tenant.findUnique.mockResolvedValue({ id: 'tenant-1' });
+    (prisma.user as any).findMany = jest.fn().mockResolvedValue([]);
+    (prisma as any).refreshToken = { updateMany: jest.fn() };
+
+    prisma.tenant.update.mockResolvedValue({
+      id: 'tenant-1',
+      status: 'SUSPENDED',
+      isVerified: false,
+    });
+    await service.suspendTenant('tenant-1');
+    expect(rabbitmq.hrRecruitmentEmployerUpdated).toHaveBeenLastCalledWith({
+      tenantId: 'tenant-1',
+      isVerified: false,
+      isBlocked: true,
+    });
+
+    prisma.tenant.update.mockResolvedValue({
+      id: 'tenant-1',
+      status: 'ACTIVE',
+      isVerified: true,
+    });
+    await service.setVerified('tenant-1', true);
+    expect(rabbitmq.hrRecruitmentEmployerUpdated).toHaveBeenLastCalledWith({
+      tenantId: 'tenant-1',
+      isVerified: true,
+      isBlocked: false,
+    });
+  });
+
+  it('does not fail the admin action when HR cannot be reached', async () => {
+    const { service, prisma, rabbitmq } = setup();
+    prisma.tenant.findUnique.mockResolvedValue({ id: 'tenant-1' });
+    prisma.tenant.update.mockResolvedValue({
+      id: 'tenant-1',
+      status: 'ACTIVE',
+      isVerified: true,
+    });
+    rabbitmq.hrRecruitmentEmployerUpdated.mockRejectedValue(new Error('down'));
+
+    await expect(service.setVerified('tenant-1', true)).resolves.toBeDefined();
+  });
+
+  it('lets a super admin set and remove the verified check mark', async () => {
+    const { service, prisma } = setup();
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 'tenant-1',
+      isVerified: false,
+    });
+    prisma.tenant.update.mockResolvedValue({
+      id: 'tenant-1',
+      isVerified: true,
+    });
+
+    await service.setVerified('tenant-1', true);
+
+    expect(prisma.tenant.update).toHaveBeenCalledWith({
+      where: { id: 'tenant-1' },
+      data: { isVerified: true },
+    });
   });
 
   it('commits pending tenant, templates, and admin before publishing invite', async () => {

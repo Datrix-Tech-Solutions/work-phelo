@@ -34,7 +34,7 @@ export const MARKETING_PAGE_TABS: Record<string, Record<string, string[]>> = {
     'decision-maker': ['marketing.crm-settings:VIEW', 'marketing.decision-makers:VIEW'],
     'source-type': ['marketing.crm-settings:VIEW', 'marketing.source-types:VIEW'],
     'interaction-medium': ['marketing.crm-settings:VIEW', 'marketing.interaction-media:VIEW'],
-    'prospect-business-type': ['marketing.crm-settings:VIEW', 'marketing.business-types:VIEW'],
+    'business-type': ['marketing.crm-settings:VIEW', 'marketing.business-types:VIEW'],
   },
   'user-management': {
     'roles-permissions': ['permission-sets:VIEW'],

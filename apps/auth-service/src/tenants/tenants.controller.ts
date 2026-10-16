@@ -34,6 +34,7 @@ import { TenantAdminService } from './tenant-admin.service';
 import { TenantBrandingService } from './tenant-branding.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { QueryTenantsDto } from './dto/query-tenants.dto';
+import { SetTenantVerifiedDto } from './dto/set-tenant-verified.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
 import {
@@ -141,6 +142,7 @@ export class TenantsController {
     required: false,
     enum: ['PENDING', 'ACTIVE', 'SUSPENDED', 'CANCELLED'],
   })
+  @ApiQuery({ name: 'source', required: false, enum: ['PLATFORM', 'WEBSITE'] })
   @ApiQuery({ name: 'search', required: false })
   @ApiResponse({ status: 200, description: 'Tenants list' })
   findAll(@Req() req: AuthenticatedRequest, @Query() query: QueryTenantsDto) {
@@ -457,6 +459,20 @@ export class TenantsController {
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   suspend(@Param('id') id: string) {
     return this.lifecycle.suspendTenant(id);
+  }
+
+  @Patch(':id/verified')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Set or remove the verified check mark — SuperAdmin only',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Verification updated' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  setVerified(@Param('id') id: string, @Body() dto: SetTenantVerifiedDto) {
+    return this.lifecycle.setVerified(id, dto.isVerified);
   }
 
   @Delete(':id')

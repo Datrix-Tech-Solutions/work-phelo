@@ -174,7 +174,7 @@ export default function ProspectBusinessTypePage() {
   return (
     <div className="flex flex-col gap-4">
       <CardList
-        title="Prospect Business Types"
+        title="Business Types"
         addLabel="Add Business Type"
         items={filtered}
         onAdd={openAdd}

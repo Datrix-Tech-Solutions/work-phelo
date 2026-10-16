@@ -657,6 +657,17 @@ model ProjectActivity {
 
 // ── Recruitment ───────────────────────────────────────────────────────────
 
+/// What auth-service tells HR about a company that posts jobs. No row means a normal,
+/// verified, unblocked company; rows exist for website recruiters and blocked companies.
+model RecruitmentEmployer {
+  tenantId   String   @id
+  isVerified Boolean  @default(false)
+  isBlocked  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  @@schema("hr")
+}
+
 model RecruitmentVacancy {
   id               String                   @id @default(uuid())
   tenantId         String
