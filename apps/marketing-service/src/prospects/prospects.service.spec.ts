@@ -174,6 +174,9 @@ describe('ProspectsService', () => {
     };
 
     return {
+      marketingCrmPreference: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       marketingCrmSettingOption: {
         findFirst: tx.marketingCrmSettingOption.findFirst,
         findMany: tx.marketingCrmSettingOption.findMany,

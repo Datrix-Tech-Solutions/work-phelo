@@ -4,7 +4,6 @@ import {
   BookSearch,
   Megaphone,
   SlidersHorizontal,
-  Users,
   ClipboardClock,
   ClipboardList,
   Handshake,
@@ -23,7 +22,6 @@ const RequestsIcon = () => <ClipboardList className="w-5 h-5" />;
 const TransportOfficersIcon = () => <SquareUser className="w-5 h-5" />;
 const FleetIcon = () => <Truck className="w-5 h-5" />;
 
-const ClientsIcon = () => <Users className="w-5 h-5" />;
 const CampaignManagementIcon = () => <SlidersHorizontal className="w-5 h-5" />;
 const TargetsIcon = () => <Target className="w-5 h-5" />;
 const CampaignsIcon = () => <Megaphone className="w-5 h-5" />;
@@ -71,18 +69,18 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
     label: 'Sales CRM',
     items: [
       {
-        key: 'prospects',
-        label: 'Prospects',
-        icon: <ProspectIcon />,
-        href: 'prospects',
+        key: 'crm-dashboard',
+        label: 'CRM Dashboard',
+        icon: <DashboardIcon />,
+        href: 'crm-dashboard',
         enabled: true,
         active: true,
       },
       {
-        key: 'clients',
-        label: 'Clients',
-        icon: <ClientsIcon />,
-        href: 'clients',
+        key: 'prospects',
+        label: 'Prospects & Clients',
+        icon: <ProspectIcon />,
+        href: 'prospects',
         enabled: true,
         active: true,
       },
@@ -91,6 +89,14 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
         label: 'Appointments',
         icon: <AppointmentIcon />,
         href: 'appointments',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'targets',
+        label: 'Sales Targets',
+        icon: <TargetsIcon />,
+        href: 'targets',
         enabled: true,
         active: true,
       },
@@ -107,6 +113,14 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Transport',
     items: [
+      {
+        key: 'transport-dashboard',
+        label: 'Transport Dashboard',
+        icon: <DashboardIcon />,
+        href: 'transport-dashboard',
+        enabled: true,
+        active: true,
+      },
       {
         key: 'fleet-management',
         label: 'Fleet Management',
@@ -135,16 +149,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Targets and Reports',
-    items: [
-      {
-        key: 'targets',
-        label: 'Sales Targets',
-        icon: <TargetsIcon />,
-        href: 'targets',
-        enabled: true,
-        active: true,
-      },
-    ],
+    items: [],
   },
   {
     label: 'Administration',

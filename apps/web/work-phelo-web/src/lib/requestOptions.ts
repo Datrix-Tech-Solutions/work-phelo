@@ -103,6 +103,7 @@ export function formatWindow(departureTime: string, returnTime: string | null): 
 /** Why a vehicle or driver can't be picked for a trip's date and times. */
 export const ALLOCATION_BLOCK_TAGS: Record<AllocationBlock, string> = {
   MAINTENANCE: 'Under maintenance',
+  DOCUMENTS: 'Documents expired',
   OVERDUE: 'On a trip',
   BOOKED: 'Booked',
 };

@@ -91,8 +91,7 @@ export default function MarketingLayout({
   const blocked =
     !isResolving &&
     !!page &&
-    (!canSeePage(page) ||
-      (!!tab && tabsOf(page).includes(tab) && page !== 'clients' && !canSeeTab(page, tab)));
+    (!canSeePage(page) || (!!tab && tabsOf(page).includes(tab) && !canSeeTab(page, tab)));
 
   // Anyone who is not a module user lands on, and stays within, the pages open to every employee.
   const router = useRouter();

@@ -24,6 +24,7 @@ import {
   UpdateFleetVehicleDto,
 } from './dto/fleet.dto';
 import { HrFleetClient, HrVehicleAsset } from './hr-fleet.client';
+import { documentAlerts } from './vehicle-documents';
 
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
 const ON_TRIP_MESSAGE =
@@ -40,12 +41,33 @@ const DETAIL_FIELDS = [
   'fuelType',
   'currentMileage',
 ] as const;
+const DOCUMENT_FIELDS = [
+  'insuranceStartDate',
+  'insuranceExpiryDate',
+  'safetyCertificateIssuedOn',
+  'safetyCertificateExpiresOn',
+] as const;
+/** Each document is a pair: it needs both its dates, and the end can't come before the start. */
+const DOCUMENT_PAIRS = [
+  ['Insurance', 'insuranceStartDate', 'insuranceExpiryDate'],
+  [
+    'Safety certificate',
+    'safetyCertificateIssuedOn',
+    'safetyCertificateExpiresOn',
+  ],
+] as const;
 /** Everything but mileage must be present the first time details are saved. */
 const REQUIRED_DETAIL_FIELDS = DETAIL_FIELDS.filter(
   (key) => key !== 'currentMileage',
 );
 
 type FleetDetails = Pick<MarketingFleetVehicle, (typeof DETAIL_FIELDS)[number]>;
+type FleetDocuments = Pick<
+  MarketingFleetVehicle,
+  (typeof DOCUMENT_FIELDS)[number]
+>;
+/** Rows predating the document columns, and test fixtures, may lack them. */
+type FleetRowDetails = FleetDetails & Partial<FleetDocuments>;
 
 /**
  * Fleet = HR vehicle assets (identity, branch, driver, status) merged with the
@@ -158,6 +180,9 @@ export class FleetService {
       );
     }
 
+    const documents = this.pickDocuments(dto);
+    this.assertDocumentDates(null, documents);
+
     const asset = await this.callHr(() =>
       this.hr.createVehicle(user.tenantId, {
         name: this.vehicleName(dto.make, dto.model),
@@ -173,6 +198,7 @@ export class FleetService {
         tenantId: user.tenantId,
         assetId: asset.id,
         ...(this.pickDetails(dto) as FleetDetails),
+        ...documents,
         createdByUserId: user.id,
         updatedByUserId: user.id,
       },
@@ -206,7 +232,11 @@ export class FleetService {
 
   async update(user: RequestUser, assetId: string, dto: UpdateFleetVehicleDto) {
     const detailPatch = this.pickDetails(dto);
-    if (!Object.keys(detailPatch).length && dto.branchId === undefined) {
+    const documentPatch = this.pickDocuments(dto);
+    const hasDetailChange =
+      Object.keys(detailPatch).length > 0 ||
+      Object.keys(documentPatch).length > 0;
+    if (!hasDetailChange && dto.branchId === undefined) {
       throw new BadRequestException(EMPTY_PATCH_MESSAGE);
     }
 
@@ -214,12 +244,13 @@ export class FleetService {
       this.hr.getVehicle(user.tenantId, assetId),
     );
     const existing = await this.findDetails(user.tenantId, assetId);
+    this.assertDocumentDates(existing, documentPatch);
 
     if (!existing) {
       const missing = REQUIRED_DETAIL_FIELDS.filter(
         (key) => detailPatch[key] == null,
       );
-      if (Object.keys(detailPatch).length && missing.length) {
+      if (hasDetailChange && missing.length) {
         throw new BadRequestException(
           `Fleet details are incomplete: ${missing.join(', ')} required`,
         );
@@ -246,17 +277,18 @@ export class FleetService {
     }
 
     let details = existing;
-    if (Object.keys(detailPatch).length) {
+    if (hasDetailChange) {
       details = await this.prisma.marketingFleetVehicle.upsert({
         where: { tenantId_assetId: { tenantId: user.tenantId, assetId } },
         create: {
           tenantId: user.tenantId,
           assetId,
           ...(detailPatch as FleetDetails),
+          ...documentPatch,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
-        update: { ...detailPatch, updatedByUserId: user.id },
+        update: { ...detailPatch, ...documentPatch, updatedByUserId: user.id },
       });
     }
 
@@ -332,11 +364,48 @@ export class FleetService {
     return picked;
   }
 
+  /** Day-only inputs ("2026-10-16") become dates; null clears; absent fields stay absent. */
+  private pickDocuments(
+    source: Partial<Record<(typeof DOCUMENT_FIELDS)[number], string | null>>,
+  ): Partial<FleetDocuments> {
+    const picked: Partial<FleetDocuments> = {};
+    for (const key of DOCUMENT_FIELDS) {
+      const value = source[key];
+      if (value === undefined) continue;
+      picked[key] = value === null ? null : new Date(`${value}T00:00:00.000Z`);
+    }
+    return picked;
+  }
+
+  /** What would be stored once `patch` is applied over `existing` must be a complete, ordered pair. */
+  private assertDocumentDates(
+    existing: Partial<FleetDocuments> | null,
+    patch: Partial<FleetDocuments>,
+  ) {
+    const merged = (key: (typeof DOCUMENT_FIELDS)[number]) =>
+      patch[key] !== undefined ? patch[key] : (existing?.[key] ?? null);
+    for (const [label, startKey, endKey] of DOCUMENT_PAIRS) {
+      const start = merged(startKey);
+      const end = merged(endKey);
+      if (!start && !end) continue;
+      if (!start || !end) {
+        throw new BadRequestException(
+          `${label} needs both its dates, or neither`,
+        );
+      }
+      if (end.getTime() < start.getTime()) {
+        throw new BadRequestException(
+          `${label} expiry date can't be before its start date`,
+        );
+      }
+    }
+  }
+
   /** Builds a vehicle row, loading just this vehicle's trips (and details unless given). */
   private async rowFor(
     tenantId: string,
     asset: HrVehicleAsset,
-    details?: FleetDetails | null,
+    details?: FleetRowDetails | null,
   ) {
     const [resolvedDetails, trips] = await Promise.all([
       details === undefined ? this.findDetails(tenantId, asset.id) : details,
@@ -357,23 +426,31 @@ export class FleetService {
 
   /**
    * Fleet status is about the vehicle's availability, not its driver: retired and
-   * maintenance come from HR, then a trip in progress means on route and a trip
-   * still to come means booked. HR's own "assigned" (a driver is attached) does
-   * not make a vehicle unavailable.
+   * maintenance come from HR, then a trip in progress means on route. After that an
+   * expired insurance or safety certificate takes the vehicle out of use (a booked trip
+   * does not keep it available), and a trip still to come means booked. HR's own
+   * "assigned" (a driver is attached) does not make a vehicle unavailable.
    */
   private deriveStatus(
     hrStatus: HrVehicleAsset['status'],
     trips: ScheduledTrip[],
+    documentsExpired: boolean,
   ): FleetStatus {
     if (hrStatus === 'RETIRED' || hrStatus === 'MAINTENANCE') return hrStatus;
-    return strongestState(trips.map((trip) => trip.state)) ?? 'AVAILABLE';
+    const tripState = strongestState(trips.map((trip) => trip.state));
+    if (tripState === 'ON_ROUTE') return tripState;
+    if (documentsExpired) return 'DOCUMENTS_EXPIRED';
+    return tripState ?? 'AVAILABLE';
   }
 
   private toRow(
     asset: HrVehicleAsset,
-    details: FleetDetails | null | undefined,
+    details: FleetRowDetails | null | undefined,
     trips: ScheduledTrip[],
   ) {
+    const alerts = documentAlerts(details);
+    const day = (date: Date | null | undefined) =>
+      date ? date.toISOString().slice(0, 10) : null;
     return {
       assetId: asset.id,
       assetNumber: asset.assetNumber,
@@ -384,6 +461,12 @@ export class FleetService {
       yearOfRegistration: details?.yearOfRegistration ?? null,
       fuelType: details?.fuelType ?? null,
       currentMileage: details?.currentMileage ?? null,
+      insuranceStartDate: day(details?.insuranceStartDate),
+      insuranceExpiryDate: day(details?.insuranceExpiryDate),
+      safetyCertificateIssuedOn: day(details?.safetyCertificateIssuedOn),
+      safetyCertificateExpiresOn: day(details?.safetyCertificateExpiresOn),
+      // Expired or expiring within the warning window, for the list to flag.
+      documentAlerts: alerts,
       branch: asset.branchId
         ? { id: asset.branchId, name: asset.branchName ?? null }
         : null,
@@ -393,7 +476,11 @@ export class FleetService {
             name: asset.assignedEmployeeName ?? null,
           }
         : null,
-      status: this.deriveStatus(asset.status, trips),
+      status: this.deriveStatus(
+        asset.status,
+        trips,
+        alerts.some((alert) => alert.state === 'EXPIRED'),
+      ),
       // Raw HR state, so the UI knows whether maintenance can be cleared, etc.
       hrStatus: asset.status,
       trips: trips.slice(0, MAX_TRIPS_PER_ROW).map((trip) => ({

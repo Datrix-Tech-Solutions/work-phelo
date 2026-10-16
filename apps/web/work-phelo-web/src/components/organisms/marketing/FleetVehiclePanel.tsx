@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import {
   useCreateFleetVehicle,
   useFleetOptions,
@@ -22,6 +23,10 @@ interface FormValues {
   yearOfRegistration: string;
   fuelType: string;
   currentMileage: string;
+  insuranceStartDate: string;
+  insuranceExpiryDate: string;
+  safetyCertificateIssuedOn: string;
+  safetyCertificateExpiresOn: string;
   branchId: string;
   assignedDriverId: string;
   status: string;
@@ -29,7 +34,16 @@ interface FormValues {
 
 type FormErrors = Partial<
   Record<
-    'vehicleType' | 'make' | 'model' | 'yearOfRegistration' | 'fuelType' | 'currentMileage',
+    | 'vehicleType'
+    | 'make'
+    | 'model'
+    | 'yearOfRegistration'
+    | 'fuelType'
+    | 'currentMileage'
+    | 'insuranceStartDate'
+    | 'insuranceExpiryDate'
+    | 'safetyCertificateIssuedOn'
+    | 'safetyCertificateExpiresOn',
     string
   >
 >;
@@ -41,6 +55,10 @@ const EMPTY: FormValues = {
   yearOfRegistration: '',
   fuelType: '',
   currentMileage: '',
+  insuranceStartDate: '',
+  insuranceExpiryDate: '',
+  safetyCertificateIssuedOn: '',
+  safetyCertificateExpiresOn: '',
   branchId: '',
   assignedDriverId: '',
   status: 'AVAILABLE',
@@ -67,6 +85,10 @@ function valuesFor(vehicle: FleetVehicle): FormValues {
     yearOfRegistration: vehicle.yearOfRegistration?.toString() ?? '',
     fuelType: vehicle.fuelType ?? '',
     currentMileage: vehicle.currentMileage?.toString() ?? '',
+    insuranceStartDate: vehicle.insuranceStartDate ?? '',
+    insuranceExpiryDate: vehicle.insuranceExpiryDate ?? '',
+    safetyCertificateIssuedOn: vehicle.safetyCertificateIssuedOn ?? '',
+    safetyCertificateExpiresOn: vehicle.safetyCertificateExpiresOn ?? '',
     branchId: vehicle.branch?.id ?? '',
   };
 }
@@ -129,6 +151,19 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
     if (values.currentMileage.trim() !== '' && (!Number.isInteger(mileage) || mileage < 0)) {
       next.currentMileage = 'Enter a valid mileage in km, or leave it blank.';
     }
+    // Insurance and the safety certificate are optional, but each needs both dates, in order.
+    const pairs = [
+      ['insuranceStartDate', 'insuranceExpiryDate', 'insurance'],
+      ['safetyCertificateIssuedOn', 'safetyCertificateExpiresOn', 'certificate'],
+    ] as const;
+    for (const [startKey, endKey, noun] of pairs) {
+      const start = values[startKey];
+      const end = values[endKey];
+      if (!start && !end) continue;
+      if (!start) next[startKey] = `Enter when the ${noun} starts, or clear the expiry date.`;
+      else if (!end) next[endKey] = `Enter when the ${noun} expires, or clear the start date.`;
+      else if (end < start) next[endKey] = 'The expiry date can’t be before the start date.';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -147,7 +182,24 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
         : vehicle
           ? { currentMileage: null }
           : {}),
+      ...documentDates(),
     };
+  }
+
+  function documentDates() {
+    const keys = [
+      'insuranceStartDate',
+      'insuranceExpiryDate',
+      'safetyCertificateIssuedOn',
+      'safetyCertificateExpiresOn',
+    ] as const;
+    // Editing: a blank date clears the stored one. Creating: just omit it.
+    const dates: Partial<Record<(typeof keys)[number], string | null>> = {};
+    for (const key of keys) {
+      if (values[key]) dates[key] = values[key];
+      else if (vehicle) dates[key] = null;
+    }
+    return dates;
   }
 
   function handleSubmit() {
@@ -279,6 +331,47 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
         </div>
 
         {numberField('currentMileage', 'Current Mileage (km) — optional', 'eg; 45000')}
+
+        <SectionTitle>Insurance — optional</SectionTitle>
+
+        <div className="grid grid-cols-2 gap-4">
+          <DatePicker
+            label="Start Date"
+            value={values.insuranceStartDate}
+            onChange={(v) => set('insuranceStartDate', v)}
+            error={errors.insuranceStartDate}
+          />
+          <DatePicker
+            label="Expiration Date"
+            value={values.insuranceExpiryDate}
+            onChange={(v) => set('insuranceExpiryDate', v)}
+            minDate={values.insuranceStartDate || undefined}
+            error={errors.insuranceExpiryDate}
+          />
+        </div>
+
+        <SectionTitle>Vehicle Safety Certificate — optional</SectionTitle>
+
+        <div className="grid grid-cols-2 gap-4">
+          <DatePicker
+            label="Issued On"
+            value={values.safetyCertificateIssuedOn}
+            onChange={(v) => set('safetyCertificateIssuedOn', v)}
+            error={errors.safetyCertificateIssuedOn}
+          />
+          <DatePicker
+            label="Expires On"
+            value={values.safetyCertificateExpiresOn}
+            onChange={(v) => set('safetyCertificateExpiresOn', v)}
+            minDate={values.safetyCertificateIssuedOn || undefined}
+            error={errors.safetyCertificateExpiresOn}
+          />
+        </div>
+
+        <p className="text-xs text-gray-500 -mt-1">
+          A vehicle is unavailable for use once its insurance or safety certificate has expired. You
+          get a warning 30 days before.
+        </p>
 
         <SectionTitle>Assignment</SectionTitle>
 

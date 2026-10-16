@@ -12,13 +12,8 @@ interface Props {
 export function ProspectsTabs({ base, className }: Props) {
   const { data: dueFollowUps } = useDueFollowUps();
   const tabs = [
-    { key: 'all', label: 'All Prospects', href: `${base}/all` },
-    {
-      key: 'upcoming-reminders',
-      label: 'Reminders',
-      count: dueFollowUps.length,
-      href: `${base}/upcoming-reminders`,
-    },
+    { key: 'all', label: 'Prospects', count: dueFollowUps.length, href: `${base}/all` },
+    { key: 'clients', label: 'Clients', href: `${base}/clients` },
   ];
 
   const { canSeeTab } = useMarketingAccess();

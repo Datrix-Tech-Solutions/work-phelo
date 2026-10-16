@@ -15,6 +15,7 @@ export const FLEET_STATUS_OPTIONS: { value: FleetStatus; label: string }[] = [
   { value: 'AVAILABLE', label: 'Available' },
   { value: 'BOOKED', label: 'Booked' },
   { value: 'ON_ROUTE', label: 'On route' },
+  { value: 'DOCUMENTS_EXPIRED', label: 'Documents expired' },
   { value: 'MAINTENANCE', label: 'Under Maintenance' },
   { value: 'RETIRED', label: 'Retired' },
 ];
@@ -24,6 +25,7 @@ export const FLEET_STATUS_STYLES: Record<FleetStatus, { label: string; text: str
     AVAILABLE: { label: 'Available', text: 'text-green-700', bg: 'bg-green-50' },
     BOOKED: { label: 'Booked', text: 'text-violet-700', bg: 'bg-violet-50' },
     ON_ROUTE: { label: 'On route', text: 'text-blue-700', bg: 'bg-blue-50' },
+    DOCUMENTS_EXPIRED: { label: 'Documents expired', text: 'text-red-700', bg: 'bg-red-50' },
     MAINTENANCE: { label: 'Maintenance', text: 'text-yellow-700', bg: 'bg-yellow-50' },
     RETIRED: { label: 'Retired', text: 'text-gray-500', bg: 'bg-gray-100' },
   };

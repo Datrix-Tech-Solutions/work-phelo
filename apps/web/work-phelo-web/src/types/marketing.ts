@@ -313,7 +313,7 @@ export interface FollowUpWorklistItem {
   prospectId: string;
   companyName: string;
   assignedUserId: string;
-  /** Null for a default (latest interaction + 7 days) follow-up, which can't be edited or cancelled. */
+  /** Null for a default (latest interaction + the tenant's reminder delay) follow-up, which can't be edited or cancelled. */
   followUpId: string | null;
   dueAt: string;
   note: string | null;
@@ -491,8 +491,28 @@ export interface UpdateClientPayload {
   location?: Partial<CreateProspectLocationPayload>;
 }
 
-/** BOOKED / ON_ROUTE come from approved trips; MAINTENANCE / RETIRED from HR. */
-export type FleetStatus = 'AVAILABLE' | 'BOOKED' | 'ON_ROUTE' | 'MAINTENANCE' | 'RETIRED';
+/**
+ * BOOKED / ON_ROUTE come from approved trips; DOCUMENTS_EXPIRED from an expired insurance or
+ * safety certificate; MAINTENANCE / RETIRED from HR.
+ */
+export type FleetStatus =
+  | 'AVAILABLE'
+  | 'BOOKED'
+  | 'ON_ROUTE'
+  | 'DOCUMENTS_EXPIRED'
+  | 'MAINTENANCE'
+  | 'RETIRED';
+
+/** A vehicle document that has expired, or will within the warning window. */
+export interface FleetDocumentAlert {
+  document: 'INSURANCE' | 'SAFETY_CERTIFICATE';
+  label: string;
+  state: 'EXPIRED' | 'EXPIRING_SOON';
+  /** YYYY-MM-DD, the last day the document is valid. */
+  expiresOn: string;
+  /** Negative once expired; 0 on the expiry day itself. */
+  daysLeft: number;
+}
 
 export type TripState = 'BOOKED' | 'ON_ROUTE';
 
@@ -526,6 +546,12 @@ export interface FleetVehicle {
   yearOfRegistration: number | null;
   fuelType: string | null;
   currentMileage: number | null;
+  /** Optional documents, YYYY-MM-DD. */
+  insuranceStartDate: string | null;
+  insuranceExpiryDate: string | null;
+  safetyCertificateIssuedOn: string | null;
+  safetyCertificateExpiresOn: string | null;
+  documentAlerts: FleetDocumentAlert[];
   branch: { id: string; name: string | null } | null;
   assignedDriver: { id: string; name: string | null } | null;
   status: FleetStatus;
@@ -567,6 +593,11 @@ export interface FleetDetailsPayload {
   fuelType: string;
   /** Optional; null clears it on update. */
   currentMileage?: number | null;
+  /** Optional documents (YYYY-MM-DD); each is a pair, and null clears it on update. */
+  insuranceStartDate?: string | null;
+  insuranceExpiryDate?: string | null;
+  safetyCertificateIssuedOn?: string | null;
+  safetyCertificateExpiresOn?: string | null;
 }
 
 export interface CreateFleetVehiclePayload extends FleetDetailsPayload {
@@ -798,7 +829,7 @@ export interface TransportRequestAllocationOptions {
 }
 
 /** Why a vehicle or driver can't be picked: maintenance, still out on an overdue trip, or booked. */
-export type AllocationBlock = 'MAINTENANCE' | 'OVERDUE' | 'BOOKED';
+export type AllocationBlock = 'MAINTENANCE' | 'DOCUMENTS' | 'OVERDUE' | 'BOOKED';
 
 export interface TransportRequestWindow {
   travelDate: string;
@@ -1531,4 +1562,9 @@ export interface MarketingTargetsOverview {
   remaining: string | null;
   percent: number | null;
   reps: { userId: string; name: string }[];
+}
+
+export interface CrmPreferences {
+  /** Days after a prospect's latest interaction that its automatic follow-up falls due. */
+  followUpDelayDays: number;
 }
