@@ -46,6 +46,10 @@ import {
   questionBehaviour,
 } from './question-types';
 import { renderRequirementsText, VacancyDetails } from './vacancy-requirements';
+import {
+  ACTIVE_RECRUITMENT_DOCUMENTS,
+  lockRecruitmentApplication,
+} from './recruitment-document';
 
 const DEFAULT_RECRUITMENT_STAGES = [
   'Applied',
@@ -61,6 +65,7 @@ const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 
 const RECRUITMENT_CANDIDATE_INCLUDE = {
+  managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
   vacancy: true,
   currentStage: true,
   answers: {
@@ -77,6 +82,7 @@ const RECRUITMENT_INTERVIEW_INCLUDE = {
 } satisfies Prisma.RecruitmentInterviewInclude;
 
 const RECRUITMENT_PUBLIC_APPLICATION_INCLUDE = {
+  managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
   vacancy: {
     include: {
       department: { select: { id: true, name: true } },
@@ -832,6 +838,7 @@ export class RecruitmentService {
         coverLetterFileName: true,
         portfolioUrl: true,
         githubUrl: true,
+        managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
       },
     });
     if (!candidate)
@@ -1459,41 +1466,43 @@ export class RecruitmentService {
   }
 
   async submitPublicApplication(applicationId: string, accessToken?: string) {
-    const draft = await this.getDraftApplicationByToken(
-      applicationId,
-      accessToken,
-    );
-    const missing = this.applicationMissingFields(
-      draft,
-      draft.vacancy.questions,
-      draft.vacancy.details,
-    );
-    if (missing.length > 0) {
-      throw new BadRequestException({
-        message: 'Recruitment application is incomplete',
-        missing,
-      });
-    }
-    await this.assertNoSubmittedDuplicate(
-      draft.tenantId,
-      draft.vacancyId,
-      draft.email?.trim().toLowerCase(),
-      draft.id,
-    );
-    const defaultStage = await this.getDefaultStage(draft.tenantId);
-    const now = new Date();
-
-    // A vacancy cut-off sends applicants who score below it straight to Rejected. If the tenant
-    // has no Rejected stage the applicant is kept in the default stage rather than refused.
-    const score = computeMatchScore(draft, draft.vacancy.details);
-    const cutoff = draft.vacancy.cutoffScore;
-    const rejectedStage =
-      cutoff !== null && score !== null && score < cutoff
-        ? await this.findRejectedStage(draft.tenantId)
-        : null;
-    const initialStage = rejectedStage ?? defaultStage;
-
     return this.prisma.$transaction(async (tx) => {
+      await lockRecruitmentApplication(tx, applicationId);
+      const draft = await this.getDraftApplicationByToken(
+        applicationId,
+        accessToken,
+        tx,
+      );
+      const missing = this.applicationMissingFields(
+        draft,
+        draft.vacancy.questions,
+        draft.vacancy.details,
+      );
+      if (missing.length > 0) {
+        throw new BadRequestException({
+          message: 'Recruitment application is incomplete',
+          missing,
+        });
+      }
+      await this.assertNoSubmittedDuplicate(
+        draft.tenantId,
+        draft.vacancyId,
+        draft.email?.trim().toLowerCase(),
+        draft.id,
+      );
+      const defaultStage = await this.getDefaultStage(draft.tenantId);
+      const now = new Date();
+
+      // A vacancy cut-off sends applicants who score below it straight to Rejected. If the tenant
+      // has no Rejected stage the applicant is kept in the default stage rather than refused.
+      const score = computeMatchScore(draft, draft.vacancy.details);
+      const cutoff = draft.vacancy.cutoffScore;
+      const rejectedStage =
+        cutoff !== null && score !== null && score < cutoff
+          ? await this.findRejectedStage(draft.tenantId)
+          : null;
+      const initialStage = rejectedStage ?? defaultStage;
+
       await tx.recruitmentApplication.update({
         where: { id: draft.id },
         data: {
@@ -1646,9 +1655,10 @@ export class RecruitmentService {
     }
   }
 
-  private async getDraftApplicationByToken(
+  async getDraftApplicationByToken(
     applicationId: string,
     accessToken?: string,
+    client: Prisma.TransactionClient = this.prisma,
   ) {
     const tokenHash = accessToken
       ? this.hashAccessToken(accessToken)
@@ -1657,7 +1667,7 @@ export class RecruitmentService {
       throw new NotFoundException('Recruitment application not found');
     }
 
-    const application = await this.prisma.recruitmentApplication.findFirst({
+    const application = await client.recruitmentApplication.findFirst({
       where: {
         id: applicationId,
         accessTokenHash: tokenHash,
@@ -1665,7 +1675,7 @@ export class RecruitmentService {
       },
       include: RECRUITMENT_PUBLIC_APPLICATION_INCLUDE,
     });
-    if (!application) {
+    if (!application?.vacancy) {
       throw new NotFoundException('Recruitment application not found');
     }
     if (
@@ -2036,6 +2046,7 @@ export class RecruitmentService {
       languages?: string[];
       certificates?: string[];
       noticePeriod?: string | null;
+      managedDocuments?: Array<{ type: string }>;
       answers?: Array<{
         questionId: string;
         answer?: string | null;
@@ -2053,6 +2064,25 @@ export class RecruitmentService {
     vacancyDetails: Prisma.JsonValue | null = null,
   ) {
     const missing: Array<{ field: string; label: string }> = [];
+    const documentRequirements =
+      vacancyDetails &&
+      typeof vacancyDetails === 'object' &&
+      !Array.isArray(vacancyDetails)
+        ? (vacancyDetails as unknown as VacancyDetails).documents
+        : undefined;
+    for (const [flag, type, label] of [
+      ['resume', 'RESUME', 'Resume'],
+      ['coverLetter', 'COVER_LETTER', 'Cover letter'],
+    ] as const) {
+      if (
+        documentRequirements?.[flag] &&
+        !application.managedDocuments?.some(
+          (document) => document.type === type,
+        )
+      ) {
+        missing.push({ field: flag, label });
+      }
+    }
     // Contact details, current job and notice period are asked on every application. The
     // rest is only required when the vacancy setup marked that requirement as required.
     const required = this.requiredRequirements(vacancyDetails);
@@ -2361,6 +2391,14 @@ export class RecruitmentService {
     coverLetterFileName: string | null;
     portfolioUrl: string | null;
     githubUrl: string | null;
+    managedDocuments?: Array<{
+      id: string;
+      type: string;
+      originalFileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      createdAt: Date;
+    }>;
   }) {
     return {
       candidateId: candidate.id,
@@ -2380,6 +2418,29 @@ export class RecruitmentService {
         : null,
       portfolioUrl: candidate.portfolioUrl,
       githubUrl: candidate.githubUrl,
+      managedDocuments: candidate.managedDocuments ?? [],
+      legacyDocuments: [
+        ...(candidate.resumeUrl
+          ? [
+              {
+                type: 'RESUME',
+                source: 'LEGACY_EXTERNAL',
+                url: candidate.resumeUrl,
+                fileName: candidate.resumeFileName,
+              },
+            ]
+          : []),
+        ...(candidate.coverLetterUrl
+          ? [
+              {
+                type: 'COVER_LETTER',
+                source: 'LEGACY_EXTERNAL',
+                url: candidate.coverLetterUrl,
+                fileName: candidate.coverLetterFileName,
+              },
+            ]
+          : []),
+      ],
     };
   }
 

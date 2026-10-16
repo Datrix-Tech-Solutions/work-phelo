@@ -9,6 +9,7 @@ import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
 import { GlobalExceptionFilter } from './common/prisma-exception.filter';
 import { assertHrRuntimeEnv } from './config/runtime-env';
+import { httpCorsOptions } from './config/cors';
 
 const ORDINARY_BODY_LIMIT = process.env.HTTP_BODY_LIMIT ?? '1mb';
 
@@ -33,14 +34,7 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-      'http://localhost:3000',
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  });
+  app.enableCors(httpCorsOptions());
 
   if (isSwaggerEnabled()) {
     setupSwagger(app);

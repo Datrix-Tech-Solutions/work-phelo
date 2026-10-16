@@ -163,6 +163,9 @@ describe('ProxyController Reinsurance foundation', () => {
       '/api/v1/hr/recruitment/public/applications/application-1/questions',
       '/api/v1/hr/recruitment/public/applications/application-1/review',
       '/api/v1/hr/recruitment/public/applications/application-1/submit',
+      '/api/v1/hr/recruitment/public/applications/application-1/documents',
+      '/api/v1/hr/recruitment/public/applications/application-1/documents/upload',
+      '/api/v1/hr/recruitment/public/applications/application-1/documents/document-1',
     ]) {
       expect(controller.isPublicPath(path)).toBe(true);
     }
@@ -170,6 +173,11 @@ describe('ProxyController Reinsurance foundation', () => {
     expect(controller.isPublicPath('/api/v1/hr/recruitment/vacancies')).toBe(
       false,
     );
+    expect(
+      controller.isPublicPath(
+        '/api/v1/hr/recruitment/candidates/application-1/documents/document-1/download',
+      ),
+    ).toBe(false);
     expect(
       controller.isPublicPath(
         '/api/v1/hr/recruitment/candidates/application-1',
