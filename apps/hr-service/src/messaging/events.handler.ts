@@ -26,6 +26,7 @@ import {
   ProvisionTenantWorkspaceCommand,
   LinkEmployeeIdentityCommand,
   EmployeeAvatarUpdatedEvent,
+  RecruitmentEmployerUpdatedEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -258,6 +259,34 @@ export class EventsHandler {
         e,
         `email=${email} | corrId=${_meta?.correlationId}`,
       );
+    }
+  }
+
+  @MessagePattern(EventPatterns.HR_RECRUITMENT_EMPLOYER_UPDATED)
+  async handleRecruitmentEmployerUpdated(
+    @Payload() data: WithMeta<RecruitmentEmployerUpdatedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    const { tenantId, isVerified, isBlocked, _meta } = data;
+    this.logger.log(
+      `[hr.recruitment_employer_updated] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
+    );
+    try {
+      await this.prisma.recruitmentEmployer.upsert({
+        where: { tenantId },
+        create: { tenantId, isVerified, isBlocked },
+        update: { isVerified, isBlocked },
+      });
+      this.ack(context);
+      return { synced: true };
+    } catch (error) {
+      this.settleRpcFailure(
+        context,
+        'hr.recruitment_employer_updated',
+        error,
+        `tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
+      );
+      throw new RpcException(this.toRpcErrorPayload(error));
     }
   }
 

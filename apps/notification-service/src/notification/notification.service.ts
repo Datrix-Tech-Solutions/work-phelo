@@ -105,28 +105,41 @@ export class NotificationService {
       return;
     }
     const isTenantAdminInvite = data.inviteKind === 'TENANT_ADMIN';
-    const success = isTenantAdminInvite
-      ? await this.email.sendTenantAdminWelcomeEmail(
-          data.email,
-          data.firstName,
-          data.tenantName,
-          data.acceptInviteUrl,
-        )
-      : await this.email.sendEmployeeInviteEmail(
-          data.email,
-          data.firstName,
-          data.tenantName,
-          data.acceptInviteUrl,
-        );
+    const isRecruiterConfirmation = data.inviteKind === 'RECRUITER';
+    let success: boolean;
+    if (isRecruiterConfirmation) {
+      success = await this.email.sendRecruiterConfirmationEmail(
+        data.email,
+        data.firstName,
+        data.tenantName,
+        data.acceptInviteUrl,
+      );
+    } else if (isTenantAdminInvite) {
+      success = await this.email.sendTenantAdminWelcomeEmail(
+        data.email,
+        data.firstName,
+        data.tenantName,
+        data.acceptInviteUrl,
+      );
+    } else {
+      success = await this.email.sendEmployeeInviteEmail(
+        data.email,
+        data.firstName,
+        data.tenantName,
+        data.acceptInviteUrl,
+      );
+    }
     await this.log({
       userId: data.userId ?? 'system',
       tenantId: data.tenantId ?? 'system',
       type: 'INVITE_USER',
       channel: 'EMAIL',
       recipient: data.email,
-      subject: isTenantAdminInvite
-        ? `Welcome to ${data.tenantName}`
-        : `Invitation to ${data.tenantName}`,
+      subject: isRecruiterConfirmation
+        ? 'Confirm your email'
+        : isTenantAdminInvite
+          ? `Welcome to ${data.tenantName}`
+          : `Invitation to ${data.tenantName}`,
       status: success ? 'SENT' : 'FAILED',
     });
   }
