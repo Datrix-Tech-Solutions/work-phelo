@@ -90,7 +90,7 @@ export default function ClientDetailPage() {
   const [editingContact, setEditingContact] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const listHref = `/${tenantSlug}/marketing/clients`;
+  const listHref = `/${tenantSlug}/marketing/prospects/clients`;
   const shell = cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col gap-6');
 
   if (isLoading) {

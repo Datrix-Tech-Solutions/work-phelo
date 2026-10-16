@@ -10,7 +10,7 @@ export function ClientBreadcrumb({ tenantSlug, clientName }: Props) {
   return (
     <nav className="flex items-center gap-2 text-sm text-gray-400">
       <Link
-        href={`/${tenantSlug}/marketing/clients`}
+        href={`/${tenantSlug}/marketing/prospects/clients`}
         className="hover:text-gray-700 transition-colors"
       >
         Clients

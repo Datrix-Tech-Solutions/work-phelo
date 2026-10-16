@@ -449,24 +449,27 @@ export class ProspectsService {
     }
 
     const prospectIds = prospects.map((prospect) => prospect.id);
-    const [pendingFollowUps, latestInteractions] = await Promise.all([
-      this.prisma.marketingProspectFollowUp.findMany({
-        where: {
-          tenantId: user.tenantId,
-          prospectId: { in: prospectIds },
-          status: MarketingProspectFollowUpStatus.PENDING,
-        },
-        orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-      }),
-      this.prisma.marketingProspectInteraction.groupBy({
-        by: ['prospectId'],
-        where: {
-          tenantId: user.tenantId,
-          prospectId: { in: prospectIds },
-        },
-        _max: { occurredAt: true },
-      }),
-    ]);
+    const [delayDays, pendingFollowUps, latestInteractions] = await Promise.all(
+      [
+        this.followUpDelayDays(user.tenantId),
+        this.prisma.marketingProspectFollowUp.findMany({
+          where: {
+            tenantId: user.tenantId,
+            prospectId: { in: prospectIds },
+            status: MarketingProspectFollowUpStatus.PENDING,
+          },
+          orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+        }),
+        this.prisma.marketingProspectInteraction.groupBy({
+          by: ['prospectId'],
+          where: {
+            tenantId: user.tenantId,
+            prospectId: { in: prospectIds },
+          },
+          _max: { occurredAt: true },
+        }),
+      ],
+    );
 
     const followUpByProspect = new Map(
       pendingFollowUps.map((followUp) => [followUp.prospectId, followUp]),
@@ -499,10 +502,7 @@ export class ProspectsService {
 
         if (!lastInteractionDate) return null;
 
-        const dueAt = this.addDays(
-          lastInteractionDate,
-          DEFAULT_FOLLOW_UP_DELAY_DAYS,
-        );
+        const dueAt = this.addDays(lastInteractionDate, delayDays);
 
         return {
           prospectId: prospect.id,
@@ -585,6 +585,7 @@ export class ProspectsService {
     }
 
     const canCompleteAll = this.canCompleteAllFollowUps(user);
+    const delayDays = await this.followUpDelayDays(user.tenantId);
     const result = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.marketingProspectFollowUp.findFirst({
         where: {
@@ -676,10 +677,7 @@ export class ProspectsService {
             }
           : {
               source: ProspectFollowUpSourceDto.DEFAULT,
-              dueAt: this.addDays(
-                latestInteractionDate,
-                DEFAULT_FOLLOW_UP_DELAY_DAYS,
-              ),
+              dueAt: this.addDays(latestInteractionDate, delayDays),
             },
       };
     });
@@ -1331,6 +1329,15 @@ export class ProspectsService {
     }
 
     return ProspectFollowUpUrgencyDto.FUTURE;
+  }
+
+  /** Days after the latest interaction that the automatic follow-up falls due, per tenant. */
+  private async followUpDelayDays(tenantId: string): Promise<number> {
+    const preference = await this.prisma.marketingCrmPreference.findUnique({
+      where: { tenantId },
+      select: { followUpDelayDays: true },
+    });
+    return preference?.followUpDelayDays ?? DEFAULT_FOLLOW_UP_DELAY_DAYS;
   }
 
   private addDays(date: Date, days: number): Date {

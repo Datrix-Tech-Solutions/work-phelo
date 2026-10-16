@@ -1,12 +1,15 @@
+import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -24,11 +27,15 @@ const MAX_MILEAGE = 10_000_000;
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
 
-/** Derived status: BOOKED / ON_ROUTE come from approved trips, the rest from HR. */
+/**
+ * Derived status: BOOKED / ON_ROUTE come from approved trips, DOCUMENTS_EXPIRED from an expired
+ * insurance or safety certificate, the rest from HR.
+ */
 export const FLEET_STATUSES = [
   'AVAILABLE',
   'BOOKED',
   'ON_ROUTE',
+  'DOCUMENTS_EXPIRED',
   'MAINTENANCE',
   'RETIRED',
 ] as const;
@@ -40,6 +47,19 @@ export const SETTABLE_FLEET_STATUSES = [
   'RETIRED',
 ] as const;
 export type SettableFleetStatus = (typeof SETTABLE_FLEET_STATUSES)[number];
+
+/** An optional YYYY-MM-DD date; null clears it on update. */
+const OptionalDay = (description: string) =>
+  applyDecorators(
+    ApiPropertyOptional({
+      example: '2026-10-16',
+      nullable: true,
+      description,
+    }),
+    IsOptional(),
+    Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Use the format YYYY-MM-DD' }),
+    IsISO8601({ strict: true }),
+  );
 
 class FleetDetailsFields {
   @ApiProperty({ enum: MarketingFleetVehicleType })
@@ -82,6 +102,22 @@ class FleetDetailsFields {
   @Min(0)
   @Max(MAX_MILEAGE)
   currentMileage?: number | null;
+
+  @OptionalDay('Insurance start date. Needs an expiry date too.')
+  insuranceStartDate?: string | null;
+
+  @OptionalDay('Insurance expiry date: the last day it is valid.')
+  insuranceExpiryDate?: string | null;
+
+  @OptionalDay(
+    'Vehicle safety certificate issue date. Needs an expiry date too.',
+  )
+  safetyCertificateIssuedOn?: string | null;
+
+  @OptionalDay(
+    'Vehicle safety certificate expiry date: the last day it is valid.',
+  )
+  safetyCertificateExpiresOn?: string | null;
 }
 
 export class CreateFleetVehicleDto extends FleetDetailsFields {
@@ -149,6 +185,22 @@ export class UpdateFleetVehicleDto {
   @Min(0)
   @Max(MAX_MILEAGE)
   currentMileage?: number | null;
+
+  @OptionalDay('Insurance start date. Needs an expiry date too.')
+  insuranceStartDate?: string | null;
+
+  @OptionalDay('Insurance expiry date: the last day it is valid.')
+  insuranceExpiryDate?: string | null;
+
+  @OptionalDay(
+    'Vehicle safety certificate issue date. Needs an expiry date too.',
+  )
+  safetyCertificateIssuedOn?: string | null;
+
+  @OptionalDay(
+    'Vehicle safety certificate expiry date: the last day it is valid.',
+  )
+  safetyCertificateExpiresOn?: string | null;
 
   @ApiPropertyOptional({
     format: 'uuid',

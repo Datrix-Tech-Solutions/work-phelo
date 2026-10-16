@@ -14,6 +14,10 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { HrFleetClient, HrVehicleAsset } from '../fleet/hr-fleet.client';
+import {
+  VehicleDocumentDates,
+  expiredDocumentsReason,
+} from '../fleet/vehicle-documents';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { callHr } from '../hr/call-hr';
 import { HrDirectoryClient } from '../hr/hr-directory.client';
@@ -220,7 +224,9 @@ export class RequestsService {
       vehicles: vehicles
         .filter(
           (vehicle) =>
-            vehicle.status !== 'RETIRED' && vehicle.status !== 'MAINTENANCE',
+            vehicle.status !== 'RETIRED' &&
+            vehicle.status !== 'MAINTENANCE' &&
+            !expiredDocumentsReason(detailsByAsset.get(vehicle.id)),
         )
         .map((vehicle) => {
           const details = detailsByAsset.get(vehicle.id);
@@ -289,10 +295,10 @@ export class RequestsService {
       const vehicle = await this.callHr(() =>
         this.fleet.getVehicle(tenantId, input.vehicleAssetId),
       );
-      this.assertVehicleUsable(vehicle);
       const details = await this.prisma.marketingFleetVehicle.findUnique({
         where: { tenantId_assetId: { tenantId, assetId: vehicle.id } },
       });
+      this.assertVehicleUsable(vehicle, details);
       data.preferredVehicleAssetId = vehicle.id;
       data.preferredVehicleName = details
         ? `${details.make} ${details.model}`
@@ -1071,14 +1077,17 @@ export class RequestsService {
         ? `Still out on ${row.requesterName}'s trip (${this.fromDate(row.travelDate)} ${windowText(row.departureTime, row.returnTime)}). Complete it first`
         : 'Out on a trip';
 
-    type Kind = 'MAINTENANCE' | 'OVERDUE' | 'BOOKED';
+    type Kind = 'MAINTENANCE' | 'DOCUMENTS' | 'OVERDUE' | 'BOOKED';
     const verdict = (
       overdueRow: (typeof stale)[number] | undefined,
       bookedRow: (typeof overlapping)[number] | undefined,
       maintenance = false,
+      expiredDocuments: string | null = null,
     ): { kind: Kind | null; reason: string | null } => {
       if (maintenance)
         return { kind: 'MAINTENANCE', reason: 'Under maintenance' };
+      if (expiredDocuments)
+        return { kind: 'DOCUMENTS', reason: expiredDocuments };
       if (overdueRow)
         return { kind: 'OVERDUE', reason: overdueText(overdueRow) };
       if (bookedRow) return { kind: 'BOOKED', reason: bookedText(bookedRow) };
@@ -1094,6 +1103,7 @@ export class RequestsService {
             stale.find((row) => row.vehicleAssetId === vehicle.id),
             overlapping.find((row) => row.vehicleAssetId === vehicle.id),
             vehicle.status === 'MAINTENANCE',
+            expiredDocumentsReason(details),
           );
           return {
             assetId: vehicle.id,
@@ -1188,13 +1198,13 @@ export class RequestsService {
           name: existing.requesterName,
         }
       : resolved.people[0];
-    this.assertVehicleUsable(vehicle);
 
     const details = await this.prisma.marketingFleetVehicle.findUnique({
       where: {
         tenantId_assetId: { tenantId: user.tenantId, assetId: vehicle.id },
       },
     });
+    this.assertVehicleUsable(vehicle, details);
     const vehicleName = details
       ? `${details.make} ${details.model}`
       : vehicle.name;
@@ -1355,12 +1365,19 @@ export class RequestsService {
     };
   }
 
-  private assertVehicleUsable(vehicle: HrVehicleAsset) {
+  private assertVehicleUsable(
+    vehicle: HrVehicleAsset,
+    details?: VehicleDocumentDates | null,
+  ) {
     if (vehicle.status === 'RETIRED') {
       throw new BadRequestException('This vehicle is retired');
     }
     if (vehicle.status === 'MAINTENANCE') {
       throw new BadRequestException('This vehicle is under maintenance');
+    }
+    const expired = expiredDocumentsReason(details);
+    if (expired) {
+      throw new BadRequestException(`This vehicle can't be used: ${expired}`);
     }
   }
 
