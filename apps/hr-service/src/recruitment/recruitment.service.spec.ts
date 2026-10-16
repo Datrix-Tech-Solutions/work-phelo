@@ -27,6 +27,7 @@ const user = {
 
 function createPrismaMock() {
   const prisma: any = {
+    $queryRaw: jest.fn(),
     recruitmentEmployer: {
       findMany: jest.fn(),
     },
@@ -1630,13 +1631,25 @@ describe('RecruitmentService', () => {
     });
 
     it('submits a complete public draft and assigns the default stage atomically', async () => {
+      const managedDocuments = [
+        {
+          id: 'document-1',
+          type: 'RESUME',
+          originalFileName: 'CV.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 20,
+          createdAt: new Date(),
+        },
+      ];
       prisma.recruitmentApplication.findFirst
         .mockResolvedValueOnce(
           draftApplication({
             ...applicationDto(),
             id: 'application-1',
+            managedDocuments,
             vacancy: vacancy({
               questions: [question({ required: true })],
+              details: { documents: { resume: true, coverLetter: false } },
               _count: { applications: 0 },
             }),
             answers: [
@@ -1661,12 +1674,23 @@ describe('RecruitmentService', () => {
       prisma.recruitmentApplication.update.mockResolvedValue({});
       prisma.recruitmentStageHistory.create.mockResolvedValue({});
       prisma.recruitmentApplication.findFirstOrThrow.mockResolvedValue(
-        candidate({ id: 'application-1', currentStageId: 'stage-1' }),
+        candidate({
+          id: 'application-1',
+          currentStageId: 'stage-1',
+          managedDocuments,
+        }),
       );
 
-      await service.submitPublicApplication('application-1', 'token');
+      const result = await service.submitPublicApplication(
+        'application-1',
+        'token',
+      );
+      expect(result.documents.managedDocuments).toEqual(managedDocuments);
 
       expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.recruitmentApplication.findFirst.mock.invocationCallOrder[0],
+      );
       expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
         where: { id: 'application-1' },
         data: expect.objectContaining({
@@ -1683,6 +1707,114 @@ describe('RecruitmentService', () => {
           newStageId: 'stage-1',
         }),
       });
+    });
+
+    it.each([
+      { resume: true, coverLetter: false, missing: ['resume'] },
+      { resume: false, coverLetter: true, missing: ['coverLetter'] },
+      { resume: true, coverLetter: true, missing: ['resume', 'coverLetter'] },
+    ])(
+      'review and submit require confirmed managed documents: %j',
+      async ({ resume, coverLetter, missing }) => {
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(
+          draftApplication({
+            ...applicationDto(),
+            answers: [],
+            managedDocuments: [],
+            resumeUrl: 'https://external.example/unverified.pdf',
+            vacancy: vacancy({
+              questions: [],
+              details: { documents: { resume, coverLetter } },
+            }),
+          }),
+        );
+        const review = await service.reviewPublicApplication(
+          'application-1',
+          'token',
+        );
+        expect(review.missing.map((item) => item.field)).toEqual(
+          expect.arrayContaining(missing),
+        );
+        await expect(
+          service.submitPublicApplication('application-1', 'token'),
+        ).rejects.toThrow('incomplete');
+        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('accepts confirmed documents, leaves optional documents optional, and returns safe review metadata', async () => {
+      const document = {
+        id: 'document-1',
+        type: 'RESUME',
+        originalFileName: 'CV.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 20,
+        createdAt: new Date(),
+      };
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(
+        draftApplication({
+          ...applicationDto(),
+          answers: [],
+          managedDocuments: [document],
+          vacancy: vacancy({
+            questions: [],
+            details: { documents: { resume: true, coverLetter: false } },
+          }),
+        }),
+      );
+      const review = await service.reviewPublicApplication(
+        'application-1',
+        'token',
+      );
+      expect(review.canSubmit).toBe(true);
+      expect(review.application.documents.managedDocuments).toEqual([document]);
+      expect(JSON.stringify(review)).not.toContain('storageKey');
+      expect(prisma.recruitmentApplication.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            managedDocuments: expect.objectContaining({
+              where: { status: 'ACTIVE' },
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('keeps managed and legacy documents visible after submission without changing their ownership', async () => {
+      const document = {
+        id: 'document-1',
+        type: 'RESUME',
+        originalFileName: 'CV.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 20,
+        createdAt: new Date(),
+      };
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(
+        candidate({
+          managedDocuments: [document],
+          resumeUrl: 'https://legacy.example/cv.pdf',
+        }),
+      );
+      const result = await service.getCandidateDocuments(
+        'tenant-1',
+        'candidate-1',
+      );
+      expect(result.managedDocuments).toEqual([document]);
+      expect(result.legacyDocuments).toContainEqual(
+        expect.objectContaining({
+          source: 'LEGACY_EXTERNAL',
+          url: 'https://legacy.example/cv.pdf',
+        }),
+      );
+      expect(prisma.recruitmentApplication.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'tenant-1',
+            id: 'candidate-1',
+            status: 'SUBMITTED',
+          },
+        }),
+      );
     });
 
     it('rejects duplicate submitted applications for the same vacancy and email', async () => {

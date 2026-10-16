@@ -628,12 +628,13 @@ export class RecruitmentController {
   }
 
   @Get('candidates/:candidateId/documents')
+  @RequireModule('hr')
   @ApiTags('HR Recruitment - Candidates')
   @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
   @ApiOperation({
     summary: 'Get recruitment candidate document references',
     description:
-      'Returns document/link references for submitted candidates only. Binary upload/storage is not part of this phase.',
+      'Returns private managed document metadata and explicitly marked legacy external references for submitted candidates only. Use the document download endpoint for a short-lived managed-file URL. Storage keys are never returned.',
   })
   @ApiParam({
     name: 'candidateId',

@@ -769,6 +769,40 @@ model RecruitmentStage {
   @@schema("hr")
 }
 
+enum RecruitmentDocumentType {
+  RESUME
+  COVER_LETTER
+  OTHER
+
+  @@schema("hr")
+}
+
+enum RecruitmentDocumentStatus {
+  ACTIVE
+  RETIRED
+
+  @@schema("hr")
+}
+
+model RecruitmentApplicationDocument {
+  id               String                    @id @default(uuid())
+  tenantId         String
+  applicationId    String
+  type             RecruitmentDocumentType
+  originalFileName String
+  storageKey       String
+  mimeType         String
+  sizeBytes        Int
+  status           RecruitmentDocumentStatus @default(ACTIVE)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  application RecruitmentApplication @relation(fields: [tenantId, applicationId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, applicationId, status])
+  @@schema("hr")
+}
+
 model RecruitmentApplication {
   id                     String                       @id @default(uuid())
   tenantId               String
@@ -815,12 +849,14 @@ model RecruitmentApplication {
   createdAt              DateTime                     @default(now())
   updatedAt              DateTime                     @updatedAt
 
-  vacancy      RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
-  currentStage RecruitmentStage?              @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
-  stageHistory RecruitmentStageHistory[]
-  answers      RecruitmentApplicationAnswer[]
-  interviews   RecruitmentInterview[]
+  vacancy          RecruitmentVacancy               @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  currentStage     RecruitmentStage?                @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
+  stageHistory     RecruitmentStageHistory[]
+  answers          RecruitmentApplicationAnswer[]
+  interviews       RecruitmentInterview[]
+  managedDocuments RecruitmentApplicationDocument[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, vacancyId])
   @@index([tenantId, currentStageId])
   @@index([tenantId, status])

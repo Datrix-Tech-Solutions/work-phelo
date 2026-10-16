@@ -45,6 +45,9 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/questions$/,
   /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/review$/,
   /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/submit$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/documents$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/documents\/upload$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/documents\/[^/]+$/,
   /^\/api\/v1\/operations\/reinsurance\/health$/,
   /^\/api\/v1\/accounting\/health$/,
 ];
