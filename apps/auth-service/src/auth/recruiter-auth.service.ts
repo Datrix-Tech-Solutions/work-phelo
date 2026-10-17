@@ -274,6 +274,7 @@ export class RecruiterAuthService {
       { email, password: dto.password, tenantSlug: tenant.slug },
       ipAddress,
       userAgent,
+      'careers',
     );
   }
 

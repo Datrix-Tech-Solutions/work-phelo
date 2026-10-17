@@ -97,6 +97,7 @@ function makeJwtMock() {
   return {
     sign: jest.fn().mockReturnValue('mock-jwt-token'),
     verify: jest.fn(),
+    decode: jest.fn().mockReturnValue(null),
   };
 }
 
@@ -184,6 +185,27 @@ describe('AuthService', () => {
       });
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
+    });
+
+    it('marks both tokens with the scope the session was started with', async () => {
+      setupHappyPath();
+
+      await service.login(loginDto, undefined, undefined, 'careers');
+
+      const signed = jwt.sign.mock.calls.map(([payload]) => payload);
+      expect(signed).toHaveLength(2);
+      expect(signed[0]).toMatchObject({ sub: USER_BASE.id, scope: 'careers' });
+      expect(signed[1]).toMatchObject({ type: 'refresh', scope: 'careers' });
+    });
+
+    it('issues unscoped tokens for a normal app login', async () => {
+      setupHappyPath();
+
+      await service.login(loginDto);
+
+      for (const [payload] of jwt.sign.mock.calls) {
+        expect(payload).not.toHaveProperty('scope');
+      }
     });
 
     it('stores a refresh token in the database on success', async () => {
@@ -486,6 +508,31 @@ describe('AuthService', () => {
           data: { isRevoked: true },
         }),
       );
+    });
+
+    it('keeps the careers scope when a careers session is refreshed', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(STORED_TOKEN);
+      prisma.refreshToken.update.mockResolvedValue({});
+      prisma.refreshToken.upsert.mockResolvedValue({});
+      jwt.decode.mockReturnValue({ scope: 'careers' });
+
+      await service.refresh({ refreshToken: 'valid-refresh-token' });
+
+      const signed = jwt.sign.mock.calls.map(([payload]) => payload);
+      expect(signed[0]).toMatchObject({ scope: 'careers' });
+      expect(signed[1]).toMatchObject({ type: 'refresh', scope: 'careers' });
+    });
+
+    it('does not add a scope when refreshing a normal session', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(STORED_TOKEN);
+      prisma.refreshToken.update.mockResolvedValue({});
+      prisma.refreshToken.upsert.mockResolvedValue({});
+
+      await service.refresh({ refreshToken: 'valid-refresh-token' });
+
+      for (const [payload] of jwt.sign.mock.calls) {
+        expect(payload).not.toHaveProperty('scope');
+      }
     });
 
     it('throws UnauthorizedException for revoked refresh token', async () => {
