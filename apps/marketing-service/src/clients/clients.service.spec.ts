@@ -330,6 +330,36 @@ describe('ClientsService', () => {
       expect(billing.submit).not.toHaveBeenCalled();
     });
 
+    it('records the date contacted as the first follow-up', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue(clientRecord);
+
+      await service.create(user, {
+        ...makeDto(),
+        initialInteraction: { occurredAt: '2026-10-17' },
+      });
+
+      const data = prisma.marketingClient.create.mock.calls[0][0].data as {
+        interactions: { create: Record<string, unknown> };
+      };
+      expect(data.interactions.create).toMatchObject({
+        tenantId: 'tenant-1',
+        occurredAt: new Date('2026-10-17'),
+        interactionMediumId: null,
+        decisionMakerInvolved: false,
+        createdByUserId: 'user-1',
+      });
+    });
+
+    it('records no follow-up when no date contacted is given', async () => {
+      prisma.marketingClient.findFirst.mockResolvedValue(clientRecord);
+
+      await service.create(user, makeDto());
+
+      const data = prisma.marketingClient.create.mock.calls[0][0]
+        .data as object;
+      expect(data).not.toHaveProperty('interactions');
+    });
+
     it('creates a tenant-scoped client assigned to the creator with PENDING products', async () => {
       prisma.marketingClient.findFirst.mockResolvedValue(clientRecord);
 

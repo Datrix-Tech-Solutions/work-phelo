@@ -29,7 +29,7 @@ import { useCreateProspect } from '@/hooks/marketing/useProspects';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
-import { inputClass, isValidEmail } from '@/lib/utils';
+import { inputClass, isValidEmail, todayLocal } from '@/lib/utils';
 import type { CreateProspectPayload, ProspectingSetting } from '@/types/marketing';
 
 interface FormValues {
@@ -56,7 +56,8 @@ type FormErrors = Partial<
   >
 >;
 
-const EMPTY: FormValues = {
+/** A blank form; the date contacted starts as today. */
+const emptyValues = (): FormValues => ({
   companyName: '',
   businessType: '',
   sourceType: '',
@@ -65,12 +66,12 @@ const EMPTY: FormValues = {
   phone: '',
   email: '',
   interactionType: '',
-  dateContacted: '',
+  dateContacted: todayLocal(),
   productIds: [],
   pipelineStageId: '',
   location: { location: '' },
   assignedUserId: '',
-};
+});
 
 function toOptions(items: ProspectingSetting[]) {
   return items.map((item) => ({ value: item.id, label: item.name }));
@@ -91,7 +92,7 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
   const toast = useToast();
   const createProspect = useCreateProspect();
 
-  const [values, setValues] = useState<FormValues>(EMPTY);
+  const [values, setValues] = useState<FormValues>(emptyValues);
   const [errors, setErrors] = useState<FormErrors>({});
   // Expected revenue, commission and close date per selected product, keyed by product id.
   const [productDetails, setProductDetails] = useState<Record<string, ClientProductDetail>>({});
@@ -124,7 +125,7 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
   }
 
   function resetForm() {
-    setValues(EMPTY);
+    setValues(emptyValues());
     setErrors({});
     setProductDetails({});
     setProductsExpanded(true);
@@ -328,13 +329,13 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
 
         <div className="grid grid-cols-2 gap-4">
           <SearchSelect
-            label="Interaction Type"
+            label="Follow-up Type"
             placeholder="Select or type to add new"
             options={interactionTypeOptions}
             value={values.interactionType}
             onChange={(v) => set('interactionType', v)}
             emptyState={buildCreateOptionEmptyState(
-              'interaction type',
+              'follow-up type',
               createInteractionMedium,
               (id) => set('interactionType', id),
               toast,
@@ -344,6 +345,7 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
             label="Date Contacted"
             value={values.dateContacted}
             onChange={(v) => set('dateContacted', v)}
+            disableFuture
           />
         </div>
 

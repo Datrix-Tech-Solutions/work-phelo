@@ -74,7 +74,7 @@ export function ProspectPreview({
           <Field label="Email" value={company.email} />
           {!hideInteraction && (
             <Field
-              label="Interaction Type"
+              label="Follow-up Type"
               value={labelFor(interactionTypeOptions, company.interactionType)}
             />
           )}

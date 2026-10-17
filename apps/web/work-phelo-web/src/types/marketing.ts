@@ -309,6 +309,13 @@ export type FollowUpStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED';
 export type FollowUpSource = 'EXPLICIT' | 'DEFAULT';
 export type FollowUpUrgency = 'OVERDUE' | 'UPCOMING' | 'FUTURE';
 
+/*
+ * Naming: the code predates the current product words, so identifiers and API paths still use the
+ * old ones. In every label, message and comment people read:
+ *   "follow-up" = a contact that happened   (code: interaction, /interactions, ProspectInteraction)
+ *   "reminder"  = a scheduled future contact (code: follow-up, /follow-ups, FollowUp*, followUpId)
+ * There is no third "reminder" concept besides that second one.
+ */
 export interface FollowUpWorklistItem {
   prospectId: string;
   companyName: string;
@@ -415,6 +422,8 @@ export interface CreateClientPayload {
   /** Products/services the client is linked to, with their terms — they start as PENDING. */
   products: AddClientProductPayload[];
   location: CreateProspectLocationPayload;
+  /** The first follow-up with the client; its date is the date contacted. */
+  initialInteraction?: { occurredAt: string };
 }
 
 export interface ConvertProspectPayload {
@@ -1567,4 +1576,76 @@ export interface MarketingTargetsOverview {
 export interface CrmPreferences {
   /** Days after a prospect's latest interaction that its automatic follow-up falls due. */
   followUpDelayDays: number;
+}
+
+/** Company-wide transport figures for the Transport dashboard. */
+export interface TransportDashboardSummary {
+  kpis: {
+    /** Waiting for approval right now, whatever the period. */
+    pending: number;
+    /** Approved trips for today that are not completed. */
+    tripsToday: number;
+    onRoute: number;
+    overdue: number;
+    completed: { current: number; previous: number };
+    /** Requests cancelled or rejected in the period. */
+    closed: { current: number; previous: number };
+  };
+  /** Awaiting approval, oldest first, capped; `kpis.pending` is the full count. */
+  pendingRequests: {
+    requestId: string;
+    requesterName: string;
+    destination: string;
+    /** YYYY-MM-DD */
+    travelDate: string;
+    departureTime: string;
+    requestedAt: string;
+  }[];
+  /** Today's approved trips that are not completed, earliest first, capped. */
+  tripsToday: {
+    requestId: string;
+    requesterName: string;
+    destination: string;
+    departureTime: string;
+    returnTime: string | null;
+    vehicleName: string | null;
+    driverName: string | null;
+    selfDriven: boolean;
+    state: TripState;
+    overdue: boolean;
+  }[];
+  attention: {
+    overdueTrips: {
+      requestId: string;
+      requesterName: string;
+      destination: string;
+      travelDate: string;
+      returnTime: string | null;
+      vehicleName: string | null;
+    }[];
+    vehicleDocuments: {
+      assetId: string;
+      name: string;
+      assetNumber: string;
+      alerts: Pick<FleetDocumentAlert, 'label' | 'state' | 'expiresOn' | 'daysLeft'>[];
+    }[];
+    maintenance: { assetId: string; name: string; assetNumber: string }[];
+  };
+  /** Null when the fleet could not be read. */
+  fleet: {
+    /** Vehicles in service: everything but retired. */
+    total: number;
+    available: number;
+    booked: number;
+    onRoute: number;
+    documentsExpired: number;
+    maintenance: number;
+  } | null;
+}
+
+export interface TransportTrendPoint {
+  fromDate: string;
+  toDate: string;
+  requested: number;
+  completed: number;
 }

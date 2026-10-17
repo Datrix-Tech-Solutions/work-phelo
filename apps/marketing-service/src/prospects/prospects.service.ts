@@ -45,11 +45,11 @@ const REQUIRED_PRODUCT_FIELDS_MESSAGE =
   'New prospect products require productId and expectedValue';
 const EMPTY_PRODUCTS_MESSAGE = 'A prospect must have at least one product';
 const DUPLICATE_PENDING_FOLLOW_UP_MESSAGE =
-  'A pending follow-up already exists for this prospect';
+  'A pending reminder already exists for this prospect';
 const FOLLOW_UP_COMPLETION_CONFLICT_MESSAGE =
-  'Follow-up is no longer pending and cannot be completed';
+  'Reminder is no longer pending and cannot be completed';
 const FOLLOW_UP_COMPLETION_ENDPOINT_MESSAGE =
-  'Use the follow-up completion endpoint to complete a pending follow-up';
+  'Use the reminder completion endpoint to complete a pending reminder';
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_FOLLOW_UP_DELAY_DAYS = 7;
 const UPCOMING_FOLLOW_UP_WINDOW_DAYS = 7;
@@ -603,7 +603,7 @@ export class ProspectsService {
         },
       });
 
-      if (!existing) throw new NotFoundException('Follow-up not found');
+      if (!existing) throw new NotFoundException('Reminder not found');
       if (existing.status !== MarketingProspectFollowUpStatus.PENDING) {
         throw new ConflictException(FOLLOW_UP_COMPLETION_CONFLICT_MESSAGE);
       }
@@ -643,7 +643,7 @@ export class ProspectsService {
           tenantId: user.tenantId,
         },
       });
-      if (!followUp) throw new NotFoundException('Follow-up not found');
+      if (!followUp) throw new NotFoundException('Reminder not found');
 
       const nextFollowUp = dto.nextFollowUp
         ? await this.createFollowUpInTransaction(
@@ -1267,7 +1267,7 @@ export class ProspectsService {
       select: { id: true },
     });
 
-    if (!followUp) throw new NotFoundException('Follow-up not found');
+    if (!followUp) throw new NotFoundException('Reminder not found');
     return followUp;
   }
 
@@ -1834,7 +1834,7 @@ export class ProspectsService {
         ? this.namedReference(
             interaction.interactionMediumId,
             settingsById,
-            'Unknown interaction medium',
+            'Unknown follow-up medium',
           )
         : null,
       notes: interaction.notes,

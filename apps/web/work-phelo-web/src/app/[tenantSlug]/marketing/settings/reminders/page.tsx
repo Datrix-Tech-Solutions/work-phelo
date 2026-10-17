@@ -52,12 +52,12 @@ export default function RemindersSettingsPage() {
         <h2 className="text-base font-semibold text-gray-900">Automatic reminder</h2>
         <p className="text-sm text-gray-500 mt-1">
           When a prospect has no reminder scheduled, one falls due this many days after its latest
-          interaction. Changing this moves the automatic reminder of every prospect; reminders
+          follow-up. Changing this moves the automatic reminder of every prospect; reminders
           scheduled by hand are not affected.
         </p>
       </div>
       <NumberField
-        label="Days after last interaction"
+        label="Days after last follow-up"
         decimals={0}
         value={days}
         onChange={setDraft}

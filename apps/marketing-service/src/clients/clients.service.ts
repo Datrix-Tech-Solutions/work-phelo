@@ -33,7 +33,7 @@ const PRODUCT_EXISTS_MESSAGE =
   'This client already has that product or service';
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
 const FOLLOW_UP_COMPLETION_MESSAGE =
-  'Completing a scheduled follow-up is not supported for clients yet';
+  'Completing a reminder is not supported for clients yet';
 const ALREADY_CONVERTED_MESSAGE = 'This prospect has already been converted';
 const NOT_CONVERTIBLE_MESSAGE =
   'Only prospects at 100% progress can be converted to a client';
@@ -218,6 +218,10 @@ export class ClientsService {
         id,
         category: MarketingCrmSettingCategory.PRODUCT,
       })),
+      {
+        id: dto.initialInteraction?.interactionMediumId,
+        category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      },
     ]);
 
     // Accounting first: if it cannot take the transaction, no client is created. If saving the
@@ -264,6 +268,36 @@ export class ClientsService {
             ...this.newProductTerms(product),
           })),
         },
+        ...(dto.initialInteraction
+          ? {
+              interactions: {
+                create: {
+                  tenantId: user.tenantId,
+                  interactionMediumId:
+                    dto.initialInteraction.interactionMediumId ?? null,
+                  occurredAt: new Date(dto.initialInteraction.occurredAt),
+                  notes: this.formatOptionalText(dto.initialInteraction.notes),
+                  decisionMakerInvolved:
+                    dto.initialInteraction.decisionMakerInvolved ?? false,
+                  createdByUserId: user.id,
+                  ...(dto.initialInteraction.participants?.length
+                    ? {
+                        participants: {
+                          create: dto.initialInteraction.participants.map(
+                            (participant) => ({
+                              tenantId: user.tenantId,
+                              fullName: this.formatText(participant.fullName),
+                              phone: this.formatText(participant.phone),
+                              role: this.formatText(participant.role),
+                            }),
+                          ),
+                        },
+                      }
+                    : {}),
+                },
+              },
+            }
+          : {}),
       },
       select: { id: true },
     });
@@ -919,7 +953,7 @@ export class ClientsService {
         ? this.namedReference(
             interaction.interactionMediumId,
             settings,
-            'Unknown interaction medium',
+            'Unknown follow-up medium',
           )
         : null,
       notes: interaction.notes,

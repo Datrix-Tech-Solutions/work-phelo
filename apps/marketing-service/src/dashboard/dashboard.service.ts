@@ -9,6 +9,7 @@ import {
 import { AssigneesService } from '../assignees/assignees.service';
 import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { PrismaService } from '../prisma/prisma.service';
+import { Range, inRange, toRange } from './range';
 import {
   SalesTargetsService,
   sumInvoiced,
@@ -27,19 +28,10 @@ import {
   DashboardTargetsOverview,
 } from './dto/dashboard-summary.dto';
 
-const DAY_MS = 86_400_000;
 const ZERO = new Prisma.Decimal(0);
 
-/** Half-open [from, to): `to` is the day after the last day shown. */
-type Range = { from: Date; to: Date };
 type DayRange = { from: string; to: string };
 
-const startOf = (value: string) => new Date(`${value}T00:00:00.000Z`);
-const toRange = (from: string, to: string): Range => ({
-  from: startOf(from),
-  to: new Date(startOf(to).getTime() + DAY_MS),
-});
-const inRange = (at: Date, range: Range) => at >= range.from && at < range.to;
 const money = (value: Prisma.Decimal) => value.toFixed(2);
 const chunks = <T>(items: T[], size: number) => {
   const out: T[][] = [];

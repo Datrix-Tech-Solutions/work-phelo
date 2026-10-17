@@ -5,6 +5,7 @@ import { RevenueByProductChart } from '@/components/molecules/marketing/RevenueB
 import { TopSalesPersonnelChart } from '@/components/molecules/marketing/TopSalesPersonnelChart';
 import { TargetsOverviewCard } from '@/components/molecules/marketing/TargetsOverviewCard';
 import { PipelineStageCards } from '@/components/molecules/marketing/PipelineStageCards';
+import { CrmQuickActions } from '@/components/organisms/marketing/CrmQuickActions';
 import { MarketingDashboardKpis } from '@/components/organisms/marketing/MarketingDashboardKpis';
 import type { DashboardViewOption } from '@/components/atoms/DashboardViewToggle';
 import { DashboardShell } from '@/components/organisms/shared/DashboardShell';
@@ -39,6 +40,7 @@ export default function CrmDashboardPage() {
               year={filters.year}
               className="lg:col-span-7"
             />
+            <CrmQuickActions fillCell className="md:col-span-2 lg:col-span-5" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-20 gap-3">
             <TopSalesPersonnelChart
@@ -54,6 +56,7 @@ export default function CrmDashboardPage() {
           </div>
         </>
       )}
+      {view === 'personal' && <CrmQuickActions className="max-w-xs" />}
     </DashboardShell>
   );
 }

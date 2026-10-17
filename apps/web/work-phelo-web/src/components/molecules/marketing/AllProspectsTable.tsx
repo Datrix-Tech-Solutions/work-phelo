@@ -21,7 +21,7 @@ export interface Prospect {
   salesStageProgress: number;
   decisionMaker: string;
   lastInteraction: string;
-  /** Interactions recorded against the prospect (its follow-ups). */
+  /** Follow-ups recorded against the prospect. */
   interactionCount: number;
   /** The assigned marketer's name. */
   assignedTo: string;
@@ -61,7 +61,7 @@ const COLUMNS: Column<Prospect>[] = [
   },
   {
     key: 'lastInteraction',
-    label: 'Last Interaction',
+    label: 'Last Follow-up',
     width: '120px',
     render: (row) =>
       row.lastInteraction ? (
@@ -129,7 +129,7 @@ export function AllProspectsTable({
   onStageFilter,
   isLoading,
 }: Props) {
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   const stageFilterSelect = (
     <SearchSelect

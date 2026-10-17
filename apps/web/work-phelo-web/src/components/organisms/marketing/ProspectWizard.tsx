@@ -245,7 +245,7 @@ export function ProspectWizard({
               toast,
             )}
             interactionTypeEmptyState={buildCreateOptionEmptyState(
-              'interaction type',
+              'follow-up type',
               createInteractionMedium,
               (id) => setCompanyForm((f) => ({ ...f, interactionType: id })),
               toast,

@@ -33,8 +33,8 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'view_all_prospects', label: 'View All Prospects' },
       { key: 'edit_all_prospects', label: 'Edit All Prospects' },
       { key: 'delete_all_prospects', label: 'Delete All Prospects' },
-      { key: 'manage_all_prospect_interactions', label: 'Manage All Prospect Interactions' },
-      { key: 'manage_all_follow_ups', label: 'Manage All Follow Ups' },
+      { key: 'manage_all_prospect_interactions', label: 'Manage All Prospect Follow-ups' },
+      { key: 'manage_all_follow_ups', label: 'Manage All Reminders' },
       { key: 'create_prospect', label: 'Create Prospect' },
       { key: 'assign_prospects', label: 'Assign Prospects' },
     ],
@@ -95,7 +95,7 @@ export const MARKETING_PERMISSION_SECTIONS: PermissionSection[] = [
       { key: 'manage_products', label: 'Manage Products/Services' },
       { key: 'manage_decision_makers', label: 'Manage Decision Makers' },
       { key: 'manage_source_types', label: 'Manage Source Types' },
-      { key: 'manage_interaction_types', label: 'Manage Interaction Types' },
+      { key: 'manage_interaction_types', label: 'Manage Follow-up Types' },
       { key: 'manage_business_types', label: 'Manage Business Types' },
     ],
   },
@@ -122,7 +122,7 @@ const ALL_TAGS = MARKETING_PERMISSION_SECTIONS.flatMap((section) => section.tags
 
 const DETAIL_MAPPING: Record<string, PermissionPair[]> = {
   // Prospecting — "create prospect" is the own-records bundle: the creator is
-  // assigned the prospect and can view/edit/delete it plus its interactions and follow-ups.
+  // assigned the prospect and can view/edit/delete it plus its follow-ups and reminders.
   create_prospect: [
     ...pairs('marketing.prospects', CRUD),
     ...pairs('marketing.prospects.interactions', ['VIEW', 'CREATE']),

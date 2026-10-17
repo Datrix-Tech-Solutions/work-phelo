@@ -166,7 +166,7 @@ export default function ProspectDetailPage() {
           <DetailField label="Primary Contact Phone" value={primaryContact?.phone} />
           <DetailField label="Primary Contact Email" value={primaryContact?.email} />
           <DetailField label="Date Created" value={formatDate(prospect.createdAt)} />
-          <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
+          <DetailField label="Last Follow-up" value={formatDate(lastInteraction)} />
           <DetailField label="Follow-ups" value={String(prospect.interactions.length)} />
           <DetailField label="Total Expected" value={formatMoney(prospect.totalExpectedValue)} />
           {/* <DetailField label="Total Achieved" value={formatMoney(prospect.totalAchievedValue)} /> */}
@@ -182,7 +182,7 @@ export default function ProspectDetailPage() {
       <TabBar
         tabs={[
           { key: 'products', label: 'Products/Services' },
-          { key: 'interactions', label: 'Follow ups' },
+          { key: 'interactions', label: 'Follow-ups' },
           {
             key: 'reminders',
             label: 'Reminders',
