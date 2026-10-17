@@ -49,7 +49,6 @@ type AssetForm = {
   customType?: string;
   serialNumber?: string;
   purchaseDate?: string;
-  purchaseCost?: string;
   currency: string;
   condition?: string;
   notes?: string;
@@ -110,10 +109,6 @@ export function AssetsContent() {
 
     if (data.purchaseDate) {
       payload.purchaseDate = data.purchaseDate;
-    }
-
-    if (data.purchaseCost?.trim()) {
-      payload.purchaseCost = Number(data.purchaseCost);
     }
 
     if (data.condition) {

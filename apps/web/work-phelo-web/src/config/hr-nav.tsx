@@ -15,6 +15,7 @@ import {
   Trophy,
   CalendarRange,
   FolderKanban,
+  Package,
 } from 'lucide-react';
 
 /* ── Icons ── */
@@ -28,6 +29,7 @@ const PayrollIcon = () => <Wallet className="w-5 h-5" />;
 const AppraisalIcon = () => <Trophy className="w-5 h-5" />;
 const LeaveIcon = () => <CalendarRange className="w-5 h-5" />;
 const ProjectsIcon = () => <FolderKanban className="w-5 h-5" />;
+const AssetsIcon = () => <Package className="w-5 h-5" />;
 const HrIcon = () => <Users className="w-5 h-5" />;
 const AccountingIcon = () => <DollarSign className="w-5 h-5" />;
 const OperationsIcon = () => <Handshake className="w-5 h-5" />;
@@ -117,6 +119,14 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         active: true,
       },
       {
+        key: 'assets',
+        label: 'Asset Management',
+        icon: <AssetsIcon />,
+        href: 'assets',
+        enabled: true,
+        active: true,
+      },
+      {
         key: 'reports',
         label: 'Reports',
         icon: <ReportsIcon />,
@@ -181,4 +191,5 @@ export const HR_TAB_KEYS: readonly string[] = [
   'appraisal',
   'leave',
   'projects',
+  'assets',
 ];

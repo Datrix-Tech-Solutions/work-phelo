@@ -97,11 +97,6 @@ export function AssetDetailPanel({
       })
     : null;
 
-  const formattedPurchaseCost =
-    asset.purchaseCost != null
-      ? `${asset.currency ?? ''} ${asset.purchaseCost.toLocaleString()}`.trim()
-      : null;
-
   const formattedAssignedAt = asset.assignedAt
     ? new Date(asset.assignedAt).toLocaleDateString('en-GB', {
         day: '2-digit',
@@ -168,7 +163,6 @@ export function AssetDetailPanel({
               value={asset.condition ? CONDITION_LABELS[asset.condition] : null}
             />
             <DetailRow label="Purchase Date" value={formattedPurchaseDate} />
-            <DetailRow label="Purchase Cost" value={formattedPurchaseCost} />
             <DetailRow label="Branch" value={branchName} />
           </div>
         </div>

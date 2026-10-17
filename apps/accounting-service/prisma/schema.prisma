@@ -903,6 +903,9 @@ model CashbookTransactionLine {
   sequence      Int
   kind          CashbookLineKind    @default(ITEM)
   glAccountId   String
+  /// Set when the line is a tax (a CHARGE such as input VAT, or a DEDUCTION such as withholding
+  /// tax) picked from the tax types; null for any other line.
+  taxTypeId     String?
   amount        Decimal             @db.Decimal(20, 4)
   /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
   quantity      Decimal?            @db.Decimal(20, 4)
@@ -911,10 +914,12 @@ model CashbookTransactionLine {
   createdAt     DateTime            @default(now())
   transaction   CashbookTransaction @relation(fields: [transactionId, tenantId], references: [id, tenantId], onDelete: Cascade)
   glAccount     GLAccount           @relation("CashbookLineAccount", fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  taxType       TaxType?            @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, transactionId, sequence])
   @@index([tenantId, glAccountId])
+  @@index([tenantId, taxTypeId])
   @@schema("accounting")
 }
 
@@ -990,6 +995,7 @@ model TaxType {
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
   ruleLines           TransactionTypeRuleLine[]
+  cashbookLines       CashbookTransactionLine[]
   payableAccount      GLAccount?                @relation("TaxTypePayableAccount", fields: [payableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   receivableAccount   GLAccount?                @relation("TaxTypeReceivableAccount", fields: [receivableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
 

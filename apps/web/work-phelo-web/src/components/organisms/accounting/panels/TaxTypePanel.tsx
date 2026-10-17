@@ -184,7 +184,7 @@ export function TaxTypePanel({
             control={control}
             render={({ field }) => (
               <SearchSelect
-                label="Account on Bills and Payments (optional)"
+                label="Purchase Tax Account (optional)"
                 placeholder={isLoadingAccounts ? 'Loading…' : 'e.g. Input VAT, Tax Payable'}
                 options={accountOptions}
                 value={field.value}
@@ -197,7 +197,7 @@ export function TaxTypePanel({
             control={control}
             render={({ field }) => (
               <SearchSelect
-                label="Account on Invoices and Receipts (optional)"
+                label="Sales Tax Account (optional)"
                 placeholder={isLoadingAccounts ? 'Loading…' : 'e.g. Output VAT, Tax Receivable'}
                 options={accountOptions}
                 value={field.value}
