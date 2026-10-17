@@ -12,6 +12,7 @@ import {
   getConfiguredGatewayServices,
   getGatewayServiceUrl,
 } from '../config/runtime-env';
+import { isAllowedForCareersToken } from './careers-scope';
 
 const permissionsCache = new Map<
   string,
@@ -202,6 +203,18 @@ export class ProxyController {
           token,
           process.env.JWT_SECRET!,
         ) as JwtPayload;
+
+        // Tokens issued to the careers site may only reach the job-posting routes.
+        if (
+          payload.scope === 'careers' &&
+          !isAllowedForCareersToken(req.method, req.path)
+        ) {
+          return res.status(403).json({
+            message: 'This session cannot access this resource',
+            statusCode: 403,
+          });
+        }
+
         req.headers['x-user-id'] = payload.sub;
         req.headers['x-user-email'] = payload.email;
         req.headers['x-user-role'] = payload.role;

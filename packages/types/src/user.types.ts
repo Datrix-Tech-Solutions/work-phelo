@@ -5,6 +5,9 @@ export enum RoleType {
 }
 
 /** Shape of the JWT payload issued by the auth service */
+/** Where a token may be used. "careers" tokens only reach the job-posting endpoints. */
+export type TokenScope = 'careers';
+
 export interface JwtPayload {
   sub: string;
   email: string;
@@ -19,6 +22,8 @@ export interface JwtPayload {
   integrationConfig?: Record<string, boolean>;
   labelConfig?: Record<string, string>;
   permissions?: string[];
+  /** Set on tokens issued to the careers site; the gateway restricts what they can call. */
+  scope?: TokenScope;
   iat?: number;
   exp?: number;
 }

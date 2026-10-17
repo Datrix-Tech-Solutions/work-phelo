@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import * as jwt from 'jsonwebtoken';
 import { ProxyController } from './proxy.controller';
 
 function mockCreateProxyRequest(
@@ -146,6 +147,41 @@ describe('ProxyController Reinsurance foundation', () => {
     expect(request.headers['x-user-permissions']).toBeUndefined();
     expect(request.headers['x-gateway-permissions-signature']).toBeUndefined();
     expect(status).toHaveBeenCalledWith(401);
+  });
+
+  it('refuses careers-site tokens outside the job-posting routes', async () => {
+    process.env.HR_SERVICE_URL = 'http://hr-service:4002';
+    const token = jwt.sign(
+      {
+        sub: 'user-1',
+        email: 'a@acme.test',
+        role: 'TENANT_ADMIN',
+        tenantId: 'tenant-1',
+        tenantSlug: 'acme',
+        scope: 'careers',
+      },
+      process.env.JWT_SECRET!,
+    );
+    const controller = new ProxyController();
+    const request = {
+      path: '/api/v1/hr/employees',
+      headers: { authorization: `Bearer ${token}` },
+      cookies: {},
+      method: 'GET',
+      url: '/api/v1/hr/employees',
+    };
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const createProxyRequest = jest.spyOn(
+      controller as unknown as { createProxyRequest: () => unknown },
+      'createProxyRequest',
+    );
+
+    await controller.proxy(request as never, { status } as never);
+
+    expect(status).toHaveBeenCalledWith(403);
+    expect(createProxyRequest).not.toHaveBeenCalled();
+    delete process.env.HR_SERVICE_URL;
   });
 
   it('makes only applicant-facing recruitment routes public', () => {

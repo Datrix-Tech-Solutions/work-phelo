@@ -46,6 +46,7 @@ function setup() {
     user: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
     },
     $transaction: jest.fn((callback) => callback(tx)),
@@ -280,6 +281,7 @@ describe('RecruiterAuthService', () => {
         },
         '1.2.3.4',
         'agent',
+        'careers',
       );
     });
 
@@ -341,6 +343,103 @@ describe('RecruiterAuthService', () => {
 
       await expect(service.login(login)).rejects.toBeInstanceOf(
         UnauthorizedException,
+      );
+    });
+
+    describe('company admins of normal companies', () => {
+      const admin = async (slug: string, password = login.password) => ({
+        email: 'abena@acme.test',
+        password: await bcrypt.hash(password, 4),
+        tenant: { slug, isVerified: true },
+      });
+
+      it('signs in the only matching admin with a careers-site token and reports the company as verified', async () => {
+        const { service, prisma, authService } = setup();
+        prisma.user.findMany.mockResolvedValue([await admin('acme')]);
+
+        const result = await service.login(login, '1.2.3.4', 'agent');
+
+        expect(prisma.user.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              role: 'TENANT_ADMIN',
+              status: 'ACTIVE',
+              tenant: { source: 'PLATFORM', status: 'ACTIVE' },
+            }),
+          }),
+        );
+        expect(authService.login).toHaveBeenCalledWith(
+          {
+            email: 'abena@acme.test',
+            password: login.password,
+            tenantSlug: 'acme',
+          },
+          '1.2.3.4',
+          'agent',
+          'careers',
+        );
+        expect(result).toMatchObject({ accessToken: 'a', isVerified: true });
+      });
+
+      it('uses the password to pick between companies the same admin manages', async () => {
+        const { service, prisma, authService } = setup();
+        prisma.user.findMany.mockResolvedValue([
+          await admin('first', 'another-password'),
+          await admin('second'),
+        ]);
+
+        await service.login(login);
+
+        expect(authService.login).toHaveBeenCalledWith(
+          expect.objectContaining({ tenantSlug: 'second' }),
+          undefined,
+          undefined,
+          'careers',
+        );
+      });
+
+      it('sends the admin to the app when the password fits several companies', async () => {
+        const { service, prisma, authService } = setup();
+        prisma.user.findMany.mockResolvedValue([
+          await admin('first'),
+          await admin('second'),
+        ]);
+
+        await expect(service.login(login)).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+        expect(authService.login).not.toHaveBeenCalled();
+      });
+
+      it('rejects a wrong password for an admin who manages several companies', async () => {
+        const { service, prisma } = setup();
+        prisma.user.findMany.mockResolvedValue([
+          await admin('first', 'x-password'),
+          await admin('second', 'y-password'),
+        ]);
+
+        await expect(service.login(login)).rejects.toBeInstanceOf(
+          UnauthorizedException,
+        );
+      });
+
+      it.each([
+        ['two-factor', { requiresMfa: true, userId: 'user-1' }],
+        [
+          'a forced password reset',
+          { requiresPasswordReset: true, userId: 'user-1' },
+        ],
+      ])(
+        'asks the admin to finish setup in the app when %s is required',
+        async (_label, result) => {
+          const { service, prisma, authService } = setup();
+          prisma.user.findMany.mockResolvedValue([await admin('acme')]);
+          authService.login.mockResolvedValue(result);
+
+          await expect(service.login(login)).rejects.toBeInstanceOf(
+            ForbiddenException,
+          );
+        },
       );
     });
   });

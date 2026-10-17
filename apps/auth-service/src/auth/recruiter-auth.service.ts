@@ -33,6 +33,12 @@ const REGISTER_RESPONSE = {
   message: 'Registration received. Check your email to confirm your account.',
 };
 
+const MULTIPLE_COMPANIES =
+  'This email manages more than one company. Please sign in through the app.';
+
+const FINISH_SETUP_IN_APP =
+  'Please sign in through the app first to finish setting up your account.';
+
 const UNCONFIRMED_MESSAGE =
   'Please confirm your email address first. Check your inbox for the link.';
 
@@ -247,10 +253,22 @@ export class RecruiterAuthService {
 
     const tenant = await this.prisma.tenant.findFirst({
       where: { source: 'WEBSITE', email },
-      select: { id: true, slug: true, status: true },
+      select: { id: true, slug: true, status: true, isVerified: true },
     });
-    if (!tenant) throw new UnauthorizedException('Invalid credentials');
+    if (tenant)
+      return this.websiteLogin(tenant, email, dto, ipAddress, userAgent);
 
+    // Not a careers-site company: let an admin of a normal company sign in too.
+    return this.adminLogin(email, dto, ipAddress, userAgent);
+  }
+
+  private async websiteLogin(
+    tenant: { id: string; slug: string; status: string; isVerified: boolean },
+    email: string,
+    dto: RecruiterLoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     if (tenant.status === 'SUSPENDED') {
       throw new ForbiddenException(
         'This account has been blocked. Contact Workphelo support.',
@@ -270,11 +288,78 @@ export class RecruiterAuthService {
       throw new ForbiddenException(UNCONFIRMED_MESSAGE);
     }
 
-    return this.authService.login(
+    const result = await this.authService.login(
       { email, password: dto.password, tenantSlug: tenant.slug },
       ipAddress,
       userAgent,
+      'careers',
     );
+    return { ...result, isVerified: tenant.isVerified };
+  }
+
+  /**
+   * Company admins already have a WorkPhelo account, so they sign in with it.
+   * Only active admins of active companies are considered, and the session is
+   * limited to the job-posting routes like any other careers-site session.
+   */
+  private async adminLogin(
+    email: string,
+    dto: RecruiterLoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const admins = await this.prisma.user.findMany({
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        role: 'TENANT_ADMIN',
+        status: 'ACTIVE',
+        tenant: { source: 'PLATFORM', status: 'ACTIVE' },
+      },
+      select: {
+        email: true,
+        password: true,
+        tenant: { select: { slug: true, isVerified: true } },
+      },
+    });
+    if (admins.length === 0) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    let admin = admins[0];
+    if (admins.length > 1) {
+      // The same person administers several companies: only their password
+      // can tell which sign-in is meant, and it must match exactly one.
+      const matches: typeof admins = [];
+      for (const candidate of admins) {
+        if (
+          candidate.password &&
+          (await bcrypt.compare(dto.password, candidate.password))
+        ) {
+          matches.push(candidate);
+        }
+      }
+      if (matches.length === 0) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      if (matches.length > 1) throw new ForbiddenException(MULTIPLE_COMPANIES);
+      admin = matches[0];
+    }
+
+    // The normal login checks the password and counts failed attempts.
+    const result = await this.authService.login(
+      {
+        email: admin.email,
+        password: dto.password,
+        tenantSlug: admin.tenant.slug,
+      },
+      ipAddress,
+      userAgent,
+      'careers',
+    );
+    if ('requiresMfa' in result || 'requiresPasswordReset' in result) {
+      throw new ForbiddenException(FINISH_SETUP_IN_APP);
+    }
+    return { ...result, isVerified: admin.tenant.isVerified };
   }
 
   private sendConfirmation(
