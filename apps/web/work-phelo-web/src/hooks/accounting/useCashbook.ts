@@ -130,13 +130,15 @@ export function useCashAccountStats(
   range?: { fromDate?: string; toDate?: string },
 ) {
   const { data: ledger, isLoading } = useGLAccountLedger(glAccountId ?? '');
+  const fromDate = range?.fromDate;
+  const toDate = range?.toDate;
   const data = useMemo<CashAccountStats | undefined>(() => {
     if (!ledger) return undefined;
     const stats: CashAccountStats = { inflow: {}, outflow: {}, net: {} };
     for (const entry of ledger.entries) {
       const day = entry.journalEntry.transactionDate.slice(0, 10);
-      if (range?.fromDate && day < range.fromDate) continue;
-      if (range?.toDate && day > range.toDate) continue;
+      if (fromDate && day < fromDate) continue;
+      if (toDate && day > toDate) continue;
       const currency = entry.journalEntry.transactionCurrency;
       const debit = Number(entry.transactionDebit);
       const credit = Number(entry.transactionCredit);
@@ -145,7 +147,7 @@ export function useCashAccountStats(
       add(stats.net, currency, debit - credit);
     }
     return stats;
-  }, [ledger, range?.fromDate, range?.toDate]);
+  }, [ledger, fromDate, toDate]);
   return { data, isLoading: !!glAccountId && isLoading };
 }
 

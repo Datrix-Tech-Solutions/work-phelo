@@ -5,7 +5,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
 import { useGLAccountLedger } from '@/hooks';
 import type { GLAccountLedgerEntry } from '@/types/accounting';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 import { formatJournalNumber } from '@/lib/formatters';
 
@@ -87,15 +87,23 @@ export function GLAccountLedger({
   /** Shows a Reconcile button in the toolbar. */
   onReconcile?: () => void;
 }) {
+  const [page, setPage] = useState(1);
   const [ownFrom, setOwnFrom] = useState('');
   const [ownTo, setOwnTo] = useState('');
   const fromDate = controlledFrom ?? ownFrom;
   const toDate = controlledTo ?? ownTo;
-  const setFromDate = onFromDateChange ?? setOwnFrom;
-  const setToDate = onToDateChange ?? setOwnTo;
+  const changeFrom = onFromDateChange ?? setOwnFrom;
+  const changeTo = onToDateChange ?? setOwnTo;
+  // A new range can leave fewer pages than the one being viewed, so go back to the first.
+  const setFromDate = (value: string) => {
+    changeFrom(value);
+    setPage(1);
+  };
+  const setToDate = (value: string) => {
+    changeTo(value);
+    setPage(1);
+  };
   const { data, isLoading } = useGLAccountLedger(accountId);
-  const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [fromDate, toDate]);
   const entries = (data?.entries ?? []).filter((entry) => {
     const day = entry.journalEntry.transactionDate.slice(0, 10);
     return (!fromDate || day >= fromDate) && (!toDate || day <= toDate);
