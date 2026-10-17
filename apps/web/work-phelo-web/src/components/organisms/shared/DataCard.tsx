@@ -67,7 +67,8 @@ export function DataCard({
           <p className="text-sm font-bold text-gray-900 leading-snug truncate">{title}</p>
           {subtitle && <p className="text-xs text-gray-400 mt-0.5 truncate">{subtitle}</p>}
         </div>
-        {badge}
+        {/* Capped so a long badge can't push the title out of the header. */}
+        {badge && <div className="min-w-0 max-w-[40%] shrink-0 flex justify-end">{badge}</div>}
       </div>
 
       {(note || (details && details.length > 0)) && (

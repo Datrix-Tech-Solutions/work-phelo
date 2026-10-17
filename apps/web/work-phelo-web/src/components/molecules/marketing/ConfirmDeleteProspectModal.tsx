@@ -9,7 +9,7 @@ export function ConfirmDeleteProspectModal({
   onConfirm,
   onCancel,
   title = 'Delete Prospect',
-  consequence = 'also removes its contacts, products/services and interaction history',
+  consequence = 'also removes its contacts, products/services and follow-up history',
   confirmLabel = 'Delete',
   confirmingLabel = 'Deleting…',
   warning = 'This action cannot be undone.',

@@ -13,7 +13,7 @@ interface Props {
   onAdd?: () => void;
   /** Label of the add button. */
   addLabel?: string;
-  /** The prospect's next follow-up, shown after the last interaction. */
+  /** The prospect's next reminder, shown after the last follow-up. */
   upcoming?: FollowUpWorklistItem;
 }
 
@@ -33,7 +33,7 @@ function fullDate(iso: string) {
 export function ProspectInteractionTimeline({
   interactions,
   onAdd,
-  addLabel = 'Add Follow ups',
+  addLabel = 'Add Follow-up',
   upcoming,
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export function ProspectInteractionTimeline({
       )}
 
       {sorted.length === 0 && !upcoming ? (
-        <p className="text-sm text-gray-400 text-center py-8">No follow ups yet</p>
+        <p className="text-sm text-gray-400 text-center py-8">No follow-ups yet</p>
       ) : (
         <div className="overflow-x-auto pb-3">
           <ol className="relative flex w-max min-w-full gap-6 px-1 pb-2">
@@ -112,7 +112,7 @@ export function ProspectInteractionTimeline({
                   </span>
                   <span className="text-sm text-gray-600">
                     {upcoming.note ||
-                      (upcoming.followUpSource === 'DEFAULT' ? 'Automatic follow-up' : 'Follow-up')}
+                      (upcoming.followUpSource === 'DEFAULT' ? 'Automatic reminder' : 'Reminder')}
                   </span>
                 </div>
                 <span

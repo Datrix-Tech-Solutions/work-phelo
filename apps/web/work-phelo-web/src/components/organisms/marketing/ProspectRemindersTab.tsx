@@ -7,7 +7,6 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
 import { FollowUpForm, FollowUpFields } from '@/components/molecules/marketing/FollowUpForm';
 import {
@@ -67,7 +66,7 @@ function automaticLabel(item: { dueAt: string; lastInteractionDate: string | nul
   const days = Math.round(
     (new Date(item.dueAt).getTime() - new Date(item.lastInteractionDate).getTime()) / 86_400_000,
   );
-  return `Automatic (${days} ${days === 1 ? 'day' : 'days'} after last interaction)`;
+  return `Automatic (${days} ${days === 1 ? 'day' : 'days'} after last follow-up)`;
 }
 
 const COLUMNS: Column<ProspectFollowUp>[] = [
@@ -118,7 +117,7 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
   const updateFollowUp = useUpdateFollowUp();
   const cancelFollowUp = useCancelFollowUp();
 
-  // Each prospect has at most one follow-up on the worklist: the next one due.
+  // Each prospect has at most one reminder on the worklist: the next one due.
   const next = worklist.find((w) => w.prospectId === prospectId);
 
   const emptyForm: FollowUpFields = {
@@ -146,14 +145,14 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
     const { date, time } = splitDueAt(next.dueAt);
     setForm({ prospectId, followUpDate: date, followUpTime: time, notes: next.note ?? '' });
     setErrors({});
-    // An automatic follow-up has no record to edit, so saving schedules an explicit one instead.
+    // An automatic reminder has no record to edit, so saving schedules an explicit one instead.
     setEditingFollowUpId(next.followUpId);
     setPanelOpen(true);
   }
 
   function handleSave() {
     const nextErrors: Partial<FollowUpFields> = {};
-    if (!form.followUpDate) nextErrors.followUpDate = 'Follow-up date is required.';
+    if (!form.followUpDate) nextErrors.followUpDate = 'Reminder date is required.';
     if (!form.followUpTime) nextErrors.followUpTime = 'Time is required.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -162,7 +161,7 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
     // Date and time are picked in local time; the API stores an ISO (UTC) timestamp.
     const dueAt = new Date(`${form.followUpDate}T${form.followUpTime}`).toISOString();
     const onError = (error: unknown) =>
-      toast.error(apiErrorMessage(error, 'Failed to save follow up'));
+      toast.error(apiErrorMessage(error, 'Failed to save reminder'));
     const onSuccess = (message: string) => () => {
       toast.success(message);
       setPanelOpen(false);
@@ -171,12 +170,12 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
     if (editingFollowUpId) {
       updateFollowUp.mutate(
         { id: editingFollowUpId, payload: { dueAt, note } },
-        { onSuccess: onSuccess('Follow up updated'), onError },
+        { onSuccess: onSuccess('Reminder updated'), onError },
       );
     } else {
       createFollowUp.mutate(
         { prospectId, payload: { dueAt, ...(note ? { note } : {}) } },
-        { onSuccess: onSuccess('Follow up scheduled'), onError },
+        { onSuccess: onSuccess('Reminder scheduled'), onError },
       );
     }
   }
@@ -214,7 +213,7 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Only once the follow-up time has passed. */}
+          {/* Only once the reminder time has passed. */}
           {next?.urgency === 'OVERDUE' && (
             <TableButton
               variant="blue"
@@ -225,7 +224,7 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
               Record Follow-up
             </TableButton>
           )}
-          {/* Automatic follow-ups have no record to cancel or reschedule. */}
+          {/* Automatic reminders have no record to cancel or reschedule. */}
           {next?.followUpId &&
             (next.urgency === 'OVERDUE' ? (
               <TableButton
@@ -263,17 +262,17 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
         noInternalScroll
       />
 
-      <SidePanel
+      <Modal
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        title={editingFollowUpId ? 'Edit Follow Up' : 'Add Follow Up'}
+        title={editingFollowUpId ? 'Edit Reminder' : 'Add Reminder'}
         footer={
           <div className="flex items-center justify-end gap-3">
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
-              {editingFollowUpId ? 'Save Changes' : 'Add Follow Up'}
+              {editingFollowUpId ? 'Save Changes' : 'Add Reminder'}
             </Button>
           </div>
         }
@@ -285,7 +284,7 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
           prospectOptions={[{ value: prospectId, label: companyName }]}
           prospectLocked
         />
-      </SidePanel>
+      </Modal>
 
       <AddInteractionPanel
         prospectId={prospectId}
@@ -298,8 +297,8 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
       <Modal
         isOpen={cancelling}
         onClose={() => setCancelling(false)}
-        title="Cancel Follow Up"
-        description="Are you sure you want to cancel this follow up? The prospect goes back to its automatic follow-up date."
+        title="Cancel Reminder"
+        description="Are you sure you want to cancel this reminder? The prospect goes back to its automatic reminder date."
         width="max-w-sm"
         height="max-h-fit"
         footer={
@@ -308,7 +307,7 @@ export function ProspectRemindersTab({ prospectId, companyName, primaryContact }
               Keep
             </Button>
             <Button variant="danger" onClick={handleCancel} disabled={cancelFollowUp.isPending}>
-              Cancel Follow Up
+              Cancel Reminder
             </Button>
           </>
         }

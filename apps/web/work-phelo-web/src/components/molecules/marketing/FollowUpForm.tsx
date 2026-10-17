@@ -18,7 +18,7 @@ interface Props {
   errors?: Partial<FollowUpFields>;
   prospectOptions?: SearchSelectOption[];
   onProspectSearch?: (query: string) => void;
-  /** A follow-up can't move to another prospect once it exists. */
+  /** A reminder can't move to another prospect once it exists. */
   prospectLocked?: boolean;
 }
 
@@ -49,7 +49,7 @@ export function FollowUpForm({
 
       <div className="grid grid-cols-2 gap-3">
         <DatePicker
-          label="Follow-up Date"
+          label="Reminder Date"
           value={values.followUpDate}
           onChange={(v) => set('followUpDate', v)}
           error={errors?.followUpDate}

@@ -147,7 +147,7 @@ export function CompanyInformationForm({
 
         {!hideInteraction && (
           <SearchSelect
-            label="Interaction Type"
+            label="Follow-up Type"
             placeholder="Select or type to add new"
             options={interactionTypeOptions}
             value={values.interactionType}

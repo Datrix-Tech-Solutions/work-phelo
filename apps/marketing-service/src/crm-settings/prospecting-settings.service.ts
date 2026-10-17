@@ -25,7 +25,7 @@ const REFERENCED_MESSAGES: Record<MarketingCrmSettingCategory, string> = {
   [MarketingCrmSettingCategory.SOURCE_TYPE]:
     'This source type is in use by one or more prospects and cannot be deleted.',
   [MarketingCrmSettingCategory.INTERACTION_MEDIUM]:
-    'This interaction medium is in use by one or more prospects and cannot be deleted.',
+    'This follow-up medium is in use by one or more prospects and cannot be deleted.',
   [MarketingCrmSettingCategory.DECISION_MAKER]:
     'This decision-maker type is in use by one or more prospects and cannot be deleted.',
   [MarketingCrmSettingCategory.PRODUCT]:

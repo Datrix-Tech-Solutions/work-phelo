@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { EmailField } from '@/components/atoms/EmailField';
@@ -35,13 +36,15 @@ import { useBillingOptions, useCreateClient } from '@/hooks/marketing/useClients
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
-import { inputClass, isValidEmail } from '@/lib/utils';
+import { inputClass, isValidEmail, todayLocal } from '@/lib/utils';
 import type { CreateClientPayload, ProspectingSetting } from '@/types/marketing';
 
 interface FormValues {
   companyName: string;
   businessType: string;
   sourceType: string;
+  /** The first follow-up with the client. Empty records none. */
+  dateContacted: string;
   contactName: string;
   roleJobTitle: string;
   phone: string;
@@ -58,10 +61,12 @@ type FormErrors = Partial<
   Record<'companyName' | 'businessType' | 'contactName' | 'email' | 'location', string>
 >;
 
-const EMPTY: FormValues = {
+/** A blank form; the date contacted starts as today. */
+const emptyValues = (): FormValues => ({
   companyName: '',
   businessType: '',
   sourceType: '',
+  dateContacted: todayLocal(),
   contactName: '',
   roleJobTitle: '',
   phone: '',
@@ -70,7 +75,7 @@ const EMPTY: FormValues = {
   raiseBilling: false,
   location: { location: '' },
   assignedUserId: '',
-};
+});
 
 function toOptions(items: ProspectingSetting[]) {
   return items.map((item) => ({ value: item.id, label: item.name }));
@@ -91,7 +96,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
   const toast = useToast();
   const createClient = useCreateClient();
 
-  const [values, setValues] = useState<FormValues>(EMPTY);
+  const [values, setValues] = useState<FormValues>(emptyValues);
   const [errors, setErrors] = useState<FormErrors>({});
   const [billing, setBilling] = useState<ClientBillingValues>(EMPTY_BILLING);
   const [billingErrors, setBillingErrors] = useState<ClientBillingErrors>({});
@@ -122,7 +127,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
   }
 
   function resetForm() {
-    setValues(EMPTY);
+    setValues(emptyValues());
     setErrors({});
     setBilling(EMPTY_BILLING);
     setBillingErrors({});
@@ -194,6 +199,7 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
         latitude: values.location.lat as number,
         longitude: values.location.lng as number,
       },
+      ...(values.dateContacted ? { initialInteraction: { occurredAt: values.dateContacted } } : {}),
     };
   }
 
@@ -273,6 +279,15 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
               (id) => set('sourceType', id),
               toast,
             )}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <DatePicker
+            label="Date Contacted"
+            value={values.dateContacted}
+            onChange={(v) => set('dateContacted', v)}
+            disableFuture
           />
         </div>
 

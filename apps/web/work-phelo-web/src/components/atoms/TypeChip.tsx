@@ -20,12 +20,14 @@ interface TypeChipProps {
 export function TypeChip({ label, color = 'gray' }: TypeChipProps) {
   return (
     <span
+      title={label}
       className={cn(
-        'inline-flex w-fit items-center whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
+        // A long label is cut with an ellipsis (full text on hover) instead of spilling out of its cell.
+        'inline-flex w-fit min-w-0 max-w-full items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
         COLOR_STYLES[color],
       )}
     >
-      {label}
+      <span className="truncate whitespace-nowrap">{label}</span>
     </span>
   );
 }

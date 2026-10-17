@@ -199,7 +199,7 @@ export default function ClientDetailPage() {
             label={client.convertedAt ? 'Converted On' : 'Date Created'}
             value={formatDate(client.convertedAt ?? client.createdAt)}
           />
-          <DetailField label="Last Follow up" value={formatDate(lastInteraction)} />
+          <DetailField label="Last Follow-up" value={formatDate(lastInteraction)} />
           <DetailField
             label="Achieved Revenue"
             value={formatMoney(billingSummary?.achievedRevenue)}
@@ -352,7 +352,7 @@ export default function ClientDetailPage() {
         <ConfirmDeleteProspectModal
           title="Delete Client"
           name={client.companyName}
-          consequence="removes its contacts and products/services, and the interactions recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
+          consequence="removes its contacts and products/services, and the follow-ups recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
           isDeleting={deleteClient.isPending}
           onConfirm={handleDelete}
           onCancel={() => setConfirmingDelete(false)}
