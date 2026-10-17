@@ -44,6 +44,7 @@ import {
   AccountingCashbookSettlementMethod,
   AccountingTradeDocument,
   CashbookLineKind,
+  TaxType,
   CashbookTransaction,
   TransactionTypeDefinition,
 } from '@/types/accounting';
@@ -97,6 +98,9 @@ type CashLineValues = {
   /** Items only: work the amount out from quantity × unit price (true) or enter it straight.
    *  Starts from the transaction type's setting and can be switched per line. */
   useQtyPrice: boolean;
+  /** A charge picked from the tax types: the amount is the tax's rate on the items total. */
+  isTax: boolean;
+  taxTypeId: string;
   glAccountId: string;
   quantity: string;
   unitPrice: string;
@@ -107,6 +111,8 @@ type CashLineValues = {
 const EMPTY_CASH_LINE: CashLineValues = {
   kind: 'ITEM',
   useQtyPrice: true,
+  isTax: false,
+  taxTypeId: '',
   glAccountId: '',
   quantity: '',
   unitPrice: '',
@@ -185,6 +191,8 @@ function cashbookDraftValues(tx: CashbookTransaction, typeName: string) {
       ? tx.lines.map((line) => ({
           kind: line.kind,
           useQtyPrice: line.kind === 'ITEM' && line.quantity !== null && line.unitPrice !== null,
+          isTax: !!line.taxTypeId,
+          taxTypeId: line.taxTypeId ?? '',
           glAccountId: line.glAccountId,
           quantity: plainNumber(line.quantity),
           unitPrice: plainNumber(line.unitPrice),
@@ -506,15 +514,23 @@ export function NewTransactionPanel({
   const cashLines = useWatch({ control, name: 'cashLines' });
   // Quantity × price only applies to items that use it; a deduction or charge, and any item
   // switched to a straight amount, is just the amount typed.
-  const cashLineAmount = (line: CashLineValues) =>
+  const itemLineAmount = (line: CashLineValues) =>
     line.kind !== 'ITEM' || !line.useQtyPrice
       ? Number(line.amount) || 0
       : computeAmount(line.quantity, line.unitPrice);
+  const itemsTotal = (cashLines ?? [])
+    .filter((line) => line.kind === 'ITEM')
+    .reduce((sum, line) => sum + itemLineAmount(line), 0);
+  // A tax line is its tax type's rate on the items total, so it follows the items as they change.
+  const cashLineAmount = (line: CashLineValues) => {
+    if (!line.isTax) return itemLineAmount(line);
+    const rate = taxTypes.find((t) => t.id === line.taxTypeId)?.rate ?? 0;
+    return Math.round(itemsTotal * rate) / 100;
+  };
   const sumOfKind = (kinds: CashbookLineKind[]) =>
     (cashLines ?? [])
       .filter((line) => kinds.includes(line.kind))
       .reduce((sum, line) => sum + cashLineAmount(line), 0);
-  const itemsTotal = sumOfKind(['ITEM']);
   const chargesTotal = sumOfKind(['CHARGE']);
   const deductionsTotal = sumOfKind(['DEDUCTION']);
   // The cash that actually moves — what the bank statement will show.
@@ -669,7 +685,13 @@ export function NewTransactionPanel({
       account: accountLabel(line.glAccountId, 'Select account…'),
       side: (line.kind === 'DEDUCTION' ? otherSide : itemSide) as 'Debit' | 'Credit',
       amount: cashLineAmount(line),
-      note: line.kind === 'ITEM' ? undefined : line.kind === 'DEDUCTION' ? 'Deduction' : 'Charge',
+      note: line.isTax
+        ? 'Tax'
+        : line.kind === 'ITEM'
+          ? undefined
+          : line.kind === 'DEDUCTION'
+            ? 'Deduction'
+            : 'Charge',
     }));
     const cashAccountName = cashAccounts.find((c) => c.id === cashAccountId)?.name;
     lines.push({
@@ -754,6 +776,10 @@ export function NewTransactionPanel({
           );
           return;
         }
+        if (values.cashLines.some((line) => line.isTax && !line.taxTypeId)) {
+          toast.error('Select a tax on every tax line');
+          return;
+        }
         if (values.cashLines.some((line) => !(cashLineAmount(line) > 0))) {
           toast.error('Every line needs an amount above zero');
           return;
@@ -795,6 +821,7 @@ export function NewTransactionPanel({
               ? values.cashLines.map((line) => ({
                   kind: line.kind,
                   glAccountId: line.glAccountId,
+                  taxTypeId: line.isTax ? line.taxTypeId : undefined,
                   amount: cashLineAmount(line),
                   ...(line.kind !== 'ITEM' || !line.useQtyPrice
                     ? {}
@@ -850,6 +877,7 @@ export function NewTransactionPanel({
                   lines: values.cashLines.map((line) => ({
                     kind: line.kind,
                     glAccountId: line.glAccountId,
+                    taxTypeId: line.isTax ? line.taxTypeId : undefined,
                     amount: cashLineAmount(line),
                     ...(line.kind !== 'ITEM' || !line.useQtyPrice
                       ? {}
@@ -1391,10 +1419,13 @@ export function NewTransactionPanel({
                   isReceipt={isCashbookReceipt}
                   currency={currency}
                   lineAmount={cashLineAmount}
-                  onAdd={(kind) =>
+                  taxTypes={taxTypes}
+                  entryDate={entryDate}
+                  onAdd={(kind, isTax) =>
                     appendCashLine({
                       ...EMPTY_CASH_LINE,
                       kind,
+                      isTax: !!isTax,
                       useQtyPrice: transactionType?.usesQuantityPrice !== false,
                     })
                   }
@@ -1662,6 +1693,8 @@ function CashEntryLines({
   isReceipt,
   currency,
   lineAmount,
+  taxTypes,
+  entryDate,
   onAdd,
   onRemove,
 }: {
@@ -1682,12 +1715,22 @@ function CashEntryLines({
   isReceipt: boolean;
   currency: string;
   lineAmount: (line: CashLineValues) => number;
-  onAdd: (kind: CashbookLineKind) => void;
+  taxTypes: TaxType[];
+  entryDate: string;
+  onAdd: (kind: CashbookLineKind, isTax?: boolean) => void;
   onRemove: (index: number) => void;
 }) {
   const verb = isReceipt ? 'received' : 'paid';
   const itemCount = lines.filter((line) => line.kind === 'ITEM').length;
   const hasAdjustments = deductionsTotal > 0 || chargesTotal > 0;
+  const taxOptions: SearchSelectOption[] = taxTypes
+    .filter(
+      (t) =>
+        t.isActive &&
+        (!entryDate || t.effectiveFrom.slice(0, 10) <= entryDate) &&
+        (!t.effectiveTo || t.effectiveTo.slice(0, 10) >= entryDate),
+    )
+    .map((t) => ({ label: `${t.name} (${t.rate}%)`, value: t.id }));
 
   return (
     <div className="flex flex-col gap-2">
@@ -1698,11 +1741,14 @@ function CashEntryLines({
         const kind = lines[index]?.kind ?? 'ITEM';
         const isItem = kind === 'ITEM';
         const useQtyPrice = isItem && (lines[index]?.useQtyPrice ?? defaultUseQtyPrice);
+        const isTax = lines[index]?.isTax ?? false;
         const accountFieldLabel = isItem
           ? accountLabel
-          : kind === 'DEDUCTION'
-            ? `Deduction (reduces the cash ${verb})`
-            : `Charge (adds to the cash ${verb})`;
+          : isTax
+            ? `Tax account (adds to the cash ${verb})`
+            : kind === 'DEDUCTION'
+              ? `Deduction (reduces the cash ${verb})`
+              : `Charge (adds to the cash ${verb})`;
 
         const accountField = (
           <Controller
@@ -1721,7 +1767,39 @@ function CashEntryLines({
             )}
           />
         );
-        const amountField = (
+        const taxField = (
+          <Controller
+            name={`cashLines.${index}.taxTypeId`}
+            control={control}
+            rules={{ required: 'Select a tax' }}
+            render={({ field: f }) => (
+              <SearchSelect
+                label="Tax"
+                placeholder={taxOptions.length ? 'Select a tax…' : 'No tax types in force'}
+                options={taxOptions}
+                value={f.value}
+                onChange={(value) => {
+                  f.onChange(value);
+                  // The tax's default account for this side pre-fills; the user can still change it.
+                  const tax = taxTypes.find((t) => t.id === value);
+                  const defaultAccount = isReceipt
+                    ? tax?.receivableAccountId
+                    : tax?.payableAccountId;
+                  if (defaultAccount) setValue(`cashLines.${index}.glAccountId`, defaultAccount);
+                }}
+                error={lineErrors?.taxTypeId?.message}
+              />
+            )}
+          />
+        );
+        const amountField = isTax ? (
+          <NumberField
+            label="Amount"
+            value={lines[index] ? lineAmount(lines[index]) : 0}
+            onChange={() => {}}
+            disabled
+          />
+        ) : (
           <Controller
             name={`cashLines.${index}.amount`}
             control={control}
@@ -1798,7 +1876,17 @@ function CashEntryLines({
 
         return (
           <div key={field.id} className="rounded-xl border border-gray-200 p-2.5">
-            {useQtyPrice ? (
+            {isTax ? (
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_1fr_auto]">
+                  {taxField}
+                  {accountField}
+                  {amountField}
+                  {actions}
+                </div>
+                {descriptionField}
+              </div>
+            ) : useQtyPrice ? (
               <div className="flex flex-col gap-2">
                 <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_auto]">
                   {accountField}
@@ -1857,6 +1945,9 @@ function CashEntryLines({
         </Button>
         <Button type="button" variant="outline" onClick={() => onAdd('DEDUCTION')}>
           Add Deduction
+        </Button>
+        <Button type="button" variant="outline" onClick={() => onAdd('CHARGE', true)}>
+          Add Tax
         </Button>
         <Button type="button" variant="outline" onClick={() => onAdd('CHARGE')}>
           Add Charge

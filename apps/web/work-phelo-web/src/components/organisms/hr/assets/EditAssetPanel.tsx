@@ -8,7 +8,6 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { Input } from '@/components/atoms/Input';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { Asset } from '@/types/asset';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useBranchOptions } from '@/hooks';
@@ -25,7 +24,6 @@ interface AssetForm {
   serialNumber?: string;
   vehicleType?: string;
   purchaseDate?: string;
-  purchaseCost?: string;
   currency: string;
   condition?: string;
   notes?: string;
@@ -55,8 +53,6 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
   const typeValue = useWatch({ control, name: 'type' });
   const conditionValue = useWatch({ control, name: 'condition' });
   const purchaseDateValue = useWatch({ control, name: 'purchaseDate' });
-  const purchaseCostValue = useWatch({ control, name: 'purchaseCost' });
-  const currencyValue = useWatch({ control, name: 'currency' });
   const branchIdValue = useWatch({ control, name: 'branchId' });
   const vehicleTypeValue = useWatch({ control, name: 'vehicleType' });
 
@@ -71,7 +67,6 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
         serialNumber: asset.serialNumber ?? '',
         vehicleType: asset.vehicleType ?? '',
         purchaseDate: asset.purchaseDate ?? '',
-        purchaseCost: asset.purchaseCost != null ? String(asset.purchaseCost) : '',
         currency: asset.currency ?? tenantCurrency,
         condition: asset.condition ?? '',
         notes: asset.notes ?? '',
@@ -158,15 +153,6 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
           value={purchaseDateValue}
           onChange={(v) => setValue('purchaseDate', v)}
           disableFuture
-        />
-
-        <CurrencyInput
-          label="Purchase Cost"
-          value={purchaseCostValue}
-          currency={currencyValue}
-          onValueChange={(v) => setValue('purchaseCost', v)}
-          onCurrencyChange={(v) => setValue('currency', v)}
-          placeholder="0.00"
         />
 
         <SearchSelect

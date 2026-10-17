@@ -119,6 +119,7 @@ export interface GLAccountLedgerEntry {
   subledgerAccount: { id: string; code: string; name: string } | null;
   journalEntry: {
     journalNumber: string;
+    entryType?: string;
     transactionDate: string;
     reference: string | null;
     description: string;
@@ -1626,6 +1627,9 @@ export interface CashbookTransactionLine {
   kind: CashbookLineKind;
   glAccountId: string;
   glAccount: CashbookGLAccountRef;
+  /** Set when the line was picked from the tax types. */
+  taxTypeId: string | null;
+  taxType: { id: string; code: string; name: string; rate: string } | null;
   amount: string;
   quantity: string | null;
   unitPrice: string | null;
@@ -1635,6 +1639,8 @@ export interface CashbookTransactionLine {
 export interface CreateCashbookEntryLinePayload {
   kind?: CashbookLineKind;
   glAccountId: string;
+  /** Only on a charge or deduction that is a tax. */
+  taxTypeId?: string;
   amount: number;
   quantity?: number;
   unitPrice?: number;

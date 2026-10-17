@@ -1,9 +1,11 @@
 'use client';
 
+import { Icons } from '@/components/atoms/icons';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
 import { useGLAccountLedger } from '@/hooks';
 import type { GLAccountLedgerEntry } from '@/types/accounting';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatSourceEventDescription } from '@/config/reinsurance-event-catalog';
 import { formatJournalNumber } from '@/lib/formatters';
 
@@ -68,15 +70,85 @@ const columns: Column<GLAccountLedgerEntry>[] = [
   },
 ];
 
-export function GLAccountLedger({ accountId }: { accountId: string }) {
+export function GLAccountLedger({
+  accountId,
+  fromDate: controlledFrom,
+  toDate: controlledTo,
+  onFromDateChange,
+  onToDateChange,
+  onReconcile,
+}: {
+  accountId: string;
+  /** Pass all four to control the range from outside (e.g. so stat cards can share it). */
+  fromDate?: string;
+  toDate?: string;
+  onFromDateChange?: (value: string) => void;
+  onToDateChange?: (value: string) => void;
+  /** Shows a Reconcile button in the toolbar. */
+  onReconcile?: () => void;
+}) {
+  const [ownFrom, setOwnFrom] = useState('');
+  const [ownTo, setOwnTo] = useState('');
+  const fromDate = controlledFrom ?? ownFrom;
+  const toDate = controlledTo ?? ownTo;
+  const setFromDate = onFromDateChange ?? setOwnFrom;
+  const setToDate = onToDateChange ?? setOwnTo;
   const { data, isLoading } = useGLAccountLedger(accountId);
   const [page, setPage] = useState(1);
-  const entries = data?.entries ?? [];
+  useEffect(() => setPage(1), [fromDate, toDate]);
+  const entries = (data?.entries ?? []).filter((entry) => {
+    const day = entry.journalEntry.transactionDate.slice(0, 10);
+    return (!fromDate || day >= fromDate) && (!toDate || day <= toDate);
+  });
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(entries.length / pageSize));
   const paged = entries.slice((page - 1) * pageSize, page * pageSize);
+  const extraFilters = (
+    <>
+      <div className="w-40">
+        <DatePicker
+          placeholder="From"
+          value={fromDate}
+          onChange={setFromDate}
+          maxDate={toDate || undefined}
+        />
+      </div>
+      <div className="w-40">
+        <DatePicker
+          placeholder="To"
+          value={toDate}
+          onChange={setToDate}
+          minDate={fromDate || undefined}
+        />
+      </div>
+      {(fromDate || toDate) && (
+        <button
+          type="button"
+          onClick={() => {
+            setFromDate('');
+            setToDate('');
+          }}
+          className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
+        >
+          Clear
+        </button>
+      )}
+    </>
+  );
   return (
     <DataTable
+      extraFilters={extraFilters}
+      actionButton={
+        onReconcile
+          ? {
+              label: 'Reconcile',
+              onClick: onReconcile,
+              icon: (
+                <Icons.GitCompareArrows className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
+              ),
+            }
+          : undefined
+      }
       columns={columns}
       data={paged}
       isLoading={isLoading}

@@ -5,6 +5,7 @@ import { assertQuantityPriceMatchesAmount } from './quantity-price.util';
 export interface NormalizedEntryLine {
   kind: CashbookLineKind;
   glAccountId: string;
+  taxTypeId?: string;
   amount: Prisma.Decimal;
   quantity?: number;
   unitPrice?: number;
@@ -14,6 +15,7 @@ export interface NormalizedEntryLine {
 interface EntryLineInput {
   kind?: CashbookLineKind;
   glAccountId: string;
+  taxTypeId?: string;
   amount: number;
   quantity?: number;
   unitPrice?: number;
@@ -77,10 +79,16 @@ export function normalizeEntryLines(input: {
           'Deductions and charges take an amount only',
         );
       }
+      if (line.taxTypeId && kind === CashbookLineKind.ITEM) {
+        throw new BadRequestException(
+          'A tax type goes on a charge or a deduction, not an item',
+        );
+      }
       assertQuantityPriceMatchesAmount(line);
       return {
         kind,
         glAccountId: line.glAccountId,
+        taxTypeId: line.taxTypeId,
         amount: new Prisma.Decimal(line.amount),
         quantity: line.quantity,
         unitPrice: line.unitPrice,

@@ -52,6 +52,8 @@ export function useHrNavAccess(): Record<string, boolean> {
   const canReadRecruitmentCandidates = usePermission(Permission.READ_RECRUITMENT_CANDIDATES);
   const canAccessRecruitment = canReadRecruitmentVacancies || canReadRecruitmentCandidates;
 
+  const canReadAssets = usePermission(Permission.READ_ASSETS);
+
   const moduleConfig = user?.moduleConfig ?? {};
 
   const navAccess: Record<string, boolean> = {
@@ -73,6 +75,7 @@ export function useHrNavAccess(): Record<string, boolean> {
     operations: (moduleConfig.operations ?? false) && canViewReinsuranceDashboard,
     marketing: moduleConfig.marketing ?? false,
     recruitment: canAccessRecruitment,
+    assets: canReadAssets,
   };
 
   return navAccess;
