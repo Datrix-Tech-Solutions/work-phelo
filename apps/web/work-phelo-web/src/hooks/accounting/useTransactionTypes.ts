@@ -9,8 +9,9 @@ import {
 const BASE = '/accounting/transaction-types';
 export const TRANSACTION_TYPES_KEY = ['accounting', 'transaction-types'] as const;
 
-export function useTransactionTypes() {
+export function useTransactionTypes(options?: { enabled?: boolean }) {
   return useQuery({
+    enabled: options?.enabled,
     queryKey: TRANSACTION_TYPES_KEY,
     // The backend auto-seeds the standard set (Receipt/Payment/Transfer/Charge/
     // Adjustment) for a tenant on first read, so this never comes back empty for

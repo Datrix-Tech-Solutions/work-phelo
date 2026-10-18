@@ -12,6 +12,8 @@ function createClient() {
     mutationCache: new MutationCache({
       onSuccess: () => {
         void client.invalidateQueries({ queryKey: ['accounting', 'transactions-page'] });
+        // What a tax still owes comes from the ledger, so any posting can change it.
+        void client.invalidateQueries({ queryKey: ['accounting', 'tax-types'] });
       },
     }),
     defaultOptions: {
@@ -30,7 +32,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       {children}
-      <ReactQueryDevtools initialIsOpen={false} />
+      <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
     </QueryClientProvider>
   );
 }

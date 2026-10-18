@@ -299,8 +299,9 @@ export function useAppraisal(id: string) {
   });
 }
 
-export function useMyAppraisals() {
+export function useMyAppraisals(options?: { enabled?: boolean }) {
   return useQuery<MyAppraisalRecord[]>({
+    enabled: options?.enabled,
     queryKey: ['my-appraisals'],
     queryFn: async () => {
       const res = await api.get('/hr/appraisals/my');

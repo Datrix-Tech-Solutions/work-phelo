@@ -199,8 +199,12 @@ export function useMySwapRequests() {
   });
 }
 
-export function usePendingManagerShiftSwaps(status?: ShiftSwapStatus) {
+export function usePendingManagerShiftSwaps(
+  status?: ShiftSwapStatus,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
+    enabled: options?.enabled,
     queryKey: ['shift-swaps', 'pending-manager', status ?? null],
     queryFn: async () => {
       try {

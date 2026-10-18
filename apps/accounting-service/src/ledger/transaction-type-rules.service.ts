@@ -10,6 +10,7 @@ import {
   Prisma,
   PostingDirection,
   RuleLineSettlementKind,
+  TaxPayFrequency,
   TransactionTypeCategory,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -93,6 +94,7 @@ export class TransactionTypeRulesService {
   async createTaxType(user: RequestUser, dto: CreateTaxTypeDto) {
     try {
       await this.assertTaxAccounts(user.tenantId, dto);
+      this.assertReminder(dto, dto.payableAccountId ?? null);
       const taxType = await this.prisma.taxType.create({
         data: {
           tenantId: user.tenantId,
@@ -103,6 +105,7 @@ export class TransactionTypeRulesService {
           effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
           payableAccountId: dto.payableAccountId ?? null,
           receivableAccountId: dto.receivableAccountId ?? null,
+          ...this.reminderData(dto),
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -125,6 +128,20 @@ export class TransactionTypeRulesService {
     const taxType = await this.findTaxType(user.tenantId, taxTypeId);
     try {
       await this.assertTaxAccounts(user.tenantId, dto);
+      this.assertReminder(
+        {
+          reminderEnabled: dto.reminderEnabled ?? taxType.reminderEnabled,
+          reminderDueOnLastDay:
+            dto.reminderDueOnLastDay ?? taxType.reminderDueOnLastDay,
+          reminderDueDay:
+            dto.reminderDueDay !== undefined
+              ? dto.reminderDueDay
+              : taxType.reminderDueDay,
+        },
+        dto.payableAccountId !== undefined
+          ? dto.payableAccountId
+          : taxType.payableAccountId,
+      );
       const updated = await this.prisma.taxType.update({
         where: { id_tenantId: { id: taxType.id, tenantId: user.tenantId } },
         data: {
@@ -146,6 +163,7 @@ export class TransactionTypeRulesService {
           ...(dto.receivableAccountId !== undefined
             ? { receivableAccountId: dto.receivableAccountId }
             : {}),
+          ...this.reminderData(dto),
           updatedByUserId: user.id,
         },
       });
@@ -193,6 +211,47 @@ export class TransactionTypeRulesService {
     }
   }
 
+  /** The reminder checks what is owed on the payable account, so it can't be on without one, and a
+   *  fixed due day is needed unless the tax is due on the last day. */
+  private assertReminder(
+    reminder: {
+      reminderEnabled?: boolean;
+      reminderDueOnLastDay?: boolean;
+      reminderDueDay?: number | null;
+    },
+    payableAccountId: string | null,
+  ) {
+    if (!reminder.reminderEnabled) return;
+    if (!payableAccountId) {
+      throw new BadRequestException(
+        'Choose the purchase tax account to turn on the payment reminder',
+      );
+    }
+    if (reminder.reminderDueOnLastDay === false && !reminder.reminderDueDay) {
+      throw new BadRequestException('Choose the day the tax is due');
+    }
+  }
+
+  private reminderData(dto: UpdateTaxTypeDto) {
+    return {
+      ...(dto.reminderEnabled !== undefined
+        ? { reminderEnabled: dto.reminderEnabled }
+        : {}),
+      ...(dto.reminderFrequency !== undefined
+        ? { reminderFrequency: dto.reminderFrequency }
+        : {}),
+      ...(dto.reminderDueDay !== undefined
+        ? { reminderDueDay: dto.reminderDueDay }
+        : {}),
+      ...(dto.reminderDueOnLastDay !== undefined
+        ? { reminderDueOnLastDay: dto.reminderDueOnLastDay }
+        : {}),
+      ...(dto.reminderDaysBefore !== undefined
+        ? { reminderDaysBefore: dto.reminderDaysBefore }
+        : {}),
+    };
+  }
+
   private async findTaxType(tenantId: string, id: string) {
     const taxType = await this.prisma.taxType.findFirst({
       where: { id, tenantId },
@@ -211,6 +270,11 @@ export class TransactionTypeRulesService {
     isActive: boolean;
     payableAccountId: string | null;
     receivableAccountId: string | null;
+    reminderEnabled: boolean;
+    reminderFrequency: TaxPayFrequency;
+    reminderDueDay: number | null;
+    reminderDueOnLastDay: boolean;
+    reminderDaysBefore: number;
   }) {
     return {
       id: taxType.id,
@@ -224,6 +288,11 @@ export class TransactionTypeRulesService {
       isActive: taxType.isActive,
       payableAccountId: taxType.payableAccountId,
       receivableAccountId: taxType.receivableAccountId,
+      reminderEnabled: taxType.reminderEnabled,
+      reminderFrequency: taxType.reminderFrequency,
+      reminderDueDay: taxType.reminderDueDay,
+      reminderDueOnLastDay: taxType.reminderDueOnLastDay,
+      reminderDaysBefore: taxType.reminderDaysBefore,
     };
   }
 

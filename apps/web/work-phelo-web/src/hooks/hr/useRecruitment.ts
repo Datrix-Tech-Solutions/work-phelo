@@ -146,6 +146,7 @@ interface CandidatesQuery {
   stageId?: string;
   page?: number;
   limit?: number;
+  enabled?: boolean;
 }
 
 export function useCandidates({
@@ -154,8 +155,10 @@ export function useCandidates({
   stageId,
   page = 1,
   limit = 10,
+  enabled = true,
 }: CandidatesQuery = {}) {
   return useQuery({
+    enabled,
     queryKey: [...CANDIDATES_KEY, 'list', { search, vacancyId, stageId, page, limit }],
     queryFn: async () => {
       const res = await api.get<RecruitmentCandidatePage>('/hr/recruitment/candidates', {
