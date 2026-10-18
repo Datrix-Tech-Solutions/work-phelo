@@ -6,7 +6,9 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { ShareJobOpeningModal } from './ShareJobOpeningModal';
 import { Badge, BadgeProps } from '@/components/atoms/Badge';
+import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/hr/usePermission';
 import {
@@ -22,6 +24,9 @@ import type { EmploymentType } from '@/types/hr';
 import type { JobOpeningStatus, RecruitmentVacancy } from '@/types/recruitment';
 
 const PAGE_SIZE = 8;
+const CAREERS_SITE_URL = (
+  process.env.NEXT_PUBLIC_CAREERS_SITE_URL ?? 'http://localhost:3001'
+).replace(/\/$/, '');
 
 const TYPE_LABELS: Record<EmploymentType, string> = {
   FULL_TIME: 'Full Time',
@@ -39,6 +44,7 @@ const STATUS_BADGES: Record<JobOpeningStatus, { label: string; variant: BadgePro
 export function JobOpeningsTable() {
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
+  const tenantId = useAuthStore((s) => s.user?.tenantId);
   const toast = useToast();
   const canCreate = usePermission(Permission.CREATE_RECRUITMENT_VACANCY);
   const canUpdate = usePermission(Permission.UPDATE_RECRUITMENT_VACANCY);
@@ -50,6 +56,7 @@ export function JobOpeningsTable() {
   const [closeTarget, setCloseTarget] = useState<RecruitmentVacancy | null>(null);
   const [publishTarget, setPublishTarget] = useState<RecruitmentVacancy | null>(null);
   const [reopenTarget, setReopenTarget] = useState<RecruitmentVacancy | null>(null);
+  const [shareTarget, setShareTarget] = useState<RecruitmentVacancy | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -64,6 +71,8 @@ export function JobOpeningsTable() {
   const openings = data?.items ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.meta.total ?? 0) / PAGE_SIZE));
   const basePath = `/${params.tenantSlug}/hr/recruitment/job-openings`;
+  const shareLink =
+    shareTarget && tenantId ? `${CAREERS_SITE_URL}/jobs/${tenantId}_${shareTarget.id}/apply` : '';
 
   const columns: Column<RecruitmentVacancy>[] = [
     {
@@ -129,6 +138,20 @@ export function JobOpeningsTable() {
       : []),
     ...(canUpdate && row.status === 'DRAFT'
       ? [{ label: 'Publish', onClick: () => setPublishTarget(row) }]
+      : []),
+    ...(row.status === 'OPEN' ? [{ label: 'Share', onClick: () => setShareTarget(row) }] : []),
+    ...(row.status === 'OPEN'
+      ? [
+          {
+            label: 'View on site',
+            onClick: () =>
+              window.open(
+                `${CAREERS_SITE_URL}/dashboard/jobs/${row.id}`,
+                '_blank',
+                'noopener,noreferrer',
+              ),
+          },
+        ]
       : []),
     ...(canClose && row.status === 'CLOSED'
       ? [{ label: 'Reopen', onClick: () => setReopenTarget(row) }]
@@ -197,6 +220,12 @@ export function JobOpeningsTable() {
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
+      />
+
+      <ShareJobOpeningModal
+        opening={shareTarget}
+        link={shareLink}
+        onClose={() => setShareTarget(null)}
       />
 
       <Modal
