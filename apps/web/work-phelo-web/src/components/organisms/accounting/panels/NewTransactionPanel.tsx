@@ -1,7 +1,7 @@
 'use client';
 
 import { HandHelping, Package, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Control,
   Controller,
@@ -75,6 +75,7 @@ import {
   useRestoreTradeEntry,
   useSourceLedger,
   useSubledgers,
+  useTaxOutstanding,
   useTaxTypes,
   useTransactionTypeRules,
 } from '@/hooks';
@@ -119,6 +120,9 @@ const EMPTY_CASH_LINE: CashLineValues = {
   amount: '',
   description: '',
 };
+
+/** The business role that pays a tax: the next field lists the tax types instead of entities. */
+const TAX_ROLE = 'TAX';
 
 type FormValues = {
   businessRole: string;
@@ -283,9 +287,12 @@ export function NewTransactionPanel({
   transactionType,
   onClose,
   draft,
+  taxToPay,
 }: {
   transactionType: TransactionTypeDefinition | null | undefined;
   onClose: () => void;
+  /** Opens a payment already set to pay this tax (its id): the tax picked and what is owed filled in. */
+  taxToPay?: string;
   /** Opens the form on a saved draft to redo it; the draft is deleted once the new one is saved. */
   draft?: DraftToRedo | null;
 }) {
@@ -299,6 +306,7 @@ export function NewTransactionPanel({
   // offset account can always be picked by hand in the form if no rule set one as default).
   const isCashbookType = transactionType?.postsToCashbook ?? false;
   const isCashbookReceipt = isCashbookType && isReceivable;
+  const canPayTax = isCashbookType && !isReceivable && !transactionType?.sourceTypeId;
   // A linked type is a credit note (receivable) / debit note (payable): it must reference
   // an original posted invoice/bill and reduces what is owed on it.
   const isLinked = !isCashbookType && (transactionType?.isLinked ?? false);
@@ -360,6 +368,7 @@ export function NewTransactionPanel({
     handleSubmit,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
@@ -468,14 +477,16 @@ export function NewTransactionPanel({
   // Entity Types list — and any of them works now, not just the old fixed enum names.
   const businessRoleOptions = useMemo<SearchSelectOption[]>(() => {
     const configured = transactionType?.businessRoles ?? [];
-    if (isCashbookType && configured.length === 0) {
-      return entityTypesData.map((t) => ({ value: t.name.trim().toUpperCase(), label: t.name }));
-    }
-    return configured.map((role) => ({
-      value: role,
-      label: entityTypesData.find((t) => t.name.trim().toUpperCase() === role)?.name ?? role,
-    }));
-  }, [transactionType, entityTypesData, isCashbookType]);
+    const roles =
+      isCashbookType && configured.length === 0
+        ? entityTypesData.map((t) => ({ value: t.name.trim().toUpperCase(), label: t.name }))
+        : configured.map((role) => ({
+            value: role,
+            label: entityTypesData.find((t) => t.name.trim().toUpperCase() === role)?.name ?? role,
+          }));
+    // A direct payment can also pay a tax.
+    return canPayTax ? [...roles, { value: TAX_ROLE, label: 'Taxes' }] : roles;
+  }, [transactionType, entityTypesData, isCashbookType, canPayTax]);
 
   const businessRole = useWatch({ control, name: 'businessRole' });
   const businessEntity = useWatch({ control, name: 'businessEntity' });
@@ -500,6 +511,9 @@ export function NewTransactionPanel({
       ? Number(manualAmount) || 0
       : derivedAmount
     : docSubtotal;
+  // A tax being paid is not one of the tenant's entities, so it is not recorded as the counterparty.
+  const hasCounterparty = (values: FormValues) =>
+    !!values.businessEntity && !!values.businessRole && values.businessRole !== TAX_ROLE;
   const resolveAmount = (values: FormValues) =>
     isDirectAmount ? Number(values.amount) : computeAmount(values.quantity, values.unitPrice);
 
@@ -546,7 +560,9 @@ export function NewTransactionPanel({
     reset({
       ...DEFAULTS,
       currency: baseCurrency,
-      businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
+      businessRole:
+        taxToPay && canPayTax ? TAX_ROLE : configuredRoles.length === 1 ? configuredRoles[0] : '',
+      businessEntity: taxToPay && canPayTax ? taxToPay : '',
       entryDate: today(),
       cashAccountId: rule?.defaultCashAccountId ?? '',
       offsetGlAccountId: rule?.lines?.[0]?.account?.id ?? '',
@@ -580,7 +596,7 @@ export function NewTransactionPanel({
 
   // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
   const openKey = isOpen
-    ? `${transactionType?.id ?? 'unknown'}:${draft?.kind === 'cashbook' ? draft.transaction.id : (draft?.document.id ?? '')}`
+    ? `${transactionType?.id ?? 'unknown'}:${draft?.kind === 'cashbook' ? draft.transaction.id : (draft?.document.id ?? '')}:${taxToPay ?? ''}`
     : null;
   const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
   // Once the redone entry is saved the old draft is gone; a further entry (multi-entry) must not
@@ -595,9 +611,48 @@ export function NewTransactionPanel({
   const { data: entities = [], isLoading: isLoadingEntities } = useSubledgers(
     businessRole ? { type: businessRole, status: 'ACTIVE' } : { status: 'ACTIVE' },
   );
+  const payingTax = canPayTax && businessRole === TAX_ROLE;
+  const { data: taxOwed = [], isLoading: isLoadingTaxOwed } = useTaxOutstanding({
+    enabled: isOpen && payingTax,
+  });
+  // Debit the tax's payable account for what is owed; the bank and the other details are filled in
+  // as for any payment.
+  const fillFromTax = (taxTypeId: string) => {
+    const owed = taxOwed.find((t) => t.taxTypeId === taxTypeId);
+    if (!owed) return;
+    setValue('cashLines.0.glAccountId', owed.payableAccountId);
+    setValue('cashLines.0.useQtyPrice', false);
+    setValue('cashLines.0.amount', owed.amountOutstanding);
+    setValue('currency', owed.currency);
+    if (!getValues('description')) setValue('description', `${owed.name} payment`);
+  };
+  // Opened to pay a particular tax: fill it in once what is owed has loaded, once per opening.
+  const filledTaxFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isOpen || !taxToPay || !canPayTax) {
+      filledTaxFor.current = null;
+      return;
+    }
+    const key = `${openKey}`;
+    if (filledTaxFor.current === key || !taxOwed.some((t) => t.taxTypeId === taxToPay)) return;
+    filledTaxFor.current = key;
+    fillFromTax(taxToPay);
+    // fillFromTax only reads the form and taxOwed, which are what this waits on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, taxToPay, canPayTax, taxOwed, openKey]);
+
   const entityOptions = useMemo<SearchSelectOption[]>(
-    () => entities.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}` })),
-    [entities],
+    () =>
+      payingTax
+        ? taxOwed.map((t) => ({
+            value: t.taxTypeId,
+            label: `${t.code} — ${t.name}`,
+            sublabel: `${t.currency} ${Number(t.amountOutstanding).toLocaleString('en-GB', {
+              minimumFractionDigits: 2,
+            })} owed${t.dueDate ? ` · due ${t.dueDate}` : ''}`,
+          }))
+        : entities.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}` })),
+    [entities, payingTax, taxOwed],
   );
 
   // A linked type picks the entity's open, posted invoice (receivable) / bill (payable) it
@@ -813,10 +868,8 @@ export function NewTransactionPanel({
             settlementMethod: values.settlementMethod,
             reference: values.reference || undefined,
             description: values.description || transactionType.name,
-            counterpartyType:
-              values.businessEntity && values.businessRole ? values.businessRole : null,
-            counterpartyId:
-              values.businessEntity && values.businessRole ? values.businessEntity : null,
+            counterpartyType: hasCounterparty(values) ? values.businessRole : null,
+            counterpartyId: hasCounterparty(values) ? values.businessEntity : null,
             lines: usesLines
               ? values.cashLines.map((line) => ({
                   kind: line.kind,
@@ -895,7 +948,7 @@ export function NewTransactionPanel({
             currency: values.currency,
             transactionDate: values.entryDate || today(),
             settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
-            ...(values.businessEntity && values.businessRole
+            ...(hasCounterparty(values)
               ? { counterpartyType: values.businessRole, counterpartyId: values.businessEntity }
               : {}),
             reference: values.reference || undefined,
@@ -1296,18 +1349,24 @@ export function NewTransactionPanel({
                     control={control}
                     render={({ field }) => (
                       <SearchSelect
-                        label="Business Entity"
+                        label={payingTax ? 'Tax Type' : 'Business Entity'}
                         placeholder={
                           !businessRole
                             ? 'Select a role first…'
-                            : isLoadingEntities
+                            : (payingTax ? isLoadingTaxOwed : isLoadingEntities)
                               ? 'Loading…'
-                              : 'Optional — select an entity…'
+                              : payingTax
+                                ? 'Select the tax to pay…'
+                                : 'Optional — select an entity…'
                         }
                         options={entityOptions}
                         value={field.value}
                         onChange={(value) => {
                           field.onChange(value);
+                          if (payingTax) {
+                            fillFromTax(value);
+                            return;
+                          }
                           const entity = entities.find((e) => e.id === value);
                           if (entity?.currency) setValue('currency', entity.currency);
                         }}

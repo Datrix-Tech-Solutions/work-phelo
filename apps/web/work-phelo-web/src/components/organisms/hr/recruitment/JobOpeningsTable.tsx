@@ -6,6 +6,7 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { ShareJobOpeningModal } from './ShareJobOpeningModal';
 import { Badge, BadgeProps } from '@/components/atoms/Badge';
 import { useAuthStore } from '@/store/auth.store';
@@ -25,7 +26,7 @@ import type { JobOpeningStatus, RecruitmentVacancy } from '@/types/recruitment';
 
 const PAGE_SIZE = 8;
 const CAREERS_SITE_URL = (
-  process.env.NEXT_PUBLIC_CAREERS_SITE_URL ?? 'http://localhost:3001'
+  process.env.NEXT_PUBLIC_CAREERS_SITE_URL ?? 'https://workphelodotcom.vercel.app'
 ).replace(/\/$/, '');
 
 const TYPE_LABELS: Record<EmploymentType, string> = {
@@ -41,6 +42,11 @@ const STATUS_BADGES: Record<JobOpeningStatus, { label: string; variant: BadgePro
   CLOSED: { label: 'Closed', variant: 'danger' },
 };
 
+const STATUS_OPTIONS = (Object.keys(STATUS_BADGES) as JobOpeningStatus[]).map((value) => ({
+  value,
+  label: STATUS_BADGES[value].label,
+}));
+
 export function JobOpeningsTable() {
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
@@ -52,6 +58,7 @@ export function JobOpeningsTable() {
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [status, setStatus] = useState<JobOpeningStatus | ''>('');
   const [page, setPage] = useState(1);
   const [closeTarget, setCloseTarget] = useState<RecruitmentVacancy | null>(null);
   const [publishTarget, setPublishTarget] = useState<RecruitmentVacancy | null>(null);
@@ -63,7 +70,12 @@ export function JobOpeningsTable() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useJobOpenings({ search: debouncedSearch, page, limit: PAGE_SIZE });
+  const { data, isLoading } = useJobOpenings({
+    search: debouncedSearch,
+    status: status || undefined,
+    page,
+    limit: PAGE_SIZE,
+  });
   const { mutate: closeJobOpening, isPending: isClosing } = useCloseJobOpening();
   const { mutate: publishJobOpening, isPending: isPublishing } = usePublishJobOpening();
   const { mutate: reopenJobOpening, isPending: isReopening } = useReopenJobOpening();
@@ -206,6 +218,20 @@ export function JobOpeningsTable() {
           setSearch(q);
           setPage(1);
         }}
+        extraFilters={
+          <SearchSelect
+            size="sm"
+            placeholder="Status"
+            allLabel="All statuses"
+            options={STATUS_OPTIONS}
+            value={status}
+            showAllOption
+            onChange={(v) => {
+              setStatus(v as JobOpeningStatus | '');
+              setPage(1);
+            }}
+          />
+        }
         {...(canCreate && {
           actionButton: {
             label: 'New Job Opening',

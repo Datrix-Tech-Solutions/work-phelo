@@ -47,8 +47,6 @@ export function useLogin() {
       return res.data;
     },
     onSuccess: async () => {
-      sessionStorage.removeItem('appraisal_reminder_shown');
-      sessionStorage.removeItem('leave_reminder_shown');
       sessionStorage.removeItem('mood_selector_shown');
       const user = await fetchMeWithProfileDetails(setPermissions);
       setUser(user);
@@ -82,8 +80,6 @@ export function useLogout() {
       await api.post('/auth/logout');
     },
     onSuccess: () => {
-      sessionStorage.removeItem('appraisal_reminder_shown');
-      sessionStorage.removeItem('leave_reminder_shown');
       sessionStorage.removeItem('mood_selector_shown');
       logout();
       queryClient.clear();

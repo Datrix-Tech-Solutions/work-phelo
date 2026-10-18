@@ -5,7 +5,7 @@ import type { PayrollGroup, PayrollGroupInput } from '@/lib/payroll-groups';
 const KEY = ['payroll', 'groups'];
 
 /** The payroll groups: sets of employees paid the same way. */
-export function usePayrollGroups() {
+export function usePayrollGroups(options?: { enabled?: boolean }) {
   const queryClient = useQueryClient();
   // Waits for the refreshed list, so a saved group is there when the save resolves.
   const refresh = () => queryClient.invalidateQueries({ queryKey: KEY });
@@ -16,6 +16,7 @@ export function usePayrollGroups() {
       const res = await api.get<PayrollGroup[]>('/hr/payroll-groups');
       return res.data;
     },
+    enabled: options?.enabled,
   });
 
   /** Creates the group, or updates it when the input has an id. */
