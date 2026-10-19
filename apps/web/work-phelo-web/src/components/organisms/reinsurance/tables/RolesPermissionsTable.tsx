@@ -36,7 +36,8 @@ export function RolesPermissionsTable() {
 
   const { data: sets = [], isLoading } = usePermissionSets({ enabled: canAccessRoles });
   const { mutate: deletePermissionSet, isPending: isDeleting } = useDeletePermissionSet();
-  const { mutate: assignPermissionSet, isPending: isAssigningMember } = useAssignPermissionSet();
+  const { mutateAsync: assignPermissionSet, isPending: isAssigningMember } =
+    useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemovingMember } = useRemovePermissionSet();
 
   const [deleteTarget, setDeleteTarget] = useState<PermissionSet | null>(null);
@@ -197,14 +198,18 @@ export function RolesPermissionsTable() {
           isLoadingMembers={isLoadingMembers}
           isAssigning={isAssigningMember}
           isRemoving={isRemovingMember}
-          onAssign={(userId) => {
-            assignPermissionSet(
-              { userId, permissionSetId: membersTarget.id },
-              {
-                onSuccess: () => toast.success('Member added to role'),
-                onError: (err) => toast.error(extractError(err, 'Failed to add member')),
-              },
-            );
+          onAssign={(userIds) => {
+            Promise.all(
+              userIds.map((userId) =>
+                assignPermissionSet({ userId, permissionSetId: membersTarget.id }),
+              ),
+            )
+              .then(() =>
+                toast.success(
+                  userIds.length > 1 ? 'Members added to role' : 'Member added to role',
+                ),
+              )
+              .catch((err) => toast.error(extractError(err, 'Failed to add member')));
           }}
           onRemove={(userId) => {
             removePermissionSet(

@@ -48,6 +48,56 @@ export interface PendingActions {
   endingWithinDays: number;
 }
 
+export type UpcomingEventType =
+  | 'BIRTHDAY'
+  | 'WORK_ANNIVERSARY'
+  | 'PROBATION_ENDS'
+  | 'CONTRACT_ENDS';
+
+export interface UpcomingEvent {
+  id: string;
+  type: UpcomingEventType;
+  employeeId: string;
+  employeeName: string;
+  department: string | null;
+  avatarUrl: string | null;
+  /** The day it happens, as YYYY-MM-DD. */
+  date: string;
+  /** Years of service for an anniversary; null for the other types. */
+  years: number | null;
+}
+
+export interface OutTodayEntry {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string | null;
+  avatarUrl: string | null;
+  leaveType: string;
+  /** Last day of the leave, as YYYY-MM-DD. */
+  endDate: string;
+}
+
+export interface PayrollStatusRun {
+  id: string;
+  /** The payslip type the run is for; "legacy" for runs made by the old calculators. */
+  payslipKey: string;
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+  totalNet: number;
+  employees: number;
+}
+
+export interface PayrollStatus {
+  /** The most recent period that has a run, or null when none exists yet. */
+  period: { month: number; year: number } | null;
+  currency: string;
+  runs: PayrollStatusRun[];
+}
+
+/** How far ahead the upcoming-events list looks, and how many events it returns. */
+const UPCOMING_EVENT_DAYS = 30;
+const UPCOMING_EVENT_LIMIT = 12;
+
 type DayRange = { from: Date; to: Date };
 type KpiEmployee = {
   id: string;
@@ -808,6 +858,190 @@ export class DashboardService {
       birthdays: upcoming.map((e, index) => ({
         ...e,
         avatarUrl: avatarUrls[index],
+      })),
+    };
+  }
+
+  /** The next occurrence of a yearly date (month and day of `origin`) on or after `today`. */
+  private nextYearly(origin: Date, today: Date): Date {
+    const month = origin.getUTCMonth();
+    const day = origin.getUTCDate();
+    let next = new Date(Date.UTC(today.getUTCFullYear(), month, day));
+    if (next < today) {
+      next = new Date(Date.UTC(today.getUTCFullYear() + 1, month, day));
+    }
+    return next;
+  }
+
+  async getUpcomingEvents(tenantId: string): Promise<{
+    events: UpcomingEvent[];
+    withinDays: number;
+  }> {
+    const today = startOfDay(dayKey(new Date()));
+    const horizon = new Date(today.getTime() + UPCOMING_EVENT_DAYS * DAY_MS);
+    const stillEmployed = { not: 'OFFBOARDED' as const };
+
+    const person = {
+      id: true,
+      firstName: true,
+      lastName: true,
+      avatarUrl: true,
+      department: { select: { name: true } },
+    } as const;
+
+    const [yearly, probations, contracts] = await Promise.all([
+      this.prisma.employee.findMany({
+        where: { tenantId, employmentStatus: { in: ['ACTIVE', 'PROBATION'] } },
+        select: { ...person, dateOfBirth: true, hireDate: true },
+      }),
+      this.prisma.employee.findMany({
+        where: {
+          tenantId,
+          employmentStatus: 'PROBATION',
+          probationEndsAt: { gte: today, lte: horizon },
+        },
+        select: { ...person, probationEndsAt: true },
+      }),
+      this.prisma.employee.findMany({
+        where: {
+          tenantId,
+          employmentStatus: stillEmployed,
+          contractEndDate: { gte: today, lte: horizon },
+        },
+        select: { ...person, contractEndDate: true },
+      }),
+    ]);
+
+    type Row = Omit<UpcomingEvent, 'avatarUrl'> & { avatar: string | null };
+    const rows: Row[] = [];
+    const push = (
+      e: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        avatarUrl: string | null;
+        department: { name: string } | null;
+      },
+      type: UpcomingEventType,
+      date: Date,
+      years: number | null = null,
+    ) =>
+      rows.push({
+        id: `${type}:${e.id}`,
+        type,
+        employeeId: e.id,
+        employeeName: `${e.firstName} ${e.lastName}`,
+        department: e.department?.name ?? null,
+        avatar: e.avatarUrl,
+        date: dayKey(date),
+        years,
+      });
+
+    for (const e of yearly) {
+      if (e.dateOfBirth) {
+        const next = this.nextYearly(e.dateOfBirth, today);
+        if (next <= horizon) push(e, 'BIRTHDAY', next);
+      }
+      const anniversary = this.nextYearly(e.hireDate, today);
+      const years = anniversary.getUTCFullYear() - e.hireDate.getUTCFullYear();
+      // The hire day itself is not an anniversary.
+      if (years >= 1 && anniversary <= horizon) {
+        push(e, 'WORK_ANNIVERSARY', anniversary, years);
+      }
+    }
+    for (const e of probations) push(e, 'PROBATION_ENDS', e.probationEndsAt!);
+    for (const e of contracts) push(e, 'CONTRACT_ENDS', e.contractEndDate!);
+
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    const top = rows.slice(0, UPCOMING_EVENT_LIMIT);
+    const avatarUrls = await this.avatarUrlResolver.resolveMany(
+      top.map((r) => r.avatar),
+    );
+
+    return {
+      events: top.map(({ avatar: _avatar, ...rest }, index) => ({
+        ...rest,
+        avatarUrl: avatarUrls[index] ?? null,
+      })),
+      withinDays: UPCOMING_EVENT_DAYS,
+    };
+  }
+
+  async getOutToday(tenantId: string): Promise<{ out: OutTodayEntry[] }> {
+    const today = startOfDay(dayKey(new Date()));
+
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: {
+        tenantId,
+        status: 'APPROVED',
+        startDate: { lte: today },
+        endDate: { gte: today },
+        employee: { employmentStatus: { not: 'OFFBOARDED' } },
+      },
+      orderBy: [{ endDate: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        endDate: true,
+        leaveType: { select: { name: true } },
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    const avatarUrls = await this.avatarUrlResolver.resolveMany(
+      requests.map((r) => r.employee.avatarUrl),
+    );
+
+    return {
+      out: requests.map((r, index) => ({
+        id: r.id,
+        employeeId: r.employee.id,
+        employeeName: `${r.employee.firstName} ${r.employee.lastName}`,
+        department: r.employee.department?.name ?? null,
+        avatarUrl: avatarUrls[index] ?? null,
+        leaveType: r.leaveType.name,
+        endDate: dayKey(r.endDate),
+      })),
+    };
+  }
+
+  async getPayrollStatus(tenantId: string): Promise<PayrollStatus> {
+    const latest = await this.prisma.payrollRun.findFirst({
+      where: { tenantId },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+      select: { month: true, year: true },
+    });
+    if (!latest) return { period: null, currency: 'GHS', runs: [] };
+
+    const runs = await this.prisma.payrollRun.findMany({
+      where: { tenantId, month: latest.month, year: latest.year },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        payslipKey: true,
+        status: true,
+        totalNet: true,
+        payrollCurrency: true,
+        _count: { select: { items: true } },
+      },
+    });
+
+    return {
+      period: latest,
+      currency: runs[0]?.payrollCurrency ?? 'GHS',
+      runs: runs.map((r) => ({
+        id: r.id,
+        payslipKey: r.payslipKey,
+        status: r.status,
+        totalNet: Number(r.totalNet),
+        employees: r._count.items,
       })),
     };
   }

@@ -190,7 +190,6 @@ export default function ChartOfAccountsPage() {
               onSearchChange={setSearch}
               status={status}
               onStatusChange={setStatus}
-              onImport={() => setImportDialogOpen(true)}
               onUseTemplate={() => setTemplateDialogOpen(true)}
               onClearUnused={() => setClearUnusedOpen(true)}
               registerActions={[
@@ -344,6 +343,10 @@ export default function ChartOfAccountsPage() {
         classifications={classifications}
         groups={groups}
         existingAccounts={glAccountsData ?? []}
+        onImportCustom={() => {
+          setTemplateDialogOpen(false);
+          setImportDialogOpen(true);
+        }}
       />
       <BulkImportGLAccountsDialog
         isOpen={importDialogOpen}

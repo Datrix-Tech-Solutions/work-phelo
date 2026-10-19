@@ -16,6 +16,7 @@ import {
 } from '../sales-targets/sales-targets.service';
 import {
   DashboardGrowthPoint,
+  DashboardRep,
   DashboardRevenueByProduct,
   DashboardSalesPersonnel,
   DashboardStage,
@@ -66,12 +67,16 @@ export class DashboardService {
     const current = toRange(days.from, days.to);
     const previous = toRange(prevDays.from, prevDays.to);
 
-    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const prospectScope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
 
     const [
       currentFunnel,
@@ -90,7 +95,7 @@ export class DashboardService {
       this.pipeline(user.tenantId, prospectScope, current),
       this.clientCounts(user.tenantId, clientScope, current),
       this.achievedRevenue(user, clientScope, days, prevDays),
-      this.targetProgress(user, days),
+      this.targetProgress(user, days, this.repFor(user, query.userId)),
     ]);
 
     const wonNow = won.filter((deal) => inRange(deal.at, current));
@@ -138,12 +143,16 @@ export class DashboardService {
       }
       return { from, to };
     });
-    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const prospectScope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
 
     return Promise.all(
       ranges.map(async ({ from, to }) => {
@@ -170,9 +179,11 @@ export class DashboardService {
     user: RequestUser,
     query: QueryDashboardRevenueDto,
   ): Promise<DashboardRevenueByProduct> {
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
     const [invoices, currency] = await Promise.all([
       this.targets.invoiceRows(user.tenantId, clientScope),
       this.targets.baseCurrency(user),
@@ -232,12 +243,16 @@ export class DashboardService {
     const range = toRange(query.fromDate, query.toDate);
     const days: DayRange = { from: query.fromDate, to: query.toDate };
     const tenantId = user.tenantId;
-    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const prospectScope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
     const expectedCloseDate = { gte: range.from, lt: range.to };
 
     const [
@@ -355,6 +370,34 @@ export class DashboardService {
         };
       }),
     };
+  }
+
+  /** Active reps the dashboard can be filtered to: everyone with view-all, otherwise only the caller. */
+  async reps(user: RequestUser): Promise<DashboardRep[]> {
+    const everyone =
+      this.canViewAll(user, P.PROSPECTS_VIEW_ALL) ||
+      this.canViewAll(user, P.CLIENTS_VIEW_ALL);
+    const reps = await this.assignees.activeUsers(user.tenantId);
+    return reps
+      .filter((rep) => everyone || rep.userId === user.id)
+      .map(({ userId, name }) => ({ userId, name }));
+  }
+
+  /**
+   * The rep a request is for. Callers without the dashboard permission only have the personal
+   * dashboard, so whatever they ask for is narrowed to themselves.
+   */
+  private repFor(user: RequestUser, userId?: string) {
+    return this.canViewAll(user, P.DASHBOARD_VIEW) ? userId : user.id;
+  }
+
+  /**
+   * Which records the caller sees: those of the picked rep when they may see everyone's,
+   * otherwise only their own, whatever rep was asked for.
+   */
+  private scopeFor(user: RequestUser, permission: string, userId?: string) {
+    if (!this.canViewAll(user, permission)) return { assignedUserId: user.id };
+    return userId ? { assignedUserId: userId } : {};
   }
 
   private canViewAll(user: RequestUser, permission: string) {
@@ -582,9 +625,15 @@ export class DashboardService {
    * Targets running during the period, added up. A rep's all-products target already includes
    * their product targets, so a rep with one counts only that; otherwise their product targets add up.
    */
-  private async targetProgress(user: RequestUser, days: DayRange) {
+  private async targetProgress(
+    user: RequestUser,
+    days: DayRange,
+    userId?: string,
+  ) {
     const rows = await this.targets.listOverlapping(user, days.from, days.to);
-    return this.sumTargets(rows);
+    return this.sumTargets(
+      userId ? rows.filter((row) => row.userId === userId) : rows,
+    );
   }
 
   /**
@@ -607,8 +656,8 @@ export class DashboardService {
       .map((userId) => ({ userId, name: names.get(userId) ?? 'Unknown rep' }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const selected = query.userId
-      ? rows.filter((row) => row.userId === query.userId)
+    const selected = this.repFor(user, query.userId)
+      ? rows.filter((row) => row.userId === this.repFor(user, query.userId))
       : rows;
     return { ...this.sumTargets(selected), reps };
   }

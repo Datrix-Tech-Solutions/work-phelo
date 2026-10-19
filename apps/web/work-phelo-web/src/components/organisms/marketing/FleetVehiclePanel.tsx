@@ -72,7 +72,9 @@ const INITIAL_STATUS_OPTIONS = [
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">{children}</p>
+    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest -mb-1">
+      {children}
+    </p>
   );
 }
 
@@ -304,21 +306,20 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
       <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <SectionTitle>Vehicle Details</SectionTitle>
 
-        <SearchSelect
-          label="Vehicle Type"
-          placeholder="Select vehicle type"
-          options={VEHICLE_TYPE_OPTIONS}
-          value={values.vehicleType}
-          onChange={(v) => set('vehicleType', v)}
-          error={errors.vehicleType}
-        />
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {textField('make', 'Make', 'eg; Toyota')}
           {textField('model', 'Model', 'eg; Hilux')}
+          <SearchSelect
+            label="Vehicle Type"
+            placeholder="Select vehicle type"
+            options={VEHICLE_TYPE_OPTIONS}
+            value={values.vehicleType}
+            onChange={(v) => set('vehicleType', v)}
+            error={errors.vehicleType}
+          />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {numberField('yearOfRegistration', 'Year of Registration', 'eg; 2022')}
           <SearchSelect
             label="Fuel Type"
@@ -328,15 +329,14 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
             onChange={(v) => set('fuelType', v)}
             error={errors.fuelType}
           />
+          {numberField('currentMileage', 'Current Mileage (km) — optional', 'eg; 45000')}
         </div>
-
-        {numberField('currentMileage', 'Current Mileage (km) — optional', 'eg; 45000')}
 
         <SectionTitle>Insurance — optional</SectionTitle>
 
         <div className="grid grid-cols-2 gap-4">
           <DatePicker
-            label="Start Date"
+            label="Date Insured"
             value={values.insuranceStartDate}
             onChange={(v) => set('insuranceStartDate', v)}
             error={errors.insuranceStartDate}
@@ -375,16 +375,15 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
 
         <SectionTitle>Assignment</SectionTitle>
 
-        <SearchSelect
-          label="Branch"
-          placeholder="Select branch"
-          options={branchOptions}
-          value={values.branchId}
-          onChange={(v) => set('branchId', v)}
-        />
-
-        {!isEdit && (
-          <>
+        <div className="grid grid-cols-2 gap-4">
+          <SearchSelect
+            label="Branch"
+            placeholder="Select branch"
+            options={branchOptions}
+            value={values.branchId}
+            onChange={(v) => set('branchId', v)}
+          />
+          {!isEdit && (
             <SearchSelect
               label="Assigned Driver"
               placeholder="Select driver"
@@ -393,6 +392,11 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
               onChange={(v) => set('assignedDriverId', v)}
               disabled={values.status === 'MAINTENANCE'}
             />
+          )}
+        </div>
+
+        {!isEdit && (
+          <>
             {options && driverOptions.length === 0 && (
               <p className="text-xs text-amber-600 -mt-1">
                 No transport officers yet. Add drivers under Transport Officers first.

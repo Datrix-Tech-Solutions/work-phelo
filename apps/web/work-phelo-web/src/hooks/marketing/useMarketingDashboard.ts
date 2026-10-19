@@ -4,15 +4,23 @@ import { api } from '@/lib/api';
 import { dashboardRanges } from '@/lib/dashboardPeriod';
 import type { MarketingDashboardSummary } from '@/types/marketing';
 
-/** Marketing dashboard figures for the period filter, with the previous period for trends. */
-export function useMarketingDashboard(period: Period, year: number) {
+/** Marketing dashboard figures for the period filter, with the previous period for trends; for one rep when `userId` is given. */
+export function useMarketingDashboard(period: Period, year: number, userId?: string) {
   const { fromDate, toDate, prevFromDate, prevToDate } = dashboardRanges(period, year);
 
   return useQuery({
-    queryKey: ['marketing', 'dashboard', fromDate, toDate, prevFromDate, prevToDate] as const,
+    queryKey: [
+      'marketing',
+      'dashboard',
+      fromDate,
+      toDate,
+      prevFromDate,
+      prevToDate,
+      userId ?? null,
+    ] as const,
     queryFn: async () => {
       const res = await api.get<MarketingDashboardSummary>('/marketing/dashboard/summary', {
-        params: { fromDate, toDate, prevFromDate, prevToDate },
+        params: { fromDate, toDate, prevFromDate, prevToDate, ...(userId ? { userId } : {}) },
       });
       return res.data;
     },

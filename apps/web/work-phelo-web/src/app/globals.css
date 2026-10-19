@@ -1214,3 +1214,14 @@ body {
     stroke-dashoffset: 0;
   }
 }
+
+/* Tints the cards inside it toward --hue, so a dashboard that mixes modules' cards can tell
+   them apart. cardClass() reads these two tokens, so nothing inside needs to know about it. */
+.section-hue {
+  --glass-subtle: color-mix(in srgb, var(--hue) 3%, rgba(255, 255, 255, 0.3));
+  --glass-border: color-mix(in srgb, var(--hue) 9%, rgba(255, 255, 255, 0.55));
+}
+:root[data-theme='dark'] .section-hue {
+  --glass-subtle: color-mix(in srgb, var(--hue) 4%, rgba(255, 255, 255, 0.05));
+  --glass-border: color-mix(in srgb, var(--hue) 11%, rgba(255, 255, 255, 0.16));
+}

@@ -1563,6 +1563,12 @@ export interface MarketingSalesPersonnel {
   reps: MarketingSalesRep[];
 }
 
+/** A sales rep the Marketing dashboard can be filtered to. */
+export interface MarketingDashboardRep {
+  userId: string;
+  name: string;
+}
+
 /** Target progress for a period, optionally for one rep, plus the reps who have a target in it. */
 export interface MarketingTargetsOverview {
   count: number;

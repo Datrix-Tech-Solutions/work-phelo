@@ -21,13 +21,14 @@ const count = (value: number | null) => (value === null ? '' : String(value));
 
 interface ClientsProspectsChartProps {
   period: Period;
+  userId?: string;
   className?: string;
 }
 
 /** New prospects against new clients as paired bars, for the ranges that suit the period filter. */
-export function ClientsProspectsChart({ period, className }: ClientsProspectsChartProps) {
+export function ClientsProspectsChart({ period, userId, className }: ClientsProspectsChartProps) {
   const buckets = useMemo(() => periodSeriesBuckets(period, { calendar: true }), [period]);
-  const { data, isLoading, isError } = useMarketingGrowth(buckets);
+  const { data, isLoading, isError } = useMarketingGrowth(buckets, userId);
 
   return (
     <PeriodBarChart
