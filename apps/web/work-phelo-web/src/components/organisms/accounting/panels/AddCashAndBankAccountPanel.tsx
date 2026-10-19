@@ -21,10 +21,6 @@ interface AddCashAndBankAccountPanelProps {
   onClose: () => void;
 }
 
-/** Code of the seeded "Current Assets" classification — bank, cash and mobile money accounts
- *  all sit under it. See STANDARD_ACCOUNT_HIERARCHY in accounting-master-data.service.ts. */
-const CURRENT_ASSETS_CLASSIFICATION_CODE = '1100';
-
 type FormValues = {
   glAccountId: string;
   name: string;
@@ -54,8 +50,7 @@ const KIND_OPTIONS: SearchSelectOption[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-/** Creates a Cash/Bank account record and links it to an existing leaf account under Current
- *  Assets. The leaf account is picked, not created here, so it doesn't matter which group it was
+/** Creates a Cash/Bank account record and links it to an existing leaf asset account. The leaf account is picked, not created here, so it doesn't matter which group it was
  *  filed under — only that it is an active, posting-enabled account that nothing else is using. */
 export function AddCashAndBankAccountPanel({ isOpen, onClose }: AddCashAndBankAccountPanelProps) {
   const toast = useToast();
@@ -72,12 +67,7 @@ export function AddCashAndBankAccountPanel({ isOpen, onClose }: AddCashAndBankAc
     const parents = new Set(glAccounts.map((g) => g.parentAccountId).filter(Boolean));
     return glAccounts
       .filter(
-        (g) =>
-          g.status === 'ACTIVE' &&
-          g.allowPosting &&
-          g.classification?.code === CURRENT_ASSETS_CLASSIFICATION_CODE &&
-          !parents.has(g.id) &&
-          !linked.has(g.id),
+        (g) => g.status === 'ACTIVE' && g.allowPosting && !parents.has(g.id) && !linked.has(g.id),
       )
       .map((g) => ({ value: g.id, label: `${g.code} – ${g.name}` }));
   }, [glAccounts, cashAccounts]);
@@ -127,7 +117,7 @@ export function AddCashAndBankAccountPanel({ isOpen, onClose }: AddCashAndBankAc
       isOpen={isOpen}
       onClose={handleClose}
       title="Add Cash/Bank Account"
-      description="Link a bank, cash or mobile money account to a leaf account under Current Assets so it can be used for payments and receipts."
+      description="Link a bank, cash or mobile money account to a leaf asset account so it can be used for payments and receipts."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -148,7 +138,7 @@ export function AddCashAndBankAccountPanel({ isOpen, onClose }: AddCashAndBankAc
             render={({ field }) => (
               <SearchSelect
                 label="Linked Account"
-                placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select a Current Assets account…'}
+                placeholder={isLoadingGLAccounts ? 'Loading…' : 'Select an asset account…'}
                 options={glAccountOptions}
                 value={field.value}
                 onChange={(value) => {
@@ -165,7 +155,7 @@ export function AddCashAndBankAccountPanel({ isOpen, onClose }: AddCashAndBankAc
           />
           {!isLoadingGLAccounts && glAccountOptions.length === 0 && (
             <span className="text-xs text-amber-700">
-              No free account under Current Assets. Create one in the Chart of Accounts first.
+              No free asset account. Create one in the Chart of Accounts first.
             </span>
           )}
         </div>

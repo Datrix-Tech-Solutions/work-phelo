@@ -245,6 +245,14 @@ export interface CashFlowStatementReport {
   netChangeInCash: string;
   openingCash: string;
   closingCash: string;
+  /** The three sections against what the cash accounts actually did; a gap means a cash account
+   *  isn't linked/tagged as cash, or an account is tagged wrongly. */
+  reconciliation: {
+    netChangeInCash: string;
+    cashMovement: string;
+    difference: string;
+    isReconciled: boolean;
+  };
 }
 
 export interface QueryGLAccountsParams {
@@ -1974,13 +1982,19 @@ export interface AccountingPartyStatement extends AccountingAgingReport {
  *  itself. Untagged: inherits from the level above, or defaults to Operating for an
  *  asset/liability/equity account (a revenue/expense account is simply left out of the
  *  statement's per-account lines — it's already inside Net Income). */
-export type CashFlowCategory = 'OPERATING' | 'INVESTING' | 'FINANCING' | 'EXCLUDED';
+export type CashFlowCategory =
+  | 'OPERATING'
+  | 'INVESTING'
+  | 'FINANCING'
+  | 'EXCLUDED'
+  | 'CASH_EQUIVALENT';
 
 export const CASH_FLOW_CATEGORY_OPTIONS: { value: CashFlowCategory; label: string }[] = [
   { value: 'OPERATING', label: 'Operating' },
   { value: 'INVESTING', label: 'Investing' },
   { value: 'FINANCING', label: 'Financing' },
   { value: 'EXCLUDED', label: 'Excluded / Non-cash' },
+  { value: 'CASH_EQUIVALENT', label: 'Cash & Cash Equivalents' },
 ];
 
 export interface AccountClassification {

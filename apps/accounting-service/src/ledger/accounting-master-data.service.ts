@@ -10,6 +10,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   FiscalPeriodStatus,
   GLAccountCategory,
+  PostingDirection,
   JournalStatus,
   NormalBalance,
   Prisma,
@@ -203,6 +204,7 @@ const STANDARD_TRANSACTION_TYPES = [
     code: 'RCPT',
     name: 'Receipt',
     category: TransactionTypeCategory.RECEIVABLE,
+    businessRoles: ['CUSTOMER'],
     description: 'Money received into a cash/bank account.',
     postsToCashbook: true,
   },
@@ -210,8 +212,35 @@ const STANDARD_TRANSACTION_TYPES = [
     code: 'PMNT',
     name: 'Payment',
     category: TransactionTypeCategory.PAYABLE,
+    businessRoles: ['VENDOR'],
     description: 'Money paid out of a cash/bank account.',
     postsToCashbook: true,
+  },
+  {
+    code: 'CRE-SAL',
+    name: 'Credit Sale',
+    category: TransactionTypeCategory.RECEIVABLE,
+    businessRoles: ['CUSTOMER'],
+    mainLine: {
+      direction: PostingDirection.CR,
+      scopes: [{ category: GLAccountCategory.REVENUE }],
+    },
+    description:
+      'A sale made on credit, to be collected from the customer later.',
+  },
+  {
+    code: 'CRE-PUR',
+    name: 'Credit Purchase',
+    category: TransactionTypeCategory.PAYABLE,
+    businessRoles: ['VENDOR'],
+    mainLine: {
+      direction: PostingDirection.DR,
+      scopes: [
+        { category: GLAccountCategory.EXPENSE },
+        { category: GLAccountCategory.ASSET },
+      ],
+    },
+    description: 'A purchase made on credit, to be paid to the supplier later.',
   },
   {
     code: 'TRNSF',
@@ -950,18 +979,8 @@ export class AccountingMasterDataService {
     query: QueryAccountHierarchyDto,
   ) {
     const tenantId = user.tenantId;
-    // Seed the standard hierarchy the first time a tenant has none of it yet — same
-    // lazy pattern as listTransactionTypes, checked by isSystemTemplate rather than an
-    // empty table, so a tenant that already created their own classifications still
-    // gets the standard ones too. Fully editable/deletable afterwards either way.
-    const hasSeeded = await this.prisma.accountClassification.findFirst({
-      where: { tenantId, isSystemTemplate: true },
-      select: { id: true },
-    });
-    if (!hasSeeded) {
-      await this.seedStandardAccountHierarchy(user);
-    }
-
+    // Nothing is seeded here: a tenant starts with only the account types and builds the
+    // hierarchy from a template, an import, or by hand.
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
     const where: Prisma.AccountClassificationWhereInput = {
@@ -1980,6 +1999,29 @@ export class AccountingMasterDataService {
           description: template.description,
           postsToCashbook:
             'postsToCashbook' in template ? template.postsToCashbook : false,
+          businessRoles:
+            'businessRoles' in template ? [...template.businessRoles] : [],
+          // Only the main line is seeded; the control (receivable/payable) line and
+          // any tax lines depend on the tenant's own accounts, so the user adds them.
+          ...('mainLine' in template && {
+            rule: {
+              create: {
+                createdByUserId: user.id,
+                updatedByUserId: user.id,
+                lines: {
+                  create: {
+                    sequence: 1,
+                    direction: template.mainLine.direction,
+                    scopes: {
+                      create: template.mainLine.scopes.map((scope) => ({
+                        category: scope.category,
+                      })),
+                    },
+                  },
+                },
+              },
+            },
+          }),
           isSystemDefault: true,
           createdByUserId: user.id,
           updatedByUserId: user.id,

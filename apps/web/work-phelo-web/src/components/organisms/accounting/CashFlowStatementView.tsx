@@ -159,6 +159,15 @@ export function CashFlowStatementView() {
           </header>
 
           <div className="flex flex-col gap-6 p-4">
+            {!data.reconciliation.isReconciled && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                This statement does not reconcile to cash: the three sections come to{' '}
+                {data.reconciliation.netChangeInCash}, but the cash accounts moved by{' '}
+                {data.reconciliation.cashMovement} (difference {data.reconciliation.difference}).
+                Check that every cash, bank and overdraft account is linked in Cash and Bank or
+                tagged Cash &amp; Cash Equivalents, and that non-cash accounts are tagged correctly.
+              </div>
+            )}
             <ActivitySection
               title="Operating Activities"
               rows={[

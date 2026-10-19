@@ -94,7 +94,7 @@ export async function downloadGLAccountImportTemplate(
     'The "Classification Code" and "Parent Account Code" columns on the Accounts sheet can point at either an existing code or a new one you just added.',
     'Account Type must be one of: Asset, Liability, Equity, Revenue, Expense.',
     "A new parent account's classification must match the account type of the accounts filed under it.",
-    'Cash Flow Category is optional and must be one of: Operating, Investing, Financing, Excluded / Non-cash. Leave it blank to inherit from the level above (parent account, then classification, then the default for the account type).',
+    'Cash Flow Category is optional and must be one of: Operating, Investing, Financing, Excluded / Non-cash, Cash & Cash Equivalents. Leave it blank to inherit from the level above (parent account, then classification, then the default for the account type).',
   ].forEach((note) => notes.addRow([note]));
 
   const buffer = await workbook.xlsx.writeBuffer();

@@ -372,3 +372,81 @@ describe('PayrollIntegrationService settlement', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('PayrollIntegrationService.createAccountForRole', () => {
+  const user = { id: 'u-1', tenantId: 'tenant-1' } as RequestUser;
+
+  function buildForCreate(
+    classifications: { id: string; code: string; name: string }[],
+  ) {
+    const accountGroupCreate = jest
+      .fn()
+      .mockImplementation(({ data }: { data: { code: string } }) => ({
+        id: 'g-1',
+        ...data,
+      }));
+    const prisma = {
+      accountGroup: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: accountGroupCreate,
+      },
+      accountClassification: {
+        findMany: jest.fn().mockResolvedValue(classifications),
+      },
+      gLAccount: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(({ data }: { data: object }) => ({
+          id: 'a-1',
+          ...data,
+        })),
+      },
+    };
+    const setup = {
+      requireRole: jest.fn().mockReturnValue({
+        key: 'netPayPayable',
+        label: 'Net Pay Payable',
+        standardName: 'Net Pay Payable',
+        seedKey: 'net-pay-payable',
+      }),
+      setMapping: jest.fn().mockResolvedValue({}),
+    };
+    const service = new PayrollIntegrationService(
+      prisma as never,
+      {} as never,
+      setup as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, prisma };
+  }
+
+  it("builds the group under the tenant's own liability classification, whatever its code", async () => {
+    const { service, prisma } = buildForCreate([
+      { id: 'c-1', code: '2400', name: 'Non-Current Liabilities' },
+      { id: 'c-2', code: '2300', name: 'Current Liabilities' },
+    ]);
+
+    await service.createAccountForRole(user, 'netPayPayable');
+
+    expect(prisma.accountGroup.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        classificationId: 'c-2',
+        code: '2310',
+      }) as unknown,
+    });
+    expect(prisma.gLAccount.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ code: '2311' }) as unknown,
+    });
+  });
+
+  it('asks for a classification of the right type instead of assuming one', async () => {
+    const { service } = buildForCreate([]);
+
+    await expect(
+      service.createAccountForRole(user, 'netPayPayable'),
+    ).rejects.toThrow('no liability classification');
+  });
+});
