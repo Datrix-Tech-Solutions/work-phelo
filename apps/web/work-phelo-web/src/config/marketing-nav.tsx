@@ -12,9 +12,11 @@ import {
   Truck,
   SquareUser,
   UserKey,
+  LayoutPanelTop,
 } from 'lucide-react';
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
+const SIcon = () => <LayoutPanelTop className="w-5 h-5" />;
 
 const ProspectIcon = () => <Handshake className="w-5 h-5" />;
 const AppointmentIcon = () => <ClipboardClock className="w-5 h-5" />;
@@ -71,7 +73,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
       {
         key: 'crm-dashboard',
         label: 'CRM Dashboard',
-        icon: <DashboardIcon />,
+        icon: <SIcon />,
         href: 'crm-dashboard',
         enabled: true,
         active: true,
@@ -116,7 +118,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
       {
         key: 'transport-dashboard',
         label: 'Transport Dashboard',
-        icon: <DashboardIcon />,
+        icon: <SIcon />,
         href: 'transport-dashboard',
         enabled: true,
         active: true,
