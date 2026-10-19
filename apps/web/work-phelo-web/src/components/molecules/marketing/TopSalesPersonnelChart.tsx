@@ -59,12 +59,18 @@ const figure = (rep: MarketingSalesRep, metric: Metric): number | null => {
 interface TopSalesPersonnelChartProps {
   period: Period;
   year: number;
+  userId?: string;
   className?: string;
 }
 
 /** The top five sales reps for the period, ranked on a metric the viewer switches. */
-export function TopSalesPersonnelChart({ period, year, className }: TopSalesPersonnelChartProps) {
-  const { data, isLoading, isError } = useMarketingSalesPersonnel(period, year);
+export function TopSalesPersonnelChart({
+  period,
+  year,
+  userId,
+  className,
+}: TopSalesPersonnelChartProps) {
+  const { data, isLoading, isError } = useMarketingSalesPersonnel(period, year, userId);
   const [metric, setMetric] = useState<Metric>('achieved');
   const [hovered, setHovered] = useState<number | null>(null);
   const [plotRef, plotSize] = useElementSize<HTMLDivElement>();

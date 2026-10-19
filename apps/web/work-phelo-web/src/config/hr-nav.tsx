@@ -41,6 +41,14 @@ export const HR_NAV_GROUPS: NavGroup[] = [
     label: 'Overview',
     items: [
       {
+        key: 'hr-dashboard',
+        label: 'Dashboard',
+        icon: <HrDashboardIcon />,
+        href: 'dashboard',
+        enabled: true,
+        active: true,
+      },
+      {
         key: 'dashboard',
         label: 'Home',
         icon: <DashboardIcon />,
@@ -48,14 +56,6 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
         exact: true,
-      },
-      {
-        key: 'hr-dashboard',
-        label: 'Dashboard',
-        icon: <HrDashboardIcon />,
-        href: 'dashboard',
-        enabled: true,
-        active: true,
       },
       {
         key: 'profile',

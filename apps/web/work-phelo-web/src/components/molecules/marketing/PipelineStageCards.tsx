@@ -16,14 +16,15 @@ const money = (currency: string | null | undefined, value: string) =>
 interface PipelineStageCardsProps {
   period: Period;
   year: number;
+  userId?: string;
 }
 
 /**
  * One card per pipeline stage, for the open prospects created in the period: the stage and its
  * prospect count, the expected revenue, and the average per prospect.
  */
-export function PipelineStageCards({ period, year }: PipelineStageCardsProps) {
-  const { data, isLoading } = useMarketingDashboard(period, year);
+export function PipelineStageCards({ period, year, userId }: PipelineStageCardsProps) {
+  const { data, isLoading } = useMarketingDashboard(period, year, userId);
   const stages = data?.pipeline.stages ?? [];
 
   if (isLoading) {

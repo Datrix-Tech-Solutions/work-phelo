@@ -1,9 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { Icons } from '@/components/atoms/icons';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { GaugeOverviewCard } from '@/components/molecules/shared/GaugeOverviewCard';
 import { useMarketingTargetsOverview } from '@/hooks/marketing/useMarketingTargetsOverview';
 import { useMarketingDashboard } from '@/hooks/marketing/useMarketingDashboard';
@@ -27,23 +25,21 @@ const compact = (value: number) => {
 interface TargetsOverviewCardProps {
   period: Period;
   year: number;
+  /** Sales rep to show; everyone the viewer may see when empty. */
+  userId?: string;
   className?: string;
 }
 
 /** Total target for the period against what has been achieved, as a gauge with selectable figures. */
-export function TargetsOverviewCard({ period, year, className }: TargetsOverviewCardProps) {
-  const { data, isLoading: loadingSummary } = useMarketingDashboard(period, year);
-  const [repId, setRepId] = useState('');
+export function TargetsOverviewCard({ period, year, userId, className }: TargetsOverviewCardProps) {
+  const { data, isLoading: loadingSummary } = useMarketingDashboard(period, year, userId);
   const { data: overview, isLoading: loadingTargets } = useMarketingTargetsOverview(
     period,
     year,
-    repId || undefined,
+    userId,
   );
   const isLoading = loadingSummary || loadingTargets;
 
-  // A rep picked for one period may have no target in another: fall back to everyone then.
-  const reps = overview?.reps ?? [];
-  const selectedRep = reps.some((rep) => rep.userId === repId) ? repId : '';
   const targets = overview;
   const currency = data?.currency ?? '';
   const target = Number(targets?.target ?? 0);
@@ -58,19 +54,6 @@ export function TargetsOverviewCard({ period, year, className }: TargetsOverview
       title="Targets Overview"
       subtitle={SUBTITLES[period]}
       className={className}
-      headerAction={
-        <div className="w-44">
-          <SearchSelect
-            placeholder="Sales rep"
-            options={reps.map((rep) => ({ value: rep.userId, label: rep.name }))}
-            value={selectedRep}
-            onChange={setRepId}
-            size="xs"
-            showAllOption
-            allLabel="All sales reps"
-          />
-        </div>
-      }
       isLoading={isLoading}
       isEmpty={count === 0}
       emptyMessage="No targets set for this period."

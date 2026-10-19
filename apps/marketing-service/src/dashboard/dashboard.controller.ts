@@ -48,11 +48,11 @@ type AuthedRequest = Request & { user: RequestUser };
 export class DashboardController {
   constructor(private readonly service: DashboardService) {}
 
-  // Needs the general dashboard permission. Within it the figures are still scoped like the lists
-  // they summarise: without the matching view-all permission they cover only the caller's own
+  // Open to any Marketing user: without the general dashboard permission the figures are narrowed
+  // to the caller (their personal dashboard). Either way they are scoped like the lists they
+  // summarise: without the matching view-all permission they cover only the caller's own
   // prospects and clients.
   @Get('summary')
-  @RequirePermissions(P.DASHBOARD_VIEW)
   @ApiOperation({
     summary: 'Marketing dashboard figures for a period',
     description:
@@ -67,7 +67,6 @@ export class DashboardController {
   }
 
   @Get('targets')
-  @RequirePermissions(P.DASHBOARD_VIEW)
   @ApiOperation({
     summary: 'Sales target progress for a period, optionally for one rep',
     description:
@@ -81,8 +80,19 @@ export class DashboardController {
     return this.service.targetsOverview(request.user, query);
   }
 
-  @Get('growth')
+  @Get('reps')
   @RequirePermissions(P.DASHBOARD_VIEW)
+  @ApiOperation({
+    summary: 'Sales reps the dashboard can be filtered to',
+    description:
+      'Active Marketing users when the caller may see everyone’s prospects or clients, otherwise just the caller.',
+  })
+  @ApiOkResponse({ description: 'Reps by name.' })
+  reps(@Req() request: AuthedRequest) {
+    return this.service.reps(request.user);
+  }
+
+  @Get('growth')
   @ApiOperation({
     summary: 'New prospects and new clients for several date ranges at once',
     description:
@@ -97,7 +107,6 @@ export class DashboardController {
   }
 
   @Get('revenue-by-product')
-  @RequirePermissions(P.DASHBOARD_VIEW)
   @ApiOperation({
     summary: 'Revenue achieved in a period, split by product',
     description:
