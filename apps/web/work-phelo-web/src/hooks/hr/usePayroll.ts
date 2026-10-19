@@ -15,13 +15,14 @@ import {
   UpdatePayrollSettingsDto,
 } from '@/types/hr';
 
-export function usePayrollRuns() {
+export function usePayrollRuns(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['payroll'],
     queryFn: async () => {
       const res = await api.get<PayrollRun[]>('/hr/payroll');
       return res.data;
     },
+    enabled: options?.enabled,
   });
 }
 

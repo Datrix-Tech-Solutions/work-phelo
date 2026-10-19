@@ -29,7 +29,7 @@ import { ApiErrorResponseDto } from './dto/prospecting-setting.dto';
 @ApiTags('Marketing CRM Settings')
 @ApiBearerAuth()
 @ApiCookieAuth()
-@Controller('marketing/crm-settings/preferences')
+@Controller('crm-settings/preferences')
 @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
 @ApiForbiddenResponse({ type: ApiErrorResponseDto })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)

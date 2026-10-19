@@ -2314,6 +2314,58 @@ describe('ProspectsService', () => {
       jest.useRealTimers();
     });
 
+    describe('automatic reminder delay', () => {
+      const arrange = () => {
+        jest
+          .useFakeTimers()
+          .setSystemTime(new Date('2026-10-01T00:00:00.000Z'));
+        prisma.marketingProspect.findMany.mockResolvedValueOnce([
+          {
+            id: 'prospect-default',
+            companyName: 'Acme Manufacturing',
+            assignedUserId: 'user-1',
+          },
+        ]);
+        prisma.marketingProspectFollowUp.findMany.mockResolvedValueOnce([]);
+        prisma.marketingProspectInteraction.groupBy.mockResolvedValueOnce([
+          {
+            prospectId: 'prospect-default',
+            _max: { occurredAt: new Date('2026-09-30T10:00:00.000Z') },
+            _count: { _all: 1 },
+          },
+        ]);
+      };
+      afterEach(() => jest.useRealTimers());
+
+      it('uses the tenant setting', async () => {
+        arrange();
+        prisma.marketingCrmPreference.findUnique.mockResolvedValueOnce({
+          followUpDelayDays: 3,
+        });
+
+        const result = await service.listFollowUpWorklist(user);
+
+        expect(result.items[0]).toMatchObject({
+          followUpSource: 'DEFAULT',
+          dueAt: new Date('2026-10-03T10:00:00.000Z'),
+        });
+      });
+
+      it('still produces the reminder, at seven days, when the setting cannot be read', async () => {
+        arrange();
+        prisma.marketingCrmPreference.findUnique.mockRejectedValueOnce(
+          new Error('relation "MarketingCrmPreference" does not exist'),
+        );
+
+        const result = await service.listFollowUpWorklist(user);
+
+        expect(result.items[0]).toMatchObject({
+          followUpSource: 'DEFAULT',
+          dueAt: new Date('2026-10-07T10:00:00.000Z'),
+        });
+      });
+    });
+
     it('returns tenant-wide follow-up worklist rows for users with FOLLOW_UPS_VIEW_ALL', async () => {
       prisma.marketingProspect.findMany.mockResolvedValueOnce([]);
 

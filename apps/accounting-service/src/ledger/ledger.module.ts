@@ -46,6 +46,7 @@ import { InternalSourceTransactionsController } from './source-transactions/inte
 import { SourceEventsNotifier } from './source-transactions/source-events.notifier';
 import { SourceProvisioningService } from './source-transactions/source-provisioning.service';
 import { SourceTransactionsService } from './source-transactions/source-transactions.service';
+import { TaxObligationsService } from './tax-obligations.service';
 import { TransactionTypeRulesController } from './transaction-type-rules.controller';
 import { TransactionTypeRulesService } from './transaction-type-rules.service';
 
@@ -99,6 +100,7 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
     SourceProvisioningService,
     SourceTransactionsService,
     SourceTypesService,
+    TaxObligationsService,
     TransactionTypeRulesService,
   ],
   exports: [

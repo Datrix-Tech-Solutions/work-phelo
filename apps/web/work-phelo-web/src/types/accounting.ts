@@ -476,6 +476,41 @@ export interface TaxType {
   payableAccountId: string | null;
   /** Default account on the receivables side — output tax on an invoice, or tax a customer withholds. */
   receivableAccountId: string | null;
+  /** Payment reminder: the tax for each period is due in the month after the period ends. */
+  reminderEnabled: boolean;
+  reminderFrequency: TaxPayFrequency;
+  /** 1 to 28; null when the tax is due on the last day of the month. */
+  reminderDueDay: number | null;
+  reminderDueOnLastDay: boolean;
+  reminderDaysBefore: number;
+}
+
+/** What a tax owes right now: the unpaid part of its last period, or what its payable account holds. */
+export interface TaxOutstanding {
+  taxTypeId: string;
+  code: string;
+  name: string;
+  payableAccountId: string;
+  /** Null for a tax without a payment reminder. */
+  dueDate: string | null;
+  amountOutstanding: string;
+  currency: string;
+}
+
+export type TaxPayFrequency = 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+
+/** A tax that is due and still has an unpaid amount, from the tax payable account. */
+export interface TaxObligation {
+  taxTypeId: string;
+  code: string;
+  name: string;
+  periodStart: string;
+  periodEnd: string;
+  dueDate: string;
+  /** Negative once the due date has passed. */
+  daysUntil: number;
+  amountOutstanding: string;
+  currency: string;
 }
 
 export interface CreateTaxTypePayload {
@@ -487,6 +522,11 @@ export interface CreateTaxTypePayload {
   /** Null clears the default. */
   payableAccountId?: string | null;
   receivableAccountId?: string | null;
+  reminderEnabled?: boolean;
+  reminderFrequency?: TaxPayFrequency;
+  reminderDueDay?: number | null;
+  reminderDueOnLastDay?: boolean;
+  reminderDaysBefore?: number;
 }
 
 export type UpdateTaxTypePayload = Partial<CreateTaxTypePayload> & { isActive?: boolean };

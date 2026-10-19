@@ -49,9 +49,10 @@ export function useRecentlyAdded() {
   });
 }
 
-export function usePendingActions() {
+export function usePendingActions(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['dashboard-pending-actions'],
     queryFn: () => api.get<PendingActions>('/hr/dashboard/pending-actions').then((r) => r.data),
+    enabled: options?.enabled,
   });
 }

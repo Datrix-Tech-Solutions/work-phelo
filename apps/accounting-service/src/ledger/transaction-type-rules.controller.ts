@@ -32,6 +32,7 @@ import {
   UpdateTaxTypeDto,
   UpdateTransactionTypeRuleDto,
 } from './dto/transaction-type-rules.dto';
+import { TaxObligationsService } from './tax-obligations.service';
 import { TransactionTypeRulesService } from './transaction-type-rules.service';
 
 @Controller()
@@ -40,7 +41,10 @@ import { TransactionTypeRulesService } from './transaction-type-rules.service';
 @UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
 @RequireModule('accounting')
 export class TransactionTypeRulesController {
-  constructor(private readonly service: TransactionTypeRulesService) {}
+  constructor(
+    private readonly service: TransactionTypeRulesService,
+    private readonly taxObligations: TaxObligationsService,
+  ) {}
 
   @Get('tax-types')
   @ApiTags('Accounting - Tax Types')
@@ -48,6 +52,30 @@ export class TransactionTypeRulesController {
   @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
   listTaxTypes(@Req() request: Request & { user: RequestUser }) {
     return this.service.listTaxTypes(request.user.tenantId);
+  }
+
+  @Get('tax-types/obligations')
+  @ApiTags('Accounting - Tax Types')
+  @ApiOperation({
+    summary: 'Taxes that are due and still owe something',
+    description:
+      'For taxes with a payment reminder: the last finished period, when it is due and what is still unpaid, read from the tax payable account. Only those inside their reminder window are returned.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  listTaxObligations(@Req() request: Request & { user: RequestUser }) {
+    return this.taxObligations.listObligations(request.user.tenantId);
+  }
+
+  @Get('tax-types/outstanding')
+  @ApiTags('Accounting - Tax Types')
+  @ApiOperation({
+    summary: 'What each tax owes right now',
+    description:
+      'For every active tax with a purchase tax (payable) account: the amount still unpaid, used to fill in a tax payment.',
+  })
+  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  listTaxOutstanding(@Req() request: Request & { user: RequestUser }) {
+    return this.taxObligations.listOutstanding(request.user.tenantId);
   }
 
   @Post('tax-types')

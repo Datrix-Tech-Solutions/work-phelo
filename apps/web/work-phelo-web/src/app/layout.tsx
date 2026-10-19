@@ -8,6 +8,7 @@ import { ToastContainer } from '@/components/molecules/shared/ToastContainer';
 import { ModuleSplash } from '@/components/molecules/shared/ModuleSplash';
 import { NavigationLoader } from '@/components/molecules/shared/NavigationLoader';
 import { AutoHideScrollbars } from '@/components/molecules/shared/AutoHideScrollbars';
+import { FloatingButton } from '@/components/molecules/shared/FloatingButton';
 import { appFont } from '@/lib/fonts';
 
 export const metadata: Metadata = {
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <QueryProvider>
             <AuthProvider>{children}</AuthProvider>
+            <FloatingButton />
           </QueryProvider>
           <ToastContainer />
           <NavigationLoader />

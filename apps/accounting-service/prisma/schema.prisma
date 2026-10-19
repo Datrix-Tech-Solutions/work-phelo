@@ -977,29 +977,46 @@ model TransactionType {
 /// A tenant-wide tax rate (e.g. VAT 12.5%, Withholding Tax 5%) referenced by
 /// TransactionTypeRuleLine — a rule's tax lines pick one of these rather than storing
 /// their own rate, so a rate change applies to every rule that uses it.
+enum TaxPayFrequency {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+
+  @@schema("accounting")
+}
+
 model TaxType {
-  id                  String                    @id @default(uuid())
-  tenantId            String
-  code                String
-  name                String
-  rate                Decimal                   @db.Decimal(6, 3)
-  effectiveFrom       DateTime
-  effectiveTo         DateTime?
-  isActive            Boolean                   @default(true)
+  id                   String                    @id @default(uuid())
+  tenantId             String
+  code                 String
+  name                 String
+  rate                 Decimal                   @db.Decimal(6, 3)
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  isActive             Boolean                   @default(true)
   /// Where this tax posts by default: on the payables side (a bill's input tax, or tax withheld
   /// when paying a vendor) and on the receivables side (an invoice's output tax, or tax withheld
   /// by a customer). Pre-fills the account on the bill/invoice and payment forms; the user can
   /// still pick another.
-  payableAccountId    String?
-  receivableAccountId String?
-  createdByUserId     String
-  updatedByUserId     String
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  ruleLines           TransactionTypeRuleLine[]
-  cashbookLines       CashbookTransactionLine[]
-  payableAccount      GLAccount?                @relation("TaxTypePayableAccount", fields: [payableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  receivableAccount   GLAccount?                @relation("TaxTypeReceivableAccount", fields: [receivableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  payableAccountId     String?
+  receivableAccountId  String?
+  /// Payment reminder. The tax for each period (a month, quarter or year) is paid in the month after
+  /// the period ends, on `reminderDueDay` or the last day of that month, and the reminder shows
+  /// `reminderDaysBefore` days ahead until the tax payable account has been paid down.
+  reminderEnabled      Boolean                   @default(false)
+  reminderFrequency    TaxPayFrequency           @default(MONTHLY)
+  /// 1 to 28, so every month has it. Ignored when `reminderDueOnLastDay` is set.
+  reminderDueDay       Int?
+  reminderDueOnLastDay Boolean                   @default(true)
+  reminderDaysBefore   Int                       @default(3)
+  createdByUserId      String
+  updatedByUserId      String
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  ruleLines            TransactionTypeRuleLine[]
+  cashbookLines        CashbookTransactionLine[]
+  payableAccount       GLAccount?                @relation("TaxTypePayableAccount", fields: [payableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  receivableAccount    GLAccount?                @relation("TaxTypeReceivableAccount", fields: [receivableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])

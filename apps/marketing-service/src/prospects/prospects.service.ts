@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
@@ -78,6 +79,8 @@ type ProspectInteractionWithParticipants = {
 
 @Injectable()
 export class ProspectsService {
+  private readonly logger = new Logger(ProspectsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly assignees: AssigneesService,
@@ -1333,11 +1336,22 @@ export class ProspectsService {
 
   /** Days after the latest interaction that the automatic follow-up falls due, per tenant. */
   private async followUpDelayDays(tenantId: string): Promise<number> {
-    const preference = await this.prisma.marketingCrmPreference.findUnique({
-      where: { tenantId },
-      select: { followUpDelayDays: true },
-    });
-    return preference?.followUpDelayDays ?? DEFAULT_FOLLOW_UP_DELAY_DAYS;
+    try {
+      const preference = await this.prisma.marketingCrmPreference.findUnique({
+        where: { tenantId },
+        select: { followUpDelayDays: true },
+      });
+      return preference?.followUpDelayDays ?? DEFAULT_FOLLOW_UP_DELAY_DAYS;
+    } catch (error) {
+      // A settings problem (e.g. its migration not applied yet) must not take the reminders
+      // down with it: fall back to the default delay.
+      const reason =
+        error instanceof Error ? error.message : 'unexpected error';
+      this.logger.warn(
+        `Could not read the reminder delay, using ${DEFAULT_FOLLOW_UP_DELAY_DAYS} days: ${reason}`,
+      );
+      return DEFAULT_FOLLOW_UP_DELAY_DAYS;
+    }
   }
 
   private addDays(date: Date, days: number): Date {

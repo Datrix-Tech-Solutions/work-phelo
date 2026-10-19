@@ -6,7 +6,10 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { ShareJobOpeningModal } from './ShareJobOpeningModal';
 import { Badge, BadgeProps } from '@/components/atoms/Badge';
+import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/hr/usePermission';
 import {
@@ -22,6 +25,9 @@ import type { EmploymentType } from '@/types/hr';
 import type { JobOpeningStatus, RecruitmentVacancy } from '@/types/recruitment';
 
 const PAGE_SIZE = 8;
+const CAREERS_SITE_URL = (
+  process.env.NEXT_PUBLIC_CAREERS_SITE_URL ?? 'https://workphelodotcom.vercel.app'
+).replace(/\/$/, '');
 
 const TYPE_LABELS: Record<EmploymentType, string> = {
   FULL_TIME: 'Full Time',
@@ -36,9 +42,15 @@ const STATUS_BADGES: Record<JobOpeningStatus, { label: string; variant: BadgePro
   CLOSED: { label: 'Closed', variant: 'danger' },
 };
 
+const STATUS_OPTIONS = (Object.keys(STATUS_BADGES) as JobOpeningStatus[]).map((value) => ({
+  value,
+  label: STATUS_BADGES[value].label,
+}));
+
 export function JobOpeningsTable() {
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
+  const tenantId = useAuthStore((s) => s.user?.tenantId);
   const toast = useToast();
   const canCreate = usePermission(Permission.CREATE_RECRUITMENT_VACANCY);
   const canUpdate = usePermission(Permission.UPDATE_RECRUITMENT_VACANCY);
@@ -46,17 +58,24 @@ export function JobOpeningsTable() {
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [status, setStatus] = useState<JobOpeningStatus | ''>('');
   const [page, setPage] = useState(1);
   const [closeTarget, setCloseTarget] = useState<RecruitmentVacancy | null>(null);
   const [publishTarget, setPublishTarget] = useState<RecruitmentVacancy | null>(null);
   const [reopenTarget, setReopenTarget] = useState<RecruitmentVacancy | null>(null);
+  const [shareTarget, setShareTarget] = useState<RecruitmentVacancy | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useJobOpenings({ search: debouncedSearch, page, limit: PAGE_SIZE });
+  const { data, isLoading } = useJobOpenings({
+    search: debouncedSearch,
+    status: status || undefined,
+    page,
+    limit: PAGE_SIZE,
+  });
   const { mutate: closeJobOpening, isPending: isClosing } = useCloseJobOpening();
   const { mutate: publishJobOpening, isPending: isPublishing } = usePublishJobOpening();
   const { mutate: reopenJobOpening, isPending: isReopening } = useReopenJobOpening();
@@ -64,6 +83,8 @@ export function JobOpeningsTable() {
   const openings = data?.items ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.meta.total ?? 0) / PAGE_SIZE));
   const basePath = `/${params.tenantSlug}/hr/recruitment/job-openings`;
+  const shareLink =
+    shareTarget && tenantId ? `${CAREERS_SITE_URL}/jobs/${tenantId}_${shareTarget.id}/apply` : '';
 
   const columns: Column<RecruitmentVacancy>[] = [
     {
@@ -130,6 +151,20 @@ export function JobOpeningsTable() {
     ...(canUpdate && row.status === 'DRAFT'
       ? [{ label: 'Publish', onClick: () => setPublishTarget(row) }]
       : []),
+    ...(row.status === 'OPEN' ? [{ label: 'Share', onClick: () => setShareTarget(row) }] : []),
+    ...(row.status === 'OPEN'
+      ? [
+          {
+            label: 'View on site',
+            onClick: () =>
+              window.open(
+                `${CAREERS_SITE_URL}/dashboard/jobs/${row.id}`,
+                '_blank',
+                'noopener,noreferrer',
+              ),
+          },
+        ]
+      : []),
     ...(canClose && row.status === 'CLOSED'
       ? [{ label: 'Reopen', onClick: () => setReopenTarget(row) }]
       : []),
@@ -183,6 +218,20 @@ export function JobOpeningsTable() {
           setSearch(q);
           setPage(1);
         }}
+        extraFilters={
+          <SearchSelect
+            size="sm"
+            placeholder="Status"
+            allLabel="All statuses"
+            options={STATUS_OPTIONS}
+            value={status}
+            showAllOption
+            onChange={(v) => {
+              setStatus(v as JobOpeningStatus | '');
+              setPage(1);
+            }}
+          />
+        }
         {...(canCreate && {
           actionButton: {
             label: 'New Job Opening',
@@ -197,6 +246,12 @@ export function JobOpeningsTable() {
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
+      />
+
+      <ShareJobOpeningModal
+        opening={shareTarget}
+        link={shareLink}
+        onClose={() => setShareTarget(null)}
       />
 
       <Modal
