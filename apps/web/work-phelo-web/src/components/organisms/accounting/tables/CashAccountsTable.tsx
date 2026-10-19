@@ -20,8 +20,7 @@ import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTr
 
 const PAGE_SIZE = 10;
 
-/** Standard account hierarchy code for the seeded "Cash and Bank" group under
- *  Current Assets — see STANDARD_ACCOUNT_HIERARCHY in accounting-master-data.service.ts. */
+/** Code of the "Cash and Bank" group the old standard hierarchy seeded under Current Assets. */
 const CASH_AND_BANK_GROUP_CODE = '1110';
 
 const KIND_LABEL: Record<AccountingCashAccountKind, string> = {
@@ -68,10 +67,25 @@ export function CashAccountsTable() {
 
   const isLoading = isLoadingCashAccounts || isLoadingGLAccounts || isLoadingGroups;
 
-  const cashAndBankGroup = useMemo(
-    () => (groupsData?.items ?? []).find((g) => g.code === CASH_AND_BANK_GROUP_CODE),
-    [groupsData],
-  );
+  // A GL account counts as cash when it (or its group or classification) is tagged Cash & Cash
+  // Equivalents, which is how the IAS 7 template marks them. The "Cash and Bank" group (1110)
+  // from the old standard hierarchy still counts, so existing charts keep working.
+  const isCashEquivalent = useMemo(() => {
+    const groups = groupsData?.items ?? [];
+    const groupById = new Map(groups.map((g) => [g.id, g]));
+    const legacyGroupId = groups.find((g) => g.code === CASH_AND_BANK_GROUP_CODE)?.id;
+    return (glAccount: GLAccount) => {
+      const group = glAccount.accountGroupId ? groupById.get(glAccount.accountGroupId) : undefined;
+      const tag =
+        glAccount.cashFlowCategory ??
+        group?.cashFlowCategory ??
+        group?.classification.cashFlowCategory ??
+        null;
+      return (
+        tag === 'CASH_EQUIVALENT' || (!!legacyGroupId && glAccount.accountGroupId === legacyGroupId)
+      );
+    };
+  }, [groupsData]);
 
   const rows = useMemo<Row[]>(() => {
     const linkedGlAccountIds = new Set(cashAccounts.map((ca) => ca.glAccountId));
@@ -79,7 +93,7 @@ export function CashAccountsTable() {
       (g) =>
         g.status === 'ACTIVE' &&
         g.allowPosting &&
-        g.accountGroupId === cashAndBankGroup?.id &&
+        isCashEquivalent(g) &&
         !linkedGlAccountIds.has(g.id),
     );
     return [
@@ -90,7 +104,7 @@ export function CashAccountsTable() {
         (glAccount): Row => ({ id: glAccount.id, status: 'incomplete', glAccount }),
       ),
     ];
-  }, [cashAccounts, glAccounts, cashAndBankGroup]);
+  }, [cashAccounts, glAccounts, isCashEquivalent]);
 
   const columns = useMemo<Column<Row>[]>(
     () => [

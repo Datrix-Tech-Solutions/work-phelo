@@ -1,6 +1,6 @@
 'use client';
 
-import { SearchIcon, Trash2, Upload } from 'lucide-react';
+import { LayoutTemplate, SearchIcon, Trash2, Upload } from 'lucide-react';
 import { cardClass, inputClass } from '@/lib/utils';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { ActionMenuButton, ActionMenuItem } from '@/components/organisms/shared/ActionMenuButton';
@@ -18,6 +18,7 @@ interface ChartOfAccountsToolbarProps {
   onStatusChange: (value: string) => void;
   registerActions: ActionMenuItem[];
   onImport: () => void;
+  onUseTemplate: () => void;
   onClearUnused: () => void;
 }
 
@@ -29,6 +30,7 @@ export function ChartOfAccountsToolbar({
   onStatusChange,
   registerActions,
   onImport,
+  onUseTemplate,
   onClearUnused,
 }: ChartOfAccountsToolbarProps) {
   return (
@@ -64,6 +66,14 @@ export function ChartOfAccountsToolbar({
           onClick={onClearUnused}
         >
           Clear Unused
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          icon={<LayoutTemplate className="h-3.5 w-3.5" />}
+          onClick={onUseTemplate}
+        >
+          Template
         </Button>
         <Button
           variant="outline"

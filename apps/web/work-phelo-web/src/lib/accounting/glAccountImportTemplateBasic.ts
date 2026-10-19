@@ -79,7 +79,7 @@ export async function downloadGLAccountImportTemplateBasic(
     'Parent Account Code is optional — leave it blank if the account sits directly under its classification.',
     'Account Type must be one of: Asset, Liability, Equity, Revenue, Expense.',
     "A new parent account's classification must match the account type of the accounts filed under it.",
-    'Cash Flow Category is optional and must be one of: Operating, Investing, Financing, Excluded / Non-cash. Leave it blank to inherit from the level above (parent account, then classification, then the default for the account type).',
+    'Cash Flow Category is optional and must be one of: Operating, Investing, Financing, Excluded / Non-cash, Cash & Cash Equivalents. Leave it blank to inherit from the level above (parent account, then classification, then the default for the account type).',
     'Need to define a classification or parent account with more control (e.g. its own cash flow category) without an account under it yet? Use the Advanced template instead.',
   ].forEach((note) => notes.addRow([note]));
 

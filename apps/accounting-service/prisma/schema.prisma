@@ -391,14 +391,16 @@ model GLAccount {
 }
 
 /// Which section of the Cash Flow Statement an account's balance change belongs in.
-/// EXCLUDED covers both non-flows (the Cash and Bank accounts themselves — always resolved
-/// automatically from AccountingCashAccount, never set here) and non-cash items that belong in
-/// the supplemental disclosure note rather than one of the three main sections.
+/// CASH_EQUIVALENT marks the cash and cash equivalents the statement reconciles to (including a
+/// bank overdraft repayable on demand); accounts linked in Cash and Bank count as cash too.
+/// EXCLUDED covers non-cash items: on an income/expense account it is reversed out of operating
+/// (see cashFlowStatement), on a balance sheet account it is dropped.
 enum CashFlowCategory {
   OPERATING
   INVESTING
   FINANCING
   EXCLUDED
+  CASH_EQUIVALENT
 
   @@schema("accounting")
 }
