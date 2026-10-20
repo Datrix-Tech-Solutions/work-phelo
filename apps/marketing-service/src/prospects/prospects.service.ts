@@ -199,6 +199,7 @@ export class ProspectsService {
         name: contact.name,
         phone: contact.phone,
         email: contact.email,
+        dateOfBirth: contact.dateOfBirth,
         isPrimary: contact.isPrimary,
         decisionMaker: contact.decisionMakerTypeId
           ? this.namedReference(
@@ -905,6 +906,9 @@ export class ProspectsService {
               name: this.formatText(dto.primaryContact.name),
               phone: this.formatOptionalText(dto.primaryContact.phone),
               email: this.formatOptionalText(dto.primaryContact.email),
+              dateOfBirth: dto.primaryContact.dateOfBirth
+                ? new Date(dto.primaryContact.dateOfBirth)
+                : null,
               decisionMakerTypeId:
                 dto.primaryContact.decisionMakerTypeId ?? null,
               isPrimary: true,
@@ -1573,6 +1577,13 @@ export class ProspectsService {
       ...(contact.email !== undefined
         ? { email: this.formatOptionalText(contact.email) }
         : {}),
+      ...(contact.dateOfBirth !== undefined
+        ? {
+            dateOfBirth: contact.dateOfBirth
+              ? new Date(contact.dateOfBirth)
+              : null,
+          }
+        : {}),
       ...(contact.decisionMakerTypeId !== undefined
         ? { decisionMakerTypeId: contact.decisionMakerTypeId }
         : {}),
@@ -1602,6 +1613,7 @@ export class ProspectsService {
           contact.email !== undefined
             ? this.formatOptionalText(contact.email)
             : null,
+        dateOfBirth: contact.dateOfBirth ? new Date(contact.dateOfBirth) : null,
         decisionMakerTypeId: contact.decisionMakerTypeId ?? null,
         isPrimary: true,
       },

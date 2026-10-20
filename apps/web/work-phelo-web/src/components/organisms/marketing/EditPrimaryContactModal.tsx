@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { Input } from '@/components/atoms/Input';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -12,6 +13,8 @@ export interface PrimaryContactValues {
   name: string;
   phone: string | null;
   email: string | null;
+  /** YYYY-MM-DD */
+  dateOfBirth: string | null;
   roleId: string;
 }
 
@@ -20,6 +23,7 @@ export interface PrimaryContactChanges {
   name?: string;
   phone?: string | null;
   email?: string | null;
+  dateOfBirth?: string | null;
   decisionMakerTypeId?: string | null;
 }
 
@@ -51,6 +55,7 @@ export function EditPrimaryContactModal({
   const [name, setName] = useState(current.name);
   const [phone, setPhone] = useState(current.phone ?? '');
   const [email, setEmail] = useState(current.email ?? '');
+  const [dateOfBirth, setDateOfBirth] = useState(current.dateOfBirth ?? '');
   const [roleId, setRoleId] = useState(current.roleId);
 
   const options = useMemo(() => roles.map((r) => ({ value: r.id, label: r.name })), [roles]);
@@ -63,8 +68,9 @@ export function EditPrimaryContactModal({
   const nameChanged = trimmedName !== current.name;
   const phoneChanged = nextPhone !== (current.phone || null);
   const emailChanged = nextEmail !== (current.email || null);
+  const dobChanged = (dateOfBirth || null) !== (current.dateOfBirth || null);
   const roleChanged = roleId !== current.roleId;
-  const changed = nameChanged || phoneChanged || emailChanged || roleChanged;
+  const changed = nameChanged || phoneChanged || emailChanged || dobChanged || roleChanged;
 
   const emailError =
     trimmedEmail && !EMAIL_PATTERN.test(trimmedEmail) ? 'Enter a valid email address' : undefined;
@@ -74,6 +80,7 @@ export function EditPrimaryContactModal({
       ...(nameChanged ? { name: trimmedName } : {}),
       ...(phoneChanged ? { phone: nextPhone } : {}),
       ...(emailChanged ? { email: nextEmail } : {}),
+      ...(dobChanged ? { dateOfBirth: dateOfBirth || null } : {}),
       ...(roleChanged ? { decisionMakerTypeId: roleId || null } : {}),
     });
   }
@@ -125,6 +132,12 @@ export function EditPrimaryContactModal({
           onChange={(e) => setEmail(e.target.value)}
           placeholder="eg; ama.mensah@example.com"
           error={emailError}
+        />
+        <DatePicker
+          label="Date of Birth"
+          value={dateOfBirth}
+          onChange={setDateOfBirth}
+          disableFuture
         />
       </div>
     </Modal>

@@ -217,6 +217,33 @@ export interface DashboardTargetsOverview {
   reps: DashboardTargetRep[];
 }
 
+export class QueryDashboardBirthdaysDto {
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s prospects and clients. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+}
+
+export interface DashboardBirthday {
+  /** The contact's id, unique across prospects and clients. */
+  id: string;
+  contactName: string;
+  companyName: string;
+  type: 'CLIENT' | 'PROSPECT';
+  /** The company's id, for linking to its page. */
+  companyId: string;
+  /** Next occurrence of the birthday, YYYY-MM-DD. */
+  date: string;
+}
+
+export interface DashboardUpcomingBirthdays {
+  withinDays: number;
+  birthdays: DashboardBirthday[];
+}
+
 export interface DashboardRep {
   userId: string;
   name: string;

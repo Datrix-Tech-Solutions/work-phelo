@@ -40,6 +40,7 @@ interface FormValues {
   roleJobTitle: string;
   phone: string;
   email: string;
+  dateOfBirth: string;
   interactionType: string;
   dateContacted: string;
   productIds: string[];
@@ -65,6 +66,7 @@ const emptyValues = (): FormValues => ({
   roleJobTitle: '',
   phone: '',
   email: '',
+  dateOfBirth: '',
   interactionType: '',
   dateContacted: todayLocal(),
   productIds: [],
@@ -173,6 +175,7 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
         name: values.contactName.trim(),
         ...(values.phone.trim() ? { phone: values.phone.trim() } : {}),
         ...(values.email.trim() ? { email: values.email.trim() } : {}),
+        ...(values.dateOfBirth ? { dateOfBirth: values.dateOfBirth } : {}),
         ...(values.roleJobTitle ? { decisionMakerTypeId: values.roleJobTitle } : {}),
       },
       // Products without an expected revenue are left out, as in the old wizard.
@@ -180,12 +183,10 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
         const detail = detailFor(productId);
         const expected = parseFloat(detail.expectedRevenue);
         if (!Number.isFinite(expected)) return [];
-        const rate = parseFloat(detail.commissionRate);
         return [
           {
             productId,
             expectedValue: expected,
-            ...(Number.isFinite(rate) ? { commissionRate: rate } : {}),
             ...(detail.expectedCloseDate ? { expectedCloseDate: detail.expectedCloseDate } : {}),
           },
         ];
@@ -301,7 +302,7 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
           </div>
 
           <SearchSelect
-            label="Decision Maker Role"
+            label="Contact Person Role"
             placeholder="Select or type to add new"
             options={roleOptions}
             value={values.roleJobTitle}
@@ -315,13 +316,19 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <PhoneInput label="Phone" value={values.phone} onChange={(v) => set('phone', v)} />
           <EmailField
             label="Email"
             value={values.email}
             onChange={(v) => set('email', v)}
             error={errors.email}
+          />
+          <DatePicker
+            label="Date of Birth"
+            value={values.dateOfBirth}
+            onChange={(v) => set('dateOfBirth', v)}
+            disableFuture
           />
         </div>
 

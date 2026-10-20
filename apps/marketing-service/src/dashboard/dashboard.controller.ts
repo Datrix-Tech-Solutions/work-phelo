@@ -21,6 +21,7 @@ import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-setting
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import { DashboardService } from './dashboard.service';
 import {
+  QueryDashboardBirthdaysDto,
   QueryDashboardGrowthDto,
   QueryDashboardRevenueDto,
   QueryDashboardSalesPersonnelDto,
@@ -78,6 +79,20 @@ export class DashboardController {
     @Req() request: AuthedRequest,
   ) {
     return this.service.targetsOverview(request.user, query);
+  }
+
+  @Get('upcoming-birthdays')
+  @ApiOperation({
+    summary: 'Upcoming birthdays of prospect and client contacts',
+    description:
+      'Primary contacts of prospects and clients with a birthday in the next 30 days, soonest first. Scoped like the lists: without the view-all permissions only the caller’s own prospects and clients are included.',
+  })
+  @ApiOkResponse({ description: 'Birthdays and the look-ahead window.' })
+  upcomingBirthdays(
+    @Query() query: QueryDashboardBirthdaysDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.upcomingBirthdays(request.user, query);
   }
 
   @Get('reps')

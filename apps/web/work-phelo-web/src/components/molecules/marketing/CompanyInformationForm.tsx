@@ -14,6 +14,7 @@ export interface CompanyInformationFields {
   contactPerson: string;
   phone: string;
   email: string;
+  dateOfBirth: string;
   interactionType: string;
   roleJobTitle: string;
   sourceType: string;
@@ -105,7 +106,7 @@ export function CompanyInformationForm({
           </div> */}
 
           <SearchSelect
-            label="Decision Maker Role"
+            label="Contact Person Role"
             placeholder="Select or type to add new"
             options={roleOptions}
             value={values.roleJobTitle}
@@ -130,7 +131,7 @@ export function CompanyInformationForm({
           {errors?.contactPerson && <p className="text-xs text-red-500">{errors.contactPerson}</p>}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <PhoneInput
             label="Phone"
             value={values.phone}
@@ -142,6 +143,13 @@ export function CompanyInformationForm({
             value={values.email}
             onChange={(v) => set('email', v)}
             error={errors?.email}
+          />
+          <DatePicker
+            label="Date of Birth"
+            value={values.dateOfBirth}
+            onChange={(v) => set('dateOfBirth', v)}
+            error={errors?.dateOfBirth}
+            disableFuture
           />
         </div>
 

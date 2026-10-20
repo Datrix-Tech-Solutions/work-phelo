@@ -31,6 +31,7 @@ function toInitialValues(prospect: ProspectDetail): ProspectWizardValues {
       contactPerson: contact?.name ?? '',
       phone: contact?.phone ?? '',
       email: contact?.email ?? '',
+      dateOfBirth: toDateInput(contact?.dateOfBirth ?? null),
       interactionType: '',
       roleJobTitle: contact?.decisionMaker?.id ?? '',
       sourceType: prospect.sourceType?.id ?? '',
@@ -43,7 +44,6 @@ function toInitialValues(prospect: ProspectDetail): ProspectWizardValues {
       expectedRevenue: p.expectedValue,
       achievedRevenue: p.achievedValue ?? '',
       expectedCloseDate: toDateInput(p.expectedCloseDate),
-      commissionRate: p.commissionRate != null ? String(Number(p.commissionRate)) : '',
     })),
     location: {
       location: prospect.location.label,
@@ -67,6 +67,7 @@ function buildPayload(
       name: company.contactPerson.trim(),
       ...(company.phone.trim() ? { phone: company.phone.trim() } : {}),
       ...(company.email.trim() ? { email: company.email.trim() } : {}),
+      dateOfBirth: company.dateOfBirth || null,
       decisionMakerTypeId: company.roleJobTitle || null,
     },
     // The full desired set: rows carrying an existing id are updated, new rows are added,
@@ -77,7 +78,6 @@ function buildPayload(
       expectedValue: Number(row.expectedRevenue),
       achievedValue: row.achievedRevenue.trim() !== '' ? Number(row.achievedRevenue) : null,
       expectedCloseDate: row.expectedCloseDate || null,
-      commissionRate: row.commissionRate?.trim() ? Number(row.commissionRate) : null,
     })),
     location: {
       label: location.location,

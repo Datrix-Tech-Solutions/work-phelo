@@ -16,6 +16,8 @@ import {
 } from '../sales-targets/sales-targets.service';
 import {
   DashboardGrowthPoint,
+  DashboardUpcomingBirthdays,
+  QueryDashboardBirthdaysDto,
   DashboardRep,
   DashboardRevenueByProduct,
   DashboardSalesPersonnel,
@@ -30,6 +32,8 @@ import {
 } from './dto/dashboard-summary.dto';
 
 const ZERO = new Prisma.Decimal(0);
+
+const BIRTHDAY_WINDOW_DAYS = 30;
 
 type DayRange = { from: string; to: string };
 
@@ -370,6 +374,83 @@ export class DashboardService {
         };
       }),
     };
+  }
+
+  /**
+   * Birthdays of prospect and client primary contacts in the next 30 days, soonest first. A live
+   * look-ahead, so it takes no period. Prospects already converted to a client are left out:
+   * their contact is listed under the client.
+   */
+  async upcomingBirthdays(
+    user: RequestUser,
+    query: QueryDashboardBirthdaysDto,
+  ): Promise<DashboardUpcomingBirthdays> {
+    const rep = this.repFor(user, query.userId);
+    const prospectScope = this.scopeFor(user, P.PROSPECTS_VIEW_ALL, rep);
+    const clientScope = this.scopeFor(user, P.CLIENTS_VIEW_ALL, rep);
+    const contactWhere = {
+      tenantId: user.tenantId,
+      isPrimary: true,
+      dateOfBirth: { not: null },
+    };
+
+    const [prospectContacts, clientContacts] = await Promise.all([
+      this.prisma.marketingProspectContact.findMany({
+        where: {
+          ...contactWhere,
+          prospect: { ...prospectScope, client: { is: null } },
+        },
+        select: {
+          id: true,
+          name: true,
+          dateOfBirth: true,
+          prospect: { select: { id: true, companyName: true } },
+        },
+      }),
+      this.prisma.marketingClientContact.findMany({
+        where: { ...contactWhere, client: clientScope },
+        select: {
+          id: true,
+          name: true,
+          dateOfBirth: true,
+          client: { select: { id: true, companyName: true } },
+        },
+      }),
+    ]);
+
+    const now = new Date();
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const birthdays = [
+      ...prospectContacts.map((c) => ({
+        id: c.id,
+        contactName: c.name,
+        companyName: c.prospect.companyName,
+        type: 'PROSPECT' as const,
+        companyId: c.prospect.id,
+        dateOfBirth: c.dateOfBirth,
+      })),
+      ...clientContacts.map((c) => ({
+        id: c.id,
+        contactName: c.name,
+        companyName: c.client.companyName,
+        type: 'CLIENT' as const,
+        companyId: c.client.id,
+        dateOfBirth: c.dateOfBirth,
+      })),
+    ]
+      .flatMap(({ dateOfBirth, ...rest }) => {
+        if (!dateOfBirth) return [];
+        const month = dateOfBirth.getUTCMonth();
+        const day = dateOfBirth.getUTCDate();
+        let next = Date.UTC(now.getFullYear(), month, day);
+        if (next < today) next = Date.UTC(now.getFullYear() + 1, month, day);
+        const days = Math.round((next - today) / 86_400_000);
+        if (days > BIRTHDAY_WINDOW_DAYS) return [];
+        return [{ ...rest, date: new Date(next).toISOString().slice(0, 10) }];
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return { withinDays: BIRTHDAY_WINDOW_DAYS, birthdays };
   }
 
   /** Active reps the dashboard can be filtered to: everyone with view-all, otherwise only the caller. */

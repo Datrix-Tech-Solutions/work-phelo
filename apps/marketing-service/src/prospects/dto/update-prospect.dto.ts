@@ -59,6 +59,15 @@ export class UpdateProspectPrimaryContactDto {
   @IsOptional()
   @IsUUID()
   decisionMakerTypeId?: string | null;
+
+  @ApiPropertyOptional({
+    example: '1990-05-14',
+    nullable: true,
+    description: 'Send null to remove the date of birth.',
+  })
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string | null;
 }
 
 export class UpdateProspectProductDto {

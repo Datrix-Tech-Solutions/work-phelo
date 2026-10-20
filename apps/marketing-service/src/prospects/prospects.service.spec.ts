@@ -331,6 +331,7 @@ describe('ProspectsService', () => {
       name: 'Ama Mensah',
       phone: '+233201234567',
       email: 'Ama.Mensah@example.com',
+      dateOfBirth: null,
       decisionMakerTypeId: '44444444-4444-4444-8444-444444444444',
       isPrimary: true,
     });

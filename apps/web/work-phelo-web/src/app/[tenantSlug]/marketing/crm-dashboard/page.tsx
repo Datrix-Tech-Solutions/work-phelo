@@ -4,6 +4,7 @@ import { ClientsProspectsChart } from '@/components/molecules/marketing/ClientsP
 import { RevenueByProductChart } from '@/components/molecules/marketing/RevenueByProductChart';
 import { TopSalesPersonnelChart } from '@/components/molecules/marketing/TopSalesPersonnelChart';
 import { TargetsOverviewCard } from '@/components/molecules/marketing/TargetsOverviewCard';
+import { UpcomingBirthdaysCard } from '@/components/molecules/marketing/UpcomingBirthdaysCard';
 import { PipelineStageCards } from '@/components/molecules/marketing/PipelineStageCards';
 import { CrmQuickActions } from '@/components/organisms/marketing/CrmQuickActions';
 import { MyAppointmentsCard } from '@/components/organisms/marketing/MyAppointmentsCard';
@@ -78,7 +79,7 @@ export default function CrmDashboardPage() {
                 period={filters.period}
                 year={filters.year}
                 userId={userId}
-                className="md:col-span-2 lg:col-span-10"
+                className="md:col-span-2 lg:col-span-7"
               />
             )}
             <TargetsOverviewCard
@@ -86,15 +87,19 @@ export default function CrmDashboardPage() {
               year={filters.year}
               userId={userId}
               className={
-                view === 'personal' ? 'md:col-span-2 lg:col-span-8' : 'md:col-span-2 lg:col-span-10'
+                view === 'personal' ? 'md:col-span-2 lg:col-span-5' : 'md:col-span-2 lg:col-span-7'
               }
             />
             {view === 'personal' && currentUserId && (
               <>
-                <MyRemindersCard userId={currentUserId} className="h-60 lg:col-span-6" />
-                <MyAppointmentsCard userId={currentUserId} className="h-60 lg:col-span-6" />
+                <MyRemindersCard userId={currentUserId} className="h-60 lg:col-span-5" />
+                <MyAppointmentsCard userId={currentUserId} className="h-60 lg:col-span-5" />
               </>
             )}
+            <UpcomingBirthdaysCard
+              userId={userId}
+              className={view === 'personal' ? 'lg:col-span-5' : 'lg:col-span-6'}
+            />
           </div>
         </>
       )}

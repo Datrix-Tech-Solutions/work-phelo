@@ -81,7 +81,7 @@ function CardInfoRow({ icon: Icon, value }: { icon: typeof Briefcase; value: str
   );
 }
 
-export function CandidatesTable() {
+export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
   const openCandidate = (row: RecruitmentCandidate) =>
@@ -336,7 +336,16 @@ export function CandidatesTable() {
         )}
       </>
     ),
-    toolbarTrailing: <ViewModeToggle value={viewMode} onChange={setViewMode} />,
+    toolbarTrailing: (
+      <>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
+        {onManage && (
+          <Button variant="outline" onClick={onManage}>
+            Manage recruitment
+          </Button>
+        )}
+      </>
+    ),
   };
 
   return (
