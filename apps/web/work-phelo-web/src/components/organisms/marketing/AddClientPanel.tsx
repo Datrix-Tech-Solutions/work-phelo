@@ -49,6 +49,7 @@ interface FormValues {
   roleJobTitle: string;
   phone: string;
   email: string;
+  dateOfBirth: string;
   productIds: string[];
   /** Raise the client's first transaction now. Optional: without one the client is Not billed. */
   raiseBilling: boolean;
@@ -71,6 +72,7 @@ const emptyValues = (): FormValues => ({
   roleJobTitle: '',
   phone: '',
   email: '',
+  dateOfBirth: '',
   productIds: [],
   raiseBilling: false,
   location: { location: '' },
@@ -181,16 +183,15 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
         name: values.contactName.trim(),
         ...(values.phone.trim() ? { phone: values.phone.trim() } : {}),
         ...(values.email.trim() ? { email: values.email.trim() } : {}),
+        ...(values.dateOfBirth ? { dateOfBirth: values.dateOfBirth } : {}),
         ...(values.roleJobTitle ? { decisionMakerTypeId: values.roleJobTitle } : {}),
       },
       products: values.productIds.map((productId) => {
         const detail = productDetails[productId] ?? EMPTY_PRODUCT_DETAIL;
         const expected = parseFloat(detail.expectedRevenue);
-        const rate = parseFloat(detail.commissionRate);
         return {
           productId,
           ...(Number.isFinite(expected) ? { expectedValue: expected } : {}),
-          ...(Number.isFinite(rate) ? { commissionRate: rate } : {}),
           ...(detail.expectedCloseDate ? { expectedCloseDate: detail.expectedCloseDate } : {}),
         };
       }),
@@ -321,13 +322,19 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <PhoneInput label="Phone" value={values.phone} onChange={(v) => set('phone', v)} />
           <EmailField
             label="Email"
             value={values.email}
             onChange={(v) => set('email', v)}
             error={errors.email}
+          />
+          <DatePicker
+            label="Date of Birth"
+            value={values.dateOfBirth}
+            onChange={(v) => set('dateOfBirth', v)}
+            disableFuture
           />
         </div>
 

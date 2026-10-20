@@ -161,10 +161,14 @@ export default function ProspectDetailPage() {
           <DetailField label="Assigned To" value={prospect.assignedUserName} />
           <DetailField label="Location" value={prospect.location.label} />
           {/* <DetailField label="Decision Maker" value={primaryContact?.name} /> */}
-          <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
+          <DetailField label="Contact Person Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
           <DetailField label="Primary Contact Phone" value={primaryContact?.phone} />
           <DetailField label="Primary Contact Email" value={primaryContact?.email} />
+          <DetailField
+            label="Primary Contact Date of Birth"
+            value={formatDate(primaryContact?.dateOfBirth ?? null)}
+          />
           <DetailField label="Date Created" value={formatDate(prospect.createdAt)} />
           <DetailField label="Last Follow-up" value={formatDate(lastInteraction)} />
           <DetailField label="Follow-ups" value={String(prospect.interactions.length)} />
@@ -275,6 +279,7 @@ export default function ProspectDetailPage() {
             name: primaryContact?.name ?? '',
             phone: primaryContact?.phone ?? null,
             email: primaryContact?.email ?? null,
+            dateOfBirth: primaryContact?.dateOfBirth?.slice(0, 10) ?? null,
             roleId: primaryContact?.decisionMaker?.id ?? '',
           }}
           isOpen

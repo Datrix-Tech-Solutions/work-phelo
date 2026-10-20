@@ -123,6 +123,8 @@ export interface CreateProspectContactPayload {
   name: string;
   phone?: string;
   email?: string;
+  /** YYYY-MM-DD */
+  dateOfBirth?: string;
   decisionMakerTypeId?: string;
 }
 
@@ -206,6 +208,7 @@ export interface ProspectDetailContact {
   name: string;
   phone: string | null;
   email: string | null;
+  dateOfBirth: string | null;
   isPrimary: boolean;
   decisionMaker: ProspectReference | null;
 }
@@ -298,6 +301,8 @@ export interface UpdateProspectPayload {
     phone?: string | null;
     /** `null` removes the email address. */
     email?: string | null;
+    /** YYYY-MM-DD; `null` removes the date of birth. */
+    dateOfBirth?: string | null;
     decisionMakerTypeId?: string | null;
   };
   /** The complete desired set — existing rows left out are removed. */
@@ -495,6 +500,8 @@ export interface UpdateClientPayload {
     phone?: string | null;
     /** `null` removes the email address. */
     email?: string | null;
+    /** YYYY-MM-DD; `null` removes the date of birth. */
+    dateOfBirth?: string | null;
     decisionMakerTypeId?: string | null;
   };
   location?: Partial<CreateProspectLocationPayload>;
@@ -1654,4 +1661,20 @@ export interface TransportTrendPoint {
   toDate: string;
   requested: number;
   completed: number;
+}
+
+/** A prospect or client contact whose birthday is coming up. */
+export interface MarketingDashboardBirthday {
+  id: string;
+  contactName: string;
+  companyName: string;
+  type: 'CLIENT' | 'PROSPECT';
+  companyId: string;
+  /** Next occurrence of the birthday, YYYY-MM-DD. */
+  date: string;
+}
+
+export interface MarketingDashboardBirthdays {
+  withinDays: number;
+  birthdays: MarketingDashboardBirthday[];
 }

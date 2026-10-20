@@ -15,6 +15,7 @@ import {
   useAvailableAssets,
   useUnassignAsset,
 } from '@/hooks/hr/useAssets';
+import { useEmployeeProjects } from '@/hooks/hr/useProjects';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
@@ -29,6 +30,9 @@ import { ProfileBanner } from '@/components/molecules/hr/employees/ProfileBanner
 import { EmployeeDetailSidebar } from '@/components/molecules/hr/employees/EmployeeDetailSidebar';
 import { PersonalInformationSection } from '@/components/molecules/hr/employees/PersonalInformationSection';
 import { cardClass } from '@/lib/utils';
+import { ObjectivesSection } from '@/components/molecules/hr/employees/ObjectivesSection';
+import { PerformanceTab } from '@/components/molecules/hr/employees/PerformanceTab';
+import { EmployeeLeaveBalancesSection } from '@/components/molecules/hr/employees/EmployeeLeaveBalancesSection';
 import { EmployeeProjectsSection } from '@/components/molecules/hr/employees/EmployeeProjectsSection';
 import { useAuthStore } from '@/store/auth.store';
 import { AssetsSection } from '@/components/molecules/hr/employees/assetSection';
@@ -43,10 +47,11 @@ import { UnassignAssetModal } from '@/components/organisms/hr/assets/UnassignAss
 import { EmployeeDocumentsTab } from '@/components/molecules/hr/employees/EmployeeDocumentsTab';
 import { pageBreadcrumb, pagePx, pageContent } from '@/lib/layout';
 
-type EmployeeTab = 'personal' | 'documents';
+type EmployeeTab = 'personal' | 'performance' | 'documents';
 
 const TABS = [
   { key: 'personal', label: 'Personal' },
+  { key: 'performance', label: 'Performance' },
   { key: 'documents', label: 'Documents' },
 ];
 
@@ -71,6 +76,7 @@ export default function EmployeeDetailPage({
   const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
   const canViewDetail = canEditEmployee || canOffboardEmployee;
   const { data: employee, isLoading, error } = useEmployee(id, { enabled: canViewDetail });
+  const { data: employeeProjects = [] } = useEmployeeProjects(id);
   const { data: resignationRecord } = useResignationRecord(id);
   const { data: allHrEmployees = [] } = useEmployeeOptions();
   const { data: availableAssets = [] } = useAvailableAssets();
@@ -81,6 +87,7 @@ export default function EmployeeDetailPage({
 
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canReadAllLeaves = usePermission(Permission.READ_ALL_LEAVES);
   const canReadProjects = usePermission(Permission.READ_PROJECTS);
 
   const { data: permissionSets = [] } = usePermissionSets({ enabled: canGrantPermission });
@@ -213,6 +220,7 @@ export default function EmployeeDetailPage({
                   onManagePermissions={() => setActivePanel('permissions')}
                   directPermissions={directPermissions}
                 />
+                {canReadAllLeaves && <EmployeeLeaveBalancesSection employeeId={employee.id} />}
                 {canAccessProjects && (
                   <EmployeeProjectsSection
                     employeeId={employee.id}
@@ -226,6 +234,9 @@ export default function EmployeeDetailPage({
                 />
               </div>
             </div>
+          )}
+          {activeTab === 'performance' && (
+            <PerformanceTab objectives={<ObjectivesSection projects={employeeProjects} />} />
           )}
           {activeTab === 'documents' && <EmployeeDocumentsTab employee={employee} />}
         </div>

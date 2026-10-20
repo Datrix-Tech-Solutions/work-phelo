@@ -23,6 +23,9 @@ import { extractError } from '@/lib/extractError';
 import { pagePx, pageContent } from '@/lib/layout';
 import { ProfileBanner } from '@/components/molecules/hr/employees/ProfileBanner';
 import { ProfileSummaryCard } from '@/components/molecules/hr/employees/ProfileSummaryCard';
+import { ObjectivesSection } from '@/components/molecules/hr/employees/ObjectivesSection';
+import { PerformanceTab } from '@/components/molecules/hr/employees/PerformanceTab';
+import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
 import { ProfilePerformanceSummaryCard } from '@/components/molecules/hr/employees/ProfilePerformanceSummaryCard';
 import { PersonalInformationSection } from '@/components/molecules/hr/employees/PersonalInformationSection';
 import { cardClass } from '@/lib/utils';
@@ -32,8 +35,8 @@ import { ProfileProjectsSection } from '@/components/molecules/hr/employees/Prof
 import { AssetsSection } from '@/components/molecules/hr/employees/assetSection';
 import { ProfilePayslipTab } from '@/components/molecules/hr/employees/ProfilePayslipTab';
 import { MyDocumentsContent } from '@/components/organisms/hr/documents/MyDocumentsContent';
-import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
 import { AnnouncementsContent } from '@/components/organisms/hr/announcements/AnnouncementsContent';
+import { CandidatesTable } from '@/components/organisms/hr/recruitment/CandidatesTable';
 import { SchedulingContent } from '@/components/organisms/hr/scheduling/SchedulingContent';
 import { EditMyProfilePanel } from '@/components/organisms/hr/employee/EditMyProfilePanel';
 import { ProfilePhotoDialog } from '@/components/organisms/hr/employee/ProfilePhotoDialog';
@@ -45,6 +48,7 @@ import { RecordsSection } from '@/components/organisms/hr/time-clock/RecordSecti
 import { CorrectionsSection } from '@/components/organisms/hr/time-clock/CorrectionSection';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { useMyProjects } from '@/hooks/hr/useProjects';
 import { useLeaveBalances } from '@/hooks/hr/useLeave';
 import {
   useAttendanceRecords,
@@ -63,6 +67,7 @@ type ProfileTab =
   | 'documents'
   | 'announcements'
   | 'scheduling'
+  | 'hiring'
   | 'clockInHistory'
   | 'timeCorrection';
 
@@ -105,18 +110,20 @@ export function ProfileContent() {
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
   const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
   const canAccessScheduling = canReadSchedules || canManageSchedules || canApproveShiftSwap;
+  const canReadCandidates = usePermission(Permission.READ_RECRUITMENT_CANDIDATES);
   const canAccessProjects = Boolean(user?.featureConfig?.hr?.projects);
   const canManageTime = usePermission(Permission.APPROVE_TIME_CORRECTION);
   const isAdmin = user?.role === 'TENANT_ADMIN';
   const canApproveCorrections = canManageTime || isAdmin;
 
+  const { data: myProjects = [] } = useMyProjects();
+  const [appraisalSearch, setAppraisalSearch] = useState('');
+  const [appraisalPage, setAppraisalPage] = useState(1);
+
   const canCreateAppraisal = usePermission(Permission.CREATE_APPRAISAL);
   const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
   const canFinalizeAppraisal = usePermission(Permission.FINALIZE_APPRAISAL);
   const canManageAppraisals = canCreateAppraisal || canConfigureAppraisal || canFinalizeAppraisal;
-
-  const [appraisalSearch, setAppraisalSearch] = useState('');
-  const [appraisalPage, setAppraisalPage] = useState(1);
 
   // Clock-in history
   const [recordsPage, setRecordsPage] = useState(1);
@@ -178,6 +185,7 @@ export function ProfileContent() {
     canApproveCorrections && { key: 'timeCorrection', label: 'Time Correction' },
     canAccessAnnouncements && { key: 'announcements', label: 'Announcements' },
     canAccessScheduling && { key: 'scheduling', label: 'Smart Scheduling' },
+    canReadCandidates && { key: 'hiring', label: 'Hiring' },
   ].filter((tab): tab is { key: string; label: string } => Boolean(tab));
 
   const userPermsTyped = userPermsRaw as
@@ -311,24 +319,29 @@ export function ProfileContent() {
           )}
 
           {activeTab === 'performance' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-              <div className="lg:col-span-2">
-                <MyAppraisalsTable
-                  search={appraisalSearch}
-                  onSearch={setAppraisalSearch}
-                  page={appraisalPage}
-                  onPageChange={setAppraisalPage}
-                  onManage={
-                    canManageAppraisals
-                      ? () => router.push(`/${tenantSlug}/hr/appraisal`)
-                      : undefined
-                  }
-                />
-              </div>
-              <div className="lg:col-span-1">
-                <ProfilePerformanceSummaryCard />
-              </div>
-            </div>
+            <PerformanceTab
+              objectives={<ObjectivesSection projects={myProjects} />}
+              assessments={
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                  <div className="xl:col-span-2 min-w-0">
+                    <MyAppraisalsTable
+                      search={appraisalSearch}
+                      onSearch={setAppraisalSearch}
+                      page={appraisalPage}
+                      onPageChange={setAppraisalPage}
+                      onManage={
+                        canManageAppraisals
+                          ? () => router.push(`/${tenantSlug}/hr/appraisal`)
+                          : undefined
+                      }
+                    />
+                  </div>
+                  <div className="xl:col-span-1">
+                    <ProfilePerformanceSummaryCard />
+                  </div>
+                </div>
+              }
+            />
           )}
 
           {activeTab === 'banking' && <ProfilePayslipTab />}
@@ -375,6 +388,9 @@ export function ProfileContent() {
             <div className="flex flex-col gap-6">
               <SchedulingContent tenantSlug={tenantSlug} />
             </div>
+          )}
+          {activeTab === 'hiring' && canReadCandidates && (
+            <CandidatesTable onManage={() => router.push(`/${tenantSlug}/hr/recruitment`)} />
           )}
         </div>
       </div>
