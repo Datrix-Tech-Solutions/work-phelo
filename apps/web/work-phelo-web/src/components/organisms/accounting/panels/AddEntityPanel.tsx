@@ -8,7 +8,15 @@ import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
-import { SubledgerAccount, SubledgerType } from '@/types/accounting';
+import { Toggle } from '@/components/atoms/Toggle';
+import { NumberField } from '@/components/atoms/NumberField';
+import {
+  AmlAmountPeriod,
+  AmlCountPeriod,
+  AmlRiskRating,
+  SubledgerAccount,
+  SubledgerType,
+} from '@/types/accounting';
 import { useCreateSubledger, useEntityTypes, useSubledgers, useUpdateSubledger } from '@/hooks';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
@@ -38,7 +46,32 @@ type FormValues = {
   phone: string;
   address: string;
   description: string;
+  monitorWithAml: boolean;
+  isPoliticallyExposed: boolean;
+  riskRating: AmlRiskRating | '';
+  amlAmountLimit: number;
+  amlAmountPeriod: AmlAmountPeriod | '';
+  amlTransactionCountLimit: number;
+  amlTransactionCountPeriod: AmlCountPeriod | '';
 };
+
+const RISK_OPTIONS: SearchSelectOption[] = [
+  { label: 'Low', value: 'LOW' },
+  { label: 'Medium', value: 'MEDIUM' },
+  { label: 'High', value: 'HIGH' },
+];
+
+const AMOUNT_PERIOD_OPTIONS: SearchSelectOption[] = [
+  { label: 'Weekly', value: 'WEEKLY' },
+  { label: 'Monthly', value: 'MONTHLY' },
+  { label: 'Yearly', value: 'YEARLY' },
+];
+
+const COUNT_PERIOD_OPTIONS: SearchSelectOption[] = [
+  { label: '12 hours', value: 'HOURS_12' },
+  { label: '24 hours', value: 'HOURS_24' },
+  { label: '48 hours', value: 'HOURS_48' },
+];
 
 const DEFAULTS: FormValues = {
   code: '',
@@ -49,6 +82,13 @@ const DEFAULTS: FormValues = {
   phone: '',
   address: '',
   description: '',
+  monitorWithAml: false,
+  isPoliticallyExposed: false,
+  riskRating: '',
+  amlAmountLimit: 0,
+  amlAmountPeriod: '',
+  amlTransactionCountLimit: 0,
+  amlTransactionCountPeriod: '',
 };
 
 export function AddEntityPanel({
@@ -93,11 +133,14 @@ export function AddEntityPanel({
     register,
     handleSubmit,
     control,
+    watch,
     reset,
     setValue,
     getValues,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
+
+  const monitorWithAml = watch('monitorWithAml');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -111,6 +154,13 @@ export function AddEntityPanel({
         phone: entity.phone ?? '',
         address: entity.address ?? '',
         description: entity.description ?? '',
+        monitorWithAml: entity.monitorWithAml ?? false,
+        isPoliticallyExposed: entity.isPoliticallyExposed ?? false,
+        riskRating: entity.riskRating ?? '',
+        amlAmountLimit: Number(entity.amlAmountLimit ?? 0),
+        amlAmountPeriod: entity.amlAmountPeriod ?? '',
+        amlTransactionCountLimit: entity.amlTransactionCountLimit ?? 0,
+        amlTransactionCountPeriod: entity.amlTransactionCountPeriod ?? '',
       });
     } else {
       reset({
@@ -156,6 +206,15 @@ export function AddEntityPanel({
         phone: data.phone || undefined,
         address: data.address.trim() || undefined,
         description: data.description.trim() || undefined,
+        monitorWithAml: data.monitorWithAml,
+        ...(data.monitorWithAml && {
+          isPoliticallyExposed: data.isPoliticallyExposed,
+          riskRating: data.riskRating || undefined,
+          amlAmountLimit: data.amlAmountLimit || undefined,
+          amlAmountPeriod: data.amlAmountPeriod || undefined,
+          amlTransactionCountLimit: data.amlTransactionCountLimit || undefined,
+          amlTransactionCountPeriod: data.amlTransactionCountPeriod || undefined,
+        }),
       };
       const subledger = entity
         ? await updateSubledger({ id: entity.id, ...payload })
@@ -273,6 +332,109 @@ export function AddEntityPanel({
           error={errors.description}
           placeholder="Optional description"
         />
+
+        <Controller
+          control={control}
+          name="monitorWithAml"
+          render={({ field }) => (
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <span className="text-sm font-bold text-gray-900">Monitor with AML</span>
+              <Toggle enabled={field.value} onChange={field.onChange} />
+            </div>
+          )}
+        />
+
+        {monitorWithAml && (
+          <>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Controller
+                control={control}
+                name="isPoliticallyExposed"
+                render={({ field }) => (
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <span className="text-sm font-bold text-gray-900">
+                      Is this person politically exposed?
+                    </span>
+                    <Toggle enabled={field.value} onChange={field.onChange} />
+                  </div>
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="riskRating"
+                rules={{ required: 'Risk rating is required' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Risk Rating"
+                    placeholder="Select rating…"
+                    options={RISK_OPTIONS}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.riskRating?.message}
+                  />
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Controller
+                control={control}
+                name="amlAmountLimit"
+                render={({ field }) => (
+                  <NumberField
+                    label="Transaction Amount Limit"
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="amlAmountPeriod"
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Period"
+                    placeholder="Select period…"
+                    options={AMOUNT_PERIOD_OPTIONS}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Controller
+                control={control}
+                name="amlTransactionCountLimit"
+                render={({ field }) => (
+                  <NumberField
+                    label="Number of Transactions"
+                    value={field.value}
+                    onChange={field.onChange}
+                    decimals={0}
+                  />
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="amlTransactionCountPeriod"
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Period"
+                    placeholder="Select period…"
+                    options={COUNT_PERIOD_OPTIONS}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </div>
+          </>
+        )}
       </div>
     </SidePanel>
   );

@@ -23,6 +23,9 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
+  AmlAmountPeriod,
+  AmlCountPeriod,
+  AmlRiskRating,
   CashFlowCategory,
   FiscalPeriodStatus,
   GLAccountCategory,
@@ -808,6 +811,46 @@ export class CreateSubledgerAccountDto {
   @IsString()
   @MaxLength(1000)
   description?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Monitor this entity in the AML report. Exceeding a limit only flags it; transactions are never blocked.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  monitorWithAml?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPoliticallyExposed?: boolean;
+
+  @ApiPropertyOptional({ enum: AmlRiskRating })
+  @IsOptional()
+  @IsEnum(AmlRiskRating)
+  riskRating?: AmlRiskRating;
+
+  @ApiPropertyOptional({ example: 50000 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amlAmountLimit?: number;
+
+  @ApiPropertyOptional({ enum: AmlAmountPeriod })
+  @IsOptional()
+  @IsEnum(AmlAmountPeriod)
+  amlAmountPeriod?: AmlAmountPeriod;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  amlTransactionCountLimit?: number;
+
+  @ApiPropertyOptional({ enum: AmlCountPeriod })
+  @IsOptional()
+  @IsEnum(AmlCountPeriod)
+  amlTransactionCountPeriod?: AmlCountPeriod;
 }
 
 export class UpdateSubledgerAccountDto extends PartialType(

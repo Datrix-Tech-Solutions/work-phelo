@@ -1807,6 +1807,10 @@ export interface CreateEntityTypePayload {
 
 export type UpdateEntityTypePayload = Partial<CreateEntityTypePayload>;
 
+export type AmlRiskRating = 'LOW' | 'MEDIUM' | 'HIGH';
+export type AmlAmountPeriod = 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+export type AmlCountPeriod = 'HOURS_12' | 'HOURS_24' | 'HOURS_48';
+
 export interface SubledgerAccount {
   id: string;
   code: string;
@@ -1830,6 +1834,13 @@ export interface SubledgerAccount {
   phone: string | null;
   address: string | null;
   description: string | null;
+  monitorWithAml?: boolean;
+  isPoliticallyExposed?: boolean | null;
+  riskRating?: AmlRiskRating | null;
+  amlAmountLimit?: number | null;
+  amlAmountPeriod?: AmlAmountPeriod | null;
+  amlTransactionCountLimit?: number | null;
+  amlTransactionCountPeriod?: AmlCountPeriod | null;
   status: GLAccountStatus;
   balance: AccountingSubledgerBalance;
   createdAt: string;
@@ -1849,6 +1860,13 @@ export interface CreateSubledgerAccountPayload {
   phone?: string;
   address?: string;
   description?: string;
+  monitorWithAml?: boolean;
+  isPoliticallyExposed?: boolean;
+  riskRating?: AmlRiskRating;
+  amlAmountLimit?: number;
+  amlAmountPeriod?: AmlAmountPeriod;
+  amlTransactionCountLimit?: number;
+  amlTransactionCountPeriod?: AmlCountPeriod;
 }
 
 export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;

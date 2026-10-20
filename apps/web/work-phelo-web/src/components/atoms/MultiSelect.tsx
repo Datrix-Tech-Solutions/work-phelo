@@ -251,14 +251,15 @@ export function MultiSelect({
         )}
       >
         {showChips ? (
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          // One row only: chips that do not fit are clipped; open the list to see every selection.
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-hidden">
             {selected.map((opt) => (
               <span
                 key={opt.value}
                 // Coloured by the option's place in the list, so each selection differs (up to
                 // eight) and an option keeps its colour whatever else is selected.
                 className={cn(
-                  'inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full',
+                  'inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs font-medium px-2 py-1 rounded-full',
                   CHIP_COLORS[options.findIndex((o) => o.value === opt.value) % CHIP_COLORS.length],
                 )}
               >

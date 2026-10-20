@@ -2465,6 +2465,7 @@ export class AccountingMasterDataService {
           phone: this.optional(dto.phone),
           address: this.optional(dto.address),
           description: this.optional(dto.description),
+          ...this.amlData(dto),
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -2532,12 +2533,50 @@ export class AccountingMasterDataService {
           ...(dto.description !== undefined
             ? { description: this.optional(dto.description) }
             : {}),
+          ...this.amlData(dto),
           updatedByUserId: user.id,
         },
       });
     } catch (error) {
       this.rethrowUnique(error, 'Subledger account already exists');
     }
+  }
+
+  /** AML monitoring settings are only kept while monitoring is on; switching it off clears
+   *  them. Absent on an update means untouched. Stored only — nothing flags or blocks on them. */
+  private amlData(
+    dto: Partial<CreateSubledgerAccountDto>,
+  ): Pick<
+    Prisma.SubledgerAccountUncheckedCreateInput,
+    | 'monitorWithAml'
+    | 'isPoliticallyExposed'
+    | 'riskRating'
+    | 'amlAmountLimit'
+    | 'amlAmountPeriod'
+    | 'amlTransactionCountLimit'
+    | 'amlTransactionCountPeriod'
+  > {
+    if (dto.monitorWithAml === undefined) return {};
+    if (!dto.monitorWithAml) {
+      return {
+        monitorWithAml: false,
+        isPoliticallyExposed: false,
+        riskRating: null,
+        amlAmountLimit: null,
+        amlAmountPeriod: null,
+        amlTransactionCountLimit: null,
+        amlTransactionCountPeriod: null,
+      };
+    }
+    return {
+      monitorWithAml: true,
+      isPoliticallyExposed: dto.isPoliticallyExposed ?? false,
+      riskRating: dto.riskRating ?? null,
+      amlAmountLimit: dto.amlAmountLimit ?? null,
+      amlAmountPeriod: dto.amlAmountPeriod ?? null,
+      amlTransactionCountLimit: dto.amlTransactionCountLimit ?? null,
+      amlTransactionCountPeriod: dto.amlTransactionCountPeriod ?? null,
+    };
   }
 
   async deactivateSubledgerAccount(user: RequestUser, subledgerId: string) {
