@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { X, ShieldOff } from 'lucide-react';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -128,7 +128,7 @@ function AssignPermissionPanelInner({
   };
 
   return (
-    <SidePanel
+    <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Grant Direct Permissions"
@@ -144,112 +144,114 @@ function AssignPermissionPanelInner({
         </div>
       }
     >
-      {/* Active direct permissions */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
+        {/* Active direct permissions */}
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Active direct permissions
+          </p>
+
+          {isLoadingPerms ? (
+            <div className="flex flex-col gap-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="h-8 bg-gray-100 rounded-full animate-pulse" />
+              ))}
+            </div>
+          ) : activeTagsByGroup.length === 0 ? (
+            <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-gray-200 px-4 py-3">
+              <ShieldOff className="w-4 h-4 text-gray-400 shrink-0" />
+              <p className="text-sm text-gray-400 italic">No direct permissions granted yet.</p>
+            </div>
+          ) : (
+            activeTagsByGroup.map((group) => (
+              <div key={group.group} className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-gray-400">{group.group}</p>
+                <div className="flex flex-wrap gap-2">
+                  {group.tags.map((tag) => (
+                    <div
+                      key={tag.key}
+                      className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-sm font-medium bg-brand/10 text-brand border border-brand/20"
+                    >
+                      {tagLabel(tag)}
+                      <button
+                        type="button"
+                        onClick={() => handleRevokeTag(tag.key)}
+                        disabled={isRevoking}
+                        className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-brand/20 transition-colors disabled:opacity-40"
+                        aria-label="Revoke"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="border-t border-gray-100" />
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Changes appear immediately. The affected user may need to refresh or sign in again before
+          their live session reflects the new access.
+        </div>
+
+        {/* Grant new permissions */}
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Active direct permissions
+          Grant new permissions
         </p>
 
-        {isLoadingPerms ? (
-          <div className="flex flex-col gap-2">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-8 bg-gray-100 rounded-full animate-pulse" />
-            ))}
-          </div>
-        ) : activeTagsByGroup.length === 0 ? (
-          <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-gray-200 px-4 py-3">
-            <ShieldOff className="w-4 h-4 text-gray-400 shrink-0" />
-            <p className="text-sm text-gray-400 italic">No direct permissions granted yet.</p>
-          </div>
-        ) : (
-          activeTagsByGroup.map((group) => (
-            <div key={group.group} className="flex flex-col gap-2">
-              <p className="text-xs font-medium text-gray-400">{group.group}</p>
+        <SearchSelect
+          label="Category"
+          placeholder="Select a category..."
+          options={PERMISSION_TAG_GROUPS.filter((g) => g.group !== 'Administration').map((g) => ({
+            value: g.group,
+            label: g.group,
+          }))}
+          value={selectedGroup}
+          onChange={setSelectedGroup}
+        />
+
+        {selectedGroup &&
+          (() => {
+            const group = PERMISSION_TAG_GROUPS.find((g) => g.group === selectedGroup);
+            if (!group) return null;
+            const pendingSet = new Set(selectedTags);
+            return (
               <div className="flex flex-wrap gap-2">
-                {group.tags.map((tag) => (
-                  <div
-                    key={tag.key}
-                    className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-sm font-medium bg-brand/10 text-brand border border-brand/20"
-                  >
-                    {tagLabel(tag)}
+                {group.tags.map((tag) => {
+                  const isGranted = grantedTagKeys.has(tag.key);
+                  const isPending = pendingSet.has(tag.key);
+                  const isActive = isGranted || isPending;
+                  return (
                     <button
+                      key={tag.key}
                       type="button"
-                      onClick={() => handleRevokeTag(tag.key)}
-                      disabled={isRevoking}
-                      className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-brand/20 transition-colors disabled:opacity-40"
-                      aria-label="Revoke"
+                      onClick={() => {
+                        if (isGranted) return; // already granted — managed via revoke in the top section
+                        const next = new Set(pendingSet);
+                        if (next.has(tag.key)) next.delete(tag.key);
+                        else next.add(tag.key);
+                        setSelectedTags(Array.from(next));
+                      }}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-sm font-medium border transition-colors',
+                        isActive
+                          ? 'bg-brand text-white border-brand'
+                          : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700',
+                        isGranted && 'cursor-default',
+                      )}
                     >
-                      <X className="w-3 h-3" />
+                      {tagLabel(tag)}
                     </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </div>
-          ))
-        )}
+            );
+          })()}
       </div>
-
-      <div className="border-t border-gray-100" />
-
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Changes appear immediately. The affected user may need to refresh or sign in again before
-        their live session reflects the new access.
-      </div>
-
-      {/* Grant new permissions */}
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-        Grant new permissions
-      </p>
-
-      <SearchSelect
-        label="Category"
-        placeholder="Select a category..."
-        options={PERMISSION_TAG_GROUPS.filter((g) => g.group !== 'Administration').map((g) => ({
-          value: g.group,
-          label: g.group,
-        }))}
-        value={selectedGroup}
-        onChange={setSelectedGroup}
-      />
-
-      {selectedGroup &&
-        (() => {
-          const group = PERMISSION_TAG_GROUPS.find((g) => g.group === selectedGroup);
-          if (!group) return null;
-          const pendingSet = new Set(selectedTags);
-          return (
-            <div className="flex flex-wrap gap-2">
-              {group.tags.map((tag) => {
-                const isGranted = grantedTagKeys.has(tag.key);
-                const isPending = pendingSet.has(tag.key);
-                const isActive = isGranted || isPending;
-                return (
-                  <button
-                    key={tag.key}
-                    type="button"
-                    onClick={() => {
-                      if (isGranted) return; // already granted — managed via revoke in the top section
-                      const next = new Set(pendingSet);
-                      if (next.has(tag.key)) next.delete(tag.key);
-                      else next.add(tag.key);
-                      setSelectedTags(Array.from(next));
-                    }}
-                    className={cn(
-                      'px-3 py-1.5 rounded-full text-sm font-medium border transition-colors',
-                      isActive
-                        ? 'bg-brand text-white border-brand'
-                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700',
-                      isGranted && 'cursor-default',
-                    )}
-                  >
-                    {tagLabel(tag)}
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })()}
-    </SidePanel>
+    </Modal>
   );
 }
 
