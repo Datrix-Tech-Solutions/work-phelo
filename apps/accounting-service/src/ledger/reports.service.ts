@@ -292,14 +292,39 @@ export class ReportsService {
    * Income Statement's rules (posted and reversed journals, base currency, revenue as credit less
    * debit, expenses as debit less credit) so the two always agree.
    */
-  async incomeSeries(tenantId: string, query: IncomeSeriesReportQueryDto) {
-    const ranges = query.ranges.split(',').map((pair) => {
+  private parseSeriesRanges(ranges: string) {
+    return ranges.split(',').map((pair) => {
       const [fromDate, toDate] = pair.split(':');
       if (toDate < fromDate) {
         throw new BadRequestException(`Range ${pair} ends before it starts`);
       }
       return { fromDate, toDate };
     });
+  }
+
+  /** Operating, investing and financing totals for each range, for charting cash flow over time. */
+  async cashFlowSeries(tenantId: string, query: IncomeSeriesReportQueryDto) {
+    const ranges = this.parseSeriesRanges(query.ranges);
+    return Promise.all(
+      ranges.map(async ({ fromDate, toDate }) => {
+        const report = await this.cashFlowStatement(tenantId, {
+          fromDate,
+          toDate,
+        });
+        return {
+          fromDate,
+          toDate,
+          operating: report.operatingActivities.total,
+          investing: report.investingActivities.total,
+          financing: report.financingActivities.total,
+          netChangeInCash: report.netChangeInCash,
+        };
+      }),
+    );
+  }
+
+  async incomeSeries(tenantId: string, query: IncomeSeriesReportQueryDto) {
+    const ranges = this.parseSeriesRanges(query.ranges);
     const categories = [GLAccountCategory.REVENUE, GLAccountCategory.EXPENSE];
 
     const accounts = await this.prisma.gLAccount.findMany({

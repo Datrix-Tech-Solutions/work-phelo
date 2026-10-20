@@ -413,6 +413,40 @@ describe('ReportsService', () => {
     });
   });
 
+  describe('cashFlowSeries', () => {
+    it('rejects a range that ends before it starts', async () => {
+      const { service } = setup();
+
+      await expect(
+        service.cashFlowSeries(tenantId, { ranges: '2026-08-01:2026-07-01' }),
+      ).rejects.toThrow('ends before it starts');
+    });
+
+    it('returns the section totals for each range', async () => {
+      const { prisma, service } = setup();
+      prisma.journalLine.findMany.mockResolvedValue([]);
+
+      const result = await service.cashFlowSeries(tenantId, {
+        ranges: '2026-07-01:2026-07-31,2026-08-01:2026-08-31',
+      });
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          fromDate: '2026-07-01',
+          toDate: '2026-07-31',
+          operating: '0.00',
+          investing: '0.00',
+          financing: '0.00',
+          netChangeInCash: '0.00',
+        }),
+        expect.objectContaining({
+          fromDate: '2026-08-01',
+          toDate: '2026-08-31',
+        }),
+      ]);
+    });
+  });
+
   describe('cashFlowStatement', () => {
     const cashAccount = {
       id: 'cash-account',

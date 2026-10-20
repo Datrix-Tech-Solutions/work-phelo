@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
@@ -308,7 +309,17 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
   const [requestInvoiceId, setRequestInvoiceId] = useState<string | undefined>();
   const [receiveRequest, setReceiveRequest] = useState<PaymentRequest | null>(null);
   const [rejectRequest, setRejectRequest] = useState<PaymentRequest | null>(null);
-  const [newTransactionOpen, setNewTransactionOpen] = useState(false);
+  // The dashboard's quick action arrives as ?new=1: open the form, then drop the flag so a
+  // refresh doesn't open it again.
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [newTransactionOpen, setNewTransactionOpen] = useState(
+    () => searchParams.get('new') === '1',
+  );
+  useEffect(() => {
+    if (searchParams.get('new') === '1') router.replace(pathname);
+  }, [searchParams, pathname, router]);
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TransactionTypeDefinition | null | undefined>(
     undefined,

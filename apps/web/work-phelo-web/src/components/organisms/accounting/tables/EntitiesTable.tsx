@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useState, useMemo } from 'react';
+import { useParams, usePathname, useSearchParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
@@ -41,7 +41,16 @@ export function EntitiesTable() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
-  const [panelTarget, setPanelTarget] = useState<SubledgerAccount | null | undefined>(undefined);
+  // The dashboard's quick action arrives as ?new=1: open the form, then drop the flag so a
+  // refresh doesn't open it again.
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const [panelTarget, setPanelTarget] = useState<SubledgerAccount | null | undefined>(() =>
+    searchParams.get('new') === '1' ? null : undefined,
+  );
+  useEffect(() => {
+    if (searchParams.get('new') === '1') router.replace(pathname);
+  }, [searchParams, pathname, router]);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<SubledgerAccount | null>(null);
   const toast = useToast();
