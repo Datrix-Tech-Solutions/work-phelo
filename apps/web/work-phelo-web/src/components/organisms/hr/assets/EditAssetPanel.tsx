@@ -113,16 +113,35 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
           placeholder="eg; MacBook Pro 14-inch"
         />
 
-        <SearchSelect
-          label="Asset Type"
-          placeholder="Select type"
-          value={typeValue}
-          onChange={(v) => {
-            setValue('type', v);
-            if (v !== 'OTHER') setValue('customType', undefined);
-          }}
-          options={ASSET_TYPE_OPTIONS}
-        />
+        <div className={`grid gap-4 ${isVehicle ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <SearchSelect
+            label="Asset Type"
+            placeholder="Select type"
+            value={typeValue}
+            onChange={(v) => {
+              setValue('type', v);
+              if (v !== 'OTHER') setValue('customType', undefined);
+            }}
+            options={ASSET_TYPE_OPTIONS}
+          />
+
+          <FormField
+            label={isVehicle ? 'Registration Number' : 'Serial Number'}
+            registration={register('serialNumber')}
+            placeholder={isVehicle ? 'eg; GR-1234-24' : 'eg; C02XL0LFJGH5'}
+          />
+
+          {isVehicle && (
+            <SearchSelect
+              label="Vehicle Type"
+              placeholder="Select vehicle type"
+              value={vehicleTypeValue}
+              onChange={(v) => setValue('vehicleType', v)}
+              options={VEHICLE_TYPE_OPTIONS}
+            />
+          )}
+        </div>
+
         {typeValue === 'OTHER' && (
           <FormField
             label="Specify asset type"
@@ -132,36 +151,22 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
           />
         )}
 
-        <FormField
-          label={isVehicle ? 'Registration Number' : 'Serial Number'}
-          registration={register('serialNumber')}
-          placeholder={isVehicle ? 'eg; GR-1234-24' : 'eg; C02XL0LFJGH5'}
-        />
-
-        {isVehicle && (
+        <div className="grid grid-cols-2 gap-4">
           <SearchSelect
-            label="Vehicle Type"
-            placeholder="Select vehicle type"
-            value={vehicleTypeValue}
-            onChange={(v) => setValue('vehicleType', v)}
-            options={VEHICLE_TYPE_OPTIONS}
+            label="Condition"
+            placeholder="Select condition"
+            value={conditionValue}
+            onChange={(v) => setValue('condition', v)}
+            options={ASSET_CONDITION_OPTIONS}
           />
-        )}
 
-        <DatePicker
-          label="Purchase Date"
-          value={purchaseDateValue}
-          onChange={(v) => setValue('purchaseDate', v)}
-          disableFuture
-        />
-
-        <SearchSelect
-          label="Condition"
-          placeholder="Select condition"
-          value={conditionValue}
-          onChange={(v) => setValue('condition', v)}
-          options={ASSET_CONDITION_OPTIONS}
-        />
+          <DatePicker
+            label="Purchase Date"
+            value={purchaseDateValue}
+            onChange={(v) => setValue('purchaseDate', v)}
+            disableFuture
+          />
+        </div>
 
         <SearchSelect
           label="Branch"

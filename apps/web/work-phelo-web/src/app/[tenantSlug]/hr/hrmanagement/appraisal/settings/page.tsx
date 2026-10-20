@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormSection } from '@/components/atoms/FormSection';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { DataTable } from '@/components/organisms/shared/DataTable';
 import type { Column } from '@/components/organisms/shared/DataTable';
 import { Input } from '@/components/atoms/Input';
@@ -99,7 +99,7 @@ function BandEditPanel({
   };
 
   return (
-    <SidePanel
+    <Modal
       isOpen={!!band}
       onClose={onClose}
       title={band?.label ?? ''}
@@ -144,7 +144,7 @@ function BandEditPanel({
           </div>
         </div>
       )}
-    </SidePanel>
+    </Modal>
   );
 }
 

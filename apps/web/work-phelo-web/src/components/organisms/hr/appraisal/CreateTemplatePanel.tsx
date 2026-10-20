@@ -205,56 +205,58 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
           placeholder="eg; Annual Performance Review"
         />
 
-        <Controller
-          name="selfAssessmentWeight"
-          control={control}
-          rules={{
-            required: 'Required',
-            min: { value: 0, message: 'Min 0' },
-            max: { value: 100, message: 'Max 100' },
-          }}
-          render={({ field }) => (
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Self Assessment Weight (%)
-              </label>
-              <Input
-                type="number"
-                placeholder="40"
-                error={errors.selfAssessmentWeight?.message}
-                {...field}
-                onChange={(e) =>
-                  field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                }
-              />
-            </div>
-          )}
-        />
+        <div className="grid grid-cols-2 gap-4">
+          <Controller
+            name="selfAssessmentWeight"
+            control={control}
+            rules={{
+              required: 'Required',
+              min: { value: 0, message: 'Min 0' },
+              max: { value: 100, message: 'Max 100' },
+            }}
+            render={({ field }) => (
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Self Assessment Weight (%)
+                </label>
+                <Input
+                  type="number"
+                  placeholder="40"
+                  error={errors.selfAssessmentWeight?.message}
+                  {...field}
+                  onChange={(e) =>
+                    field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                />
+              </div>
+            )}
+          />
 
-        <Controller
-          name="managerAssessmentWeight"
-          control={control}
-          rules={{ required: 'Set the self assessment weight first' }}
-          render={({ field }) => (
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Manager Assessment Weight ({field.value === '' ? '—' : field.value}%)
-              </label>
-              <Input
-                type="number"
-                placeholder="60"
-                readOnly
-                disabled
-                error={errors.managerAssessmentWeight?.message}
-                value={field.value}
-                className="bg-gray-50 text-gray-500 cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-400">
-                Automatically set to what&apos;s left of the 100% total.
-              </p>
-            </div>
-          )}
-        />
+          <Controller
+            name="managerAssessmentWeight"
+            control={control}
+            rules={{ required: 'Set the self assessment weight first' }}
+            render={({ field }) => (
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Manager Assessment Weight ({field.value === '' ? '—' : field.value}%)
+                </label>
+                <Input
+                  type="number"
+                  placeholder="60"
+                  readOnly
+                  disabled
+                  error={errors.managerAssessmentWeight?.message}
+                  value={field.value}
+                  className="bg-gray-50 text-gray-500 cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-400">
+                  Automatically set to what&apos;s left of the 100% total.
+                </p>
+              </div>
+            )}
+          />
+        </div>
 
         <div
           className={`px-4 py-2.5 rounded-lg text-sm font-medium ${
