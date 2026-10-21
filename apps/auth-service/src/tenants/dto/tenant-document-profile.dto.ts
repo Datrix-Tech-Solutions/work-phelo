@@ -309,6 +309,12 @@ export class TenantDocumentProfileResponseDto {
   @ApiPropertyOptional({ format: 'date-time', nullable: true })
   signatureUrlExpiresAt!: string | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Short-lived signed URL for reading the logo image.',
+  })
+  logoUrl!: string | null;
+
   @ApiPropertyOptional({ nullable: true })
   authorizedSignatoryName!: string | null;
 

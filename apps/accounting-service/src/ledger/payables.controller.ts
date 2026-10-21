@@ -402,7 +402,7 @@ export class PayablesController {
   @ApiOperation({
     summary: 'Restore a voided bill, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restoreBill(
     @Param('billId', ParseUUIDPipe) billId: string,
     @Body() dto: RestorePayableBillDto,
@@ -441,7 +441,7 @@ export class PayablesController {
   @ApiOperation({
     summary: 'Restore a voided debit note, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restoreCreditNote(
     @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
     @Body() dto: EditPayableNoteDto,
@@ -480,7 +480,7 @@ export class PayablesController {
   @ApiOperation({
     summary: 'Restore a voided payment, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.PAYABLES_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restorePayment(
     @Param('paymentId', ParseUUIDPipe) paymentId: string,
     @Body() dto: EditPayablePaymentDto,

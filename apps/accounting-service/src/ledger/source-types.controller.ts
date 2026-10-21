@@ -42,7 +42,7 @@ export class SourceTypesController {
   @ApiOperation({
     summary: 'List source types other modules have linked into Accounting',
   })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_VIEW)
   list(@Req() request: Request & { user: RequestUser }) {
     return this.service.list(request.user);
   }
@@ -54,7 +54,7 @@ export class SourceTypesController {
     description:
       'For modules that raise transactions: whether the source is linked, the base currency is set, and which of its linked transaction types can be used (and why not, if not).',
   })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_VIEW)
   setup(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: Request & { user: RequestUser },
@@ -65,7 +65,7 @@ export class SourceTypesController {
   @Post(':id/link')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Re-link a source type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_EDIT)
   link(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: Request & { user: RequestUser },
@@ -76,7 +76,7 @@ export class SourceTypesController {
   @Post(':id/unlink')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Unlink a source type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_EDIT)
   unlink(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: Request & { user: RequestUser },

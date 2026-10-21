@@ -29,6 +29,8 @@ import {
   TenantDocumentAssetType,
 } from './tenant-asset-storage.service';
 
+type ProfileAssetType = Exclude<TenantDocumentAssetType, 'watermark'>;
+
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
@@ -73,6 +75,13 @@ export class TenantDocumentProfileService {
     const signature = await this.resolveSignatureUrl(tenant.documentProfile);
     response.signatureUrl = signature.url;
     response.signatureUrlExpiresAt = signature.expiresAt;
+    const logo = await this.resolveInternalAsset(
+      tenant.documentProfile?.logoObjectKey ?? null,
+      tenant.documentProfile?.logoMimeType ?? null,
+      tenant.documentProfile?.logoFileName ?? null,
+      tenant.documentProfile?.logoSizeBytes ?? null,
+    );
+    response.logoUrl = logo?.readUrl ?? null;
     return response;
   }
 
@@ -188,7 +197,7 @@ export class TenantDocumentProfileService {
   async uploadAsset(
     tenantId: string,
     actorUserId: string,
-    assetType: TenantDocumentAssetType,
+    assetType: ProfileAssetType,
     file: Express.Multer.File | undefined,
   ): Promise<TenantDocumentProfileResponseDto> {
     const tenant = await this.findTenant(tenantId);
@@ -541,7 +550,7 @@ export class TenantDocumentProfileService {
   }
 
   private validateAsset(
-    assetType: TenantDocumentAssetType,
+    assetType: ProfileAssetType,
     file: Express.Multer.File | undefined,
   ): void {
     if (!file?.buffer?.length) {
@@ -691,6 +700,7 @@ export class TenantDocumentProfileService {
       signatureSizeBytes: profile?.signatureSizeBytes ?? null,
       signatureUrl: null,
       signatureUrlExpiresAt: null,
+      logoUrl: null,
       authorizedSignatoryName: profile?.authorizedSignatoryName ?? null,
       authorizedSignatoryTitle: profile?.authorizedSignatoryTitle ?? null,
       isActive: profile?.isActive ?? true,

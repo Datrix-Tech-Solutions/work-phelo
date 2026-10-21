@@ -116,7 +116,7 @@ export class JournalsController {
   @ApiOperation({
     summary: 'Void a posted journal while its fiscal period is open',
   })
-  @RequirePermissions(AccountingPermission.JOURNALS_POST)
+  @RequirePermissions(AccountingPermission.JOURNALS_VOID)
   voidPosted(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Body() dto: VoidEntryDto,
@@ -129,7 +129,7 @@ export class JournalsController {
   @ApiOperation({
     summary: 'Restore a voided journal, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.JOURNALS_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restoreVoided(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Body() dto: UpdateDraftJournalDto,
@@ -154,7 +154,7 @@ export class JournalsController {
   @ApiOperation({
     summary: 'Create an exact linked reversal for a posted journal',
   })
-  @RequirePermissions(AccountingPermission.JOURNALS_POST)
+  @RequirePermissions(AccountingPermission.JOURNALS_REVERSE)
   reverse(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Body() dto: ReverseJournalDto,

@@ -52,4 +52,37 @@ export const AccountingPermission = {
   JOURNALS_EDIT: 'accounting.journals:EDIT',
   JOURNALS_POST: 'accounting.journals:APPROVE',
   LEDGER_VIEW: 'accounting.ledger:VIEW',
+  CASH_ACCOUNTS_DEACTIVATE: 'accounting.cash-accounts:DEACTIVATE',
+  JOURNALS_VOID: 'accounting.journals:CANCEL',
+  JOURNALS_REVERSE: 'accounting.journals:DELETE',
+  TRANSACTIONS_VIEW: 'accounting.transactions:VIEW',
+  TRANSACTIONS_CREATE: 'accounting.transactions:CREATE',
+  TRANSACTIONS_POST: 'accounting.transactions:APPROVE',
+  TRANSACTIONS_VOID: 'accounting.transactions:CANCEL',
+  TRANSACTIONS_REVERSE: 'accounting.transactions:DELETE',
+  ARCHIVE_VIEW: 'accounting.archive:VIEW',
+  ARCHIVE_RESTORE: 'accounting.archive:EDIT',
+  ARCHIVE_DELETE: 'accounting.archive:DELETE',
+  ENTITIES_VIEW: 'accounting.entities:VIEW',
+  ENTITIES_CREATE: 'accounting.entities:CREATE',
+  ENTITIES_EDIT: 'accounting.entities:EDIT',
+  ENTITIES_DEACTIVATE: 'accounting.entities:DEACTIVATE',
+  ENTITIES_DELETE: 'accounting.entities:DELETE',
+  COST_CENTRES_VIEW: 'accounting.cost-centres:VIEW',
+  COST_CENTRES_CREATE: 'accounting.cost-centres:CREATE',
+  COST_CENTRES_EDIT: 'accounting.cost-centres:EDIT',
+  COST_CENTRES_DEACTIVATE: 'accounting.cost-centres:DEACTIVATE',
+  TRANSACTION_SETTINGS_VIEW: 'accounting.transaction-settings:VIEW',
+  TRANSACTION_SETTINGS_CREATE: 'accounting.transaction-settings:CREATE',
+  TRANSACTION_SETTINGS_EDIT: 'accounting.transaction-settings:EDIT',
+  TRANSACTION_SETTINGS_DELETE: 'accounting.transaction-settings:DELETE',
 } as const;
+
+/**
+ * Reference data that forms across Accounting need to fill their dropdowns (accounts, cost centres,
+ * entities, currencies, transaction types, tax types, rules, fiscal periods). Whoever holds any
+ * Accounting permission can read it, so a user who only raises transactions does not also need the
+ * permission to manage each list.
+ */
+export const ACCOUNTING_REFERENCE_READERS: string[] =
+  Object.values(AccountingPermission);

@@ -11,17 +11,19 @@ import {
   SIGNATURE_POSITION_OPTIONS,
   type DocumentTemplate,
   type PreviewDoc,
+  type TemplateAssetHandlers,
 } from './templateConfig';
 
-const SIGNATURE_MAX_BYTES = 2 * 1024 * 1024;
-const SIGNATURE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+const SIGNATURE_MAX_BYTES = 1024 * 1024;
+const SIGNATURE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 interface SignatureSectionProps {
   template: DocumentTemplate;
   onChange: <K extends keyof DocumentTemplate>(key: K, value: DocumentTemplate[K]) => void;
+  assets: TemplateAssetHandlers;
 }
 
-export function SignatureSection({ template, onChange }: SignatureSectionProps) {
+export function SignatureSection({ template, onChange, assets }: SignatureSectionProps) {
   const toast = useToast();
 
   const toggleRule = (doc: PreviewDoc, value: boolean) =>
@@ -45,10 +47,11 @@ export function SignatureSection({ template, onChange }: SignatureSectionProps) 
           <>
             <ImageUploadField
               label="Signature image"
-              hint="Transparent PNG works best · max 2 MB"
+              hint="Transparent PNG works best · max 1 MB"
               value={template.signatureImage}
-              onChange={(dataUrl) => onChange('signatureImage', dataUrl)}
-              onClear={() => onChange('signatureImage', null)}
+              onFile={assets.uploadSignature}
+              busy={assets.busy === 'signature'}
+              accept="image/png,image/jpeg,image/webp"
               allowedTypes={SIGNATURE_TYPES}
               maxBytes={SIGNATURE_MAX_BYTES}
               onError={(message) => toast.error(message)}

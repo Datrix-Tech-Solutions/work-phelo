@@ -2,17 +2,15 @@ import { NavGroup } from '@/components/organisms/shared/Sidebar';
 
 import {
   Archive,
-  // BanknoteArrowDown,
-  // BanknoteArrowUp,
   BookOpenText,
   ChartLine,
   LayoutDashboard,
-  // LibraryBig,
   Network,
   NotebookTabsIcon,
   ReceiptText,
   Settings,
   Target,
+  UserKey,
   Users,
   Wallet,
   WalletCards,
@@ -20,19 +18,16 @@ import {
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
 const ChartOfAccountsIcon = () => <BookOpenText className="w-5 h-5" />;
-// const GeneralLedgerIcon = () => <LibraryBig className="w-5 h-5" />;
 const JournalEntriesIcon = () => <NotebookTabsIcon className="w-5 h-5" />;
-// const AccountsPayableIcon = () => <BanknoteArrowUp className="w-5 h-5" />;
-// const AccountsReceivableIcon = () => <BanknoteArrowDown className="w-5 h-5" />;
 const CashAndBankIcon = () => <Wallet className="w-5 h-5" />;
 const FinancialReportsIcon = () => <ChartLine className="w-5 h-5" />;
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
+const UserManagementIcon = () => <UserKey className="w-5 h-5" />;
 const BudgetIcon = () => <Target className="w-5 h-5" />;
 const FiscalYearIcon = () => <WalletCards className="w-5 h-5" />;
 const EntitiesIcon = () => <Users className="w-5 h-5" />;
 const CostCentresIcon = () => <Network className="w-5 h-5" />;
 const ArchiveIcon = () => <Archive className="w-5 h-5" />;
-// const BillsIcon = () => <ReceiptText className="w-5 h-5" />;
 
 export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
   {
@@ -49,45 +44,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Transactions',
-    items: [
-      {
-        key: 'transactions',
-        label: 'Transactions',
-        icon: <ReceiptText />,
-        href: 'transactions',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  {
-    label: 'Sales & Revenue',
-    items: [
-      // {
-      //   key: 'ar-invoices',
-      //   label: 'Receivable',
-      //   icon: <AccountsReceivableIcon />,
-      //   href: 'accountsreceivable/invoices',
-      //   enabled: true,
-      //   active: true,
-      // },
-    ],
-  },
-  // {
-  //   label: 'Expenses & Purchases',
-  //   items: [
-  //     {
-  //       key: 'bills',
-  //       label: 'Payable',
-  //       icon: <BillsIcon />,
-  //       href: 'expensesandpurchases/bills',
-  //       enabled: true,
-  //       active: true,
-  //     },
-  //   ],
-  // },
-  {
     label: 'Accounting',
     items: [
       {
@@ -103,6 +59,14 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         label: 'Journal Entries',
         icon: <JournalEntriesIcon />,
         href: 'journalentry',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'transactions',
+        label: 'Transactions',
+        icon: <ReceiptText />,
+        href: 'transactions',
         enabled: true,
         active: true,
       },
@@ -125,7 +89,7 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Master Data',
+    label: 'Data and Planning',
     items: [
       {
         key: 'ap-entities',
@@ -143,25 +107,6 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
-    ],
-  },
-
-  {
-    label: 'Reports',
-    items: [
-      {
-        key: 'financial-reports',
-        label: 'Financial Reports',
-        icon: <FinancialReportsIcon />,
-        href: 'financial-reports',
-        enabled: true,
-        active: true,
-      },
-    ],
-  },
-  {
-    label: 'Planning',
-    items: [
       {
         key: 'budget',
         label: 'Budgets & Forecasts',
@@ -181,6 +126,19 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Reports',
+    items: [
+      {
+        key: 'financial-reports',
+        label: 'Financial Reports',
+        icon: <FinancialReportsIcon />,
+        href: 'financial-reports',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
     label: 'System',
     items: [
       {
@@ -191,47 +149,14 @@ export const ACCOUNTING_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: true,
       },
+      {
+        key: 'user-management',
+        label: 'User Management',
+        icon: <UserManagementIcon />,
+        href: 'user-management',
+        enabled: true,
+        active: true,
+      },
     ],
   },
-  // {
-  //   label: 'Finance',
-  //   items: [
-  //     {
-  //       key: 'general-ledger',
-  //       label: 'General Ledger',
-  //       icon: <GeneralLedgerIcon />,
-  //       href: 'general-ledger',
-  //       enabled: true,
-  //       active: true,
-  //       exact: true,
-  //     },
-
-  //     {
-  //       key: 'source-events',
-  //       label: 'Posting Inbox',
-  //       icon: <JournalEntriesIcon />,
-  //       href: 'source-events',
-  //       enabled: true,
-  //       active: true,
-  //     },
-  //     {
-  //       key: 'accounts-payable',
-  //       label: 'Accounts Payable',
-  //       icon: <AccountsPayableIcon />,
-  //       href: 'accountspayable',
-  //       enabled: true,
-  //       active: true,
-  //       exact: true,
-  //     },
-  //     {
-  //       key: 'accounts-receivable',
-  //       label: 'Accounts Receivable',
-  //       icon: <AccountsReceivableIcon />,
-  //       href: 'accountsreceivable',
-  //       enabled: true,
-  //       active: true,
-  //       exact: true,
-  //     },
-  //   ],
-  // },
 ];

@@ -55,6 +55,8 @@ export interface TenantDocumentProfile {
   /** Short-lived signed URL for the uploaded signature image. */
   signatureUrl?: string | null;
   signatureUrlExpiresAt?: string | null;
+  /** Short-lived signed URL for the uploaded logo image. */
+  logoUrl?: string | null;
   authorizedSignatoryName: string | null;
   authorizedSignatoryTitle: string | null;
   isActive: boolean;

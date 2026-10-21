@@ -23,12 +23,18 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { FiscalPeriodStatus } from '../../prisma/generated/client';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingMasterDataService } from './accounting-master-data.service';
-import { AccountingPermission } from './accounting.permissions';
+import {
+  ACCOUNTING_REFERENCE_READERS,
+  AccountingPermission,
+} from './accounting.permissions';
 import {
   CreateAccountingCurrencyDto,
   CreateExchangeRateDto,
@@ -53,7 +59,7 @@ export class AccountingSettingsController {
   @Get('config')
   @ApiTags('Accounting - Configuration')
   @ApiOperation({ summary: 'Get tenant Accounting configuration' })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   getConfig(@Req() request: Request & { user: RequestUser }) {
     return this.service.getConfig(request.user.tenantId);
   }
@@ -72,7 +78,7 @@ export class AccountingSettingsController {
   @Get('currencies')
   @ApiTags('Accounting - Currencies')
   @ApiOperation({ summary: 'List tenant Accounting currencies' })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listCurrencies(@Req() request: Request & { user: RequestUser }) {
     return this.service.listCurrencies(request.user.tenantId);
   }
@@ -103,7 +109,7 @@ export class AccountingSettingsController {
   @Get('exchange-rates')
   @ApiTags('Accounting - Currencies')
   @ApiOperation({ summary: 'List tenant exchange rates' })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listExchangeRates(@Req() request: Request & { user: RequestUser }) {
     return this.service.listExchangeRates(request.user.tenantId);
   }
@@ -138,7 +144,7 @@ export class AccountingSettingsController {
     description:
       'Each year carries a derived status (open while any period is open, closed once all are) and period progress.',
   })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listFiscalYears(@Req() request: Request & { user: RequestUser }) {
     return this.service.listFiscalYears(request.user.tenantId);
   }
@@ -146,7 +152,7 @@ export class AccountingSettingsController {
   @Get('fiscal-years/:yearId')
   @ApiTags('Accounting - Fiscal Years')
   @ApiOperation({ summary: 'Get a fiscal year with its periods' })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   getFiscalYear(
     @Param('yearId', ParseUUIDPipe) yearId: string,
     @Req() request: Request & { user: RequestUser },
@@ -176,7 +182,7 @@ export class AccountingSettingsController {
   @Get('fiscal-periods')
   @ApiTags('Accounting - Fiscal Periods')
   @ApiOperation({ summary: 'List tenant fiscal periods' })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listFiscalPeriods(
     @Query() query: QueryFiscalPeriodsDto,
     @Req() request: Request & { user: RequestUser },
@@ -283,7 +289,7 @@ export class AccountingSettingsController {
   @Get('transaction-types')
   @ApiTags('Accounting - Transaction Types')
   @ApiOperation({ summary: 'List tenant transaction types' })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listTransactionTypes(@Req() request: Request & { user: RequestUser }) {
     return this.service.listTransactionTypes(request.user);
   }
@@ -291,7 +297,7 @@ export class AccountingSettingsController {
   @Post('transaction-types')
   @ApiTags('Accounting - Transaction Types')
   @ApiOperation({ summary: 'Create a transaction type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_CREATE)
   createTransactionType(
     @Body() dto: CreateTransactionTypeDto,
     @Req() request: Request & { user: RequestUser },
@@ -302,7 +308,7 @@ export class AccountingSettingsController {
   @Patch('transaction-types/:transactionTypeId')
   @ApiTags('Accounting - Transaction Types')
   @ApiOperation({ summary: 'Update a transaction type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_EDIT)
   updateTransactionType(
     @Param('transactionTypeId', ParseUUIDPipe) transactionTypeId: string,
     @Body() dto: UpdateTransactionTypeDto,
@@ -319,7 +325,7 @@ export class AccountingSettingsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiTags('Accounting - Transaction Types')
   @ApiOperation({ summary: 'Delete a transaction type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_DELETE)
   deleteTransactionType(
     @Param('transactionTypeId', ParseUUIDPipe) transactionTypeId: string,
     @Req() request: Request & { user: RequestUser },
@@ -332,7 +338,7 @@ export class AccountingSettingsController {
   @ApiOperation({
     summary: 'Seed the standard cashbook transaction types for the tenant',
   })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.TRANSACTION_SETTINGS_CREATE)
   seedStandardTransactionTypes(
     @Req() request: Request & { user: RequestUser },
   ) {
