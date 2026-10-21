@@ -372,6 +372,14 @@ enum RecruitmentVacancyStatus {
   @@schema("hr")
 }
 
+/// A reviewer's call on one screening answer. No value means it has not been reviewed yet.
+enum RecruitmentScreeningDecision {
+  ACCEPTED
+  DECLINED
+
+  @@schema("hr")
+}
+
 enum RecruitmentQuestionType {
   SHORT_ANSWER
   PARAGRAPH
@@ -877,6 +885,11 @@ model RecruitmentApplicationAnswer {
   answerText       String?
   selectedOptions  String[] @default([])
   createdAt        DateTime @default(now())
+
+  /// Set by a reviewer while screening; part of the screening share of the match score.
+  screeningDecision        RecruitmentScreeningDecision?
+  screeningDecidedAt       DateTime?
+  screeningDecidedByUserId String?
 
   application RecruitmentApplication     @relation(fields: [applicationId], references: [id], onDelete: Restrict)
   question    RecruitmentVacancyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)

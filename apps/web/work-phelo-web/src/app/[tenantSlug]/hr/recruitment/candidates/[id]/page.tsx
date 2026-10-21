@@ -9,10 +9,13 @@ import {
   useCandidate,
   useCandidateInterviews,
   useCandidateStageHistory,
+  useSetScreeningDecision,
   useRecruitmentStages,
   useVacancyRequirements,
 } from '@/hooks/hr/useRecruitment';
-import { computeMatchScore } from '@/lib/hr/candidateMatch';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import { computeMatchScore, computeScreeningScore } from '@/lib/hr/candidateMatch';
 import { Permission } from '@/lib/permissionMap';
 import { pageBreadcrumb, pagePx, pageContent } from '@/lib/layout';
 import { EmployeeDetailSkeleton } from '@/components/molecules/hr/employees/employeeDetailSkeleton';
@@ -22,7 +25,11 @@ import { CandidateDocumentsTab } from '@/components/molecules/hr/recruitment/Can
 import { CandidateInterviewsTab } from '@/components/molecules/hr/recruitment/CandidateInterviewsTab';
 import { ScheduleInterviewPanel } from '@/components/organisms/hr/recruitment/ScheduleInterviewPanel';
 import { ChangeCandidateStageModal } from '@/components/molecules/hr/recruitment/ChangeCandidateStageModal';
-import type { CandidateInterview } from '@/types/recruitment';
+import type {
+  CandidateInterview,
+  ScreeningDecision,
+  ScreeningDecisions,
+} from '@/types/recruitment';
 import { candidateFullName } from '@/components/molecules/hr/recruitment/candidateUtils';
 
 type CandidateTab = 'overview' | 'documents' | 'interviews';
@@ -50,10 +57,12 @@ export default function CandidateDetailPage({
   const canReadVacancies = usePermission(Permission.READ_RECRUITMENT_VACANCIES);
   const { data: history = [] } = useCandidateStageHistory(canView ? id : '');
   const { data: stages = [] } = useRecruitmentStages(canReadStages === true);
-  const { data: requirements } = useVacancyRequirements(
+  const { data: vacancyScoring } = useVacancyRequirements(
     candidate?.vacancyId ?? '',
     canReadVacancies === true,
   );
+  const toast = useToast();
+  const { mutate: setScreeningDecision } = useSetScreeningDecision();
   const { data: interviews = [], isLoading: interviewsLoading } = useCandidateInterviews(
     canView ? id : '',
   );
@@ -71,6 +80,18 @@ export default function CandidateDetailPage({
       </div>
     );
   }
+
+  const decisions: ScreeningDecisions = Object.fromEntries(
+    candidate.answers.flatMap((a) =>
+      a.screeningDecision ? [[a.questionId, a.screeningDecision]] : [],
+    ),
+  );
+  const decide = (questionId: string, decision: ScreeningDecision | null) =>
+    setScreeningDecision(
+      { candidateId: candidate.id, questionId, decision },
+      { onError: (err) => toast.error(extractError(err, 'Failed to save the decision')) },
+    );
+  const isRejected = candidate.currentStage?.name.trim().toLowerCase() === 'rejected';
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -111,7 +132,13 @@ export default function CandidateDetailPage({
               candidate={candidate}
               stages={stages}
               history={history}
-              match={computeMatchScore(candidate, requirements)}
+              match={computeMatchScore(candidate, vacancyScoring?.details)}
+              screening={computeScreeningScore(decisions, vacancyScoring?.questions ?? [])}
+              review={{
+                enabled: !!candidate.currentStage && !isRejected && canChangeStage === true,
+                decisions,
+                onDecide: decide,
+              }}
             />
           )}
           {activeTab === 'documents' && <CandidateDocumentsTab candidate={candidate} />}

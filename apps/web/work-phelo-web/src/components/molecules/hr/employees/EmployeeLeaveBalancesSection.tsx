@@ -3,13 +3,15 @@
 import { cardClass } from '@/lib/utils';
 import { useLeaveBalances, useLeaveTypes } from '@/hooks/hr/useLeave';
 import { useParams } from 'next/navigation';
+import { TableButton } from '@/components/atoms/TableButton';
 import type { LeaveBalance } from '@/types/hr';
 
 interface Props {
   employeeId: string;
+  onManage?: () => void;
 }
 
-export function EmployeeLeaveBalancesSection({ employeeId }: Props) {
+export function EmployeeLeaveBalancesSection({ employeeId, onManage }: Props) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { data: balancesRaw, isLoading } = useLeaveBalances(employeeId);
   const balances: LeaveBalance[] = Array.isArray(balancesRaw) ? balancesRaw : [];
@@ -22,8 +24,13 @@ export function EmployeeLeaveBalancesSection({ employeeId }: Props) {
 
   return (
     <div className={cardClass('overflow-hidden')}>
-      <div className="border-b border-gray-100 px-6 py-3">
+      <div className="flex items-center justify-between border-b border-gray-100 px-6 py-3">
         <h3 className="text-sm font-semibold text-gray-900">Leave Balances</h3>
+        {onManage && (
+          <TableButton variant="blue" onClick={onManage}>
+            Manage Leave
+          </TableButton>
+        )}
       </div>
       {eligible.length === 0 ? (
         <p className="px-6 py-5 text-sm text-gray-400">No eligible leave types.</p>

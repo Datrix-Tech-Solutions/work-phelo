@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { HrSidebar } from '@/components/organisms/shared/HrSidebar';
-import { useHrSidebarGroups, useHrTabs } from '@/hooks/hr/useHrSidebarGroups';
+import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useModuleThemeScope } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
@@ -39,7 +39,6 @@ export default function HRLayout({
   }, [markHrVisited]);
 
   const groups = useHrSidebarGroups(tenantSlug, 'hr');
-  const tabs = useHrTabs(tenantSlug);
 
   // Lets the sidebar be pinned open via TopNav's menu button, for anyone who
   // doesn't want to rely on hover to see it expanded.
@@ -60,7 +59,6 @@ export default function HRLayout({
       <TopNav
         showMenuButton
         onMenuClick={() => setPinned((v) => !v)}
-        tabs={tabs}
         userInitials={initials}
         logoVariant="image"
       />

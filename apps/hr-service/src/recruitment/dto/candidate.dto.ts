@@ -16,6 +16,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -98,6 +99,25 @@ export class UpdateRecruitmentCandidateStageDto {
   @IsString()
   @MaxLength(1000)
   note?: string;
+}
+
+export const RECRUITMENT_SCREENING_DECISIONS = [
+  'ACCEPTED',
+  'DECLINED',
+] as const;
+
+export class SetRecruitmentScreeningDecisionDto {
+  @ApiProperty({
+    description:
+      "The reviewer's call on this screening answer. Null clears it back to not yet reviewed.",
+    enum: RECRUITMENT_SCREENING_DECISIONS,
+    nullable: true,
+  })
+  @ValidateIf(
+    (dto: SetRecruitmentScreeningDecisionDto) => dto.decision !== null,
+  )
+  @IsIn(RECRUITMENT_SCREENING_DECISIONS)
+  decision!: (typeof RECRUITMENT_SCREENING_DECISIONS)[number] | null;
 }
 
 export class RecruitmentApplicationAnswerDto {

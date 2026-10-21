@@ -13,10 +13,11 @@ import {
   RecruitmentInterviewStatus,
   RecruitmentQuestionType,
   RecruitmentSalaryType,
+  RecruitmentScreeningDecision,
   RecruitmentVacancyStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { computeMatchScore } from './candidate-match';
+import { computeMatchScore, computeOverallScore } from './candidate-match';
 import {
   CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
@@ -66,7 +67,11 @@ const MAX_LIMIT = 100;
 
 const RECRUITMENT_CANDIDATE_INCLUDE = {
   managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
-  vacancy: true,
+  vacancy: {
+    include: {
+      _count: { select: { questions: { where: { retiredAt: null } } } },
+    },
+  },
   currentStage: true,
   answers: {
     include: { question: true },
@@ -513,12 +518,18 @@ export class RecruitmentService {
     const cutoff = dto.cutoffScore;
     if (cutoff !== null) {
       const scoreable = computeMatchScore(
-        { skills: [], languages: [], yearsOfExperience: null },
+        {
+          skills: [],
+          languages: [],
+          certificates: [],
+          yearsOfExperience: null,
+          highestEducationLevel: null,
+        },
         vacancy.details,
       );
       if (scoreable === null) {
         throw new BadRequestException(
-          'Add skills, minimum experience or languages to this opening before setting a cut-off',
+          'Add skills, certificates, education, minimum experience or languages to this opening before setting a cut-off',
         );
       }
     }
@@ -554,7 +565,9 @@ export class RecruitmentService {
         autoRejectedAt: true,
         skills: true,
         languages: true,
+        certificates: true,
         yearsOfExperience: true,
+        highestEducationLevel: true,
       },
     });
 
@@ -871,10 +884,16 @@ export class RecruitmentService {
 
     const targetStage = await this.prisma.recruitmentStage.findFirst({
       where: { tenantId, id: stageId },
-      select: { id: true },
+      select: { id: true, isDefault: true },
     });
     if (!targetStage)
       throw new NotFoundException('Recruitment stage not found');
+    // The default stage is where applying puts a candidate, so it is never a place to move back to.
+    if (targetStage.isDefault && candidate.currentStageId !== targetStage.id) {
+      throw new ConflictException(
+        'Candidates cannot be moved back to the first stage',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.recruitmentApplication.update({
@@ -902,6 +921,103 @@ export class RecruitmentService {
         include: RECRUITMENT_CANDIDATE_INCLUDE,
       });
       return this.serializeCandidate(updated);
+    });
+  }
+
+  /**
+   * Records a reviewer's accept/decline on one screening answer, or clears it with null. This
+   * never moves the candidate; moving to Screening is a separate step.
+   */
+  async setScreeningDecision(
+    tenantId: string,
+    user: RequestUser,
+    candidateId: string,
+    questionId: string,
+    decision: RecruitmentScreeningDecision | null,
+  ) {
+    const answer = await this.prisma.recruitmentApplicationAnswer.findFirst({
+      where: {
+        tenantId,
+        applicationId: candidateId,
+        questionId,
+        application: { status: RecruitmentApplicationStatus.SUBMITTED },
+      },
+      select: { id: true },
+    });
+    if (!answer) throw new NotFoundException('Screening answer not found');
+
+    await this.prisma.recruitmentApplicationAnswer.update({
+      where: { id: answer.id },
+      data: {
+        screeningDecision: decision,
+        screeningDecidedAt: decision ? new Date() : null,
+        screeningDecidedByUserId: decision ? user.id : null,
+      },
+    });
+    return this.getCandidate(tenantId, candidateId);
+  }
+
+  /**
+   * Moves every applicant of a vacancy who is still in the entry stage into Screening, with
+   * stage history, in one transaction. Applicants a cut-off rejected stay where they are.
+   */
+  async moveVacancyApplicantsToScreening(
+    tenantId: string,
+    user: RequestUser,
+    vacancyId: string,
+  ) {
+    const vacancy = await this.prisma.recruitmentVacancy.findFirst({
+      where: { tenantId, id: vacancyId },
+      select: { id: true },
+    });
+    if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
+
+    const [defaultStage, screeningStage, actorEmployee] = await Promise.all([
+      this.getDefaultStage(tenantId),
+      this.prisma.recruitmentStage.findFirst({
+        where: { tenantId, normalizedName: this.normalizeName('Screening') },
+      }),
+      this.prisma.employee.findFirst({
+        where: { tenantId, userId: user.id },
+        select: { id: true },
+      }),
+    ]);
+    if (!screeningStage) {
+      throw new ConflictException(
+        'A "Screening" recruitment stage is required',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const applicants = await tx.recruitmentApplication.findMany({
+        where: {
+          tenantId,
+          vacancyId,
+          status: RecruitmentApplicationStatus.SUBMITTED,
+          currentStageId: defaultStage.id,
+          autoRejectedAt: null,
+        },
+        select: { id: true },
+      });
+      if (applicants.length === 0) return { moved: 0 };
+
+      const ids = applicants.map((applicant) => applicant.id);
+      await tx.recruitmentApplication.updateMany({
+        where: { id: { in: ids } },
+        data: { currentStageId: screeningStage.id },
+      });
+      await tx.recruitmentStageHistory.createMany({
+        data: ids.map((applicationId) => ({
+          tenantId,
+          applicationId,
+          previousStageId: defaultStage.id,
+          newStageId: screeningStage.id,
+          changedByUserId: user.id,
+          changedByEmployeeId: actorEmployee?.id,
+          note: 'Moved to Screening from the job opening',
+        })),
+      });
+      return { moved: ids.length };
     });
   }
 
@@ -2331,11 +2447,25 @@ export class RecruitmentService {
     }>,
   ) {
     const { accessTokenHash: _accessTokenHash, ...safeCandidate } = candidate;
+    const { _count: vacancyCounts, ...vacancy } = candidate.vacancy;
+    // Answers to questions since retired no longer take part in the screening share.
+    const activeAnswers = candidate.answers.filter(
+      (answer) => answer.question.retiredAt === null,
+    );
+    const matchScore = computeOverallScore(candidate, vacancy.details, {
+      total: vacancyCounts.questions,
+      accepted: activeAnswers.filter(
+        (answer) => answer.screeningDecision === 'ACCEPTED',
+      ).length,
+      decided: activeAnswers.filter((answer) => answer.screeningDecision)
+        .length,
+    });
     return {
       ...safeCandidate,
+      matchScore,
       expectedSalary: this.decimalToNumber(candidate.expectedSalary),
       vacancy: {
-        ...candidate.vacancy,
+        ...vacancy,
         salaryMin: this.decimalToNumber(candidate.vacancy.salaryMin),
         salaryMax: this.decimalToNumber(candidate.vacancy.salaryMax),
       },
@@ -2348,6 +2478,8 @@ export class RecruitmentService {
         answerText: answer.answerText,
         selectedOptions: answer.selectedOptions,
         createdAt: answer.createdAt,
+        screeningDecision: answer.screeningDecision,
+        screeningDecidedAt: answer.screeningDecidedAt,
       })),
       documents: this.serializeCandidateDocuments(candidate),
     };

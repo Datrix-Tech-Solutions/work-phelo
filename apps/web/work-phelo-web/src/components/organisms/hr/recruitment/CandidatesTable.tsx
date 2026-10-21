@@ -12,6 +12,7 @@ import { DataCard, DataCardAction } from '@/components/organisms/shared/DataCard
 import { ViewModeToggle, type ViewMode } from '@/components/atoms/ViewModeToggle';
 import { Avatar } from '@/components/atoms/Avatar';
 import { Badge, BadgeProps } from '@/components/atoms/Badge';
+import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -54,6 +55,13 @@ function stageVariant(name: string): BadgeProps['variant'] {
     default:
       return 'neutral';
   }
+}
+
+/** Colour of a candidate's score: strong from 70, partial from 40, weak below. */
+function scoreChipColor(score: number): TypeChipColor {
+  if (score >= 70) return 'green';
+  if (score >= 40) return 'amber';
+  return 'red';
 }
 
 function candidateName(c: RecruitmentCandidate): string {
@@ -169,7 +177,7 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
     {
       key: 'candidate',
       label: 'Candidate',
-      width: 'minmax(220px, 2fr)',
+      width: 'minmax(160px, 1fr)',
       render: (row) => (
         <div className="flex items-center gap-3 min-w-0">
           <Avatar name={candidateName(row)} size="sm" />
@@ -183,13 +191,13 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
     {
       key: 'jobRole',
       label: 'Job Role',
-      width: 'minmax(160px, 1.6fr)',
+      width: 'minmax(160px,1fr)',
       render: (row) => <span className="text-sm text-gray-600">{row.vacancy.title ?? '—'}</span>,
     },
     {
       key: 'appliedAt',
       label: 'Date Applied',
-      width: '130px',
+      width: '100px',
       render: (row) => (
         <span className="text-sm text-gray-600">
           {formatDate(row.submittedAt ?? row.appliedAt)}
@@ -199,7 +207,7 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
     {
       key: 'location',
       label: 'Location',
-      width: 'minmax(140px, 1.3fr)',
+      width: 'minmax(140px, 0.6fr)',
       render: (row) => <span className="text-sm text-gray-600">{candidateLocation(row)}</span>,
     },
     {
@@ -209,6 +217,17 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
       render: (row) => (
         <span className="text-sm text-gray-600">{experienceLabel(row.yearsOfExperience)}</span>
       ),
+    },
+    {
+      key: 'score',
+      label: 'Score',
+      width: '100px',
+      render: (row) =>
+        row.matchScore === null ? (
+          <span className="text-sm text-gray-400">—</span>
+        ) : (
+          <TypeChip label={`${row.matchScore}%`} color={scoreChipColor(row.matchScore)} />
+        ),
     },
     {
       key: 'stage',

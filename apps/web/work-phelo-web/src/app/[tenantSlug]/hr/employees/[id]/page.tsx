@@ -187,7 +187,8 @@ export default function EmployeeDetailPage({
           canEdit={canEditEmployee}
           onEdit={() => setActivePanel('edit')}
           onOffboard={canOffboardEmployee ? () => setActivePanel('offboard') : undefined}
-          onResign={() => setActivePanel('resign')}
+          // Resigning is self-service (profile page); HR only sees a pending one to review.
+          onResign={hrIsNotified ? () => setActivePanel('resign') : undefined}
           onResendInvite={handleResendInvite}
           isResending={isResending}
           tabs={TABS}
@@ -220,7 +221,12 @@ export default function EmployeeDetailPage({
                   onManagePermissions={() => setActivePanel('permissions')}
                   directPermissions={directPermissions}
                 />
-                {canReadAllLeaves && <EmployeeLeaveBalancesSection employeeId={employee.id} />}
+                {canReadAllLeaves && (
+                  <EmployeeLeaveBalancesSection
+                    employeeId={employee.id}
+                    onManage={() => router.push(`/${tenantSlug}/hr/leave`)}
+                  />
+                )}
                 {canAccessProjects && (
                   <EmployeeProjectsSection
                     employeeId={employee.id}
@@ -230,6 +236,7 @@ export default function EmployeeDetailPage({
                 <AssetsSection
                   assets={employee.assets ?? []}
                   onAssignAsset={canAssignAsset ? () => setActivePanel('assign-asset') : undefined}
+                  onManage={() => router.push(`/${tenantSlug}/hr/assets`)}
                   onSelectAsset={(a) => setSelectedAssetId(a.id)}
                 />
               </div>

@@ -7,7 +7,7 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { ModuleRail } from '@/components/organisms/shared/ModuleRail';
 import { useAppraisalSidebarGroups } from '@/hooks/hr/useAppraisalSidebarGroups';
-import { useHrSidebarGroups, useHrTabs } from '@/hooks/hr/useHrSidebarGroups';
+import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { useModuleThemeScope } from '@/hooks';
 
@@ -38,14 +38,12 @@ export default function AppraisalLayout({
   // Parked, icon-only HR rail — same as the one shown from Accounting/Operations/Payroll.
   const hasVisitedHr = useNavRailStore((s) => s.hasVisitedHr);
   const parkedHrGroups = useHrSidebarGroups(tenantSlug, 'hr');
-  const tabs = useHrTabs(tenantSlug);
 
   return (
     <AppBackground className="h-dvh overflow-hidden flex flex-col layout-hr">
       <TopNav
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
-        tabs={tabs}
         userInitials={initials}
         logoVariant="image"
       />

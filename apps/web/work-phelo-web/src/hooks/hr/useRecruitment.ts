@@ -13,6 +13,8 @@ import type {
   RecruitmentStageHistoryEntry,
   RecruitmentStage,
   RecruitmentVacancy,
+  RecruitmentVacancyQuestion,
+  ScreeningDecision,
   RecruitmentVacancyPage,
   RecruitmentVacancyPayload,
   ScheduleInterviewInput,
@@ -227,6 +229,41 @@ export function useMoveCandidateStage() {
         stageId,
         note: note || undefined,
       });
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CANDIDATES_KEY }),
+  });
+}
+
+/** Accepts or declines one screening answer, or clears it with null. Never changes the stage. */
+export function useSetScreeningDecision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidateId,
+      questionId,
+      decision,
+    }: {
+      candidateId: string;
+      questionId: string;
+      decision: ScreeningDecision | null;
+    }) => {
+      await api.patch(`/hr/recruitment/candidates/${candidateId}/answers/${questionId}/decision`, {
+        decision,
+      });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CANDIDATES_KEY }),
+  });
+}
+
+/** Moves everyone still in the entry stage of a job opening into Screening. */
+export function useMoveApplicantsToScreening() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vacancyId: string) => {
+      const res = await api.post<{ moved: number }>(
+        `/hr/recruitment/vacancies/${vacancyId}/move-to-screening`,
+      );
       return res.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: CANDIDATES_KEY }),
@@ -456,13 +493,19 @@ export function useScheduleInterview() {
   });
 }
 
-/** What the candidate's job opening asked for, used to score the match. Needs vacancy access. */
+/**
+ * What the candidate's job opening asked for (requirements and screening questions), used to score
+ * the match. Needs vacancy access.
+ */
 export function useVacancyRequirements(vacancyId: string, enabled: boolean) {
   return useQuery({
     queryKey: [...VACANCIES_KEY, 'requirements', vacancyId],
-    queryFn: async (): Promise<VacancyDetails | null> => {
+    queryFn: async (): Promise<{
+      details: VacancyDetails | null;
+      questions: RecruitmentVacancyQuestion[];
+    }> => {
       const res = await api.get<RecruitmentVacancy>(`/hr/recruitment/vacancies/${vacancyId}`);
-      return res.data.details;
+      return { details: res.data.details, questions: res.data.questions ?? [] };
     },
     enabled: enabled && !!vacancyId,
   });
