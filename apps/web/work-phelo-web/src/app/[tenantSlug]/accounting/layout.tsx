@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
@@ -10,6 +11,8 @@ import { ACCOUNTING_NAV_GROUPS } from '@/config/accounting-nav';
 import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { useModuleThemeScope } from '@/hooks';
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
+import { AccountingNoAccess } from '@/components/molecules/accounting/AccountingNoAccess';
 
 export default function AccountingLayout({
   children,
@@ -38,10 +41,25 @@ export default function AccountingLayout({
     };
   }
 
+  // A page shows in the menu only when the user can open it (or at least one of its tabs).
+  const { canSeePage, canSeeTab, tabsOf, isResolving } = useAccountingAccess();
   const groups = ACCOUNTING_NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.map(prefixItem),
+    items: group.items.map((item) => ({
+      ...prefixItem(item),
+      enabled: item.enabled !== false && (isResolving || canSeePage(item.href)),
+    })),
   }));
+
+  // Typing the address of a page (or tab) that is out of reach shows the same answer as the menu.
+  const pathname = usePathname();
+  const [page, tab] = pathname.startsWith(`${BASE}/`)
+    ? pathname.slice(BASE.length + 1).split('/')
+    : [];
+  const blocked =
+    !isResolving &&
+    !!page &&
+    (!canSeePage(page) || (!!tab && tabsOf(page).includes(tab) && !canSeeTab(page, tab)));
 
   // Parked, icon-only HR rail — shown once the user has visited HR, sitting
   // next to Accounting's own sidebar (which behaves exactly as before).
@@ -71,7 +89,7 @@ export default function AccountingLayout({
             if (!collapsed) setCollapsed(true);
           }}
         >
-          {children}
+          {blocked ? <AccountingNoAccess /> : children}
         </main>
       </div>
     </AppBackground>

@@ -437,7 +437,7 @@ export class ReceivablesController {
   @ApiOperation({
     summary: 'Restore a voided invoice, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restoreInvoice(
     @Param('invoiceId', ParseUUIDPipe) invoiceId: string,
     @Body() dto: RestoreReceivableInvoiceDto,
@@ -476,7 +476,7 @@ export class ReceivablesController {
   @ApiOperation({
     summary: 'Restore a voided credit note, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restoreCreditNote(
     @Param('creditNoteId', ParseUUIDPipe) creditNoteId: string,
     @Body() dto: EditReceivableNoteDto,
@@ -515,7 +515,7 @@ export class ReceivablesController {
   @ApiOperation({
     summary: 'Restore a voided receipt, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.RECEIVABLES_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restoreReceipt(
     @Param('receiptId', ParseUUIDPipe) receiptId: string,
     @Body() dto: EditReceivableReceiptDto,

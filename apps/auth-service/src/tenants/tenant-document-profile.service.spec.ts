@@ -346,6 +346,10 @@ describe('TenantDocumentProfileService', () => {
       fileName: 'logo.png',
       sizeBytes: 5,
     });
+    storage.createSignedReadUrl.mockResolvedValue({
+      readUrl: 'https://signed.example/logo.png',
+      expiresAt: '2026-01-01T00:02:00.000Z',
+    });
 
     const result = await service.uploadAsset(
       'tenant-1',
@@ -374,7 +378,7 @@ describe('TenantDocumentProfileService', () => {
       }) as Record<string, unknown>,
     });
     expect(result.logoObjectKey).toContain('/logo/');
-    expect(result).not.toHaveProperty('logoUrl');
+    expect(result.logoUrl).toBe('https://signed.example/logo.png');
   });
 
   it('rejects unsupported image types before storage', async () => {

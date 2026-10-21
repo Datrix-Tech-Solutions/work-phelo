@@ -20,6 +20,7 @@ export enum PermissionAction {
   ASSIGN = 'ASSIGN',
   CANCEL = 'CANCEL',
   VERIFY = 'VERIFY',
+  DEACTIVATE = 'DEACTIVATE',
 }
 
 export class GrantPermissionDto {

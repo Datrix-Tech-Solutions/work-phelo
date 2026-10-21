@@ -1,5 +1,6 @@
 'use client';
 
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -294,6 +295,7 @@ function toPaymentRequestRow(request: PaymentRequest): UnifiedTransactionRow {
 }
 
 export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
+  const { can } = useAccountingAccess();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -497,7 +499,7 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
       {
         key: 'type',
         label: 'Type',
-        width: '80px',
+        width: '100px',
         render: (row) => <TypeChip label={row.typeLabel} color={row.typeColor} />,
       },
       {
@@ -643,7 +645,9 @@ export function TransactionsTable({ partyId }: { partyId?: string } = {}) {
                 label: bulkPaymentSide === 'PAYABLE' ? 'Make Payment' : 'Receive Payment',
                 onClick: () => setBulkPaymentOpen(true),
               }
-            : { label: 'New Transaction', onClick: () => setNewTransactionOpen(true) }
+            : can('accounting.transactions:CREATE')
+              ? { label: 'New Transaction', onClick: () => setNewTransactionOpen(true) }
+              : undefined
         }
         emptyMessage="No transactions found"
         currentPage={page}

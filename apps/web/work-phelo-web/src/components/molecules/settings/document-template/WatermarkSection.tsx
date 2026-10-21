@@ -6,7 +6,7 @@ import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
 import { CollapsibleCard } from '@/components/atoms/CollapsibleCard';
 import { ImageUploadField } from '@/components/atoms/ImageUploadField';
 import { useToast } from '@/hooks/useToast';
-import type { DocumentTemplate, WatermarkMode } from './templateConfig';
+import type { DocumentTemplate, TemplateAssetHandlers, WatermarkMode } from './templateConfig';
 
 const MODE_OPTIONS: { value: WatermarkMode; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -15,14 +15,15 @@ const MODE_OPTIONS: { value: WatermarkMode; label: string }[] = [
 ];
 
 const WATERMARK_MAX_BYTES = 2 * 1024 * 1024;
-const WATERMARK_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+const WATERMARK_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 interface WatermarkSectionProps {
   template: DocumentTemplate;
   onChange: <K extends keyof DocumentTemplate>(key: K, value: DocumentTemplate[K]) => void;
+  assets: TemplateAssetHandlers;
 }
 
-export function WatermarkSection({ template, onChange }: WatermarkSectionProps) {
+export function WatermarkSection({ template, onChange, assets }: WatermarkSectionProps) {
   const toast = useToast();
 
   return (
@@ -56,8 +57,10 @@ export function WatermarkSection({ template, onChange }: WatermarkSectionProps) 
           <ImageUploadField
             hint="Transparent PNG works best · max 2 MB"
             value={template.watermarkImage}
-            onChange={(dataUrl) => onChange('watermarkImage', dataUrl)}
-            onClear={() => onChange('watermarkImage', null)}
+            onFile={assets.uploadWatermark}
+            onClear={assets.removeWatermark}
+            busy={assets.busy === 'watermark'}
+            accept="image/png,image/jpeg,image/webp"
             allowedTypes={WATERMARK_TYPES}
             maxBytes={WATERMARK_MAX_BYTES}
             onError={(message) => toast.error(message)}

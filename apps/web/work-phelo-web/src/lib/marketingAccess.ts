@@ -11,7 +11,7 @@
 export const MARKETING_PERMISSION_PREFIX = 'marketing.';
 
 /** Pages open to every employee, marketer or not: each person raises and sees their own, approvers see more. */
-export const MARKETING_OPEN_PAGES: readonly string[] = ['requests'];
+export const MARKETING_OPEN_PAGES: readonly string[] = ['requests', 'account-settings'];
 
 /**
  * Pages that take a permission. A marketer sees anything not listed here (dashboard, appointments,

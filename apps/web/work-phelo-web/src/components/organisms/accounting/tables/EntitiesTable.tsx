@@ -1,5 +1,6 @@
 'use client';
 
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, usePathname, useSearchParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
@@ -36,6 +37,7 @@ function fmtBalance(amount: number, currency: string) {
 }
 
 export function EntitiesTable() {
+  const { can } = useAccountingAccess();
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
@@ -206,7 +208,11 @@ export function EntitiesTable() {
         extraFilters={extraFilters}
         onRowClick={(row) => router.push(`/${tenantSlug}/accounting/entities/${row.id}`)}
         secondaryButton={{ label: 'Import', onClick: () => setIsImportOpen(true) }}
-        actionButton={{ label: 'Add Entity', onClick: () => setPanelTarget(null) }}
+        actionButton={
+          can('accounting.entities:CREATE')
+            ? { label: 'Add Entity', onClick: () => setPanelTarget(null) }
+            : undefined
+        }
         emptyMessage="No entities found"
         currentPage={page}
         totalPages={totalPages}

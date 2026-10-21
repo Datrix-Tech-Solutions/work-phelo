@@ -31,11 +31,7 @@ export class TransactionsController {
     description:
       'Invoices, bills, credit/debit notes and direct cashbook entries, newest first. Filtering, search and paging are done in the database.',
   })
-  @RequirePermissions(
-    AccountingPermission.RECEIVABLES_VIEW,
-    AccountingPermission.PAYABLES_VIEW,
-    AccountingPermission.CASHBOOK_VIEW,
-  )
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_VIEW)
   list(
     @Query() query: QueryTransactionsDto,
     @Req() request: Request & { user: RequestUser },

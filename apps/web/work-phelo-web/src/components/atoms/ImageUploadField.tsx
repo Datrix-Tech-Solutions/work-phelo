@@ -9,10 +9,16 @@ import { Button } from '@/components/atoms/Button';
 interface ImageUploadFieldProps {
   label?: string;
   hint?: string;
-  /** Current image as a data URL, or null. */
+  /** Current image (data URL or remote URL), or null. */
   value: string | null;
-  onChange: (dataUrl: string) => void;
-  onClear: () => void;
+  /** Receives the picked image as a data URL. */
+  onChange?: (dataUrl: string) => void;
+  /** Receives the picked file itself, for callers that upload it. Skips the data-URL read. */
+  onFile?: (file: File) => void;
+  /** Omit when the image can be replaced but not removed; hides the Remove button. */
+  onClear?: () => void;
+  /** Disables the controls while an upload is in flight. */
+  busy?: boolean;
   /** `accept` attribute for the file input. */
   accept?: string;
   /** MIME types allowed through; a file outside the set is rejected. */
@@ -29,7 +35,9 @@ export function ImageUploadField({
   hint,
   value,
   onChange,
+  onFile,
   onClear,
+  busy,
   accept = DEFAULT_ACCEPT,
   allowedTypes,
   maxBytes,
@@ -47,8 +55,12 @@ export function ImageUploadField({
       onError?.(`Image must be ${Math.round(maxBytes / 1024 / 1024)} MB or smaller.`);
       return;
     }
+    if (onFile) {
+      onFile(file);
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => onChange(String(reader.result));
+    reader.onload = () => onChange?.(String(reader.result));
     reader.readAsDataURL(file);
   };
 
@@ -68,16 +80,18 @@ export function ImageUploadField({
           variant="outline"
           size="sm"
           icon={<Upload className="h-3.5 w-3.5" />}
+          disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
           {value ? 'Replace' : 'Upload'}
         </Button>
-        {value && (
+        {value && onClear && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
             icon={<Trash2 className="h-3.5 w-3.5" />}
+            disabled={busy}
             onClick={onClear}
           >
             Remove

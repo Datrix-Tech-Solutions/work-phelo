@@ -2,6 +2,7 @@
 
 import { Fragment, useState, ChangeEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -81,6 +82,7 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const fiscalPeriodName =
     fiscalPeriods.find((p) => p.id === journal?.fiscalPeriodId)?.name ?? journal?.fiscalPeriodId;
 
+  const { can } = useAccountingAccess();
   const postJournal = usePostJournal();
   const deleteDraft = useDeleteDraftJournal();
   const [choiceOpen, setChoiceOpen] = useState(false);
@@ -109,10 +111,20 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
   const periodOpen = isPeriodOpen(journal?.transactionDate);
   const hasLiveReversal = Boolean(journal?.reversalJournal);
   const canChangePosted = journal?.status === 'POSTED' && isChangeableHere && periodOpen;
-  const canEditPosted = canChangePosted && !hasLiveReversal && !journal?.reversalOfJournalId;
-  const canVoidPosted = canChangePosted && !hasLiveReversal;
-  const canRestore = journal?.status === 'VOIDED' && isChangeableHere && periodOpen;
-  const canDeleteArchived = journal?.status === 'VOIDED' && isChangeableHere;
+  const canEditPosted =
+    canChangePosted &&
+    !hasLiveReversal &&
+    !journal?.reversalOfJournalId &&
+    can('accounting.journals:APPROVE');
+  const canVoidPosted = canChangePosted && !hasLiveReversal && can('accounting.journals:CANCEL');
+  const canReversePosted = can('accounting.journals:DELETE');
+  const canRestore =
+    journal?.status === 'VOIDED' &&
+    isChangeableHere &&
+    periodOpen &&
+    can('accounting.archive:EDIT');
+  const canDeleteArchived =
+    journal?.status === 'VOIDED' && isChangeableHere && can('accounting.archive:DELETE');
   const restoresAsIs = Boolean(journal?.voidedReversalOfJournalId);
 
   // Debit and credit always match on a saved journal, so one total covers both sides.
@@ -222,9 +234,15 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                   Reject
                 </Button>
               )}
-              <Button isLoading={postJournal.isPending} loadingText="Posting…" onClick={handlePost}>
-                Post
-              </Button>
+              {can('accounting.journals:APPROVE') && (
+                <Button
+                  isLoading={postJournal.isPending}
+                  loadingText="Posting…"
+                  onClick={handlePost}
+                >
+                  Post
+                </Button>
+              )}
             </div>
           ) : journal && canReverse(journal) && isManual ? (
             <div className="flex justify-end gap-3">
@@ -248,12 +266,16 @@ export function JournalDetailPanel({ journal, onClose }: JournalDetailPanelProps
                   Void
                 </Button>
               )}
-              <Button variant="outline" onClick={() => openReverse('correct')}>
-                Reverse &amp; correct
-              </Button>
-              <Button variant="danger" onClick={() => openReverse('reverse')}>
-                Reverse
-              </Button>
+              {canReversePosted && (
+                <>
+                  <Button variant="outline" onClick={() => openReverse('correct')}>
+                    Reverse &amp; correct
+                  </Button>
+                  <Button variant="danger" onClick={() => openReverse('reverse')}>
+                    Reverse
+                  </Button>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex justify-end gap-3">

@@ -1,5 +1,6 @@
 'use client';
 
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
@@ -13,6 +14,7 @@ import type { CostCentre } from '@/types/accounting';
 
 const PAGE_SIZE = 10;
 export function CostCentresTable() {
+  const { can } = useAccountingAccess();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelTarget, setPanelTarget] = useState<CostCentre | null | undefined>(undefined);
@@ -76,7 +78,11 @@ export function CostCentresTable() {
           setSearch(value);
           setPage(1);
         }}
-        actionButton={{ label: 'Add Cost Centre', onClick: () => setPanelTarget(null) }}
+        actionButton={
+          can('accounting.cost-centres:CREATE')
+            ? { label: 'Add Cost Centre', onClick: () => setPanelTarget(null) }
+            : undefined
+        }
         rowActions={(row) => [
           { label: 'Update', onClick: () => setPanelTarget(row) },
           ...(row.status === 'ACTIVE'

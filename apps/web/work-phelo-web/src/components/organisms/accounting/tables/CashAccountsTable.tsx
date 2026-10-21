@@ -17,6 +17,7 @@ import { AddCashAndBankAccountPanel } from '@/components/organisms/accounting/pa
 import { EditCashAccountPanel } from '@/components/organisms/accounting/panels/EditCashAccountPanel';
 import { CompleteCashAccountSetupPanel } from '@/components/organisms/accounting/panels/CompleteCashAccountSetupPanel';
 import { NewTransferPanel } from '@/components/organisms/accounting/panels/NewTransferPanel';
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 
 const PAGE_SIZE = 10;
 
@@ -49,6 +50,9 @@ type Row =
 export function CashAccountsTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const { can } = useAccountingAccess();
+  const canManage = can('accounting.cash-accounts:EDIT');
+  const canDeactivate = can('accounting.cash-accounts:DEACTIVATE');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [deactivateTarget, setDeactivateTarget] = useState<AccountingCashAccount | null>(null);
@@ -206,36 +210,42 @@ export function CashAccountsTable() {
         render: (row) =>
           row.status === 'complete' ? (
             <div className="flex items-center gap-2">
-              <TableButton
-                variant="gray"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditTarget(row.cashAccount);
-                }}
-              >
-                Update
-              </TableButton>
-              <TableButton
-                variant={row.cashAccount.isActive ? 'red' : 'green'}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (row.cashAccount.isActive) setDeactivateTarget(row.cashAccount);
-                  else reactivate(row.cashAccount);
-                }}
-              >
-                {row.cashAccount.isActive ? 'Deactivate' : 'Reactivate'}
-              </TableButton>
+              {canManage && (
+                <TableButton
+                  variant="gray"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditTarget(row.cashAccount);
+                  }}
+                >
+                  Update
+                </TableButton>
+              )}
+              {canDeactivate && (
+                <TableButton
+                  variant={row.cashAccount.isActive ? 'red' : 'green'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (row.cashAccount.isActive) setDeactivateTarget(row.cashAccount);
+                    else reactivate(row.cashAccount);
+                  }}
+                >
+                  {row.cashAccount.isActive ? 'Deactivate' : 'Reactivate'}
+                </TableButton>
+              )}
             </div>
           ) : (
-            <TableButton
-              variant="blue"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSetupTarget(row.glAccount);
-              }}
-            >
-              Complete Setup
-            </TableButton>
+            canManage && (
+              <TableButton
+                variant="blue"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSetupTarget(row.glAccount);
+                }}
+              >
+                Complete Setup
+              </TableButton>
+            )
           ),
       },
     ],
@@ -294,14 +304,16 @@ export function CashAccountsTable() {
           setSearch(q);
           setPage(1);
         }}
-        secondaryButton={{
-          label: 'New Contra Transaction',
-          onClick: () => setTransferPanelOpen(true),
-        }}
-        actionButton={{
-          label: 'Add Cash/Bank Account',
-          onClick: () => setAddPanelOpen(true),
-        }}
+        secondaryButton={
+          canManage
+            ? { label: 'New Contra Transaction', onClick: () => setTransferPanelOpen(true) }
+            : undefined
+        }
+        actionButton={
+          canManage
+            ? { label: 'Add Cash/Bank Account', onClick: () => setAddPanelOpen(true) }
+            : undefined
+        }
         onRowClick={(row) => {
           if (row.status === 'complete') {
             router.push(`/${tenantSlug}/accounting/cashandbank/${row.cashAccount.id}`);
