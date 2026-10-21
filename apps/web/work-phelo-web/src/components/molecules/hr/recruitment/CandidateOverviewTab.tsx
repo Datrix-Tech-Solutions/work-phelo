@@ -1,13 +1,16 @@
 import { ExternalLink, GraduationCap } from 'lucide-react';
-import { cardClass, frostedAvatarStyle } from '@/lib/utils';
+import { TableButton } from '@/components/atoms/TableButton';
+import { cardClass, cn, frostedAvatarStyle } from '@/lib/utils';
 import { CandidateProgressColumn } from './CandidateProgressColumn';
-import type { MatchResult } from '@/lib/hr/candidateMatch';
+import type { MatchCriterion, MatchResult } from '@/lib/hr/candidateMatch';
 import type {
   CandidateEducation,
   CandidateExperience,
   RecruitmentCandidateDetail,
   RecruitmentStage,
   RecruitmentStageHistoryEntry,
+  ScreeningDecision,
+  ScreeningDecisions,
 } from '@/types/recruitment';
 
 function SummarySection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -22,6 +25,49 @@ function SummarySection({ title, children }: { title: string; children: React.Re
 }
 
 const EMPTY = <p className="text-sm text-gray-400">Not provided</p>;
+
+function AnswerDecision({
+  decision,
+  enabled,
+  onDecide,
+}: {
+  decision: ScreeningDecision | undefined;
+  enabled: boolean;
+  onDecide: (decision: ScreeningDecision | null) => void;
+}) {
+  if (!enabled) {
+    if (!decision) return null;
+    return (
+      <span
+        className={cn(
+          'shrink-0 rounded px-2 py-1 text-xs font-medium',
+          decision === 'ACCEPTED' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600',
+        )}
+      >
+        {decision === 'ACCEPTED' ? 'Accepted' : 'Declined'}
+      </span>
+    );
+  }
+  // Pressing the active button again clears the decision.
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <TableButton
+        variant="green"
+        className={cn(decision === 'ACCEPTED' && 'bg-green-600 text-white')}
+        onClick={() => onDecide(decision === 'ACCEPTED' ? null : 'ACCEPTED')}
+      >
+        Accept
+      </TableButton>
+      <TableButton
+        variant="red"
+        className={cn(decision === 'DECLINED' && 'bg-red-500 text-white')}
+        onClick={() => onDecide(decision === 'DECLINED' ? null : 'DECLINED')}
+      >
+        Decline
+      </TableButton>
+    </div>
+  );
+}
 
 function educationDuration(e: CandidateEducation): string | null {
   if (!e.startYear && !e.endYear) return null;
@@ -101,9 +147,23 @@ interface OverviewProps {
   stages: RecruitmentStage[];
   history: RecruitmentStageHistoryEntry[];
   match: MatchResult | null;
+  screening: MatchCriterion | null;
+  review: {
+    /** Accept/decline buttons show at every stage except Rejected, for viewers who can act. */
+    enabled: boolean;
+    decisions: ScreeningDecisions;
+    onDecide: (questionId: string, decision: ScreeningDecision | null) => void;
+  };
 }
 
-export function CandidateOverviewTab({ candidate, stages, history, match }: OverviewProps) {
+export function CandidateOverviewTab({
+  candidate,
+  stages,
+  history,
+  match,
+  screening,
+  review,
+}: OverviewProps) {
   const links = [
     candidate.portfolioUrl && { label: 'Portfolio', url: candidate.portfolioUrl },
     candidate.githubUrl && { label: 'GitHub', url: candidate.githubUrl },
@@ -197,11 +257,21 @@ export function CandidateOverviewTab({ candidate, stages, history, match }: Over
             {candidate.answers.length > 0 ? (
               <ul className="flex flex-col divide-y divide-gray-100">
                 {candidate.answers.map((a) => (
-                  <li key={a.id} className="py-3 first:pt-0 last:pb-0">
-                    <p className="text-xs font-semibold text-gray-500">{a.question}</p>
-                    <p className="mt-1 whitespace-pre-line text-sm text-gray-900">
-                      {a.selectedOptions.length > 0 ? a.selectedOptions.join(', ') : a.answer}
-                    </p>
+                  <li
+                    key={a.id}
+                    className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-500">{a.question}</p>
+                      <p className="mt-1 whitespace-pre-line text-sm text-gray-900">
+                        {a.selectedOptions.length > 0 ? a.selectedOptions.join(', ') : a.answer}
+                      </p>
+                    </div>
+                    <AnswerDecision
+                      decision={review.decisions[a.questionId]}
+                      enabled={review.enabled}
+                      onDecide={(decision) => review.onDecide(a.questionId, decision)}
+                    />
                   </li>
                 ))}
               </ul>
@@ -216,6 +286,7 @@ export function CandidateOverviewTab({ candidate, stages, history, match }: Over
         stages={stages}
         history={history}
         match={match}
+        screening={screening}
       />
     </div>
   );

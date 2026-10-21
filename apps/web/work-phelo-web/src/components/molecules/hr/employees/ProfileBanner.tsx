@@ -16,7 +16,8 @@ interface ProfileBannerProps {
   employee: Employee;
   hasPendingResignation: boolean;
   canEdit: boolean;
-  onResign: () => void;
+  /** Omit to hide the Resign / Pending Resignation menu item. */
+  onResign?: () => void;
   onEdit: () => void;
   /** When provided, shows a camera badge on the avatar + a "Change photo" menu item. */
   onEditAvatar?: () => void;
@@ -194,7 +195,7 @@ export function ProfileBanner({
                     Change photo
                   </button>
                 )}
-                {!isOffboarded && (
+                {onResign && !isOffboarded && (
                   <button
                     type="button"
                     role="menuitem"

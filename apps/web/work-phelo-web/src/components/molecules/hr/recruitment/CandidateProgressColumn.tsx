@@ -5,7 +5,8 @@ import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/formatters';
 import { formatDateTime } from './candidateUtils';
-import type { MatchResult } from '@/lib/hr/candidateMatch';
+import { SCREENING_SHARE, overallScore } from '@/lib/hr/candidateMatch';
+import type { MatchCriterion, MatchResult } from '@/lib/hr/candidateMatch';
 import type {
   RecruitmentCandidateDetail,
   RecruitmentStage,
@@ -17,15 +18,17 @@ interface Props {
   stages: RecruitmentStage[];
   history: RecruitmentStageHistoryEntry[];
   match: MatchResult | null;
+  /** Only passed while the candidate is in the Screening stage. */
+  screening: MatchCriterion | null;
 }
 
 const EMPTY_CLASS = 'text-sm text-gray-400';
 
-export function CandidateProgressColumn({ candidate, stages, history, match }: Props) {
+export function CandidateProgressColumn({ candidate, stages, history, match, screening }: Props) {
   return (
     <div className="flex flex-col gap-6 min-w-0">
       <SectionCard title="Match Score">
-        <MatchScore match={match} />
+        <MatchScore match={match} screening={screening} />
       </SectionCard>
       <SectionCard title="Stage Progress">
         <StageProgress candidate={candidate} stages={stages} history={history} />
@@ -123,39 +126,93 @@ function scoreTone(score: number) {
   return { label: 'Weak match', text: 'text-red-600', bar: 'bg-red-500' };
 }
 
-function MatchScore({ match }: { match: MatchResult | null }) {
-  if (!match) {
+function MatchScore({
+  match,
+  screening,
+}: {
+  match: MatchResult | null;
+  screening: MatchCriterion | null;
+}) {
+  const score = overallScore(match, screening);
+  if (score === null) {
     return (
       <p className={EMPTY_CLASS}>
-        Not available. The job opening has no skills, experience or language requirements to score
-        against.
+        Not available. The job opening has no skills, certificate, education, experience or language
+        requirements to score against.
       </p>
     );
   }
-  const tone = scoreTone(match.score);
+  const tone = scoreTone(score);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-baseline gap-2">
-        <span className={cn('text-3xl font-bold', tone.text)}>{match.score}%</span>
+        <span className={cn('text-3xl font-bold', tone.text)}>{score}%</span>
         <span className="text-sm font-medium text-gray-500">{tone.label}</span>
       </div>
-      <ul className="flex flex-col gap-3">
-        {match.criteria.map((c) => (
-          <li key={c.key}>
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="font-medium text-gray-700">{c.label}</span>
-              <span className="text-gray-400">{c.detail}</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
-              <div
-                className={cn('h-full rounded-full', scoreTone(c.score).bar)}
-                style={{ width: `${c.score}%` }}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
+      {match && (
+        <div className="flex flex-col gap-3">
+          {screening && (
+            <ScoreGroupHeading
+              title="Application"
+              score={match.score}
+              share={100 - SCREENING_SHARE}
+            />
+          )}
+          <ul className="flex flex-col gap-3">
+            {match.criteria.map((c) => (
+              <CriterionBar key={c.key} criterion={c} />
+            ))}
+          </ul>
+        </div>
+      )}
+      {screening && (
+        <div className="flex flex-col gap-3 border-t border-gray-100 pt-3">
+          {match && (
+            <ScoreGroupHeading title="Screening" score={screening.score} share={SCREENING_SHARE} />
+          )}
+          <ul>
+            <CriterionBar criterion={screening} />
+          </ul>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Shown in Screening, where the score is split between the application and the screening. */
+function ScoreGroupHeading({
+  title,
+  score,
+  share,
+}: {
+  title: string;
+  score: number;
+  share: number;
+}) {
+  return (
+    <div className="flex items-baseline justify-between text-xs">
+      <span className="font-semibold text-gray-900">
+        {title} <span className="font-normal text-gray-400">· {share}% of score</span>
+      </span>
+      <span className={cn('font-semibold', scoreTone(score).text)}>{score}%</span>
+    </div>
+  );
+}
+
+function CriterionBar({ criterion: c }: { criterion: MatchCriterion }) {
+  return (
+    <li className="list-none">
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="font-medium text-gray-700">{c.label}</span>
+        <span className="text-gray-400">{c.detail}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+        <div
+          className={cn('h-full rounded-full', scoreTone(c.score).bar)}
+          style={{ width: `${c.score}%` }}
+        />
+      </div>
+    </li>
   );
 }
 

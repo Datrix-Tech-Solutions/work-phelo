@@ -63,14 +63,18 @@ function createPrismaMock() {
       findFirstOrThrow: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     recruitmentApplicationAnswer: {
       deleteMany: jest.fn(),
       createMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
     },
     recruitmentStageHistory: {
       count: jest.fn(),
       create: jest.fn(),
+      createMany: jest.fn(),
       findMany: jest.fn(),
     },
     recruitmentInterview: {
@@ -1196,7 +1200,7 @@ describe('RecruitmentService', () => {
         candidate({ id: 'candidate-1', currentStageId: 'stage-1' }),
       );
       prisma.recruitmentStage.findFirst.mockResolvedValue(
-        stage({ id: 'stage-2' }),
+        stage({ id: 'stage-2', isDefault: false }),
       );
       prisma.recruitmentApplication.update.mockResolvedValue({});
       prisma.recruitmentStageHistory.create.mockResolvedValue({});
@@ -1977,13 +1981,303 @@ describe('RecruitmentService', () => {
         candidate({ currentStageId: 'stage-1' }),
       );
       prisma.recruitmentStage.findFirst.mockResolvedValue(
-        stage({ id: 'stage-2' }),
+        stage({ id: 'stage-2', isDefault: false }),
       );
       prisma.$transaction.mockRejectedValue(new Error('rollback'));
 
       await expect(
         service.moveCandidateStage('tenant-1', user, 'candidate-1', 'stage-2'),
       ).rejects.toThrow('rollback');
+    });
+  });
+
+  describe('screening', () => {
+    it('refuses to move a candidate back to the entry stage', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(
+        candidate({ currentStageId: 'stage-2' }),
+      );
+      prisma.recruitmentStage.findFirst.mockResolvedValue(
+        stage({ id: 'stage-1', isDefault: true }),
+      );
+
+      await expect(
+        service.moveCandidateStage('tenant-1', user, 'candidate-1', 'stage-1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    describe('score on candidate lists', () => {
+      const answer = (
+        decision: string | null,
+        retiredAt: Date | null = null,
+      ) => ({
+        id: `answer-${Math.random()}`,
+        questionId: 'question-1',
+        questionSnapshot: 'Can you relocate?',
+        answer: 'Yes',
+        answerText: null,
+        selectedOptions: ['Yes'],
+        createdAt: new Date('2026-10-01T00:00:00Z'),
+        screeningDecision: decision,
+        screeningDecidedAt: null,
+        question: { question: 'Can you relocate?', retiredAt },
+      });
+      const listed = (answers: unknown[]) =>
+        candidate({
+          skills: ['Payroll'],
+          answers,
+          vacancy: vacancy({
+            details: { skills: { items: ['Payroll'] } },
+            _count: { applications: 1, questions: 2 },
+          }),
+        });
+
+      it('is the application score alone until an answer is decided', async () => {
+        prisma.recruitmentApplication.findMany.mockResolvedValue([
+          listed([answer(null)]),
+        ]);
+        prisma.recruitmentApplication.count.mockResolvedValue(1);
+
+        const result = await service.listCandidates('tenant-1', {} as any);
+
+        expect(result.items[0].matchScore).toBe(100);
+      });
+
+      it('blends in the screening once an answer is decided', async () => {
+        prisma.recruitmentApplication.findMany.mockResolvedValue([
+          listed([answer('ACCEPTED')]),
+        ]);
+        prisma.recruitmentApplication.count.mockResolvedValue(1);
+
+        const result = await service.listCandidates('tenant-1', {} as any);
+
+        // 100% application and 1 of 2 questions accepted.
+        expect(result.items[0].matchScore).toBe(75);
+      });
+
+      it('ignores decisions on retired questions and hides the internal counts', async () => {
+        prisma.recruitmentApplication.findMany.mockResolvedValue([
+          listed([answer('ACCEPTED', new Date('2026-10-02T00:00:00Z'))]),
+        ]);
+        prisma.recruitmentApplication.count.mockResolvedValue(1);
+
+        const result = await service.listCandidates('tenant-1', {} as any);
+
+        expect(result.items[0].matchScore).toBe(100);
+        expect(result.items[0].vacancy).not.toHaveProperty('_count.questions');
+      });
+    });
+
+    describe('decisions', () => {
+      it('records who decided on an answer and when', async () => {
+        prisma.recruitmentApplicationAnswer.findFirst.mockResolvedValue({
+          id: 'answer-1',
+        });
+        prisma.recruitmentApplicationAnswer.update.mockResolvedValue({});
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(candidate());
+
+        await service.setScreeningDecision(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'question-1',
+          'ACCEPTED' as any,
+        );
+
+        expect(
+          prisma.recruitmentApplicationAnswer.findFirst,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              tenantId: 'tenant-1',
+              applicationId: 'candidate-1',
+              questionId: 'question-1',
+            }),
+          }),
+        );
+        expect(prisma.recruitmentApplicationAnswer.update).toHaveBeenCalledWith(
+          {
+            where: { id: 'answer-1' },
+            data: {
+              screeningDecision: 'ACCEPTED',
+              screeningDecidedAt: expect.any(Date),
+              screeningDecidedByUserId: user.id,
+            },
+          },
+        );
+      });
+
+      it('clears the decision, and who made it, when given null', async () => {
+        prisma.recruitmentApplicationAnswer.findFirst.mockResolvedValue({
+          id: 'answer-1',
+        });
+        prisma.recruitmentApplicationAnswer.update.mockResolvedValue({});
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(candidate());
+
+        await service.setScreeningDecision(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'question-1',
+          null,
+        );
+
+        expect(prisma.recruitmentApplicationAnswer.update).toHaveBeenCalledWith(
+          {
+            where: { id: 'answer-1' },
+            data: {
+              screeningDecision: null,
+              screeningDecidedAt: null,
+              screeningDecidedByUserId: null,
+            },
+          },
+        );
+      });
+
+      it('never changes the candidate stage', async () => {
+        prisma.recruitmentApplicationAnswer.findFirst.mockResolvedValue({
+          id: 'answer-1',
+        });
+        prisma.recruitmentApplicationAnswer.update.mockResolvedValue({});
+        prisma.recruitmentApplication.findFirst.mockResolvedValue(candidate());
+
+        await service.setScreeningDecision(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'question-1',
+          'DECLINED' as any,
+        );
+
+        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+        expect(prisma.recruitmentStageHistory.create).not.toHaveBeenCalled();
+      });
+
+      it('does not disclose answers of another tenant or a draft', async () => {
+        prisma.recruitmentApplicationAnswer.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.setScreeningDecision(
+            'tenant-1',
+            user,
+            'other',
+            'question-1',
+            'ACCEPTED' as any,
+          ),
+        ).rejects.toThrow(NotFoundException);
+        expect(
+          prisma.recruitmentApplicationAnswer.update,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('moving a vacancy to Screening', () => {
+      const screeningStage = stage({
+        id: 'stage-screening',
+        name: 'Screening',
+        normalizedName: 'screening',
+        sortOrder: 2,
+        isDefault: false,
+      });
+
+      beforeEach(() => {
+        prisma.recruitmentVacancy.findFirst.mockResolvedValue({
+          id: 'vacancy-1',
+        });
+        prisma.recruitmentStage.findFirst.mockImplementation(
+          async (args: any) =>
+            args.where.isDefault ? stage() : screeningStage,
+        );
+        prisma.recruitmentStage.findMany.mockResolvedValue([stage()]);
+        prisma.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+      });
+
+      it('moves only applicants in the entry stage and writes their history', async () => {
+        prisma.recruitmentApplication.findMany.mockResolvedValue([
+          { id: 'a-1' },
+          { id: 'a-2' },
+        ]);
+        prisma.recruitmentApplication.updateMany.mockResolvedValue({
+          count: 2,
+        });
+        prisma.recruitmentStageHistory.createMany.mockResolvedValue({
+          count: 2,
+        });
+
+        const result = await service.moveVacancyApplicantsToScreening(
+          'tenant-1',
+          user,
+          'vacancy-1',
+        );
+
+        expect(result).toEqual({ moved: 2 });
+        expect(prisma.recruitmentApplication.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              tenantId: 'tenant-1',
+              vacancyId: 'vacancy-1',
+              currentStageId: 'stage-1',
+              autoRejectedAt: null,
+              status: RecruitmentApplicationStatus.SUBMITTED,
+            }),
+          }),
+        );
+        expect(prisma.recruitmentApplication.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: ['a-1', 'a-2'] } },
+          data: { currentStageId: 'stage-screening' },
+        });
+        expect(prisma.recruitmentStageHistory.createMany).toHaveBeenCalledWith({
+          data: [
+            expect.objectContaining({
+              applicationId: 'a-1',
+              previousStageId: 'stage-1',
+              newStageId: 'stage-screening',
+              changedByUserId: user.id,
+              changedByEmployeeId: 'employee-1',
+            }),
+            expect.objectContaining({ applicationId: 'a-2' }),
+          ],
+        });
+      });
+
+      it('does nothing when nobody is waiting in the entry stage', async () => {
+        prisma.recruitmentApplication.findMany.mockResolvedValue([]);
+
+        const result = await service.moveVacancyApplicantsToScreening(
+          'tenant-1',
+          user,
+          'vacancy-1',
+        );
+
+        expect(result).toEqual({ moved: 0 });
+        expect(prisma.recruitmentApplication.updateMany).not.toHaveBeenCalled();
+        expect(
+          prisma.recruitmentStageHistory.createMany,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('needs a Screening stage', async () => {
+        prisma.recruitmentStage.findFirst.mockImplementation(
+          async (args: any) => (args.where.isDefault ? stage() : null),
+        );
+
+        await expect(
+          service.moveVacancyApplicantsToScreening(
+            'tenant-1',
+            user,
+            'vacancy-1',
+          ),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('does not touch another tenant vacancy', async () => {
+        prisma.recruitmentVacancy.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.moveVacancyApplicantsToScreening('tenant-1', user, 'other'),
+        ).rejects.toThrow(NotFoundException);
+      });
     });
   });
 

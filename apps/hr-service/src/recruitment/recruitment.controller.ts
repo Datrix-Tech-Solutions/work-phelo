@@ -38,6 +38,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
+  SetRecruitmentScreeningDecisionDto,
   UpdateRecruitmentApplicationAnswersDto,
   UpdateRecruitmentApplicationBasicInfoDto,
   UpdateRecruitmentApplicationProfessionalInfoDto,
@@ -481,6 +482,28 @@ export class RecruitmentController {
     );
   }
 
+  @Post('vacancies/:vacancyId/move-to-screening')
+  @ApiTags('HR Recruitment - Vacancies')
+  @RequirePermissions(Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE)
+  @ApiOperation({
+    summary: 'Move a vacancy’s applicants from the entry stage to Screening',
+    description:
+      'Moves every submitted applicant still in the entry stage into Screening and records stage history. Applicants a cut-off rejected are left in Rejected.',
+  })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  @ApiOkResponse({ description: 'How many applicants were moved' })
+  @ApiConflictResponse({ description: 'The tenant has no Screening stage' })
+  moveApplicantsToScreening(
+    @Param('vacancyId') vacancyId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.moveVacancyApplicantsToScreening(
+      req.user.tenantId,
+      req.user,
+      vacancyId,
+    );
+  }
+
   @Post('vacancies/:vacancyId/close')
   @ApiTags('HR Recruitment - Vacancies')
   @RequirePermissions(Permission.CLOSE_RECRUITMENT_VACANCY)
@@ -676,6 +699,36 @@ export class RecruitmentController {
       candidateId,
       dto.stageId,
       dto.note,
+    );
+  }
+
+  @Patch('candidates/:candidateId/answers/:questionId/decision')
+  @ApiTags('HR Recruitment - Candidates')
+  @RequirePermissions(Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE)
+  @ApiOperation({
+    summary: 'Accept or decline a candidate screening answer',
+    description:
+      "Records the reviewer's call on one screening answer, or clears it with a null decision. It does not change the candidate's stage.",
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiParam({ name: 'questionId', description: 'Vacancy question UUID' })
+  @ApiBody({ type: SetRecruitmentScreeningDecisionDto })
+  @ApiOkResponse({ description: 'The candidate with the decision applied' })
+  setScreeningDecision(
+    @Param('candidateId') candidateId: string,
+    @Param('questionId') questionId: string,
+    @Body() dto: SetRecruitmentScreeningDecisionDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.setScreeningDecision(
+      req.user.tenantId,
+      req.user,
+      candidateId,
+      questionId,
+      dto.decision,
     );
   }
 

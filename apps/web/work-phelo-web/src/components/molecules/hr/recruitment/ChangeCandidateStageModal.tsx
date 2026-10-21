@@ -67,14 +67,22 @@ function StageForm({
   onSubmit,
 }: {
   candidate: RecruitmentCandidate;
-  stages: { id: string; name: string }[];
+  stages: { id: string; name: string; isDefault: boolean }[];
   isPending: boolean;
   onCancel: () => void;
   onSubmit: (stageId: string, note: string) => void;
 }) {
-  const [stageId, setStageId] = useState(candidate.currentStageId ?? '');
+  // Applied is where a candidate starts when they apply, so a candidate is never moved back to it.
+  const options = useMemo(
+    () => stages.filter((s) => !s.isDefault).map((s) => ({ value: s.id, label: s.name })),
+    [stages],
+  );
+  const [stageId, setStageId] = useState(() =>
+    options.some((o) => o.value === candidate.currentStageId)
+      ? (candidate.currentStageId ?? '')
+      : '',
+  );
   const [note, setNote] = useState('');
-  const options = useMemo(() => stages.map((s) => ({ value: s.id, label: s.name })), [stages]);
   const unchanged = stageId === candidate.currentStageId;
 
   return (

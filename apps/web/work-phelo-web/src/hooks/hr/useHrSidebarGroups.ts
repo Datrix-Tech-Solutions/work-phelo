@@ -1,8 +1,6 @@
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
-import type { NavTab } from '@/components/organisms/shared/TopNav';
 import { HR_NAV_GROUPS, HR_TAB_KEYS } from '@/config/hr-nav';
 import { useAuthStore } from '@/store/auth.store';
-import { useProjectLabels } from '@/hooks/useModuleLabels';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useTeamAppraisals } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
@@ -107,7 +105,7 @@ export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string)
       ...group,
       items: group.items
         .filter((item) => item.key !== currentModuleKey)
-        // The section entries are top-nav tabs of HR (see useHrTabs), never part of the sidebar or rail.
+        // The section entries (Hiring, Payroll, etc.) are kept out of the sidebar and rail.
         .filter((item) => !HR_TAB_KEYS.includes(item.key))
         .map((item) => ({
           ...item,
@@ -117,25 +115,4 @@ export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string)
         })),
     }),
   );
-}
-
-/**
- * The top-nav tabs for HR's own chrome: the section entries (Hiring, Payroll, Performance, Leave
- * Management, Project Management) that used to sit in the sidebar's Management group, in the same order
- * and under the same access rules. Each opens its section's own layout.
- */
-export function useHrTabs(tenantSlug: string): NavTab[] {
-  const navAccess = useHrNavAccess();
-  const projectLabels = useProjectLabels();
-  return HR_NAV_GROUPS.flatMap((group) => group.items)
-    .filter(
-      (item) =>
-        HR_TAB_KEYS.includes(item.key) && item.enabled !== false && (navAccess[item.key] ?? true),
-    )
-    .map((item) => ({
-      key: item.key,
-      // Projects carries the company's own name for it (set by the super admin).
-      label: item.key === 'projects' ? projectLabels.management : item.label,
-      href: `/${tenantSlug}/hr/${item.href}`,
-    }));
 }

@@ -18,8 +18,13 @@ import {
   stageVariant,
 } from '@/components/molecules/hr/recruitment/candidateUtils';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { useCandidates, useRecruitmentStages, useSetCutoff } from '@/hooks/hr/useRecruitment';
-import { computeMatchScore } from '@/lib/hr/candidateMatch';
+import {
+  useCandidates,
+  useMoveApplicantsToScreening,
+  useRecruitmentStages,
+  useSetCutoff,
+} from '@/hooks/hr/useRecruitment';
+import { isScreeningStage } from '@/lib/hr/candidateMatch';
 import { formatDate } from '@/lib/formatters';
 import { Permission } from '@/lib/permissionMap';
 import { cardClass } from '@/lib/utils';
@@ -37,15 +42,13 @@ function matchVariant(score: number): BadgeProps['variant'] {
 
 function CandidateCard({
   candidate,
-  requirements,
   onOpen,
 }: {
   candidate: RecruitmentCandidate;
-  requirements: VacancyDetails | null;
   onOpen: () => void;
 }) {
   const name = candidateFullName(candidate);
-  const match = computeMatchScore(candidate, requirements);
+  const score = candidate.matchScore;
   return (
     <button
       type="button"
@@ -66,7 +69,7 @@ function CandidateCard({
         </span>
         <span>Applied {formatDate(candidate.submittedAt ?? candidate.appliedAt)}</span>
       </div>
-      {match && <Badge label={`${match.score}% match`} variant={matchVariant(match.score)} />}
+      {score !== null && <Badge label={`${score}% match`} variant={matchVariant(score)} />}
     </button>
   );
 }
@@ -118,6 +121,12 @@ export function JobOpeningPipeline({
     restored: number;
   } | null>(null);
 
+  const canMoveStage = usePermission(Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE);
+  const { mutate: moveToScreening, isPending: isMovingToScreening } =
+    useMoveApplicantsToScreening();
+  const [confirmingScreening, setConfirmingScreening] = useState(false);
+  const screeningStage = stages.find((s) => isScreeningStage(s.name));
+
   const columns = useMemo(() => {
     const items = data?.items ?? [];
     const ordered = [...stages].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -149,6 +158,16 @@ export function JobOpeningPipeline({
       .sort((a, b) => a - b)
       .map((n) => ({ value: String(n), label: `${n}% and above` }));
   }, [cutoffScore]);
+
+  /** Moves everyone still in Applied into Screening; there is no moving back to Applied. */
+  const moveApplicantsToScreening = () =>
+    moveToScreening(vacancyId, {
+      onSuccess: ({ moved }) => {
+        setConfirmingScreening(false);
+        toast.success(`${moved} ${moved === 1 ? 'applicant' : 'applicants'} moved to Screening`);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to move applicants to Screening')),
+    });
 
   const applyCutoff = (value: number | null) =>
     setCutoffScore(
@@ -201,6 +220,12 @@ export function JobOpeningPipeline({
   }
 
   const total = data?.meta.total ?? 0;
+  const applicantCount = columns.find((c) => c.isEntry)?.items.length ?? 0;
+  // The board shows only the most recent applicants, but the move covers all of them.
+  const moveWhat =
+    total > LIMIT
+      ? 'all applicants still in Applied'
+      : `${applicantCount} ${applicantCount === 1 ? 'applicant' : 'applicants'}`;
 
   return (
     <div className="flex flex-col gap-2">
@@ -215,6 +240,18 @@ export function JobOpeningPipeline({
                 <Badge label={col.name} variant={stageVariant(col.name)} />
                 <span className="text-xs font-medium text-gray-500">{col.items.length}</span>
               </header>
+              {col.isEntry && canMoveStage === true && screeningStage && col.items.length > 0 && (
+                <div className="mb-3">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => setConfirmingScreening(true)}
+                  >
+                    Move to Screening
+                  </Button>
+                </div>
+              )}
               {col.isEntry && hasCriteria && canSetCutoff && (
                 <div className="mb-3">
                   <SearchSelect
@@ -239,7 +276,6 @@ export function JobOpeningPipeline({
                     <CandidateCard
                       key={c.id}
                       candidate={c}
-                      requirements={requirements}
                       onOpen={() =>
                         router.push(`/${params.tenantSlug}/hr/recruitment/candidates/${c.id}`)
                       }
@@ -267,6 +303,26 @@ export function JobOpeningPipeline({
               onClick={() => pending && applyCutoff(pending.value)}
             >
               Apply
+            </Button>
+          </div>
+        }
+      />
+      <Modal
+        isOpen={confirmingScreening}
+        onClose={() => setConfirmingScreening(false)}
+        title="Move to Screening"
+        description={`Move ${moveWhat} from Applied to Screening? They cannot be moved back to Applied.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setConfirmingScreening(false)}>
+              Cancel
+            </Button>
+            <Button
+              isLoading={isMovingToScreening}
+              loadingText="Moving…"
+              onClick={moveApplicantsToScreening}
+            >
+              Move
             </Button>
           </div>
         }

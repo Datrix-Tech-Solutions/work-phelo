@@ -21,7 +21,7 @@ export function AssetsSection({ assets, onAssignAsset, onManage, onSelectAsset }
         )}
         {onManage && (
           <TableButton variant="blue" onClick={onManage}>
-            Manage
+            Manage Assets
           </TableButton>
         )}
       </div>

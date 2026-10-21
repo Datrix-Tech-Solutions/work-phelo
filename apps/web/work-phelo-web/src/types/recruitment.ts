@@ -199,6 +199,10 @@ export interface RecruitmentCandidate {
   currentEmployer: string | null;
   skills: string[];
   languages: string[];
+  certificates: string[];
+  highestEducationLevel: string | null;
+  /** 0–100, the current score: the application's match, blended with screening once reviewed. */
+  matchScore: number | null;
   resumeUrl: string | null;
   appliedAt: string;
   submittedAt: string | null;
@@ -229,8 +233,15 @@ export interface CandidateEducation {
   endYear: number | null;
 }
 
+/** A reviewer's call on one screening answer. A question with no entry is still pending. */
+export type ScreeningDecision = 'ACCEPTED' | 'DECLINED';
+export type ScreeningDecisions = Record<string, ScreeningDecision>;
+
 export interface RecruitmentCandidateAnswer {
   id: string;
+  questionId: string;
+  /** The reviewer's call on this answer; null until it has been reviewed. */
+  screeningDecision: ScreeningDecision | null;
   question: string;
   answer: string;
   selectedOptions: string[];
@@ -241,13 +252,11 @@ export interface RecruitmentCandidateDetail extends RecruitmentCandidate {
   professionalSummary: string | null;
   skills: string[];
   languages: string[];
-  certificates: string[];
   /** School entries for the overview; derived from `education` when the API has no structure. */
   educationHistory: CandidateEducation[];
   /** Work history, newest first; derived from the current role when the API has no structure. */
   experienceHistory: CandidateExperience[];
   education: string | null;
-  highestEducationLevel: string | null;
   expectedSalary: number | null;
   expectedSalaryCurrency: string | null;
   noticePeriod: string | null;
