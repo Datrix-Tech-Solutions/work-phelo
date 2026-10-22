@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { Button } from '@/components/atoms/Button';
 import { Badge, type BadgeProps } from '@/components/atoms/Badge';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { usePayrollStatus } from '@/hooks/hr/useEmployeeDashboard';
@@ -42,15 +43,28 @@ interface PayrollStatusCardProps {
  * ignores the period filter. Shown only to people who can read payroll. */
 export function PayrollStatusCard({ className }: PayrollStatusCardProps) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const { data, isLoading, isError } = usePayrollStatus();
 
   return (
     <div className={cn(cardClass('flex flex-col gap-2 p-3 h-72', 'glass'), className)}>
-      <div className="flex flex-col">
-        <h3 className="text-sm font-semibold text-gray-900">Payroll</h3>
-        <span className="text-xs text-gray-400">
-          {data?.period ? payrollMonthLabel(data.period.month, data.period.year) : 'Latest period'}
-        </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col">
+          <h3 className="text-sm font-semibold text-gray-900">Payroll</h3>
+          <span className="text-xs text-gray-400">
+            {data?.period
+              ? payrollMonthLabel(data.period.month, data.period.year)
+              : 'Latest period'}
+          </span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="px-3 py-1 text-xs"
+          onClick={() => router.push(`/${tenantSlug}/hr/payroll/manage`)}
+        >
+          Manage
+        </Button>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">

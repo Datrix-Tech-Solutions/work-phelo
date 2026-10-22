@@ -91,7 +91,7 @@ interface DataTableProps<T extends { id: string | number }> {
   onSort?: (key: string) => void;
 }
 
-function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
+export function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
   /* keeps the dropdown mounted through its closing transition — see expanded below */
   const [showDropdown, setShowDropdown] = useState(false);

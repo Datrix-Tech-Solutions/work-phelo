@@ -55,10 +55,7 @@ export function ProjectMembersTable({ projectId }: Props) {
     const q = search.toLowerCase();
     if (!q) return members;
     return members.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) ||
-        m.department?.toLowerCase().includes(q) ||
-        m.jobTitle?.toLowerCase().includes(q),
+      (m) => m.name.toLowerCase().includes(q) || m.jobTitle?.toLowerCase().includes(q),
     );
   }, [members, search]);
 
@@ -95,12 +92,6 @@ export function ProjectMembersTable({ projectId }: Props) {
           </div>
         </div>
       ),
-    },
-    {
-      key: 'department',
-      label: 'Department',
-      width: '180px',
-      render: (row) => <span>{row.department ?? '—'}</span>,
     },
     {
       key: 'role',

@@ -8,6 +8,7 @@ import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { ProjectCard } from '@/components/molecules/hr/projects/ProjectCard';
 import { ProjectStatsRow } from '@/components/molecules/hr/projects/ProjectStatsRow';
 import { ProjectFilterBar } from '@/components/molecules/hr/projects/ProjectFilterBar';
+import { SelectProjectTemplateModal } from '@/components/organisms/hr/projects/SelectProjectTemplateModal';
 import { CreateProjectPanel } from '@/components/organisms/hr/projects/CreateProjectPanel';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import {
@@ -18,9 +19,10 @@ import {
   usePermission,
 } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
-import { CreateProjectDto } from '@/types/hr';
+import { CreateProjectDto, ProjectConfig, ProjectTemplate, ProjectType } from '@/types/hr';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
+import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 const PAGE_SIZE = 12;
@@ -86,6 +88,11 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  // Chosen in the template pop-up (null is the blank slate); the create form is prefilled from it.
+  const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null);
+  // Bumped on every pick so the form remounts and is prefilled from it afresh.
+  const [panelKey, setPanelKey] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const canViewAll = usePermission(Permission.READ_PROJECTS);
@@ -99,6 +106,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const { data: employees = [] } = useEmployeeOptions();
   const createProject = useCreateProject();
   const archiveProject = useArchiveProject();
+  const setProjectDetails = useProjectLocalStore((s) => s.setProjectDetails);
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -132,9 +140,18 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pagedProjects = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const handleCreate = async (data: CreateProjectDto) => {
+  const handleCreate = async (
+    data: CreateProjectDto,
+    projectType: ProjectType,
+    config: ProjectConfig,
+  ) => {
     try {
-      await createProject.mutateAsync(data);
+      const project = await createProject.mutateAsync(data);
+      setProjectDetails(project.id, {
+        projectType,
+        config,
+        templateName: selectedTemplate?.name ?? null,
+      });
       setPanelOpen(false);
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
@@ -171,7 +188,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
         }}
         actionButton={
           canManageProjects
-            ? { label: `New ${labels.singular}`, onClick: () => setPanelOpen(true) }
+            ? { label: `New ${labels.singular}`, onClick: () => setTemplateModalOpen(true) }
             : undefined
         }
         extraFilters={
@@ -203,12 +220,27 @@ export function ProjectsContent({ tenantSlug }: Props) {
       />
 
       {canManageProjects && (
+        <SelectProjectTemplateModal
+          isOpen={templateModalOpen}
+          onClose={() => setTemplateModalOpen(false)}
+          onSelect={(template) => {
+            setSelectedTemplate(template);
+            setPanelKey((k) => k + 1);
+            setTemplateModalOpen(false);
+            setPanelOpen(true);
+          }}
+        />
+      )}
+
+      {canManageProjects && (
         <CreateProjectPanel
+          key={panelKey}
           isOpen={panelOpen}
           onClose={() => setPanelOpen(false)}
           employees={employees}
           onSubmit={handleCreate}
           isSubmitting={createProject.isPending}
+          template={selectedTemplate}
         />
       )}
 

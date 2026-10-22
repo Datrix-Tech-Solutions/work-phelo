@@ -345,7 +345,7 @@ describe('PayrollRunsService.run', () => {
 
     const data = prisma.payrollRun.create.mock.calls[0][0].data;
     expect(data.payrollCurrency).toBe('KES');
-    expect(data.payrollCountry).toBe('KE');
+    expect(data.payrollCountry).toBeUndefined();
   });
 
   it('refuses a run whose configurations are in different currencies', async () => {

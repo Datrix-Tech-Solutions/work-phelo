@@ -2,12 +2,21 @@
 
 import { use } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { pageBreadcrumb, pagePx } from '@/lib/layout';
 import { ProjectBanner } from '@/components/molecules/hr/projects/ProjectBanner';
-import { useProject } from '@/hooks';
+import { useProject, useMyProfile, usePermission } from '@/hooks';
+import { Permission } from '@/lib/permissionMap';
+import { AddProjectTabMenu } from '@/components/molecules/hr/projects/AddProjectTabMenu';
+import {
+  PROJECT_FEATURE_LABELS,
+  PROJECT_FEATURE_OPTIONS,
+  PROJECT_FEATURE_TAB_SEGMENTS,
+} from '@/lib/projectFeatures';
+import type { ProjectFeature } from '@/types/hr';
+import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 const TAB_ACTIVE =
@@ -28,6 +37,14 @@ export default function ProjectDetailLayout({
   const root = `${base}/${id}`;
 
   const { data: project, isLoading } = useProject(id);
+  // The project's own features (from its template or blank-slate setup) decide its tabs.
+  const features = useProjectLocalStore((s) => s.byProjectId[id]?.config.features);
+  const addFeature = useProjectLocalStore((s) => s.addFeature);
+  const router = useRouter();
+  const { data: myProfile } = useMyProfile();
+  const canManageProjects = usePermission(Permission.CREATE_PROJECT);
+  const canAddTabs =
+    canManageProjects || !!(project?.managerId && project.managerId === myProfile?.id);
 
   if (isLoading) {
     return (
@@ -47,11 +64,21 @@ export default function ProjectDetailLayout({
     );
   }
 
-  const tabs = [
-    { label: `${labels.singular} Details`, href: `${root}/details` },
-    { label: `${labels.singular} Tasks`, href: `${root}/tasks` },
-    { label: `${labels.singular} Board`, href: `${root}/board` },
-  ];
+  // Summary is always there. Projects with no saved setup (made before templates) keep Tasks and Board.
+  const featureTabs = features
+    ? features.map((f) => ({
+        label: `${labels.singular} ${f === 'LIST' ? 'Tasks' : PROJECT_FEATURE_LABELS[f]}`,
+        href: `${root}/${PROJECT_FEATURE_TAB_SEGMENTS[f]}`,
+      }))
+    : [
+        { label: `${labels.singular} Tasks`, href: `${root}/tasks` },
+        { label: `${labels.singular} Board`, href: `${root}/board` },
+      ];
+  // The tabs a project doesn't have yet. A project with no saved setup shows Tasks and Board.
+  const activeFeatures: ProjectFeature[] = features ?? ['LIST', 'BOARD'];
+  const unusedTabs = PROJECT_FEATURE_OPTIONS.filter((o) => !activeFeatures.includes(o.value));
+
+  const tabs = [{ label: `${labels.singular} Summary`, href: `${root}/summary` }, ...featureTabs];
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -69,25 +96,40 @@ export default function ProjectDetailLayout({
       {/* Scroll container — not a flex container so children grow to full natural height */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className={cn(pagePx, 'flex flex-col gap-6 pt-4 pb-8')}>
-          <ProjectBanner project={project} />
+          {/* The bar and the tabs sit closer together than the rest of the page. */}
+          <div className="flex flex-col gap-2">
+            <ProjectBanner project={project} />
 
-          {/* Tabs */}
-          <div className="flex items-end gap-1 border-b border-gray-200">
-            {tabs.map((tab) => {
-              const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={cn(
-                    'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
-                    isActive ? TAB_ACTIVE : TAB_IDLE,
-                  )}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
+            {/* Tabs */}
+            <div className="flex items-end gap-1 border-b border-gray-200">
+              {tabs.map((tab) => {
+                const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
+                return (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={cn(
+                      'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
+                      isActive ? TAB_ACTIVE : TAB_IDLE,
+                    )}
+                  >
+                    {tab.label}
+                  </Link>
+                );
+              })}
+              {canAddTabs && (
+                <AddProjectTabMenu
+                  options={unusedTabs.map((o) => ({
+                    value: o.value,
+                    label: o.value === 'LIST' ? 'Tasks' : o.label,
+                  }))}
+                  onPick={(value) => {
+                    addFeature(id, value as ProjectFeature);
+                    router.push(`${root}/${PROJECT_FEATURE_TAB_SEGMENTS[value as ProjectFeature]}`);
+                  }}
+                />
+              )}
+            </div>
           </div>
 
           {children}

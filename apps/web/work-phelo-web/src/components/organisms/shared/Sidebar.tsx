@@ -19,6 +19,8 @@ export interface NavItem {
   active?: boolean;
   // exact true means only highlight on exact path match (use for index/dashboard routes)
   exact?: boolean;
+  // paths under href that belong to another nav item, so this one stays unhighlighted on them
+  excludeHrefs?: string[];
   // children turns this item into a collapsible dropdown section
   children?: NavItem[];
 }
@@ -37,7 +39,9 @@ interface SidebarProps {
 
 function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const pathname = usePathname();
-  const isCurrent = pathname === item.href || (!item.exact && pathname.startsWith(item.href + '/'));
+  const isExcluded = item.excludeHrefs?.some((h) => pathname === h || pathname.startsWith(h + '/'));
+  const isCurrent =
+    pathname === item.href || (!item.exact && !isExcluded && pathname.startsWith(item.href + '/'));
   const isDeactivated = item.active === false;
 
   const iconEl = (

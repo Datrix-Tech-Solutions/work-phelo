@@ -341,12 +341,10 @@ export function ComponentEditor({
         </div>
 
         {c.method === 'fixed' && (
-          <Input
+          <NumberField
             label={`Amount each period (${symbol})`}
-            type="number"
-            step="any"
-            value={show(p.amount)}
-            onChange={(e) => patchParams({ amount: parseNumber(e.target.value) })}
+            value={p.amount ?? 0}
+            onChange={(value) => patchParams({ amount: value })}
           />
         )}
 
@@ -360,26 +358,20 @@ export function ComponentEditor({
               onChange={(e) => patchParams({ rate: parseNumber(e.target.value) })}
             />
             {calculatedOn}
-            <Input
+            <NumberField
               label="Pay limit (optional)"
-              type="number"
-              step="any"
-              value={show(p.baseCap)}
-              onChange={(e) => patchParams({ baseCap: parseNumber(e.target.value) })}
+              value={p.baseCap ?? 0}
+              onChange={(value) => patchParams({ baseCap: value || null })}
             />
-            <Input
+            <NumberField
               label="Minimum amount (optional)"
-              type="number"
-              step="any"
-              value={show(p.min)}
-              onChange={(e) => patchParams({ min: parseNumber(e.target.value) })}
+              value={p.min ?? 0}
+              onChange={(value) => patchParams({ min: value || null })}
             />
-            <Input
+            <NumberField
               label="Maximum amount (optional)"
-              type="number"
-              step="any"
-              value={show(p.max)}
-              onChange={(e) => patchParams({ max: parseNumber(e.target.value) })}
+              value={p.max ?? 0}
+              onChange={(value) => patchParams({ max: value || null })}
             />
             <p className="self-end pb-2 text-xs text-gray-500">
               Pay above the limit is ignored, like a contribution ceiling.
@@ -402,7 +394,7 @@ export function ComponentEditor({
                 onChange={(v) => v && patchParams({ period: v as 'monthly' | 'annual' })}
               />
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3">
               <div className="grid grid-cols-[1fr_1fr_36px] gap-2 text-xs text-gray-500">
                 <span>Income up to ({symbol})</span>
                 <span>Rate (%)</span>

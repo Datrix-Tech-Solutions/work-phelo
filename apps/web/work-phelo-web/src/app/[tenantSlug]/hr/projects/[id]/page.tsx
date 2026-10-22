@@ -6,5 +6,5 @@ export default async function ProjectDetailPage({
   params: Promise<{ tenantSlug: string; id: string }>;
 }) {
   const { tenantSlug, id } = await params;
-  redirect(`/${tenantSlug}/hr/projects/${id}/details`);
+  redirect(`/${tenantSlug}/hr/projects/${id}/summary`);
 }

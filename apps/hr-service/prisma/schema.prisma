@@ -1443,7 +1443,9 @@ model PayrollRun {
   /// changes a run that already exists.
   postedToAccounting          Boolean        @default(false)
   notes                       String?
-  payrollCountry              PayrollCountry @default(GH)
+  /// Set only by the older fixed-country payroll. Runs from payroll configurations leave it empty:
+  /// their currency is just a label.
+  payrollCountry              PayrollCountry?
   payrollCurrency             String         @default("GHS")
   tier3Enabled                Boolean        @default(false)
   tier3Rate                   Decimal?       @db.Decimal(5, 2)
