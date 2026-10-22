@@ -45,7 +45,7 @@ export function ProjectConfigFields({ value, onChange, showErrors }: Props) {
         error={errors.workTypes}
       />
       <MultiSelect
-        label="Features"
+        label="View"
         placeholder="Select the project tabs to turn on"
         options={PROJECT_FEATURE_OPTIONS}
         value={value.features}

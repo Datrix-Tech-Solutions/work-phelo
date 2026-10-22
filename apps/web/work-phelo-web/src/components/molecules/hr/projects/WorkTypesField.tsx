@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { InlineRenameText } from '@/components/atoms/InlineRenameText';
 import { WorkTypeIconPicker } from '@/components/atoms/WorkTypeIconPicker';
-import { WorkTypeIconBadge } from '@/lib/workTypeIcons';
 import { inputClass } from '@/lib/utils';
 import { ProjectWorkType, WorkTypeIcon } from '@/types/hr';
 
@@ -70,11 +70,23 @@ export function WorkTypesField({ label, value, onChange, placeholder, error }: P
         <ul className="flex flex-wrap items-center gap-2">
           {value.map((w, i) => (
             <li
-              key={w.name}
+              key={i}
               className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg pl-2 pr-1.5 py-1.5"
             >
-              <WorkTypeIconBadge icon={w.icon} />
-              <span className="text-sm font-medium text-gray-900">{w.name}</span>
+              <WorkTypeIconPicker
+                inline
+                value={w.icon}
+                onChange={(next) =>
+                  onChange(value.map((x, j) => (j === i ? { ...x, icon: next } : x)))
+                }
+              />
+              <InlineRenameText
+                value={w.name}
+                takenNames={value.map((x) => x.name)}
+                onRename={(name) => onChange(value.map((x, j) => (j === i ? { ...x, name } : x)))}
+                onTaken={(name) => setDraftError(`"${name}" is already in the list`)}
+                className="text-gray-900"
+              />
               <button
                 type="button"
                 aria-label={`Remove ${w.name}`}

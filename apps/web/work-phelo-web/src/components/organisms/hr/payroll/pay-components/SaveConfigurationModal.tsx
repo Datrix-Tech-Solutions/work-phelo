@@ -4,11 +4,9 @@ import { useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import {
   PAYSLIP_TYPES,
-  PAYSLIP_TYPE_ORDER,
   checkConfiguration,
   type PayComponent,
   type PayslipTypeKey,
@@ -18,6 +16,12 @@ import {
   sameComponents,
   type SavedConfiguration,
 } from '@/lib/payroll-engine';
+import { defaultGroupSettings, type GroupSettings, type PayrollGroup } from '@/lib/payroll-groups';
+import type { Employee } from '@/types/hr';
+import {
+  PayrollGroupFields,
+  eligibleEmployees,
+} from '@/components/organisms/hr/payroll/payroll-groups/PayrollGroupFields';
 
 interface SaveConfigurationModalProps {
   isOpen: boolean;
@@ -27,6 +31,9 @@ interface SaveConfigurationModalProps {
   current: SavedConfiguration | null;
   /** The payslip type the sample was previewing, ticked by default for a new configuration. */
   previewType: PayslipTypeKey;
+  /** Every group and employee, for the group a new configuration creates with it. */
+  groups: PayrollGroup[];
+  employees: Employee[];
   isSaving: boolean;
   /** Why the last save failed, from the server. */
   error: string | null;
@@ -35,6 +42,8 @@ interface SaveConfigurationModalProps {
     payslipType: PayslipTypeKey;
     effectiveFrom: string;
     note: string;
+    /** The group's schedule and members: created with a new configuration, updated on a saved one. */
+    group: GroupSettings;
   }) => void;
 }
 
@@ -44,6 +53,8 @@ export function SaveConfigurationModal({
   components,
   current,
   previewType,
+  groups,
+  employees,
   isSaving,
   error,
   onSave,
@@ -57,18 +68,43 @@ export function SaveConfigurationModal({
   const [effectiveFrom, setEffectiveFrom] = useState(minDate && minDate > today ? minDate : today);
   const [note, setNote] = useState('');
   const changes = latest ? diffComponents(latest.components, components) : [];
-  const [type, setType] = useState<PayslipTypeKey>(current?.payslipType ?? previewType);
+  // The payslip type is the one the sample is previewing, as the currency is.
+  const type = previewType;
+
+  // A new configuration creates a group with its own name; a saved one shows the group it has,
+  // filled in, and renames it with the configuration.
+  const linkedGroup = current ? groups.find((g) => g.configurationId === current.id) : undefined;
+  const [group, setGroup] = useState<GroupSettings>(() =>
+    linkedGroup
+      ? {
+          frequency: linkedGroup.frequency,
+          payday: linkedGroup.payday,
+          reminder: linkedGroup.reminder,
+          memberIds: employees.filter((e) => e.payrollGroupId === linkedGroup.id).map((e) => e.id),
+        }
+      : defaultGroupSettings(),
+  );
+  const trimmedName = name.trim();
+  const nameTaken =
+    trimmedName !== '' &&
+    trimmedName !== linkedGroup?.name &&
+    groups.some(
+      (g) => g.id !== linkedGroup?.id && g.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+    );
 
   const check = useMemo(() => checkConfiguration(components, type), [type, components]);
   const canSave =
-    name.trim() !== '' && check.errors.length === 0 && (!hasChanges || effectiveFrom !== '');
+    trimmedName !== '' &&
+    !nameTaken &&
+    check.errors.length === 0 &&
+    (!hasChanges || effectiveFrom !== '');
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Save configuration"
-      description="Choose the payslip type, which decides the figures it is calculated from, and when changes take effect."
+      title="Save group"
+      description={`${PAYSLIP_TYPES[type].label} payslip group`}
       width="max-w-lg"
       footer={
         <>
@@ -80,7 +116,18 @@ export function SaveConfigurationModal({
             isLoading={isSaving}
             loadingText="Saving…"
             onClick={() =>
-              onSave({ name: name.trim(), payslipType: type, effectiveFrom, note: note.trim() })
+              onSave({
+                name: trimmedName,
+                payslipType: type,
+                effectiveFrom,
+                note: note.trim(),
+                group: {
+                  ...group,
+                  memberIds: group.memberIds.filter((id) =>
+                    eligibleEmployees(employees, type).some((e) => e.id === id),
+                  ),
+                },
+              })
             }
           >
             Save
@@ -95,18 +142,12 @@ export function SaveConfigurationModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-
-        <SearchSelect
-          label="Payslip type"
-          clearable={false}
-          options={PAYSLIP_TYPE_ORDER.map((key) => ({
-            value: key,
-            label: PAYSLIP_TYPES[key].label,
-            sublabel: PAYSLIP_TYPES[key].description,
-          }))}
-          value={type}
-          onChange={(v) => v && setType(v as PayslipTypeKey)}
-        />
+        {nameTaken && (
+          <p className="-mt-2 text-xs text-red-600">
+            A payroll group named &quot;{trimmedName}&quot; already exists. A configuration and its
+            group share one name.
+          </p>
+        )}
 
         {hasChanges ? (
           <>
@@ -119,12 +160,14 @@ export function SaveConfigurationModal({
             <span className="-mt-2 text-xs text-gray-500">
               Payroll runs dated before this keep using the earlier version.
             </span>
-            <Input
-              label="What changed and why"
-              placeholder="e.g. New PAYE bands from the 2027 budget"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
+            {current && (
+              <Input
+                label="What changed and why"
+                placeholder="e.g. New PAYE bands from the 2027 budget"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            )}
             {changes.length > 0 && (
               <p className="rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-600">
                 {changes.join('. ')}.
@@ -136,6 +179,19 @@ export function SaveConfigurationModal({
             No component changes, so this won&apos;t create a new version.
           </p>
         )}
+
+        {
+          <section className="flex flex-col gap-3 border-t border-gray-100 pt-4">
+            <PayrollGroupFields
+              settings={group}
+              onChange={setGroup}
+              payslipType={type}
+              employees={employees}
+              groups={groups}
+              groupId={linkedGroup?.id}
+            />
+          </section>
+        }
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 

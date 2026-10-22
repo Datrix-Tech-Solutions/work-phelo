@@ -17,11 +17,13 @@ import {
   describePayday,
   describeReminder,
   type PayrollGroup,
-  type PayrollGroupInput,
+  toGroupInput,
+  type GroupSettings,
 } from '@/lib/payroll-groups';
 import { PAYSLIP_TYPES, versionInForce } from '@/lib/payroll-engine';
 import { isOnPayroll } from '@/components/organisms/hr/payroll/run-payroll/runRows';
-import { PayrollGroupPanel } from './PayrollGroupPanel';
+import { PayrollGroupMembersPanel } from './PayrollGroupMembersPanel';
+import { PayrollGroupScheduleModal } from './PayrollGroupScheduleModal';
 
 export function PayrollGroupsContent() {
   const toast = useToast();
@@ -31,7 +33,10 @@ export function PayrollGroupsContent() {
   const employees = employeeData?.data ?? [];
 
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<PayrollGroup | 'new' | null>(null);
+  const [managing, setManaging] = useState<{
+    group: PayrollGroup;
+    kind: 'members' | 'reminders';
+  } | null>(null);
   const [deleting, setDeleting] = useState<PayrollGroup | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -81,16 +86,28 @@ export function PayrollGroupsContent() {
     { key: 'reminder', label: 'Payday reminder', render: (g) => describeReminder(g.reminder) },
   ];
 
-  const save = async (input: PayrollGroupInput, employeeIds: string[]) => {
+  const saveMembers = async (group: PayrollGroup, employeeIds: string[]) => {
     setSaveError(null);
     try {
-      const saved = await store.save(input);
-      await store.setEmployees(saved.id, employeeIds);
-      setEditing(null);
-      toast.success(input.id ? `Saved "${input.name.trim()}"` : `Created "${input.name.trim()}"`);
+      await store.setEmployees(group.id, employeeIds);
+      setManaging(null);
+      toast.success(`Saved the members of "${group.name}"`);
     } catch (e) {
-      // Kept in the panel, where the person can fix it and try again.
-      setSaveError(payrollConfigurationError(e, 'Could not save the group'));
+      setSaveError(payrollConfigurationError(e, 'Could not save the members'));
+    }
+  };
+
+  const saveSchedule = async (
+    group: PayrollGroup,
+    schedule: Pick<GroupSettings, 'frequency' | 'payday' | 'reminder'>,
+  ) => {
+    setSaveError(null);
+    try {
+      await store.save({ ...toGroupInput(group), ...schedule });
+      setManaging(null);
+      toast.success(`Saved the reminders of "${group.name}"`);
+    } catch (e) {
+      setSaveError(payrollConfigurationError(e, 'Could not save the reminders'));
     }
   };
 
@@ -118,8 +135,8 @@ export function PayrollGroupsContent() {
               .slice(0, 6)
               .map((e) => `${e.firstName} ${e.lastName}`)
               .join(', ')}
-            {withoutGroup.length > 6 ? `, and ${withoutGroup.length - 6} more` : ''}). Open a group
-            and add them under Employees, so nobody is left out of payroll.
+            {withoutGroup.length > 6 ? `, and ${withoutGroup.length - 6} more` : ''}). Use Manage
+            members on a group to add them, so nobody is left out of payroll.
           </p>
         </div>
       )}
@@ -130,33 +147,50 @@ export function PayrollGroupsContent() {
         searchPlaceholder="Search groups..."
         searchValue={search}
         onSearch={setSearch}
-        actionButton={{ label: 'New Payroll Group', onClick: () => setEditing('new') }}
-        onRowClick={(g) => setEditing(g)}
+        onRowClick={(g) => setManaging({ group: g, kind: 'members' })}
         rowActions={(g) => [
-          { label: 'Edit group', onClick: () => setEditing(g) },
+          { label: 'Manage members', onClick: () => setManaging({ group: g, kind: 'members' }) },
+          {
+            label: 'Manage reminders',
+            onClick: () => setManaging({ group: g, kind: 'reminders' }),
+          },
           { label: 'Delete', onClick: () => setDeleting(g), danger: true },
         ]}
-        emptyMessage="No payroll groups yet. Create one to say who is paid, how often and with which configuration."
+        emptyMessage="No payroll groups yet. Saving a configuration under Pay Components creates one."
         currentPage={1}
         totalPages={1}
         onPageChange={() => undefined}
         noInternalScroll
       />
 
-      {editing && (
-        <PayrollGroupPanel
-          key={editing === 'new' ? 'new' : editing.id}
-          group={editing === 'new' ? null : editing}
+      {managing?.kind === 'members' && (
+        <PayrollGroupMembersPanel
+          key={managing.group.id}
+          group={managing.group}
           groups={store.groups}
           configurations={configStore.configurations}
           employees={employees}
           onClose={() => {
-            setEditing(null);
+            setManaging(null);
             setSaveError(null);
           }}
           isSaving={store.isSaving}
           error={saveError}
-          onSave={save}
+          onSave={(ids) => saveMembers(managing.group, ids)}
+        />
+      )}
+
+      {managing?.kind === 'reminders' && (
+        <PayrollGroupScheduleModal
+          key={managing.group.id}
+          group={managing.group}
+          onClose={() => {
+            setManaging(null);
+            setSaveError(null);
+          }}
+          isSaving={store.isSaving}
+          error={saveError}
+          onSave={(schedule) => saveSchedule(managing.group, schedule)}
         />
       )}
 

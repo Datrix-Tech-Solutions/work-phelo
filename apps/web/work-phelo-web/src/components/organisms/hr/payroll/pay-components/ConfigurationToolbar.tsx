@@ -12,6 +12,8 @@ interface ConfigurationToolbarProps {
   configurations: SavedConfiguration[];
   current: SavedConfiguration | null;
   dirty: boolean;
+  /** There are components in the draft, so starting a new configuration clears something. */
+  hasComponents: boolean;
   onOpen: (id: string) => void;
   onNew: () => void;
   onTemplate: () => void;
@@ -23,6 +25,7 @@ export function ConfigurationToolbar({
   configurations,
   current,
   dirty,
+  hasComponents,
   onOpen,
   onNew,
   onTemplate,
@@ -66,13 +69,15 @@ export function ConfigurationToolbar({
             Discard changes
           </Button>
         )}
-        <Button variant="outline" onClick={onNew}>
-          New configuration
-        </Button>
+        {(current || hasComponents) && (
+          <Button variant="outline" onClick={onNew}>
+            New configuration
+          </Button>
+        )}
         <Button variant="outline" onClick={onTemplate}>
           Use a template
         </Button>
-        <Button onClick={onSave}>Save configuration</Button>
+        <Button onClick={onSave}>Save group</Button>
       </div>
     </div>
   );
