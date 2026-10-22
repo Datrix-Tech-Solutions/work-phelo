@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { InlineRenameText } from '@/components/atoms/InlineRenameText';
 import { inputClass } from '@/lib/utils';
 
 interface Props {
@@ -69,12 +70,18 @@ export function OrderedItemsField({ label, value, onChange, placeholder, error }
       {value.length > 0 && (
         <ol className="flex flex-wrap items-center gap-y-2">
           {value.map((step, i) => (
-            <li key={step} className="flex items-center">
+            <li key={i} className="flex items-center">
               <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg pl-2 pr-1.5 py-1.5">
                 <span className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded bg-brand-tint text-brand text-[11px] font-bold">
                   {i + 1}
                 </span>
-                <span className="text-sm font-medium text-gray-900">{step}</span>
+                <InlineRenameText
+                  value={step}
+                  takenNames={value}
+                  onRename={(name) => onChange(value.map((v, j) => (j === i ? name : v)))}
+                  onTaken={(name) => setDraftError(`"${name}" is already in the list`)}
+                  className="text-gray-900"
+                />
                 <button
                   type="button"
                   aria-label={`Move ${step} earlier`}

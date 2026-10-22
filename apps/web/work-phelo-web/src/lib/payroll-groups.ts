@@ -23,6 +23,34 @@ export interface PayrollGroup {
 
 export type PayrollGroupInput = Omit<PayrollGroup, 'id' | 'employeeCount'> & { id?: string };
 
+export const DEFAULT_REMINDER_DAYS = 3;
+
+/** What a group needs besides its name and configuration: its schedule, reminder and members. */
+export interface GroupSettings {
+  frequency: PayFrequency;
+  payday: Payday;
+  reminder: PayrollGroup['reminder'];
+  memberIds: string[];
+}
+
+/** The group a new configuration starts with: monthly, paid on the last day, reminder on. */
+export const defaultGroupSettings = (): GroupSettings => ({
+  frequency: 'monthly',
+  payday: { kind: 'last_day' },
+  reminder: { enabled: true, daysBefore: DEFAULT_REMINDER_DAYS },
+  memberIds: [],
+});
+
+/** A saved group as the input to save it again, e.g. to change only its name. */
+export const toGroupInput = (group: PayrollGroup): PayrollGroupInput => ({
+  id: group.id,
+  name: group.name,
+  frequency: group.frequency,
+  payday: group.payday,
+  configurationId: group.configurationId,
+  reminder: group.reminder,
+});
+
 export const FREQUENCY_OPTIONS: {
   value: PayFrequency;
   label: string;
@@ -41,8 +69,6 @@ export const FREQUENCY_LABELS: Record<PayFrequency, string> = {
 };
 
 export const REMINDER_DAY_OPTIONS = [1, 2, 3, 5, 7, 10, 14];
-
-export const DEFAULT_REMINDER_DAYS = 3;
 
 export const ordinal = (n: number) => {
   const rest = n % 100;

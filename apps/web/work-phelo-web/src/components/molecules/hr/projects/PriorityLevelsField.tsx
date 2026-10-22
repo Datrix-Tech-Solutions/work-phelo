@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { InlineRenameText } from '@/components/atoms/InlineRenameText';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { PRIORITY_COLORS, PRIORITY_COLOR_OPTIONS, PriorityDot } from '@/lib/priorityColors';
+import { PriorityColorPicker } from '@/components/atoms/PriorityColorPicker';
+import { PRIORITY_COLORS, PRIORITY_COLOR_OPTIONS } from '@/lib/priorityColors';
 import { inputClass } from '@/lib/utils';
 import { PriorityColor, PriorityLevel } from '@/types/hr';
 
@@ -85,12 +87,22 @@ export function PriorityLevelsField({ label, value, onChange, placeholder, error
       {value.length > 0 && (
         <ol className="flex flex-wrap items-center gap-y-2">
           {value.map((p, i) => (
-            <li key={p.name} className="flex items-center">
+            <li key={i} className="flex items-center">
               <div
                 className={`flex items-center gap-1.5 rounded-lg pl-2.5 pr-1.5 py-1.5 ${PRIORITY_COLORS[p.color].chip}`}
               >
-                <PriorityDot color={p.color} />
-                <span className="text-sm font-medium">{p.name}</span>
+                <PriorityColorPicker
+                  value={p.color}
+                  onChange={(next) =>
+                    onChange(value.map((x, j) => (j === i ? { ...x, color: next } : x)))
+                  }
+                />
+                <InlineRenameText
+                  value={p.name}
+                  takenNames={value.map((x) => x.name)}
+                  onRename={(name) => onChange(value.map((x, j) => (j === i ? { ...x, name } : x)))}
+                  onTaken={(name) => setDraftError(`"${name}" is already in the list`)}
+                />
                 <button
                   type="button"
                   aria-label={`Move ${p.name} lower`}

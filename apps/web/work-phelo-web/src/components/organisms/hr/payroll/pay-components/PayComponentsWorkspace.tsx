@@ -6,6 +6,9 @@ import {
   usePayrollConfigurations,
 } from '@/hooks/hr/usePayrollConfigurations';
 import { useSavedPayComponents } from '@/hooks/hr/useSavedPayComponents';
+import { usePayrollGroups } from '@/hooks/hr/usePayrollGroups';
+import { useAllEmployees } from '@/hooks/hr/useEmployees';
+import { toGroupInput, type GroupSettings } from '@/lib/payroll-groups';
 import { useToast } from '@/hooks/useToast';
 import { useUnsavedChangesGuard } from '@/hooks/hr/useUnsavedChangesGuard';
 import { cardClass } from '@/lib/utils';
@@ -52,6 +55,9 @@ export function PayComponentsWorkspace() {
   const toast = useToast();
   const savedStore = useSavedPayComponents();
   const configStore = usePayrollConfigurations();
+  const groupStore = usePayrollGroups();
+  const { data: employeeData } = useAllEmployees();
+  const employees = employeeData?.data ?? [];
 
   const [components, setComponents] = useState<PayComponent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -215,27 +221,113 @@ export function PayComponentsWorkspace() {
 
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  /** A new configuration's group that couldn't be created, kept so it can be tried again. */
+  const [pendingGroup, setPendingGroup] = useState<{
+    configurationId: string;
+    name: string;
+    settings: GroupSettings;
+    /** Set once the group exists, so a retry only has the members left to add. */
+    groupId?: string;
+    error: string;
+  } | null>(null);
+  const [retryingGroup, setRetryingGroup] = useState(false);
+
+  /** Creates the group a new configuration comes with, same name and no more than its settings. */
+  const createGroup = async (pending: {
+    configurationId: string;
+    name: string;
+    settings: GroupSettings;
+    groupId?: string;
+  }) => {
+    let groupId = pending.groupId;
+    try {
+      if (!groupId) {
+        const saved = await groupStore.save({
+          name: pending.name,
+          configurationId: pending.configurationId,
+          frequency: pending.settings.frequency,
+          payday: pending.settings.payday,
+          reminder: pending.settings.reminder,
+        });
+        groupId = saved.id;
+      }
+      if (pending.settings.memberIds.length > 0) {
+        await groupStore.setEmployees(groupId, pending.settings.memberIds);
+      }
+      setPendingGroup(null);
+      return true;
+    } catch (e) {
+      setPendingGroup({
+        ...pending,
+        groupId,
+        error: payrollConfigurationError(e, 'Could not create the group'),
+      });
+      return false;
+    }
+  };
+
+  const retryGroup = async () => {
+    if (!pendingGroup) return;
+    setRetryingGroup(true);
+    const created = await createGroup(pendingGroup);
+    setRetryingGroup(false);
+    if (created) toast.success(`Created the "${pendingGroup.name}" group`);
+  };
+
   const saveConfiguration = async (input: {
     name: string;
     payslipType: PayslipTypeKey;
     effectiveFrom: string;
     note: string;
+    group: GroupSettings;
   }) => {
     setSaveError(null);
+    const { group, ...configuration } = input;
+    // A configuration and its group share one name (this holds while each has just the one).
+    const linkedGroup = configId
+      ? groupStore.groups.find((g) => g.configurationId === configId)
+      : undefined;
     try {
+      // The group goes first: its name has to be unique, so a clash stops here before anything changes.
+      if (linkedGroup) {
+        await groupStore.save({
+          ...toGroupInput(linkedGroup),
+          name: configuration.name,
+          frequency: group.frequency,
+          payday: group.payday,
+          reminder: group.reminder,
+        });
+        const members = employees.filter((e) => e.payrollGroupId === linkedGroup.id);
+        const same =
+          members.length === group.memberIds.length &&
+          members.every((e) => group.memberIds.includes(e.id));
+        if (!same) await groupStore.setEmployees(linkedGroup.id, group.memberIds);
+      }
       const { id, published } = await configStore.save({
         id: configId ?? undefined,
-        ...input,
+        ...configuration,
         currency,
         components,
         baseVersion: current ? latestVersion(current).version : undefined,
       });
       setConfigId(id);
       setSaving(false);
-      toast.success(published ? `Saved "${input.name}" as a new version` : `Saved "${input.name}"`);
+      const message = published
+        ? `Saved the "${configuration.name}" group as a new version`
+        : `Saved the "${configuration.name}" group`;
+      if (!linkedGroup) {
+        const created = await createGroup({
+          configurationId: id,
+          name: configuration.name,
+          settings: group,
+        });
+        toast.success(created ? `Created the "${configuration.name}" group` : message);
+      } else {
+        toast.success(message);
+      }
     } catch (e) {
       // Kept in the pop-up, where the person can fix it and try again.
-      setSaveError(payrollConfigurationError(e, 'Could not save the configuration'));
+      setSaveError(payrollConfigurationError(e, 'Could not save the group'));
     }
   };
 
@@ -249,7 +341,9 @@ export function PayComponentsWorkspace() {
       setSelectedId(copy[0]?.id ?? null);
       if (configuration.payslipType) setPreviewType(configuration.payslipType);
       setTab('configuration');
-      toast.success(`Version ${version.version} of "${configuration.name}" loaded into the draft`);
+      toast.success(
+        `Version ${version.version} of the "${configuration.name}" group loaded into the draft`,
+      );
     });
   };
 
@@ -267,6 +361,17 @@ export function PayComponentsWorkspace() {
         onTabChange={(key) => setTab(key as 'configuration' | 'history')}
       />
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto flex flex-col`}>
+        {pendingGroup && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <p>
+              &quot;{pendingGroup.name}&quot; was saved, but the group couldn&apos;t be created:{' '}
+              {pendingGroup.error}
+            </p>
+            <Button size="sm" variant="outline" isLoading={retryingGroup} onClick={retryGroup}>
+              Try again
+            </Button>
+          </div>
+        )}
         {tab === 'history' && (
           <ConfigurationHistory
             loading={configStore.isLoading}
@@ -283,6 +388,7 @@ export function PayComponentsWorkspace() {
               configurations={configStore.configurations}
               current={current}
               dirty={dirty}
+              hasComponents={components.length > 0}
               onOpen={openConfiguration}
               onNew={newConfiguration}
               onTemplate={() => setPickingTemplate(true)}
@@ -401,7 +507,9 @@ export function PayComponentsWorkspace() {
             setSaving(false);
             setSaveError(null);
           }}
-          isSaving={configStore.isSaving}
+          groups={groupStore.groups}
+          employees={employees}
+          isSaving={configStore.isSaving || groupStore.isSaving}
           error={saveError}
           components={components}
           current={current}

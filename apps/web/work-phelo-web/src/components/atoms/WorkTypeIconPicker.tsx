@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAnchoredMenu } from '@/hooks/useAnchoredMenu';
 import { WORK_TYPE_ICONS, WorkTypeIconBadge } from '@/lib/workTypeIcons';
 import { cn, popupClass } from '@/lib/utils';
 import type { WorkTypeIcon } from '@/types/hr';
@@ -9,34 +9,13 @@ import type { WorkTypeIcon } from '@/types/hr';
 interface Props {
   value: WorkTypeIcon;
   onChange: (icon: WorkTypeIcon) => void;
+  /** A bare icon button for editing an existing item, instead of the boxed form field. */
+  inline?: boolean;
 }
 
 /** Just the icon: a small box showing the chosen icon, which opens a grid of the others to pick from. */
-export function WorkTypeIconPicker({ value, onChange }: Props) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useEffect(() => {
-    if (!pos) return;
-    const close = () => setPos(null);
-    const onPress = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
-      close();
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
-    document.addEventListener('mousedown', onPress);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      document.removeEventListener('mousedown', onPress);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [pos]);
+export function WorkTypeIconPicker({ value, onChange, inline }: Props) {
+  const { triggerRef: ref, menuRef, pos, toggle, close } = useAnchoredMenu();
 
   return (
     <>
@@ -46,14 +25,14 @@ export function WorkTypeIconPicker({ value, onChange }: Props) {
         aria-label="Choose an icon"
         aria-haspopup="listbox"
         aria-expanded={!!pos}
-        onClick={() => {
-          if (pos) return setPos(null);
-          const rect = ref.current?.getBoundingClientRect();
-          if (rect) setPos({ top: rect.bottom + 4, left: rect.left });
-        }}
+        onClick={toggle}
         // Not inputClass(): its `read-only:` styles match any non-editable element, buttons
         // included, which put the not-allowed cursor on this one.
-        className="flex w-12 shrink-0 cursor-pointer items-center justify-center rounded-input border border-(--input-border,var(--color-gray-400)) bg-transparent py-2 transition-colors focus:outline-none focus:border-(--module-btn-bg,var(--color-brand)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30"
+        className={
+          inline
+            ? 'flex shrink-0 cursor-pointer items-center justify-center rounded p-0.5 transition-colors hover:bg-gray-200'
+            : 'flex w-12 shrink-0 cursor-pointer items-center justify-center rounded-input border border-(--input-border,var(--color-gray-400)) bg-transparent py-2 transition-colors focus:outline-none focus:border-(--module-btn-bg,var(--color-brand)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30'
+        }
       >
         <WorkTypeIconBadge icon={value} />
       </button>
@@ -76,7 +55,7 @@ export function WorkTypeIconPicker({ value, onChange }: Props) {
                 // The name is only a hover hint, so the picker itself stays icon-only.
                 title={WORK_TYPE_ICONS[icon].label}
                 onClick={() => {
-                  setPos(null);
+                  close();
                   onChange(icon);
                 }}
                 className={cn(

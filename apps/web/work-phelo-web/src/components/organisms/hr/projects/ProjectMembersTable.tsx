@@ -81,7 +81,7 @@ export function ProjectMembersTable({ projectId }: Props) {
   const COLUMNS: Column<ProjectMember>[] = [
     {
       key: 'name',
-      label: 'Employee',
+      label: 'team member',
       width: 'minmax(200px, 1.5fr)',
       render: (row) => (
         <div className="flex items-center gap-3">
