@@ -12,6 +12,7 @@ interface Objective {
   id: string;
   name: string;
   projectName?: string;
+  projectObjectiveName?: string;
   createdBy: string;
   kpis: { name: string; done: boolean }[];
 }
@@ -78,6 +79,7 @@ export function ObjectivesSection({ projects }: Props) {
               id: crypto.randomUUID(),
               name: o.name,
               projectName: o.projectName,
+              projectObjectiveName: o.projectObjectiveName,
               createdBy: creatorName,
               kpis: o.kpis.map((name) => ({ name, done: false })),
             },
@@ -115,7 +117,9 @@ function ObjectiveCard({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">{objective.name}</p>
           {objective.projectName && (
-            <p className="text-xs text-gray-500 mt-0.5">{objective.projectName}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {[objective.projectName, objective.projectObjectiveName].filter(Boolean).join(' · ')}
+            </p>
           )}
           <p className="text-xs text-gray-400 mt-1">Created by {objective.createdBy}</p>
           {!expanded && total > 0 && (

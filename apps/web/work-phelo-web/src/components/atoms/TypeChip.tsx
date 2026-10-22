@@ -15,9 +15,11 @@ const COLOR_STYLES: Record<TypeChipColor, string> = {
 interface TypeChipProps {
   label: string;
   color?: TypeChipColor;
+  /** Rendered inside the chip after the label, e.g. a dropdown chevron. */
+  trailing?: React.ReactNode;
 }
 
-export function TypeChip({ label, color = 'gray' }: TypeChipProps) {
+export function TypeChip({ label, color = 'gray', trailing }: TypeChipProps) {
   return (
     <span
       title={label}
@@ -28,6 +30,7 @@ export function TypeChip({ label, color = 'gray' }: TypeChipProps) {
       )}
     >
       <span className="truncate whitespace-nowrap">{label}</span>
+      {trailing}
     </span>
   );
 }

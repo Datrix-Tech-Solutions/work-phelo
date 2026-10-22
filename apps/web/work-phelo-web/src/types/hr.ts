@@ -490,6 +490,14 @@ export type {
 // ── Project ───────────────────────────────────────────────
 export type ProjectStatus = 'PLANNING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 
+export type ProjectType =
+  | 'CLIENT'
+  | 'INTERNAL'
+  | 'RESEARCH'
+  | 'IMPLEMENTATION'
+  | 'OPERATIONS'
+  | 'OTHER';
+
 export interface Project {
   id: string;
   name: string;
@@ -535,6 +543,13 @@ export interface ProjectTask {
   createdByUserId?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+/** One person a task is assigned to. */
+export interface TaskAssignee {
+  id: string;
+  name: string;
+  avatarUrl?: string;
 }
 
 export interface ProjectMember {
@@ -1263,3 +1278,89 @@ export interface TeamReviewRow {
   managerReviewDeadline: string;
   overallStatus: EmployeeAppraisalStatus;
 }
+
+// ── Project templates (front-end / local storage only for now) ──
+/** A named group of a project's tasks; it has no status of its own, its progress comes from its tasks. */
+export interface ProjectObjective {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+}
+
+/** A step towards finishing a task. A subtask always belongs to a task, never directly to an objective or the project. */
+export interface ProjectSubtask {
+  id: string;
+  projectId: string;
+  taskId: string;
+  name: string;
+  done: boolean;
+  createdAt: string;
+}
+
+/** A time-boxed collection of a project's tasks. A task is in at most one sprint. */
+export interface ProjectSprint {
+  id: string;
+  projectId: string;
+  name: string;
+  /** YYYY-MM-DD */
+  startDate: string;
+  endDate: string;
+  taskIds: string[];
+  /** YYYY-MM-DD, set when the sprint is completed. */
+  completedAt?: string;
+  createdAt: string;
+}
+
+/** Tabs a project can show on its detail page; a template picks which ones it turns on. */
+export type ProjectFeature = 'OBJECTIVES' | 'BOARD' | 'BACKLOG' | 'CALENDAR' | 'LIST';
+
+export type WorkTypeIcon =
+  | 'EPIC'
+  | 'STORY'
+  | 'TASK'
+  | 'BUG'
+  | 'IMPROVEMENT'
+  | 'FEATURE'
+  | 'SUBTASK';
+
+export type PriorityColor = 'GRAY' | 'BLUE' | 'GREEN' | 'YELLOW' | 'ORANGE' | 'RED' | 'PURPLE';
+
+export interface PriorityLevel {
+  name: string;
+  color: PriorityColor;
+}
+
+export interface ProjectWorkType {
+  name: string;
+  icon: WorkTypeIcon;
+}
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  /** Workflow: the statuses work moves through, in order (the board columns). */
+  workflow: string[];
+  /** Kinds of work items a project can hold, e.g. Epic, Story, Bug. */
+  workTypes: ProjectWorkType[];
+  /** Features turned on for projects using this template; each is a tab on the project details. */
+  features: ProjectFeature[];
+  /** Levels of importance work can be given, ordered from lowest to highest. */
+  priorities: PriorityLevel[];
+  /** Built-in templates ship with the app and can't be deleted. */
+  isDefault: boolean;
+  createdAt: string;
+}
+
+/** The part of a template a project actually runs on; a project gets its own editable copy. */
+export type ProjectConfig = Pick<
+  ProjectTemplate,
+  'workflow' | 'workTypes' | 'features' | 'priorities'
+>;
+
+export type CreateProjectTemplateDto = Pick<
+  ProjectTemplate,
+  'name' | 'description' | 'workflow' | 'workTypes' | 'features' | 'priorities'
+>;

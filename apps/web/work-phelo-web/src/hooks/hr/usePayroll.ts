@@ -92,7 +92,7 @@ export function useEmployeePayslips(employeeId: string) {
               year: detail.year,
               status: detail.status,
               paidAt: detail.paidAt ?? null,
-              payrollCountry: detail.payrollCountry,
+              payrollCountry: detail.payrollCountry ?? undefined,
               payrollCurrency: detail.payrollCurrency,
               tier3Enabled: detail.tier3Enabled,
               tier3Rate: detail.tier3Rate ?? null,

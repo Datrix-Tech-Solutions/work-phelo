@@ -211,7 +211,13 @@ export function useUpdateTaskStatus() {
       const res = await api.patch<ProjectTask>(`/hr/projects/tasks/${taskId}/status`, { status });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, { taskId, status }) => {
+      // Put the new status straight into the cached task lists, so the board doesn't show the
+      // old one until the refetch below lands.
+      queryClient.setQueriesData<ProjectTask[]>(
+        { queryKey: [KEY], predicate: (q) => q.queryKey[2] === 'tasks' },
+        (old) => old?.map((t) => (t.id === taskId ? { ...t, status } : t)),
+      );
       queryClient.invalidateQueries({ queryKey: [KEY] });
     },
   });

@@ -234,11 +234,61 @@ export const COMPENSATION_PAYSLIP_TYPE: Record<CompensationType, PayslipTypeKey>
   SALARY_PLUS_COMMISSION: 'monthly_commission',
 };
 
-/** The currencies a configuration can pay in, with the country whose number formatting goes with each. */
+/** The currencies a configuration can pay in. Currency is only a label on the configuration and
+ * the runs made from it; it never changes how pay is calculated. */
 export const CURRENCIES = [
-  { code: 'GHS', label: 'Ghana cedi', country: 'GH' },
-  { code: 'NGN', label: 'Nigerian naira', country: 'NG' },
-  { code: 'KES', label: 'Kenyan shilling', country: 'KE' },
+  { code: 'AED', label: 'UAE dirham' },
+  { code: 'AUD', label: 'Australian dollar' },
+  { code: 'BWP', label: 'Botswana pula' },
+  { code: 'BRL', label: 'Brazilian real' },
+  { code: 'CAD', label: 'Canadian dollar' },
+  { code: 'CHF', label: 'Swiss franc' },
+  { code: 'CNY', label: 'Chinese yuan' },
+  { code: 'CVE', label: 'Cape Verdean escudo' },
+  { code: 'DKK', label: 'Danish krone' },
+  { code: 'DZD', label: 'Algerian dinar' },
+  { code: 'EGP', label: 'Egyptian pound' },
+  { code: 'ETB', label: 'Ethiopian birr' },
+  { code: 'EUR', label: 'Euro' },
+  { code: 'GBP', label: 'British pound' },
+  { code: 'GHS', label: 'Ghana cedi' },
+  { code: 'GMD', label: 'Gambian dalasi' },
+  { code: 'GNF', label: 'Guinean franc' },
+  { code: 'HKD', label: 'Hong Kong dollar' },
+  { code: 'INR', label: 'Indian rupee' },
+  { code: 'JPY', label: 'Japanese yen' },
+  { code: 'KES', label: 'Kenyan shilling' },
+  { code: 'LRD', label: 'Liberian dollar' },
+  { code: 'LSL', label: 'Lesotho loti' },
+  { code: 'MAD', label: 'Moroccan dirham' },
+  { code: 'MGA', label: 'Malagasy ariary' },
+  { code: 'MUR', label: 'Mauritian rupee' },
+  { code: 'MWK', label: 'Malawian kwacha' },
+  { code: 'MXN', label: 'Mexican peso' },
+  { code: 'MYR', label: 'Malaysian ringgit' },
+  { code: 'MZN', label: 'Mozambican metical' },
+  { code: 'NAD', label: 'Namibian dollar' },
+  { code: 'NGN', label: 'Nigerian naira' },
+  { code: 'NOK', label: 'Norwegian krone' },
+  { code: 'NZD', label: 'New Zealand dollar' },
+  { code: 'PKR', label: 'Pakistani rupee' },
+  { code: 'PHP', label: 'Philippine peso' },
+  { code: 'QAR', label: 'Qatari riyal' },
+  { code: 'RWF', label: 'Rwandan franc' },
+  { code: 'SAR', label: 'Saudi riyal' },
+  { code: 'SEK', label: 'Swedish krona' },
+  { code: 'SGD', label: 'Singapore dollar' },
+  { code: 'SLE', label: 'Sierra Leonean leone' },
+  { code: 'SZL', label: 'Eswatini lilangeni' },
+  { code: 'TND', label: 'Tunisian dinar' },
+  { code: 'TZS', label: 'Tanzanian shilling' },
+  { code: 'UGX', label: 'Ugandan shilling' },
+  { code: 'USD', label: 'US dollar' },
+  { code: 'XAF', label: 'Central African CFA franc' },
+  { code: 'XOF', label: 'West African CFA franc' },
+  { code: 'ZAR', label: 'South African rand' },
+  { code: 'ZMW', label: 'Zambian kwacha' },
+  { code: 'ZWL', label: 'Zimbabwean dollar' },
 ] as const;
 
 export type CurrencyCode = (typeof CURRENCIES)[number]['code'];
@@ -246,7 +296,3 @@ export type CurrencyCode = (typeof CURRENCIES)[number]['code'];
 export const CURRENCY_CODES: CurrencyCode[] = CURRENCIES.map((c) => c.code);
 
 export const DEFAULT_CURRENCY: CurrencyCode = 'GHS';
-
-export function countryForCurrency(code: string): 'GH' | 'NG' | 'KE' {
-  return CURRENCIES.find((c) => c.code === code)?.country ?? 'GH';
-}

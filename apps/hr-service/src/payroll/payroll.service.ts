@@ -887,12 +887,12 @@ export class PayrollService {
 
     await this.getPayrollSettingsSnapshot(tenantId);
     const settings: PayrollSettingsSnapshot = {
-      payrollCountry: run.payrollCountry,
+      payrollCountry: run.payrollCountry ?? PayrollCountry.GH,
       payrollCurrency: run.payrollCurrency,
       tier3Enabled: run.tier3Enabled,
       tier3Rate: run.tier3Rate?.toString() ?? null,
       tier3SchemeName: run.tier3SchemeName,
-      country: run.payrollCountry,
+      country: run.payrollCountry ?? PayrollCountry.GH,
     };
     const taxPolicySnapshot = dto.taxPolicy ?? currentItem.taxPolicySnapshot;
     const fixedTaxAmount =

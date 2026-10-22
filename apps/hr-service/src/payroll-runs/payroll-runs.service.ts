@@ -11,7 +11,6 @@ import {
   calculatePayslip,
   DEFAULT_CURRENCY,
   checkConfiguration,
-  countryForCurrency,
   roleTotals,
   sumRoleTotals,
   variableAmounts,
@@ -24,10 +23,7 @@ import {
   type SavedConfiguration,
 } from '@work-phelo/payroll-engine';
 import { RequestUser } from '@work-phelo/types';
-import {
-  EmploymentStatus,
-  PayrollCountry,
-} from '../../prisma/generated/client';
+import { EmploymentStatus } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { PayrollService } from '../payroll/payroll.service';
@@ -310,8 +306,6 @@ export class PayrollRunsService {
     const totalNet = sum((p) => p.result.net);
     const totalEmployerCost = sum((p) => p.result.employerCost);
 
-    const country = countryForCurrency(currency) as PayrollCountry;
-
     const run = await this.prisma.$transaction(async (tx) => {
       // A run returned to draft is replaced by the new one.
       if (sameType) await tx.payrollRun.delete({ where: { id: sameType.id } });
@@ -325,7 +319,6 @@ export class PayrollRunsService {
           status: 'DRAFT',
           runBy: actor.id,
           notes: dto.notes,
-          payrollCountry: country,
           payrollCurrency: currency,
           totalGross: money(runTotals.grossPay),
           totalNet: money(totalNet),

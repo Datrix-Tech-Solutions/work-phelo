@@ -17,25 +17,19 @@ interface Props {
   project: Project;
 }
 
+/** The project overview as a thin bar: name, status and deadline on the left, progress on the right. */
 export function ProjectBanner({ project }: Props) {
   return (
-    <div className={cardClass('p-6 flex items-center gap-6')}>
-      {/* Left: name + meta */}
-      <div className="flex-1 min-w-0 flex flex-col gap-2">
-        <h1 className="text-xl font-bold text-gray-900 truncate">{project.name}</h1>
-        <div className="flex items-center gap-3 flex-wrap">
-          <ProjectStatusBadge status={project.status} />
-          <span className="flex items-center gap-1.5 text-sm text-gray-500">
-            <CalendarDays className="w-4 h-4 text-gray-400" />
-            <span className="text-gray-400">Deadline:</span>
-            <span className="font-medium text-gray-700">{formatDate(project.endDate)}</span>
-          </span>
-        </div>
-      </div>
+    <div className={cardClass('px-4 py-2 flex items-center gap-4')}>
+      <h1 className="text-base font-bold text-gray-900 truncate min-w-0">{project.name}</h1>
+      <ProjectStatusBadge status={project.status} />
+      <span className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 shrink-0">
+        <CalendarDays className="w-4 h-4 text-gray-400" />
+        <span className="text-gray-400">Deadline:</span>
+        <span className="font-medium text-gray-700">{formatDate(project.endDate)}</span>
+      </span>
 
-      {/* Right: progress */}
-      <div className="shrink-0 min-w-52 flex flex-col gap-1.5">
-        <p className="text-xs text-gray-400 font-medium">Progress</p>
+      <div className="ml-auto shrink-0 w-40 sm:w-52">
         <ProgressBar value={project.progress ?? 0} />
       </div>
     </div>

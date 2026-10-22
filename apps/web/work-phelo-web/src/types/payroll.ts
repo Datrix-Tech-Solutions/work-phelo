@@ -40,7 +40,8 @@ export interface PayrollRun {
   paidAt?: string;
   /** Approved while payroll was linked to Accounting, so it is posted and settled there. Fixed at approval. */
   postedToAccounting?: boolean;
-  payrollCountry: PayrollCountry;
+  /** Empty for runs made from payroll configurations, where currency is only a label. */
+  payrollCountry?: PayrollCountry | null;
   payrollCurrency: string;
   tier3Enabled: boolean;
   tier3Rate?: string | null;
