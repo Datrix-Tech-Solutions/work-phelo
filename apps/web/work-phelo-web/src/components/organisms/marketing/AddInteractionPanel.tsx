@@ -145,7 +145,7 @@ export function AddInteractionPanel({
       : {};
 
     setDateError(occurredAt ? undefined : 'Date is required');
-    setMediumError(mediumId ? undefined : 'Interaction type is required');
+    setMediumError(mediumId ? undefined : 'Follow-up type is required');
     setParticipantErrors(nextParticipantErrors);
     if (!occurredAt || !mediumId || Object.keys(nextParticipantErrors).length > 0) return;
 
@@ -205,7 +205,7 @@ export function AddInteractionPanel({
     >
       <div className="flex flex-col gap-4">
         <SearchSelect
-          label="Interaction Type"
+          label="Follow-up Type"
           placeholder="Select or type to add new"
           options={mediumOptions}
           value={mediumId}
@@ -215,7 +215,7 @@ export function AddInteractionPanel({
           }}
           error={mediumError}
           emptyState={buildCreateOptionEmptyState(
-            'interaction type',
+            'follow-up type',
             createMedium,
             setMediumId,
             toast,

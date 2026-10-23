@@ -139,7 +139,7 @@ export function FleetCard({
     ),
   };
 
-  const details: DataCardDetail[] = vehicle.needsFleetDetails
+  const baseDetails: DataCardDetail[] = vehicle.needsFleetDetails
     ? [
         { label: 'Fleet details', value: value('Not added yet', 'text-amber-600') },
         ...tripRow,
@@ -162,6 +162,20 @@ export function FleetCard({
         driverRow,
         ...tripRow,
       ];
+
+  // Expired documents are what hold the vehicle back; ones close to expiring are an early warning.
+  const documentRows: DataCardDetail[] = vehicle.documentAlerts.map((alert) => ({
+    label: alert.label,
+    value: value(
+      alert.state === 'EXPIRED'
+        ? `Expired ${formatTravelDate(alert.expiresOn)}`
+        : alert.daysLeft === 0
+          ? 'Expires today'
+          : `Expires in ${alert.daysLeft} ${alert.daysLeft === 1 ? 'day' : 'days'}`,
+      alert.state === 'EXPIRED' ? 'text-red-600' : 'text-amber-600',
+    ),
+  }));
+  const details = [...baseDetails, ...documentRows];
 
   return (
     <DataCard

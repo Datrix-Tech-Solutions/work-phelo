@@ -15,7 +15,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v2 as cloudinary } from 'cloudinary';
 import type { UploadApiOptions, UploadApiResponse } from 'cloudinary';
 
-export type TenantDocumentAssetType = 'logo' | 'signature';
+export type TenantDocumentAssetType = 'logo' | 'signature' | 'watermark';
 export type TenantBrandingAssetType =
   | 'app-logo'
   | 'sidebar-logo'

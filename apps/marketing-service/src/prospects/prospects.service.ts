@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
@@ -45,11 +46,11 @@ const REQUIRED_PRODUCT_FIELDS_MESSAGE =
   'New prospect products require productId and expectedValue';
 const EMPTY_PRODUCTS_MESSAGE = 'A prospect must have at least one product';
 const DUPLICATE_PENDING_FOLLOW_UP_MESSAGE =
-  'A pending follow-up already exists for this prospect';
+  'A pending reminder already exists for this prospect';
 const FOLLOW_UP_COMPLETION_CONFLICT_MESSAGE =
-  'Follow-up is no longer pending and cannot be completed';
+  'Reminder is no longer pending and cannot be completed';
 const FOLLOW_UP_COMPLETION_ENDPOINT_MESSAGE =
-  'Use the follow-up completion endpoint to complete a pending follow-up';
+  'Use the reminder completion endpoint to complete a pending reminder';
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_FOLLOW_UP_DELAY_DAYS = 7;
 const UPCOMING_FOLLOW_UP_WINDOW_DAYS = 7;
@@ -78,6 +79,8 @@ type ProspectInteractionWithParticipants = {
 
 @Injectable()
 export class ProspectsService {
+  private readonly logger = new Logger(ProspectsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly assignees: AssigneesService,
@@ -196,6 +199,7 @@ export class ProspectsService {
         name: contact.name,
         phone: contact.phone,
         email: contact.email,
+        dateOfBirth: contact.dateOfBirth,
         isPrimary: contact.isPrimary,
         decisionMaker: contact.decisionMakerTypeId
           ? this.namedReference(
@@ -449,24 +453,27 @@ export class ProspectsService {
     }
 
     const prospectIds = prospects.map((prospect) => prospect.id);
-    const [pendingFollowUps, latestInteractions] = await Promise.all([
-      this.prisma.marketingProspectFollowUp.findMany({
-        where: {
-          tenantId: user.tenantId,
-          prospectId: { in: prospectIds },
-          status: MarketingProspectFollowUpStatus.PENDING,
-        },
-        orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-      }),
-      this.prisma.marketingProspectInteraction.groupBy({
-        by: ['prospectId'],
-        where: {
-          tenantId: user.tenantId,
-          prospectId: { in: prospectIds },
-        },
-        _max: { occurredAt: true },
-      }),
-    ]);
+    const [delayDays, pendingFollowUps, latestInteractions] = await Promise.all(
+      [
+        this.followUpDelayDays(user.tenantId),
+        this.prisma.marketingProspectFollowUp.findMany({
+          where: {
+            tenantId: user.tenantId,
+            prospectId: { in: prospectIds },
+            status: MarketingProspectFollowUpStatus.PENDING,
+          },
+          orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+        }),
+        this.prisma.marketingProspectInteraction.groupBy({
+          by: ['prospectId'],
+          where: {
+            tenantId: user.tenantId,
+            prospectId: { in: prospectIds },
+          },
+          _max: { occurredAt: true },
+        }),
+      ],
+    );
 
     const followUpByProspect = new Map(
       pendingFollowUps.map((followUp) => [followUp.prospectId, followUp]),
@@ -499,10 +506,7 @@ export class ProspectsService {
 
         if (!lastInteractionDate) return null;
 
-        const dueAt = this.addDays(
-          lastInteractionDate,
-          DEFAULT_FOLLOW_UP_DELAY_DAYS,
-        );
+        const dueAt = this.addDays(lastInteractionDate, delayDays);
 
         return {
           prospectId: prospect.id,
@@ -585,6 +589,7 @@ export class ProspectsService {
     }
 
     const canCompleteAll = this.canCompleteAllFollowUps(user);
+    const delayDays = await this.followUpDelayDays(user.tenantId);
     const result = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.marketingProspectFollowUp.findFirst({
         where: {
@@ -602,7 +607,7 @@ export class ProspectsService {
         },
       });
 
-      if (!existing) throw new NotFoundException('Follow-up not found');
+      if (!existing) throw new NotFoundException('Reminder not found');
       if (existing.status !== MarketingProspectFollowUpStatus.PENDING) {
         throw new ConflictException(FOLLOW_UP_COMPLETION_CONFLICT_MESSAGE);
       }
@@ -642,7 +647,7 @@ export class ProspectsService {
           tenantId: user.tenantId,
         },
       });
-      if (!followUp) throw new NotFoundException('Follow-up not found');
+      if (!followUp) throw new NotFoundException('Reminder not found');
 
       const nextFollowUp = dto.nextFollowUp
         ? await this.createFollowUpInTransaction(
@@ -676,10 +681,7 @@ export class ProspectsService {
             }
           : {
               source: ProspectFollowUpSourceDto.DEFAULT,
-              dueAt: this.addDays(
-                latestInteractionDate,
-                DEFAULT_FOLLOW_UP_DELAY_DAYS,
-              ),
+              dueAt: this.addDays(latestInteractionDate, delayDays),
             },
       };
     });
@@ -904,6 +906,9 @@ export class ProspectsService {
               name: this.formatText(dto.primaryContact.name),
               phone: this.formatOptionalText(dto.primaryContact.phone),
               email: this.formatOptionalText(dto.primaryContact.email),
+              dateOfBirth: dto.primaryContact.dateOfBirth
+                ? new Date(dto.primaryContact.dateOfBirth)
+                : null,
               decisionMakerTypeId:
                 dto.primaryContact.decisionMakerTypeId ?? null,
               isPrimary: true,
@@ -1269,7 +1274,7 @@ export class ProspectsService {
       select: { id: true },
     });
 
-    if (!followUp) throw new NotFoundException('Follow-up not found');
+    if (!followUp) throw new NotFoundException('Reminder not found');
     return followUp;
   }
 
@@ -1331,6 +1336,26 @@ export class ProspectsService {
     }
 
     return ProspectFollowUpUrgencyDto.FUTURE;
+  }
+
+  /** Days after the latest interaction that the automatic follow-up falls due, per tenant. */
+  private async followUpDelayDays(tenantId: string): Promise<number> {
+    try {
+      const preference = await this.prisma.marketingCrmPreference.findUnique({
+        where: { tenantId },
+        select: { followUpDelayDays: true },
+      });
+      return preference?.followUpDelayDays ?? DEFAULT_FOLLOW_UP_DELAY_DAYS;
+    } catch (error) {
+      // A settings problem (e.g. its migration not applied yet) must not take the reminders
+      // down with it: fall back to the default delay.
+      const reason =
+        error instanceof Error ? error.message : 'unexpected error';
+      this.logger.warn(
+        `Could not read the reminder delay, using ${DEFAULT_FOLLOW_UP_DELAY_DAYS} days: ${reason}`,
+      );
+      return DEFAULT_FOLLOW_UP_DELAY_DAYS;
+    }
   }
 
   private addDays(date: Date, days: number): Date {
@@ -1552,6 +1577,13 @@ export class ProspectsService {
       ...(contact.email !== undefined
         ? { email: this.formatOptionalText(contact.email) }
         : {}),
+      ...(contact.dateOfBirth !== undefined
+        ? {
+            dateOfBirth: contact.dateOfBirth
+              ? new Date(contact.dateOfBirth)
+              : null,
+          }
+        : {}),
       ...(contact.decisionMakerTypeId !== undefined
         ? { decisionMakerTypeId: contact.decisionMakerTypeId }
         : {}),
@@ -1581,6 +1613,7 @@ export class ProspectsService {
           contact.email !== undefined
             ? this.formatOptionalText(contact.email)
             : null,
+        dateOfBirth: contact.dateOfBirth ? new Date(contact.dateOfBirth) : null,
         decisionMakerTypeId: contact.decisionMakerTypeId ?? null,
         isPrimary: true,
       },
@@ -1827,7 +1860,7 @@ export class ProspectsService {
         ? this.namedReference(
             interaction.interactionMediumId,
             settingsById,
-            'Unknown interaction medium',
+            'Unknown follow-up medium',
           )
         : null,
       notes: interaction.notes,

@@ -16,6 +16,9 @@ export class ProspectContactResponseDto {
   @ApiPropertyOptional({ nullable: true })
   decisionMakerTypeId!: string | null;
 
+  @ApiPropertyOptional({ nullable: true })
+  dateOfBirth!: string | null;
+
   @ApiProperty()
   isPrimary!: boolean;
 }

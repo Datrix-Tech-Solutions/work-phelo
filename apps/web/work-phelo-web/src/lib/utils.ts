@@ -13,6 +13,12 @@ export function cn(...inputs: ClassValue[]) {
  * would otherwise compare unequal on the same calendar day (a date-only string is always
  * "less than" its own timestamp form since it's a string prefix of it).
  */
+/** Today's date (YYYY-MM-DD) in the user's local time. */
+export function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function toDateOnly(date?: string | null): string {
   return date ? date.split('T')[0] : '';
 }

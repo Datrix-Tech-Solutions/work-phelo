@@ -20,12 +20,18 @@ import {
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingMasterDataService } from './accounting-master-data.service';
-import { AccountingPermission } from './accounting.permissions';
+import {
+  ACCOUNTING_REFERENCE_READERS,
+  AccountingPermission,
+} from './accounting.permissions';
 import {
   BulkDeleteAccountsDto,
   BulkImportAccountsDto,
@@ -60,7 +66,7 @@ export class AccountsController {
   @Get('account-categories')
   @ApiTags('Accounting - Chart of Accounts')
   @ApiOperation({ summary: 'List system-controlled account categories' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listAccountCategories() {
     return this.masterData.listAccountCategories();
   }
@@ -310,7 +316,7 @@ export class AccountsController {
   @Get('accounts')
   @ApiTags('Accounting - Chart of Accounts')
   @ApiOperation({ summary: 'List tenant GL accounts' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listAccounts(
     @Query() query: QueryGLAccountsDto,
     @Req() request: Request & { user: RequestUser },
@@ -396,7 +402,7 @@ export class AccountsController {
   @Get('cost-centres')
   @ApiTags('Accounting - Cost Centres')
   @ApiOperation({ summary: 'List tenant cost centres' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listCostCentres(@Req() request: Request & { user: RequestUser }) {
     return this.masterData.listCostCentres(request.user.tenantId);
   }
@@ -404,7 +410,7 @@ export class AccountsController {
   @Post('cost-centres')
   @ApiTags('Accounting - Cost Centres')
   @ApiOperation({ summary: 'Create a tenant cost centre' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_CREATE)
+  @RequirePermissions(AccountingPermission.COST_CENTRES_CREATE)
   createCostCentre(
     @Body() dto: CreateCostCentreDto,
     @Req() request: Request & { user: RequestUser },
@@ -415,7 +421,7 @@ export class AccountsController {
   @Patch('cost-centres/:costCentreId')
   @ApiTags('Accounting - Cost Centres')
   @ApiOperation({ summary: 'Update a tenant cost centre' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  @RequirePermissions(AccountingPermission.COST_CENTRES_EDIT)
   updateCostCentre(
     @Param('costCentreId', ParseUUIDPipe) costCentreId: string,
     @Body() dto: UpdateCostCentreDto,
@@ -427,7 +433,7 @@ export class AccountsController {
   @Post('cost-centres/:costCentreId/deactivate')
   @ApiTags('Accounting - Cost Centres')
   @ApiOperation({ summary: 'Deactivate a cost centre' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  @RequirePermissions(AccountingPermission.COST_CENTRES_DEACTIVATE)
   deactivateCostCentre(
     @Param('costCentreId', ParseUUIDPipe) costCentreId: string,
     @Req() request: Request & { user: RequestUser },
@@ -442,7 +448,7 @@ export class AccountsController {
     description:
       'Returns subledger balances by Accounting control account. The same legal counterparty may therefore appear in separate premium, claims, receivable or payable dimensions without netting across control accounts.',
   })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listSubledgers(
     @Query() query: QuerySubledgerAccountsDto,
     @Req() request: Request & { user: RequestUser },
@@ -453,7 +459,7 @@ export class AccountsController {
   @Get('subledger-accounts/:subledgerId')
   @ApiTags('Accounting - Subledgers')
   @ApiOperation({ summary: 'Get a single tenant subledger account' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   getSubledger(
     @Param('subledgerId', ParseUUIDPipe) subledgerId: string,
     @Req() request: Request & { user: RequestUser },
@@ -467,7 +473,7 @@ export class AccountsController {
   @Post('subledger-accounts')
   @ApiTags('Accounting - Subledgers')
   @ApiOperation({ summary: 'Create a tenant subledger account' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_CREATE)
+  @RequirePermissions(AccountingPermission.ENTITIES_CREATE)
   createSubledger(
     @Body() dto: CreateSubledgerAccountDto,
     @Req() request: Request & { user: RequestUser },
@@ -478,7 +484,7 @@ export class AccountsController {
   @Patch('subledger-accounts/:subledgerId')
   @ApiTags('Accounting - Subledgers')
   @ApiOperation({ summary: 'Update a tenant subledger account' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  @RequirePermissions(AccountingPermission.ENTITIES_EDIT)
   updateSubledger(
     @Param('subledgerId', ParseUUIDPipe) subledgerId: string,
     @Body() dto: UpdateSubledgerAccountDto,
@@ -494,7 +500,7 @@ export class AccountsController {
   @Post('subledger-accounts/:subledgerId/deactivate')
   @ApiTags('Accounting - Subledgers')
   @ApiOperation({ summary: 'Deactivate a subledger account' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  @RequirePermissions(AccountingPermission.ENTITIES_DEACTIVATE)
   deactivateSubledger(
     @Param('subledgerId', ParseUUIDPipe) subledgerId: string,
     @Req() request: Request & { user: RequestUser },
@@ -508,7 +514,7 @@ export class AccountsController {
   @Post('subledger-accounts/:subledgerId/activate')
   @ApiTags('Accounting - Subledgers')
   @ApiOperation({ summary: 'Reactivate a subledger account' })
-  @RequirePermissions(AccountingPermission.ACCOUNTS_EDIT)
+  @RequirePermissions(AccountingPermission.ENTITIES_EDIT)
   activateSubledger(
     @Param('subledgerId', ParseUUIDPipe) subledgerId: string,
     @Req() request: Request & { user: RequestUser },

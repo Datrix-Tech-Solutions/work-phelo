@@ -73,6 +73,8 @@ interface DataTableProps<T extends { id: string | number }> {
     disabled?: boolean;
     variant?: 'primary' | 'danger';
     title?: string;
+    /** Replaces the hover "+" icon. */
+    icon?: React.ReactNode;
   };
   rowActions?: (row: T) => RowAction[];
   /** When a row has exactly one action, it renders as a standalone inline button by default.
@@ -89,7 +91,7 @@ interface DataTableProps<T extends { id: string | number }> {
   onSort?: (key: string) => void;
 }
 
-function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
+export function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
   /* keeps the dropdown mounted through its closing transition — see expanded below */
   const [showDropdown, setShowDropdown] = useState(false);
@@ -350,7 +352,9 @@ export function DataTable<T extends { id: string | number }>({
                 {actionButton.label}
                 {actionButton.variant !== 'danger' && (
                   <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
-                    <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
+                    {actionButton.icon ?? (
+                      <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
+                    )}
                   </span>
                 )}
               </Button>

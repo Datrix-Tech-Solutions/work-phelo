@@ -119,6 +119,7 @@ export interface GLAccountLedgerEntry {
   subledgerAccount: { id: string; code: string; name: string } | null;
   journalEntry: {
     journalNumber: string;
+    entryType?: string;
     transactionDate: string;
     reference: string | null;
     description: string;
@@ -244,6 +245,14 @@ export interface CashFlowStatementReport {
   netChangeInCash: string;
   openingCash: string;
   closingCash: string;
+  /** The three sections against what the cash accounts actually did; a gap means a cash account
+   *  isn't linked/tagged as cash, or an account is tagged wrongly. */
+  reconciliation: {
+    netChangeInCash: string;
+    cashMovement: string;
+    difference: string;
+    isReconciled: boolean;
+  };
 }
 
 export interface QueryGLAccountsParams {
@@ -467,6 +476,41 @@ export interface TaxType {
   payableAccountId: string | null;
   /** Default account on the receivables side — output tax on an invoice, or tax a customer withholds. */
   receivableAccountId: string | null;
+  /** Payment reminder: the tax for each period is due in the month after the period ends. */
+  reminderEnabled: boolean;
+  reminderFrequency: TaxPayFrequency;
+  /** 1 to 28; null when the tax is due on the last day of the month. */
+  reminderDueDay: number | null;
+  reminderDueOnLastDay: boolean;
+  reminderDaysBefore: number;
+}
+
+/** What a tax owes right now: the unpaid part of its last period, or what its payable account holds. */
+export interface TaxOutstanding {
+  taxTypeId: string;
+  code: string;
+  name: string;
+  payableAccountId: string;
+  /** Null for a tax without a payment reminder. */
+  dueDate: string | null;
+  amountOutstanding: string;
+  currency: string;
+}
+
+export type TaxPayFrequency = 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+
+/** A tax that is due and still has an unpaid amount, from the tax payable account. */
+export interface TaxObligation {
+  taxTypeId: string;
+  code: string;
+  name: string;
+  periodStart: string;
+  periodEnd: string;
+  dueDate: string;
+  /** Negative once the due date has passed. */
+  daysUntil: number;
+  amountOutstanding: string;
+  currency: string;
 }
 
 export interface CreateTaxTypePayload {
@@ -478,6 +522,11 @@ export interface CreateTaxTypePayload {
   /** Null clears the default. */
   payableAccountId?: string | null;
   receivableAccountId?: string | null;
+  reminderEnabled?: boolean;
+  reminderFrequency?: TaxPayFrequency;
+  reminderDueDay?: number | null;
+  reminderDueOnLastDay?: boolean;
+  reminderDaysBefore?: number;
 }
 
 export type UpdateTaxTypePayload = Partial<CreateTaxTypePayload> & { isActive?: boolean };
@@ -1626,6 +1675,9 @@ export interface CashbookTransactionLine {
   kind: CashbookLineKind;
   glAccountId: string;
   glAccount: CashbookGLAccountRef;
+  /** Set when the line was picked from the tax types. */
+  taxTypeId: string | null;
+  taxType: { id: string; code: string; name: string; rate: string } | null;
   amount: string;
   quantity: string | null;
   unitPrice: string | null;
@@ -1635,6 +1687,8 @@ export interface CashbookTransactionLine {
 export interface CreateCashbookEntryLinePayload {
   kind?: CashbookLineKind;
   glAccountId: string;
+  /** Only on a charge or deduction that is a tax. */
+  taxTypeId?: string;
   amount: number;
   quantity?: number;
   unitPrice?: number;
@@ -1753,6 +1807,10 @@ export interface CreateEntityTypePayload {
 
 export type UpdateEntityTypePayload = Partial<CreateEntityTypePayload>;
 
+export type AmlRiskRating = 'LOW' | 'MEDIUM' | 'HIGH';
+export type AmlAmountPeriod = 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+export type AmlCountPeriod = 'HOURS_12' | 'HOURS_24' | 'HOURS_48';
+
 export interface SubledgerAccount {
   id: string;
   code: string;
@@ -1776,6 +1834,13 @@ export interface SubledgerAccount {
   phone: string | null;
   address: string | null;
   description: string | null;
+  monitorWithAml?: boolean;
+  isPoliticallyExposed?: boolean | null;
+  riskRating?: AmlRiskRating | null;
+  amlAmountLimit?: number | null;
+  amlAmountPeriod?: AmlAmountPeriod | null;
+  amlTransactionCountLimit?: number | null;
+  amlTransactionCountPeriod?: AmlCountPeriod | null;
   status: GLAccountStatus;
   balance: AccountingSubledgerBalance;
   createdAt: string;
@@ -1795,6 +1860,13 @@ export interface CreateSubledgerAccountPayload {
   phone?: string;
   address?: string;
   description?: string;
+  monitorWithAml?: boolean;
+  isPoliticallyExposed?: boolean;
+  riskRating?: AmlRiskRating;
+  amlAmountLimit?: number;
+  amlAmountPeriod?: AmlAmountPeriod;
+  amlTransactionCountLimit?: number;
+  amlTransactionCountPeriod?: AmlCountPeriod;
 }
 
 export type UpdateSubledgerAccountPayload = Partial<CreateSubledgerAccountPayload>;
@@ -1928,13 +2000,19 @@ export interface AccountingPartyStatement extends AccountingAgingReport {
  *  itself. Untagged: inherits from the level above, or defaults to Operating for an
  *  asset/liability/equity account (a revenue/expense account is simply left out of the
  *  statement's per-account lines — it's already inside Net Income). */
-export type CashFlowCategory = 'OPERATING' | 'INVESTING' | 'FINANCING' | 'EXCLUDED';
+export type CashFlowCategory =
+  | 'OPERATING'
+  | 'INVESTING'
+  | 'FINANCING'
+  | 'EXCLUDED'
+  | 'CASH_EQUIVALENT';
 
 export const CASH_FLOW_CATEGORY_OPTIONS: { value: CashFlowCategory; label: string }[] = [
   { value: 'OPERATING', label: 'Operating' },
   { value: 'INVESTING', label: 'Investing' },
   { value: 'FINANCING', label: 'Financing' },
   { value: 'EXCLUDED', label: 'Excluded / Non-cash' },
+  { value: 'CASH_EQUIVALENT', label: 'Cash & Cash Equivalents' },
 ];
 
 export interface AccountClassification {

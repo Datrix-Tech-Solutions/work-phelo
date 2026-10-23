@@ -8,7 +8,6 @@ import { ProspectBreadcrumb } from '@/components/molecules/marketing/ProspectBre
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { useAuthStore } from '@/store/auth.store';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
@@ -16,6 +15,7 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
+import { ProspectRemindersTab } from '@/components/organisms/marketing/ProspectRemindersTab';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
 import { EditProspectProductsModal } from '@/components/organisms/marketing/EditProspectProductsModal';
 import { EditProspectCompanyModal } from '@/components/organisms/marketing/EditProspectCompanyModal';
@@ -26,9 +26,7 @@ import { UpdateProspectStageModal } from '@/components/organisms/marketing/Updat
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { ProspectProductCard } from '@/components/molecules/marketing/ProspectProductCard';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import type { FollowUpStatus, ProspectFollowUp } from '@/types/marketing';
-import { useFollowUpWorklist, useProspectFollowUps } from '@/hooks/marketing/useFollowUps';
+import { useFollowUpWorklist } from '@/hooks/marketing/useFollowUps';
 import { useDeleteProspect, useProspect, useUpdateProspect } from '@/hooks/marketing/useProspects';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
@@ -53,51 +51,7 @@ function formatDate(value: string | null): string {
   });
 }
 
-const FOLLOW_UP_STATUS: Record<FollowUpStatus, { label: string; color: TypeChipColor }> = {
-  PENDING: { label: 'Pending', color: 'amber' },
-  COMPLETED: { label: 'Completed', color: 'green' },
-  CANCELLED: { label: 'Cancelled', color: 'gray' },
-};
-
-const FOLLOW_UP_COLUMNS: Column<ProspectFollowUp>[] = [
-  {
-    key: 'dueAt',
-    label: 'Due Date',
-    width: '160px',
-    render: (row) => <span className="font-semibold">{formatDate(row.dueAt)}</span>,
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    width: '140px',
-    render: (row) => (
-      <TypeChip
-        label={FOLLOW_UP_STATUS[row.status].label}
-        color={FOLLOW_UP_STATUS[row.status].color}
-      />
-    ),
-  },
-  {
-    key: 'note',
-    label: 'Note',
-    width: 'minmax(160px, 1fr)',
-    render: (row) => <span className="font-semibold">{row.note || '—'}</span>,
-  },
-  {
-    key: 'completedAt',
-    label: 'Completed On',
-    width: '160px',
-    render: (row) => <span className="font-semibold">{formatDate(row.completedAt)}</span>,
-  },
-  {
-    key: 'createdAt',
-    label: 'Scheduled On',
-    width: '160px',
-    render: (row) => <span className="font-semibold">{formatDate(row.createdAt)}</span>,
-  },
-];
-
-type ProspectTab = 'products' | 'interactions' | 'follow-ups';
+type ProspectTab = 'products' | 'interactions' | 'reminders';
 
 export default function ProspectDetailPage() {
   const { tenantSlug, id } = useParams<{ tenantSlug: string; id: string }>();
@@ -112,7 +66,6 @@ export default function ProspectDetailPage() {
   const canCreateClient =
     hasCreateClientPermission || (!!prospect && prospect.assignedUserId === currentUserId);
   const deleteProspect = useDeleteProspect();
-  const { data: followUps = [], isLoading: followUpsLoading } = useProspectFollowUps(id);
   const { data: worklist = [] } = useFollowUpWorklist();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [convertingToClient, setConvertingToClient] = useState(false);
@@ -208,12 +161,16 @@ export default function ProspectDetailPage() {
           <DetailField label="Assigned To" value={prospect.assignedUserName} />
           <DetailField label="Location" value={prospect.location.label} />
           {/* <DetailField label="Decision Maker" value={primaryContact?.name} /> */}
-          <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
+          <DetailField label="Contact Person Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
           <DetailField label="Primary Contact Phone" value={primaryContact?.phone} />
           <DetailField label="Primary Contact Email" value={primaryContact?.email} />
+          <DetailField
+            label="Primary Contact Date of Birth"
+            value={formatDate(primaryContact?.dateOfBirth ?? null)}
+          />
           <DetailField label="Date Created" value={formatDate(prospect.createdAt)} />
-          <DetailField label="Last Interaction" value={formatDate(lastInteraction)} />
+          <DetailField label="Last Follow-up" value={formatDate(lastInteraction)} />
           <DetailField label="Follow-ups" value={String(prospect.interactions.length)} />
           <DetailField label="Total Expected" value={formatMoney(prospect.totalExpectedValue)} />
           {/* <DetailField label="Total Achieved" value={formatMoney(prospect.totalAchievedValue)} /> */}
@@ -229,8 +186,12 @@ export default function ProspectDetailPage() {
       <TabBar
         tabs={[
           { key: 'products', label: 'Products/Services' },
-          { key: 'interactions', label: 'Follow ups' },
-          // { key: 'follow-ups', label: 'Follow-ups' },
+          { key: 'interactions', label: 'Follow-ups' },
+          {
+            key: 'reminders',
+            label: 'Reminders',
+            count: worklist.some((w) => w.prospectId === id && w.urgency === 'OVERDUE') ? 1 : 0,
+          },
         ]}
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as ProspectTab)}
@@ -255,16 +216,17 @@ export default function ProspectDetailPage() {
         />
       )}
 
-      {activeTab === 'follow-ups' && (
-        <DataTable
-          columns={FOLLOW_UP_COLUMNS}
-          data={followUps}
-          emptyMessage="No follow-ups yet"
-          isLoading={followUpsLoading}
-          currentPage={1}
-          totalPages={0}
-          onPageChange={() => {}}
-          noInternalScroll
+      {activeTab === 'reminders' && (
+        <ProspectRemindersTab
+          prospectId={id}
+          companyName={prospect.companyName}
+          primaryContact={
+            primaryContact && {
+              name: primaryContact.name,
+              phone: primaryContact.phone,
+              role: primaryContact.decisionMaker?.name,
+            }
+          }
         />
       )}
 
@@ -317,6 +279,7 @@ export default function ProspectDetailPage() {
             name: primaryContact?.name ?? '',
             phone: primaryContact?.phone ?? null,
             email: primaryContact?.email ?? null,
+            dateOfBirth: primaryContact?.dateOfBirth?.slice(0, 10) ?? null,
             roleId: primaryContact?.decisionMaker?.id ?? '',
           }}
           isOpen

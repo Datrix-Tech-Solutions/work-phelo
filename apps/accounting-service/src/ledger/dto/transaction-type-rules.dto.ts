@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -19,6 +20,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   GLAccountCategory,
   PostingDirection,
+  TaxPayFrequency,
   RuleLineSettlementKind,
 } from '../../../prisma/generated/client';
 
@@ -82,6 +84,47 @@ export class CreateTaxTypeDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   receivableAccountId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Remind about paying this tax. Needs the purchase tax (payable) account, which is the one checked for what is still owed.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  reminderEnabled?: boolean;
+
+  @ApiPropertyOptional({ enum: TaxPayFrequency })
+  @IsOptional()
+  @IsEnum(TaxPayFrequency)
+  reminderFrequency?: TaxPayFrequency;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 28,
+    nullable: true,
+    description:
+      'Day of the month after each period that the tax is due. Ignored when reminderDueOnLastDay is true.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  @Max(28)
+  reminderDueDay?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Due on the last day of the month instead of a fixed day.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  reminderDueOnLastDay?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 60 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  reminderDaysBefore?: number;
 }
 
 export class UpdateTaxTypeDto extends PartialType(CreateTaxTypeDto) {

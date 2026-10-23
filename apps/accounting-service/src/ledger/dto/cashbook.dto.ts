@@ -141,6 +141,15 @@ export class CashbookEntryLineDto {
   @IsUUID()
   glAccountId!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The tax type this line was picked from. Only on a CHARGE (input VAT) or DEDUCTION (withholding tax).',
+  })
+  @IsOptional()
+  @IsUUID()
+  taxTypeId?: string;
+
   @ApiProperty({ example: 1000, minimum: 0.0001 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 4 })

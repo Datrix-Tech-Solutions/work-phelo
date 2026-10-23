@@ -125,12 +125,20 @@ export interface CashAccountStats {
 
 /** All-time inflow/outflow/net for one Cash/Bank account, from its GL account's journal lines —
  *  the lines the General Ledger table under it lists, so the cards always agree with that table. */
-export function useCashAccountStats(glAccountId: string | undefined) {
+export function useCashAccountStats(
+  glAccountId: string | undefined,
+  range?: { fromDate?: string; toDate?: string },
+) {
   const { data: ledger, isLoading } = useGLAccountLedger(glAccountId ?? '');
+  const fromDate = range?.fromDate;
+  const toDate = range?.toDate;
   const data = useMemo<CashAccountStats | undefined>(() => {
     if (!ledger) return undefined;
     const stats: CashAccountStats = { inflow: {}, outflow: {}, net: {} };
     for (const entry of ledger.entries) {
+      const day = entry.journalEntry.transactionDate.slice(0, 10);
+      if (fromDate && day < fromDate) continue;
+      if (toDate && day > toDate) continue;
       const currency = entry.journalEntry.transactionCurrency;
       const debit = Number(entry.transactionDebit);
       const credit = Number(entry.transactionCredit);
@@ -139,7 +147,7 @@ export function useCashAccountStats(glAccountId: string | undefined) {
       add(stats.net, currency, debit - credit);
     }
     return stats;
-  }, [ledger]);
+  }, [ledger, fromDate, toDate]);
   return { data, isLoading: !!glAccountId && isLoading };
 }
 

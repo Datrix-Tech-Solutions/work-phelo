@@ -6,17 +6,18 @@ import { CollapsibleCard } from '@/components/atoms/CollapsibleCard';
 import { ImageUploadField } from '@/components/atoms/ImageUploadField';
 import { useToast } from '@/hooks/useToast';
 import { LetterheadElementRow } from './LetterheadElementRow';
-import type { DocumentTemplate } from './templateConfig';
+import type { DocumentTemplate, TemplateAssetHandlers } from './templateConfig';
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
-const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 interface LetterheadSectionProps {
   template: DocumentTemplate;
   onChange: <K extends keyof DocumentTemplate>(key: K, value: DocumentTemplate[K]) => void;
+  assets: TemplateAssetHandlers;
 }
 
-export function LetterheadSection({ template, onChange }: LetterheadSectionProps) {
+export function LetterheadSection({ template, onChange, assets }: LetterheadSectionProps) {
   const toast = useToast();
 
   return (
@@ -30,10 +31,11 @@ export function LetterheadSection({ template, onChange }: LetterheadSectionProps
           onPositionChange={(value) => onChange('logoPosition', value)}
         >
           <ImageUploadField
-            hint="PNG, JPEG, WEBP or SVG · max 2 MB"
+            hint="PNG, JPEG or WEBP · max 2 MB"
             value={template.logo}
-            onChange={(dataUrl) => onChange('logo', dataUrl)}
-            onClear={() => onChange('logo', null)}
+            onFile={assets.uploadLogo}
+            busy={assets.busy === 'logo'}
+            accept="image/png,image/jpeg,image/webp"
             allowedTypes={LOGO_TYPES}
             maxBytes={LOGO_MAX_BYTES}
             onError={(message) => toast.error(message)}

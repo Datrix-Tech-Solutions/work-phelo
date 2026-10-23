@@ -7,28 +7,10 @@ import { useAccountingConfig } from '@/hooks/accounting/useAccountingConfig';
 import { useFiscalYears } from '@/hooks/accounting/useFiscalPeriods';
 import { useIncomeSeries } from '@/hooks/accounting/useIncomeSeries';
 import { periodSeriesBuckets } from '@/lib/periodSeries';
+import { compactNumber, fullNumber, SERIES_SUBTITLES } from './dashboardChartFormat';
 
 const REVENUE_COLOR = '#1baf7a';
 const EXPENSE_COLOR = '#e34948';
-
-const SUBTITLES: Record<Period, string> = {
-  daily: 'This week',
-  weekly: 'Weeks of this month',
-  monthly: 'Last 6 months',
-  quarterly: 'Quarters of this year',
-  yearly: 'Last 6 years',
-};
-
-const compact = (value: number) => {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return String(value);
-};
-
-const full = (value: number) =>
-  value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 interface RevenueExpenseChartProps {
   period: Period;
@@ -52,12 +34,12 @@ export function RevenueExpenseChart({ period, className }: RevenueExpenseChartPr
 
   const currency = config?.baseCurrency ?? '';
   const money = (value: number | null) =>
-    value === null ? '' : `${currency} ${full(value)}`.trim();
+    value === null ? '' : `${currency} ${fullNumber(value)}`.trim();
 
   return (
     <PeriodBarChart
       title="Revenue vs Expenses"
-      subtitle={SUBTITLES[period]}
+      subtitle={SERIES_SUBTITLES[period]}
       buckets={buckets}
       series={[
         {
@@ -77,7 +59,7 @@ export function RevenueExpenseChart({ period, className }: RevenueExpenseChartPr
       isError={isError}
       errorText="Revenue and expenses could not be loaded."
       emptyText="No revenue or expenses in this range."
-      axisFormatter={compact}
+      axisFormatter={compactNumber}
       className={className}
     />
   );

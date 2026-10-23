@@ -20,6 +20,14 @@ export class QueryDashboardSummaryDto {
   @ApiProperty({ example: '2026-09-09', description: 'Last day, inclusive.' })
   @IsDateString({ strict: true })
   prevToDate!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s prospects and clients. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 export interface DashboardStage {
@@ -85,6 +93,14 @@ export class QueryDashboardGrowthDto {
     message: `ranges must be 1-${GROWTH_MAX_RANGES} comma-separated fromDate:toDate pairs`,
   })
   ranges!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s prospects and clients. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 export interface DashboardGrowthPoint {
@@ -102,6 +118,14 @@ export class QueryDashboardRevenueDto {
   @ApiProperty({ example: '2026-10-09', description: 'Last day, inclusive.' })
   @IsDateString({ strict: true })
   toDate!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s prospects and clients. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 export interface DashboardRevenueProduct {
@@ -126,6 +150,14 @@ export class QueryDashboardSalesPersonnelDto {
   @ApiProperty({ example: '2026-10-09', description: 'Last day, inclusive.' })
   @IsDateString({ strict: true })
   toDate!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s prospects and clients. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }
 
 export interface DashboardSalesRep {
@@ -183,4 +215,36 @@ export interface DashboardTargetsOverview {
   percent: number | null;
   /** Reps with a target in the range that the caller may see, by name, for filtering. */
   reps: DashboardTargetRep[];
+}
+
+export class QueryDashboardBirthdaysDto {
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s prospects and clients. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+}
+
+export interface DashboardBirthday {
+  /** The contact's id, unique across prospects and clients. */
+  id: string;
+  contactName: string;
+  companyName: string;
+  type: 'CLIENT' | 'PROSPECT';
+  /** The company's id, for linking to its page. */
+  companyId: string;
+  /** Next occurrence of the birthday, YYYY-MM-DD. */
+  date: string;
+}
+
+export interface DashboardUpcomingBirthdays {
+  withinDays: number;
+  birthdays: DashboardBirthday[];
+}
+
+export interface DashboardRep {
+  userId: string;
+  name: string;
 }

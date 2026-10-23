@@ -49,7 +49,7 @@ export function ProspectInteractionDetails({
   return (
     <div className={cardClass('p-6 flex flex-col gap-5')}>
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm font-semibold text-gray-900">Follow Up Details</p>
+        <p className="text-sm font-semibold text-gray-900">Follow-up Details</p>
         <button
           type="button"
           onClick={onClose}
@@ -70,7 +70,7 @@ export function ProspectInteractionDetails({
           <IconField
             icon={MessageSquare}
             color="#8b5cf6"
-            label="Interaction Type"
+            label="Follow-up Type"
             value={interaction.interactionMedium?.name}
           />
           <IconField

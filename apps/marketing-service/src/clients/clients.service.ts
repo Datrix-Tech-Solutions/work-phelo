@@ -33,7 +33,7 @@ const PRODUCT_EXISTS_MESSAGE =
   'This client already has that product or service';
 const EMPTY_PATCH_MESSAGE = 'At least one field is required';
 const FOLLOW_UP_COMPLETION_MESSAGE =
-  'Completing a scheduled follow-up is not supported for clients yet';
+  'Completing a reminder is not supported for clients yet';
 const ALREADY_CONVERTED_MESSAGE = 'This prospect has already been converted';
 const NOT_CONVERTIBLE_MESSAGE =
   'Only prospects at 100% progress can be converted to a client';
@@ -218,6 +218,10 @@ export class ClientsService {
         id,
         category: MarketingCrmSettingCategory.PRODUCT,
       })),
+      {
+        id: dto.initialInteraction?.interactionMediumId,
+        category: MarketingCrmSettingCategory.INTERACTION_MEDIUM,
+      },
     ]);
 
     // Accounting first: if it cannot take the transaction, no client is created. If saving the
@@ -253,6 +257,9 @@ export class ClientsService {
             name: this.formatText(dto.primaryContact.name),
             phone: this.formatOptionalText(dto.primaryContact.phone),
             email: this.formatOptionalText(dto.primaryContact.email),
+            dateOfBirth: dto.primaryContact.dateOfBirth
+              ? new Date(dto.primaryContact.dateOfBirth)
+              : null,
             decisionMakerTypeId: dto.primaryContact.decisionMakerTypeId ?? null,
             isPrimary: true,
           },
@@ -264,6 +271,36 @@ export class ClientsService {
             ...this.newProductTerms(product),
           })),
         },
+        ...(dto.initialInteraction
+          ? {
+              interactions: {
+                create: {
+                  tenantId: user.tenantId,
+                  interactionMediumId:
+                    dto.initialInteraction.interactionMediumId ?? null,
+                  occurredAt: new Date(dto.initialInteraction.occurredAt),
+                  notes: this.formatOptionalText(dto.initialInteraction.notes),
+                  decisionMakerInvolved:
+                    dto.initialInteraction.decisionMakerInvolved ?? false,
+                  createdByUserId: user.id,
+                  ...(dto.initialInteraction.participants?.length
+                    ? {
+                        participants: {
+                          create: dto.initialInteraction.participants.map(
+                            (participant) => ({
+                              tenantId: user.tenantId,
+                              fullName: this.formatText(participant.fullName),
+                              phone: this.formatText(participant.phone),
+                              role: this.formatText(participant.role),
+                            }),
+                          ),
+                        },
+                      }
+                    : {}),
+                },
+              },
+            }
+          : {}),
       },
       select: { id: true },
     });
@@ -394,6 +431,13 @@ export class ClientsService {
               ...(contact.email !== undefined
                 ? { email: this.formatOptionalText(contact.email) }
                 : {}),
+              ...(contact.dateOfBirth !== undefined
+                ? {
+                    dateOfBirth: contact.dateOfBirth
+                      ? new Date(contact.dateOfBirth)
+                      : null,
+                  }
+                : {}),
               ...(contact.decisionMakerTypeId !== undefined
                 ? { decisionMakerTypeId: contact.decisionMakerTypeId }
                 : {}),
@@ -410,6 +454,9 @@ export class ClientsService {
               ),
               phone: this.formatOptionalText(contact.phone),
               email: this.formatOptionalText(contact.email),
+              dateOfBirth: contact.dateOfBirth
+                ? new Date(contact.dateOfBirth)
+                : null,
               decisionMakerTypeId: contact.decisionMakerTypeId ?? null,
               isPrimary: true,
             },
@@ -642,6 +689,7 @@ export class ClientsService {
                 name: contact.name,
                 phone: contact.phone,
                 email: contact.email,
+                dateOfBirth: contact.dateOfBirth,
                 decisionMakerTypeId: contact.decisionMakerTypeId,
                 isPrimary: contact.isPrimary,
               })),
@@ -816,6 +864,7 @@ export class ClientsService {
         name: contact.name,
         phone: contact.phone,
         email: contact.email,
+        dateOfBirth: contact.dateOfBirth,
         isPrimary: contact.isPrimary,
         decisionMaker: contact.decisionMakerTypeId
           ? this.namedReference(
@@ -919,7 +968,7 @@ export class ClientsService {
         ? this.namedReference(
             interaction.interactionMediumId,
             settings,
-            'Unknown interaction medium',
+            'Unknown follow-up medium',
           )
         : null,
       notes: interaction.notes,

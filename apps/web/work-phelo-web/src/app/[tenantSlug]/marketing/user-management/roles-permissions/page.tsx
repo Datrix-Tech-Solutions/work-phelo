@@ -44,7 +44,7 @@ export default function MarketingRolesPermissionsPage() {
     membersTarget?.id ?? '',
     { enabled: !!membersTarget },
   );
-  const { mutate: assignPermissionSet, isPending: isAssigning } = useAssignPermissionSet();
+  const { mutateAsync: assignPermissionSet, isPending: isAssigning } = useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemoving } = useRemovePermissionSet();
 
   // Only roles that carry marketing permissions belong on this page.
@@ -170,14 +170,20 @@ export default function MarketingRolesPermissionsPage() {
           isLoadingMembers={isLoadingMembers}
           isAssigning={isAssigning}
           isRemoving={isRemoving}
-          onAssign={(userId) => {
-            assignPermissionSet(
-              { userId, permissionSetId: membersTarget.id },
-              {
-                onSuccess: () => toast.success('Member added to permission set'),
-                onError: (err) => toast.error(extractError(err, 'Failed to add member')),
-              },
-            );
+          onAssign={(userIds) => {
+            Promise.all(
+              userIds.map((userId) =>
+                assignPermissionSet({ userId, permissionSetId: membersTarget.id }),
+              ),
+            )
+              .then(() =>
+                toast.success(
+                  userIds.length > 1
+                    ? 'Members added to permission set'
+                    : 'Member added to permission set',
+                ),
+              )
+              .catch((err) => toast.error(extractError(err, 'Failed to add member')));
           }}
           onRemove={(userId) => {
             removePermissionSet(

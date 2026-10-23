@@ -1,7 +1,7 @@
 'use client';
 
 import { HandHelping, Package, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Control,
   Controller,
@@ -44,6 +44,7 @@ import {
   AccountingCashbookSettlementMethod,
   AccountingTradeDocument,
   CashbookLineKind,
+  TaxType,
   CashbookTransaction,
   TransactionTypeDefinition,
 } from '@/types/accounting';
@@ -74,6 +75,7 @@ import {
   useRestoreTradeEntry,
   useSourceLedger,
   useSubledgers,
+  useTaxOutstanding,
   useTaxTypes,
   useTransactionTypeRules,
 } from '@/hooks';
@@ -97,6 +99,9 @@ type CashLineValues = {
   /** Items only: work the amount out from quantity × unit price (true) or enter it straight.
    *  Starts from the transaction type's setting and can be switched per line. */
   useQtyPrice: boolean;
+  /** A charge picked from the tax types: the amount is the tax's rate on the items total. */
+  isTax: boolean;
+  taxTypeId: string;
   glAccountId: string;
   quantity: string;
   unitPrice: string;
@@ -107,12 +112,17 @@ type CashLineValues = {
 const EMPTY_CASH_LINE: CashLineValues = {
   kind: 'ITEM',
   useQtyPrice: true,
+  isTax: false,
+  taxTypeId: '',
   glAccountId: '',
   quantity: '',
   unitPrice: '',
   amount: '',
   description: '',
 };
+
+/** The business role that pays a tax: the next field lists the tax types instead of entities. */
+const TAX_ROLE = 'TAX';
 
 type FormValues = {
   businessRole: string;
@@ -185,6 +195,8 @@ function cashbookDraftValues(tx: CashbookTransaction, typeName: string) {
       ? tx.lines.map((line) => ({
           kind: line.kind,
           useQtyPrice: line.kind === 'ITEM' && line.quantity !== null && line.unitPrice !== null,
+          isTax: !!line.taxTypeId,
+          taxTypeId: line.taxTypeId ?? '',
           glAccountId: line.glAccountId,
           quantity: plainNumber(line.quantity),
           unitPrice: plainNumber(line.unitPrice),
@@ -275,9 +287,12 @@ export function NewTransactionPanel({
   transactionType,
   onClose,
   draft,
+  taxToPay,
 }: {
   transactionType: TransactionTypeDefinition | null | undefined;
   onClose: () => void;
+  /** Opens a payment already set to pay this tax (its id): the tax picked and what is owed filled in. */
+  taxToPay?: string;
   /** Opens the form on a saved draft to redo it; the draft is deleted once the new one is saved. */
   draft?: DraftToRedo | null;
 }) {
@@ -291,6 +306,7 @@ export function NewTransactionPanel({
   // offset account can always be picked by hand in the form if no rule set one as default).
   const isCashbookType = transactionType?.postsToCashbook ?? false;
   const isCashbookReceipt = isCashbookType && isReceivable;
+  const canPayTax = isCashbookType && !isReceivable && !transactionType?.sourceTypeId;
   // A linked type is a credit note (receivable) / debit note (payable): it must reference
   // an original posted invoice/bill and reduces what is owed on it.
   const isLinked = !isCashbookType && (transactionType?.isLinked ?? false);
@@ -352,6 +368,7 @@ export function NewTransactionPanel({
     handleSubmit,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
@@ -460,14 +477,16 @@ export function NewTransactionPanel({
   // Entity Types list — and any of them works now, not just the old fixed enum names.
   const businessRoleOptions = useMemo<SearchSelectOption[]>(() => {
     const configured = transactionType?.businessRoles ?? [];
-    if (isCashbookType && configured.length === 0) {
-      return entityTypesData.map((t) => ({ value: t.name.trim().toUpperCase(), label: t.name }));
-    }
-    return configured.map((role) => ({
-      value: role,
-      label: entityTypesData.find((t) => t.name.trim().toUpperCase() === role)?.name ?? role,
-    }));
-  }, [transactionType, entityTypesData, isCashbookType]);
+    const roles =
+      isCashbookType && configured.length === 0
+        ? entityTypesData.map((t) => ({ value: t.name.trim().toUpperCase(), label: t.name }))
+        : configured.map((role) => ({
+            value: role,
+            label: entityTypesData.find((t) => t.name.trim().toUpperCase() === role)?.name ?? role,
+          }));
+    // A direct payment can also pay a tax.
+    return canPayTax ? [...roles, { value: TAX_ROLE, label: 'Taxes' }] : roles;
+  }, [transactionType, entityTypesData, isCashbookType, canPayTax]);
 
   const businessRole = useWatch({ control, name: 'businessRole' });
   const businessEntity = useWatch({ control, name: 'businessEntity' });
@@ -492,6 +511,9 @@ export function NewTransactionPanel({
       ? Number(manualAmount) || 0
       : derivedAmount
     : docSubtotal;
+  // A tax being paid is not one of the tenant's entities, so it is not recorded as the counterparty.
+  const hasCounterparty = (values: FormValues) =>
+    !!values.businessEntity && !!values.businessRole && values.businessRole !== TAX_ROLE;
   const resolveAmount = (values: FormValues) =>
     isDirectAmount ? Number(values.amount) : computeAmount(values.quantity, values.unitPrice);
 
@@ -506,15 +528,23 @@ export function NewTransactionPanel({
   const cashLines = useWatch({ control, name: 'cashLines' });
   // Quantity × price only applies to items that use it; a deduction or charge, and any item
   // switched to a straight amount, is just the amount typed.
-  const cashLineAmount = (line: CashLineValues) =>
+  const itemLineAmount = (line: CashLineValues) =>
     line.kind !== 'ITEM' || !line.useQtyPrice
       ? Number(line.amount) || 0
       : computeAmount(line.quantity, line.unitPrice);
+  const itemsTotal = (cashLines ?? [])
+    .filter((line) => line.kind === 'ITEM')
+    .reduce((sum, line) => sum + itemLineAmount(line), 0);
+  // A tax line is its tax type's rate on the items total, so it follows the items as they change.
+  const cashLineAmount = (line: CashLineValues) => {
+    if (!line.isTax) return itemLineAmount(line);
+    const rate = taxTypes.find((t) => t.id === line.taxTypeId)?.rate ?? 0;
+    return Math.round(itemsTotal * rate) / 100;
+  };
   const sumOfKind = (kinds: CashbookLineKind[]) =>
     (cashLines ?? [])
       .filter((line) => kinds.includes(line.kind))
       .reduce((sum, line) => sum + cashLineAmount(line), 0);
-  const itemsTotal = sumOfKind(['ITEM']);
   const chargesTotal = sumOfKind(['CHARGE']);
   const deductionsTotal = sumOfKind(['DEDUCTION']);
   // The cash that actually moves — what the bank statement will show.
@@ -530,7 +560,9 @@ export function NewTransactionPanel({
     reset({
       ...DEFAULTS,
       currency: baseCurrency,
-      businessRole: configuredRoles.length === 1 ? configuredRoles[0] : '',
+      businessRole:
+        taxToPay && canPayTax ? TAX_ROLE : configuredRoles.length === 1 ? configuredRoles[0] : '',
+      businessEntity: taxToPay && canPayTax ? taxToPay : '',
       entryDate: today(),
       cashAccountId: rule?.defaultCashAccountId ?? '',
       offsetGlAccountId: rule?.lines?.[0]?.account?.id ?? '',
@@ -564,7 +596,7 @@ export function NewTransactionPanel({
 
   // Reset the form whenever a fresh "open" happens (rather than in an effect, to avoid
   const openKey = isOpen
-    ? `${transactionType?.id ?? 'unknown'}:${draft?.kind === 'cashbook' ? draft.transaction.id : (draft?.document.id ?? '')}`
+    ? `${transactionType?.id ?? 'unknown'}:${draft?.kind === 'cashbook' ? draft.transaction.id : (draft?.document.id ?? '')}:${taxToPay ?? ''}`
     : null;
   const [lastOpenKey, setLastOpenKey] = useState<string | null>(null);
   // Once the redone entry is saved the old draft is gone; a further entry (multi-entry) must not
@@ -579,9 +611,48 @@ export function NewTransactionPanel({
   const { data: entities = [], isLoading: isLoadingEntities } = useSubledgers(
     businessRole ? { type: businessRole, status: 'ACTIVE' } : { status: 'ACTIVE' },
   );
+  const payingTax = canPayTax && businessRole === TAX_ROLE;
+  const { data: taxOwed = [], isLoading: isLoadingTaxOwed } = useTaxOutstanding({
+    enabled: isOpen && payingTax,
+  });
+  // Debit the tax's payable account for what is owed; the bank and the other details are filled in
+  // as for any payment.
+  const fillFromTax = (taxTypeId: string) => {
+    const owed = taxOwed.find((t) => t.taxTypeId === taxTypeId);
+    if (!owed) return;
+    setValue('cashLines.0.glAccountId', owed.payableAccountId);
+    setValue('cashLines.0.useQtyPrice', false);
+    setValue('cashLines.0.amount', owed.amountOutstanding);
+    setValue('currency', owed.currency);
+    if (!getValues('description')) setValue('description', `${owed.name} payment`);
+  };
+  // Opened to pay a particular tax: fill it in once what is owed has loaded, once per opening.
+  const filledTaxFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isOpen || !taxToPay || !canPayTax) {
+      filledTaxFor.current = null;
+      return;
+    }
+    const key = `${openKey}`;
+    if (filledTaxFor.current === key || !taxOwed.some((t) => t.taxTypeId === taxToPay)) return;
+    filledTaxFor.current = key;
+    fillFromTax(taxToPay);
+    // fillFromTax only reads the form and taxOwed, which are what this waits on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, taxToPay, canPayTax, taxOwed, openKey]);
+
   const entityOptions = useMemo<SearchSelectOption[]>(
-    () => entities.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}` })),
-    [entities],
+    () =>
+      payingTax
+        ? taxOwed.map((t) => ({
+            value: t.taxTypeId,
+            label: `${t.code} — ${t.name}`,
+            sublabel: `${t.currency} ${Number(t.amountOutstanding).toLocaleString('en-GB', {
+              minimumFractionDigits: 2,
+            })} owed${t.dueDate ? ` · due ${t.dueDate}` : ''}`,
+          }))
+        : entities.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}` })),
+    [entities, payingTax, taxOwed],
   );
 
   // A linked type picks the entity's open, posted invoice (receivable) / bill (payable) it
@@ -669,7 +740,13 @@ export function NewTransactionPanel({
       account: accountLabel(line.glAccountId, 'Select account…'),
       side: (line.kind === 'DEDUCTION' ? otherSide : itemSide) as 'Debit' | 'Credit',
       amount: cashLineAmount(line),
-      note: line.kind === 'ITEM' ? undefined : line.kind === 'DEDUCTION' ? 'Deduction' : 'Charge',
+      note: line.isTax
+        ? 'Tax'
+        : line.kind === 'ITEM'
+          ? undefined
+          : line.kind === 'DEDUCTION'
+            ? 'Deduction'
+            : 'Charge',
     }));
     const cashAccountName = cashAccounts.find((c) => c.id === cashAccountId)?.name;
     lines.push({
@@ -754,6 +831,10 @@ export function NewTransactionPanel({
           );
           return;
         }
+        if (values.cashLines.some((line) => line.isTax && !line.taxTypeId)) {
+          toast.error('Select a tax on every tax line');
+          return;
+        }
         if (values.cashLines.some((line) => !(cashLineAmount(line) > 0))) {
           toast.error('Every line needs an amount above zero');
           return;
@@ -787,14 +868,13 @@ export function NewTransactionPanel({
             settlementMethod: values.settlementMethod,
             reference: values.reference || undefined,
             description: values.description || transactionType.name,
-            counterpartyType:
-              values.businessEntity && values.businessRole ? values.businessRole : null,
-            counterpartyId:
-              values.businessEntity && values.businessRole ? values.businessEntity : null,
+            counterpartyType: hasCounterparty(values) ? values.businessRole : null,
+            counterpartyId: hasCounterparty(values) ? values.businessEntity : null,
             lines: usesLines
               ? values.cashLines.map((line) => ({
                   kind: line.kind,
                   glAccountId: line.glAccountId,
+                  taxTypeId: line.isTax ? line.taxTypeId : undefined,
                   amount: cashLineAmount(line),
                   ...(line.kind !== 'ITEM' || !line.useQtyPrice
                     ? {}
@@ -850,6 +930,7 @@ export function NewTransactionPanel({
                   lines: values.cashLines.map((line) => ({
                     kind: line.kind,
                     glAccountId: line.glAccountId,
+                    taxTypeId: line.isTax ? line.taxTypeId : undefined,
                     amount: cashLineAmount(line),
                     ...(line.kind !== 'ITEM' || !line.useQtyPrice
                       ? {}
@@ -867,7 +948,7 @@ export function NewTransactionPanel({
             currency: values.currency,
             transactionDate: values.entryDate || today(),
             settlementMethod: values.settlementMethod as AccountingCashbookSettlementMethod,
-            ...(values.businessEntity && values.businessRole
+            ...(hasCounterparty(values)
               ? { counterpartyType: values.businessRole, counterpartyId: values.businessEntity }
               : {}),
             reference: values.reference || undefined,
@@ -1268,18 +1349,24 @@ export function NewTransactionPanel({
                     control={control}
                     render={({ field }) => (
                       <SearchSelect
-                        label="Business Entity"
+                        label={payingTax ? 'Tax Type' : 'Business Entity'}
                         placeholder={
                           !businessRole
                             ? 'Select a role first…'
-                            : isLoadingEntities
+                            : (payingTax ? isLoadingTaxOwed : isLoadingEntities)
                               ? 'Loading…'
-                              : 'Optional — select an entity…'
+                              : payingTax
+                                ? 'Select the tax to pay…'
+                                : 'Optional — select an entity…'
                         }
                         options={entityOptions}
                         value={field.value}
                         onChange={(value) => {
                           field.onChange(value);
+                          if (payingTax) {
+                            fillFromTax(value);
+                            return;
+                          }
                           const entity = entities.find((e) => e.id === value);
                           if (entity?.currency) setValue('currency', entity.currency);
                         }}
@@ -1391,10 +1478,13 @@ export function NewTransactionPanel({
                   isReceipt={isCashbookReceipt}
                   currency={currency}
                   lineAmount={cashLineAmount}
-                  onAdd={(kind) =>
+                  taxTypes={taxTypes}
+                  entryDate={entryDate}
+                  onAdd={(kind, isTax) =>
                     appendCashLine({
                       ...EMPTY_CASH_LINE,
                       kind,
+                      isTax: !!isTax,
                       useQtyPrice: transactionType?.usesQuantityPrice !== false,
                     })
                   }
@@ -1662,6 +1752,8 @@ function CashEntryLines({
   isReceipt,
   currency,
   lineAmount,
+  taxTypes,
+  entryDate,
   onAdd,
   onRemove,
 }: {
@@ -1682,12 +1774,22 @@ function CashEntryLines({
   isReceipt: boolean;
   currency: string;
   lineAmount: (line: CashLineValues) => number;
-  onAdd: (kind: CashbookLineKind) => void;
+  taxTypes: TaxType[];
+  entryDate: string;
+  onAdd: (kind: CashbookLineKind, isTax?: boolean) => void;
   onRemove: (index: number) => void;
 }) {
   const verb = isReceipt ? 'received' : 'paid';
   const itemCount = lines.filter((line) => line.kind === 'ITEM').length;
   const hasAdjustments = deductionsTotal > 0 || chargesTotal > 0;
+  const taxOptions: SearchSelectOption[] = taxTypes
+    .filter(
+      (t) =>
+        t.isActive &&
+        (!entryDate || t.effectiveFrom.slice(0, 10) <= entryDate) &&
+        (!t.effectiveTo || t.effectiveTo.slice(0, 10) >= entryDate),
+    )
+    .map((t) => ({ label: `${t.name} (${t.rate}%)`, value: t.id }));
 
   return (
     <div className="flex flex-col gap-2">
@@ -1698,11 +1800,14 @@ function CashEntryLines({
         const kind = lines[index]?.kind ?? 'ITEM';
         const isItem = kind === 'ITEM';
         const useQtyPrice = isItem && (lines[index]?.useQtyPrice ?? defaultUseQtyPrice);
+        const isTax = lines[index]?.isTax ?? false;
         const accountFieldLabel = isItem
           ? accountLabel
-          : kind === 'DEDUCTION'
-            ? `Deduction (reduces the cash ${verb})`
-            : `Charge (adds to the cash ${verb})`;
+          : isTax
+            ? `Tax account (adds to the cash ${verb})`
+            : kind === 'DEDUCTION'
+              ? `Deduction (reduces the cash ${verb})`
+              : `Charge (adds to the cash ${verb})`;
 
         const accountField = (
           <Controller
@@ -1721,7 +1826,39 @@ function CashEntryLines({
             )}
           />
         );
-        const amountField = (
+        const taxField = (
+          <Controller
+            name={`cashLines.${index}.taxTypeId`}
+            control={control}
+            rules={{ required: 'Select a tax' }}
+            render={({ field: f }) => (
+              <SearchSelect
+                label="Tax"
+                placeholder={taxOptions.length ? 'Select a tax…' : 'No tax types in force'}
+                options={taxOptions}
+                value={f.value}
+                onChange={(value) => {
+                  f.onChange(value);
+                  // The tax's default account for this side pre-fills; the user can still change it.
+                  const tax = taxTypes.find((t) => t.id === value);
+                  const defaultAccount = isReceipt
+                    ? tax?.receivableAccountId
+                    : tax?.payableAccountId;
+                  if (defaultAccount) setValue(`cashLines.${index}.glAccountId`, defaultAccount);
+                }}
+                error={lineErrors?.taxTypeId?.message}
+              />
+            )}
+          />
+        );
+        const amountField = isTax ? (
+          <NumberField
+            label="Amount"
+            value={lines[index] ? lineAmount(lines[index]) : 0}
+            onChange={() => {}}
+            disabled
+          />
+        ) : (
           <Controller
             name={`cashLines.${index}.amount`}
             control={control}
@@ -1798,7 +1935,17 @@ function CashEntryLines({
 
         return (
           <div key={field.id} className="rounded-xl border border-gray-200 p-2.5">
-            {useQtyPrice ? (
+            {isTax ? (
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_1fr_auto]">
+                  {taxField}
+                  {accountField}
+                  {amountField}
+                  {actions}
+                </div>
+                {descriptionField}
+              </div>
+            ) : useQtyPrice ? (
               <div className="flex flex-col gap-2">
                 <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_auto]">
                   {accountField}
@@ -1857,6 +2004,9 @@ function CashEntryLines({
         </Button>
         <Button type="button" variant="outline" onClick={() => onAdd('DEDUCTION')}>
           Add Deduction
+        </Button>
+        <Button type="button" variant="outline" onClick={() => onAdd('CHARGE', true)}>
+          Add Tax
         </Button>
         <Button type="button" variant="outline" onClick={() => onAdd('CHARGE')}>
           Add Charge

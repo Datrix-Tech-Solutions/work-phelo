@@ -206,7 +206,38 @@ export const RESOURCES = [
   {
     name: 'accounting.ledger',
     module: 'ACCOUNTING',
-    description: 'Posted general-ledger activity',
+    description: 'Posted general-ledger activity and the financial reports',
+  },
+  {
+    name: 'accounting.bank-reconciliations',
+    module: 'ACCOUNTING',
+    description: 'Bank statement imports and reconciliation of cash accounts',
+  },
+  {
+    name: 'accounting.transactions',
+    module: 'ACCOUNTING',
+    description: 'Raise, post, void and reverse direct receipts and payments',
+  },
+  {
+    name: 'accounting.archive',
+    module: 'ACCOUNTING',
+    description: 'Voided entries: view, restore and remove from the archive',
+  },
+  {
+    name: 'accounting.entities',
+    module: 'ACCOUNTING',
+    description:
+      'Accounting entities (customers, vendors and others) and entity types',
+  },
+  {
+    name: 'accounting.cost-centres',
+    module: 'ACCOUNTING',
+    description: 'Accounting cost centres',
+  },
+  {
+    name: 'accounting.transaction-settings',
+    module: 'ACCOUNTING',
+    description: 'Transaction types, source types and transaction rules',
   },
 
   // ── MARKETING module ───────────────────────────────────────────

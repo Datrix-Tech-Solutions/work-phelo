@@ -391,14 +391,16 @@ model GLAccount {
 }
 
 /// Which section of the Cash Flow Statement an account's balance change belongs in.
-/// EXCLUDED covers both non-flows (the Cash and Bank accounts themselves — always resolved
-/// automatically from AccountingCashAccount, never set here) and non-cash items that belong in
-/// the supplemental disclosure note rather than one of the three main sections.
+/// CASH_EQUIVALENT marks the cash and cash equivalents the statement reconciles to (including a
+/// bank overdraft repayable on demand); accounts linked in Cash and Bank count as cash too.
+/// EXCLUDED covers non-cash items: on an income/expense account it is reversed out of operating
+/// (see cashFlowStatement), on a balance sheet account it is dropped.
 enum CashFlowCategory {
   OPERATING
   INVESTING
   FINANCING
   EXCLUDED
+  CASH_EQUIVALENT
 
   @@schema("accounting")
 }
@@ -506,32 +508,39 @@ model CostCentre {
 /// A control account here is only ever an optional, explicit override for a specific entity
 /// (e.g. a manual Journal Entry quick-add), never something posting logic depends on.
 model SubledgerAccount {
-  id                    String                           @id @default(uuid())
-  tenantId              String
-  code                  String
-  name                  String
-  type                  String
-  externalRef           String?
-  controlAccountId      String?
-  currency              String?
-  contactName           String?
-  phone                 String?
-  address               String?
-  description           String?
-  status                RecordStatus                     @default(ACTIVE)
-  createdByUserId       String
-  updatedByUserId       String
-  createdAt             DateTime                         @default(now())
-  updatedAt             DateTime                         @updatedAt
-  controlAccount        GLAccount?                       @relation(fields: [controlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  journalLines          JournalLine[]
-  cashbookOffsets       CashbookTransaction[]            @relation("CashbookOffsetSubledger")
-  receivableDocuments   AccountingReceivableDocument[]
-  receivableReceipts    AccountingReceivableReceipt[]
-  receivableAllocations AccountingReceivableAllocation[]
-  payableDocuments      AccountingPayableDocument[]
-  payablePayments       AccountingPayablePayment[]
-  payableAllocations    AccountingPayableAllocation[]
+  id                        String                           @id @default(uuid())
+  tenantId                  String
+  code                      String
+  name                      String
+  type                      String
+  externalRef               String?
+  controlAccountId          String?
+  currency                  String?
+  contactName               String?
+  phone                     String?
+  address                   String?
+  description               String?
+  monitorWithAml            Boolean                          @default(false)
+  isPoliticallyExposed      Boolean                          @default(false)
+  riskRating                AmlRiskRating?
+  amlAmountLimit            Decimal?                         @db.Decimal(18, 2)
+  amlAmountPeriod           AmlAmountPeriod?
+  amlTransactionCountLimit  Int?
+  amlTransactionCountPeriod AmlCountPeriod?
+  status                    RecordStatus                     @default(ACTIVE)
+  createdByUserId           String
+  updatedByUserId           String
+  createdAt                 DateTime                         @default(now())
+  updatedAt                 DateTime                         @updatedAt
+  controlAccount            GLAccount?                       @relation(fields: [controlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalLines              JournalLine[]
+  cashbookOffsets           CashbookTransaction[]            @relation("CashbookOffsetSubledger")
+  receivableDocuments       AccountingReceivableDocument[]
+  receivableReceipts        AccountingReceivableReceipt[]
+  receivableAllocations     AccountingReceivableAllocation[]
+  payableDocuments          AccountingPayableDocument[]
+  payablePayments           AccountingPayablePayment[]
+  payableAllocations        AccountingPayableAllocation[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -539,6 +548,30 @@ model SubledgerAccount {
   @@index([tenantId, type, externalRef])
   @@index([tenantId, type, status])
   @@index([tenantId, controlAccountId])
+  @@schema("accounting")
+}
+
+enum AmlRiskRating {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@schema("accounting")
+}
+
+enum AmlAmountPeriod {
+  WEEKLY
+  MONTHLY
+  YEARLY
+
+  @@schema("accounting")
+}
+
+enum AmlCountPeriod {
+  HOURS_12
+  HOURS_24
+  HOURS_48
+
   @@schema("accounting")
 }
 
@@ -903,6 +936,9 @@ model CashbookTransactionLine {
   sequence      Int
   kind          CashbookLineKind    @default(ITEM)
   glAccountId   String
+  /// Set when the line is a tax (a CHARGE such as input VAT, or a DEDUCTION such as withholding
+  /// tax) picked from the tax types; null for any other line.
+  taxTypeId     String?
   amount        Decimal             @db.Decimal(20, 4)
   /// Optional descriptive breakdown: amount = quantity × unitPrice (2dp).
   quantity      Decimal?            @db.Decimal(20, 4)
@@ -911,10 +947,12 @@ model CashbookTransactionLine {
   createdAt     DateTime            @default(now())
   transaction   CashbookTransaction @relation(fields: [transactionId, tenantId], references: [id, tenantId], onDelete: Cascade)
   glAccount     GLAccount           @relation("CashbookLineAccount", fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  taxType       TaxType?            @relation(fields: [taxTypeId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, transactionId, sequence])
   @@index([tenantId, glAccountId])
+  @@index([tenantId, taxTypeId])
   @@schema("accounting")
 }
 
@@ -970,28 +1008,46 @@ model TransactionType {
 /// A tenant-wide tax rate (e.g. VAT 12.5%, Withholding Tax 5%) referenced by
 /// TransactionTypeRuleLine — a rule's tax lines pick one of these rather than storing
 /// their own rate, so a rate change applies to every rule that uses it.
+enum TaxPayFrequency {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+
+  @@schema("accounting")
+}
+
 model TaxType {
-  id                  String                    @id @default(uuid())
-  tenantId            String
-  code                String
-  name                String
-  rate                Decimal                   @db.Decimal(6, 3)
-  effectiveFrom       DateTime
-  effectiveTo         DateTime?
-  isActive            Boolean                   @default(true)
+  id                   String                    @id @default(uuid())
+  tenantId             String
+  code                 String
+  name                 String
+  rate                 Decimal                   @db.Decimal(6, 3)
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  isActive             Boolean                   @default(true)
   /// Where this tax posts by default: on the payables side (a bill's input tax, or tax withheld
   /// when paying a vendor) and on the receivables side (an invoice's output tax, or tax withheld
   /// by a customer). Pre-fills the account on the bill/invoice and payment forms; the user can
   /// still pick another.
-  payableAccountId    String?
-  receivableAccountId String?
-  createdByUserId     String
-  updatedByUserId     String
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  ruleLines           TransactionTypeRuleLine[]
-  payableAccount      GLAccount?                @relation("TaxTypePayableAccount", fields: [payableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  receivableAccount   GLAccount?                @relation("TaxTypeReceivableAccount", fields: [receivableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  payableAccountId     String?
+  receivableAccountId  String?
+  /// Payment reminder. The tax for each period (a month, quarter or year) is paid in the month after
+  /// the period ends, on `reminderDueDay` or the last day of that month, and the reminder shows
+  /// `reminderDaysBefore` days ahead until the tax payable account has been paid down.
+  reminderEnabled      Boolean                   @default(false)
+  reminderFrequency    TaxPayFrequency           @default(MONTHLY)
+  /// 1 to 28, so every month has it. Ignored when `reminderDueOnLastDay` is set.
+  reminderDueDay       Int?
+  reminderDueOnLastDay Boolean                   @default(true)
+  reminderDaysBefore   Int                       @default(3)
+  createdByUserId      String
+  updatedByUserId      String
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  ruleLines            TransactionTypeRuleLine[]
+  cashbookLines        CashbookTransactionLine[]
+  payableAccount       GLAccount?                @relation("TaxTypePayableAccount", fields: [payableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  receivableAccount    GLAccount?                @relation("TaxTypeReceivableAccount", fields: [receivableAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])

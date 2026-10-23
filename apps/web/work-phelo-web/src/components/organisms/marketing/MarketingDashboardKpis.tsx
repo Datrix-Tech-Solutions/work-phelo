@@ -37,10 +37,11 @@ const rate = (converted: number, created: number) =>
 interface MarketingDashboardKpisProps {
   period: Period;
   year: number;
+  userId?: string;
 }
 
-export function MarketingDashboardKpis({ period, year }: MarketingDashboardKpisProps) {
-  const { data, isLoading } = useMarketingDashboard(period, year);
+export function MarketingDashboardKpis({ period, year, userId }: MarketingDashboardKpisProps) {
+  const { data, isLoading } = useMarketingDashboard(period, year, userId);
   const periodLabel = PERIOD_LABELS[period];
   const currency = data?.currency;
 

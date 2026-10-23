@@ -20,6 +20,7 @@ import { ChartOfAccountsBreadcrumb } from '@/components/molecules/accounting/Cha
 import { ChartOfAccountsToolbar } from '@/components/molecules/accounting/ChartOfAccountsToolbar';
 import { SeedHierarchyDialog } from '@/components/molecules/accounting/SeedHierarchyDialog';
 import { ClearUnusedAccountsDialog } from '@/components/organisms/accounting/ClearUnusedAccountsDialog';
+import { ApplyAccountTemplateDialog } from '@/components/organisms/accounting/ApplyAccountTemplateDialog';
 import { BulkImportGLAccountsDialog } from '@/components/organisms/accounting/BulkImportGLAccountsDialog';
 import { getScopedAccounts, getScopeTitle } from '@/lib/accounting/chartOfAccountsScope';
 import { buildAccountBalanceMap } from '@/lib/accounting/glAccountBalance';
@@ -52,6 +53,7 @@ export default function ChartOfAccountsPage() {
   const [scope, setScope] = useState<AccountScope>({ kind: 'all' });
   const [seedDialogOpen, setSeedDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [clearUnusedOpen, setClearUnusedOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{
     kind: 'classification' | 'group';
@@ -188,7 +190,7 @@ export default function ChartOfAccountsPage() {
               onSearchChange={setSearch}
               status={status}
               onStatusChange={setStatus}
-              onImport={() => setImportDialogOpen(true)}
+              onUseTemplate={() => setTemplateDialogOpen(true)}
               onClearUnused={() => setClearUnusedOpen(true)}
               registerActions={[
                 {
@@ -335,6 +337,17 @@ export default function ChartOfAccountsPage() {
         onClose={() => setClearUnusedOpen(false)}
       />
 
+      <ApplyAccountTemplateDialog
+        isOpen={templateDialogOpen}
+        onClose={() => setTemplateDialogOpen(false)}
+        classifications={classifications}
+        groups={groups}
+        existingAccounts={glAccountsData ?? []}
+        onImportCustom={() => {
+          setTemplateDialogOpen(false);
+          setImportDialogOpen(true);
+        }}
+      />
       <BulkImportGLAccountsDialog
         isOpen={importDialogOpen}
         onClose={() => setImportDialogOpen(false)}

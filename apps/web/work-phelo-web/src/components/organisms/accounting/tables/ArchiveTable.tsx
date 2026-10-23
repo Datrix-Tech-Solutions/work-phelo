@@ -7,6 +7,7 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { CashbookTransactionDetailPanel } from '@/components/organisms/accounting/panels/CashbookTransactionDetailPanel';
 import { JournalDetailPanel } from '@/components/organisms/accounting/panels/JournalDetailPanel';
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import {
   DeleteArchivedEntryModal,
   DeleteArchivedTarget,
@@ -64,6 +65,9 @@ function fmtAmount(amount: string | null, currency: string | null) {
 /** Every voided entry, newest void first. Opening one shows it as it was and, while its period is
  *  open, lets it be restored: a form to correct it first where there is one, or a plain confirm. */
 export function ArchiveTable() {
+  const { can } = useAccountingAccess();
+  const canRestore = can('accounting.archive:EDIT');
+  const canDelete = can('accounting.archive:DELETE');
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState('');
   const [page, setPage] = useState(1);
@@ -222,7 +226,7 @@ export function ArchiveTable() {
       render: (row) => (
         <div className="flex items-center gap-2">
           {/* Restoring may need a form to correct the entry first, so it opens the entry. */}
-          {row.restorable && (
+          {row.restorable && canRestore && (
             <TableButton
               variant="green"
               onClick={(e) => {
@@ -233,15 +237,17 @@ export function ArchiveTable() {
               Restore
             </TableButton>
           )}
-          <TableButton
-            variant="red"
-            onClick={(e) => {
-              e.stopPropagation();
-              askDelete(row);
-            }}
-          >
-            Delete
-          </TableButton>
+          {canDelete && (
+            <TableButton
+              variant="red"
+              onClick={(e) => {
+                e.stopPropagation();
+                askDelete(row);
+              }}
+            >
+              Delete
+            </TableButton>
+          )}
         </div>
       ),
     },
@@ -276,13 +282,18 @@ export function ArchiveTable() {
           setTicked(new Set());
         }}
         extraFilters={extraFilters}
-        actionButton={{
-          label: selectedItems.length > 0 ? `Delete (${selectedItems.length})` : 'Delete',
-          variant: 'danger',
-          disabled: selectedItems.length === 0,
-          title: selectedItems.length === 0 ? 'Tick entries to delete them together' : undefined,
-          onClick: () => setDeleteTarget(selectedItems.map(toTarget)),
-        }}
+        actionButton={
+          canDelete
+            ? {
+                label: selectedItems.length > 0 ? `Delete (${selectedItems.length})` : 'Delete',
+                variant: 'danger',
+                disabled: selectedItems.length === 0,
+                title:
+                  selectedItems.length === 0 ? 'Tick entries to delete them together' : undefined,
+                onClick: () => setDeleteTarget(selectedItems.map(toTarget)),
+              }
+            : undefined
+        }
         onRowClick={open}
         emptyMessage="Nothing has been voided"
         currentPage={page}

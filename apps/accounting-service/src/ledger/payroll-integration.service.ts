@@ -63,23 +63,20 @@ const WAGE_PAYMENT_TYPE_CODE = 'PR-WAGE';
 const WAGE_PAYMENT_TYPE_NAME = 'Wage Payment';
 
 interface PayrollAccountGroupTemplate {
-  classificationCode: string;
-  groupCode: string;
   groupName: string;
   category: GLAccountCategory;
+  /** Which of the tenant's own classifications of this type to prefer, by name. */
+  classificationHint: RegExp;
   children: { key: string; name: string }[];
 }
 
-// Preferred codes — the group's band width is its trailing zeros (1130 -> band 1130-1139),
-// and every group here nests under an already-seeded standard classification band (1100
-// Current Assets, 2100 Current Liabilities, 5100 Operating Expense) so it stays within
-// range. Deliberately excludes "Other Employer-Borne Payroll Cost" and "Other
-// Statutory/Third-Party Payable" — not every tenant/run uses those, so they're added
-// on-demand instead of seeded.
+// The groups are made under whichever of the tenant's own classifications of the right type has
+// room (preferring the one the hint matches) — no classification or group code is assumed.
+// Deliberately excludes "Other Employer-Borne Payroll Cost" and "Other Statutory/Third-Party
+// Payable" — not every tenant/run uses those, so they're added on-demand instead of seeded.
 const PAYROLL_ACCOUNT_GROUPS: PayrollAccountGroupTemplate[] = [
   {
-    classificationCode: '1100',
-    groupCode: '1130',
+    classificationHint: /^(?!non).*current/i,
     groupName: 'Staff Advances / Employee Loans',
     category: GLAccountCategory.ASSET,
     children: [
@@ -88,8 +85,7 @@ const PAYROLL_ACCOUNT_GROUPS: PayrollAccountGroupTemplate[] = [
     ],
   },
   {
-    classificationCode: '2100',
-    groupCode: '2120',
+    classificationHint: /^(?!non).*current/i,
     groupName: 'Payroll Liabilities',
     category: GLAccountCategory.LIABILITY,
     children: [
@@ -101,8 +97,7 @@ const PAYROLL_ACCOUNT_GROUPS: PayrollAccountGroupTemplate[] = [
     ],
   },
   {
-    classificationCode: '5100',
-    groupCode: '5120',
+    classificationHint: /operat/i,
     groupName: 'Payroll Expense',
     category: GLAccountCategory.EXPENSE,
     children: [
@@ -153,6 +148,30 @@ function findAvailableGroupCode(
   return preferredGroupCode;
 }
 
+/** A free group code inside the band of the given classification code (a group's own band is its
+ *  trailing zeros, so a multiple of 10 leaves room for up to nine accounts). */
+function findGroupCodeInBand(
+  classificationCode: string,
+  childCount: number,
+  usedCodes: Set<number>,
+): number | undefined {
+  const start = Number(classificationCode);
+  if (!Number.isInteger(start)) return undefined;
+  const end = start + codeBandWidth(start) - 1;
+  for (
+    let code = start + 10 - (start % 10);
+    code + childCount <= end;
+    code += 10
+  ) {
+    const free = [
+      code,
+      ...Array.from({ length: childCount }, (_, i) => code + i + 1),
+    ].every((c) => !usedCodes.has(c));
+    if (free) return code;
+  }
+  return undefined;
+}
+
 @Injectable()
 export class PayrollIntegrationService {
   private readonly logger = new Logger(PayrollIntegrationService.name);
@@ -167,11 +186,11 @@ export class PayrollIntegrationService {
   ) {}
 
   /** Idempotent — safe to call every time the tenant clicks "Create Payroll GL Accounts".
-   *  Ensures (in order): the standard classification hierarchy, the payroll GL account
-   *  groups/leaf accounts the tenant didn't opt out of, the "Employee" entity type, one
-   *  aggregate entity of that type, and the "HR / Payroll" source type entry. */
+   *  Ensures (in order): the payroll GL account groups/leaf accounts the tenant didn't opt out
+   *  of, the "Employee" entity type, one aggregate entity of that type, and the "HR / Payroll"
+   *  source type entry. The groups go under the tenant's own classifications (a template, an
+   *  import, or by hand), found by account type rather than by code. */
   async seedAccounts(user: RequestUser, dto: SeedPayrollAccountsDto) {
-    await this.masterData.seedStandardAccountHierarchy(user);
     const sourceType = await this.setup.getSource(user.tenantId);
 
     const itemByKey = new Map(dto.items.map((item) => [item.key, item]));
@@ -198,19 +217,11 @@ export class PayrollIntegrationService {
     const accountIdByKey = new Map<string, string>();
 
     for (const template of PAYROLL_ACCOUNT_GROUPS) {
-      const classification = await this.prisma.accountClassification.findUnique(
-        {
-          where: {
-            tenantId_code: {
-              tenantId: user.tenantId,
-              code: template.classificationCode,
-            },
-          },
-        },
+      const includedChildren = template.children.filter(
+        (child) => itemByKey.get(child.key)?.include !== false,
       );
-      if (!classification) {
-        // Standard hierarchy seed above guarantees this in the normal case; skip this
-        // group defensively rather than throw if a tenant somehow deleted it.
+      if (includedChildren.length === 0) {
+        // Every function in this group was opted out, so there's nothing to create.
         for (const child of template.children) {
           accountResults.push({
             key: child.key,
@@ -222,42 +233,16 @@ export class PayrollIntegrationService {
         continue;
       }
 
-      const includedChildren = template.children.filter(
-        (child) => itemByKey.get(child.key)?.include !== false,
+      const { group, classification } = await this.resolvePayrollGroup(
+        user,
+        template,
+        usedCodes,
       );
-
-      // Reuse a group we already created on a prior seed run (matched by name within the
-      // classification, not by code) rather than drifting to a new code every time.
-      let group = await this.prisma.accountGroup.findFirst({
-        where: {
-          tenantId: user.tenantId,
-          classificationId: classification.id,
-          name: template.groupName,
-        },
-      });
-      if (!group && includedChildren.length > 0) {
-        const groupCode = findAvailableGroupCode(
-          Number(template.groupCode),
-          template.children.length,
-          usedCodes,
-        );
-        usedCodes.add(groupCode);
-        group = await this.prisma.accountGroup.create({
-          data: {
-            tenantId: user.tenantId,
-            classificationId: classification.id,
-            code: String(groupCode),
-            name: template.groupName,
-            createdByUserId: user.id,
-            updatedByUserId: user.id,
-          },
-        });
-      }
 
       for (const child of template.children) {
         const requestItem = itemByKey.get(child.key);
         const name = requestItem?.name?.trim() || child.name;
-        if (requestItem?.include === false || !group) {
+        if (requestItem?.include === false) {
           accountResults.push({
             key: child.key,
             code: '',
@@ -338,6 +323,72 @@ export class PayrollIntegrationService {
     };
   }
 
+  /** The group a payroll function's accounts live in: one already made for it (matched by name
+   *  within the type), else a new one under whichever of the tenant's own classifications of that
+   *  type has room. Nothing is assumed about codes; with no suitable classification it says what
+   *  to add instead of creating one. */
+  private async resolvePayrollGroup(
+    user: RequestUser,
+    template: PayrollAccountGroupTemplate,
+    usedCodes: Set<number>,
+  ) {
+    const existing = await this.prisma.accountGroup.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        name: template.groupName,
+        classification: { category: template.category },
+      },
+      include: { classification: true },
+    });
+    if (existing) {
+      return { group: existing, classification: existing.classification };
+    }
+
+    const typeLabel = template.category.toLowerCase();
+    const classifications = await this.prisma.accountClassification.findMany({
+      where: {
+        tenantId: user.tenantId,
+        category: template.category,
+        isActive: true,
+      },
+      orderBy: [{ displayOrder: 'asc' }, { code: 'asc' }],
+    });
+    if (classifications.length === 0) {
+      throw new BadRequestException(
+        `Your chart of accounts has no ${typeLabel} classification yet - add one (or apply a template), or pick an existing account for each payroll function instead.`,
+      );
+    }
+    const candidates = classifications.flatMap((classification) => {
+      const code = findGroupCodeInBand(
+        classification.code,
+        template.children.length,
+        usedCodes,
+      );
+      return code === undefined ? [] : [{ classification, code }];
+    });
+    if (candidates.length === 0) {
+      throw new BadRequestException(
+        `None of your ${typeLabel} classifications has room for the ${template.groupName} group - pick an existing account for each payroll function instead.`,
+      );
+    }
+    const chosen =
+      candidates.find((c) =>
+        template.classificationHint.test(c.classification.name),
+      ) ?? candidates[0];
+    usedCodes.add(chosen.code);
+    const group = await this.prisma.accountGroup.create({
+      data: {
+        tenantId: user.tenantId,
+        classificationId: chosen.classification.id,
+        code: String(chosen.code),
+        name: template.groupName,
+        createdByUserId: user.id,
+        updatedByUserId: user.id,
+      },
+    });
+    return { group, classification: chosen.classification };
+  }
+
   /** Creates a new account for one payroll function - under the standard payroll group, with
    *  the next free code - and maps the function to it. For tenants that have no account of their
    *  own to choose for it. */
@@ -357,21 +408,6 @@ export class PayrollIntegrationService {
     }
     const accountName = name?.trim() || role.standardName;
 
-    await this.masterData.seedStandardAccountHierarchy(user);
-    const classification = await this.prisma.accountClassification.findUnique({
-      where: {
-        tenantId_code: {
-          tenantId: user.tenantId,
-          code: template.classificationCode,
-        },
-      },
-    });
-    if (!classification) {
-      throw new BadRequestException(
-        `The ${template.classificationCode} account classification does not exist for this tenant.`,
-      );
-    }
-
     const [groups, accounts] = await Promise.all([
       this.prisma.accountGroup.findMany({
         where: { tenantId: user.tenantId },
@@ -386,31 +422,11 @@ export class PayrollIntegrationService {
       [...groups, ...accounts].map((a) => Number(a.code)),
     );
 
-    let group = await this.prisma.accountGroup.findFirst({
-      where: {
-        tenantId: user.tenantId,
-        classificationId: classification.id,
-        name: template.groupName,
-      },
-    });
-    if (!group) {
-      const groupCode = findAvailableGroupCode(
-        Number(template.groupCode),
-        template.children.length,
-        usedCodes,
-      );
-      usedCodes.add(groupCode);
-      group = await this.prisma.accountGroup.create({
-        data: {
-          tenantId: user.tenantId,
-          classificationId: classification.id,
-          code: String(groupCode),
-          name: template.groupName,
-          createdByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-      });
-    }
+    const { group, classification } = await this.resolvePayrollGroup(
+      user,
+      template,
+      usedCodes,
+    );
 
     const duplicate = await this.prisma.gLAccount.findFirst({
       where: {

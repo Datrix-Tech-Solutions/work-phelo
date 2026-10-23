@@ -23,7 +23,7 @@ export function useMarketingAccess() {
 
   // Being assigned a client or prospect is access enough to its page. Only asked when the user holds
   // none of the permissions, and the list is already limited to their own records.
-  const needsClientCheck = !!user && isMarketer && !has(MARKETING_RECORD_PAGES.clients.main);
+  const needsClientCheck = !!user && isMarketer && !has(MARKETING_RECORD_PAGES.prospects.clients);
   const needsProspectCheck = !!user && isMarketer && !has(MARKETING_RECORD_PAGES.prospects.all);
   const ownClients = useClients({ limit: 1 }, needsClientCheck);
   const ownProspects = useProspects({ limit: 1 }, needsProspectCheck);
@@ -32,10 +32,9 @@ export function useMarketingAccess() {
 
   function canSeeTab(page: string, tab: string): boolean {
     if (!isMarketer) return MARKETING_OPEN_PAGES.includes(page);
-    if (page === 'clients') return has(MARKETING_RECORD_PAGES.clients.main) || hasOwnClients;
     if (page === 'prospects') {
-      const required = MARKETING_RECORD_PAGES.prospects[tab as 'all' | 'upcoming-reminders'];
-      return (!!required && has(required)) || hasOwnProspects;
+      if (tab === 'clients') return has(MARKETING_RECORD_PAGES.prospects.clients) || hasOwnClients;
+      return has(MARKETING_RECORD_PAGES.prospects.all) || hasOwnProspects;
     }
     const tabs = MARKETING_PAGE_TABS[page];
     if (!tabs) return true;
@@ -45,7 +44,6 @@ export function useMarketingAccess() {
 
   /** The tab keys of a multi-tab page. */
   function tabsOf(page: string): string[] {
-    if (page === 'clients') return ['main'];
     if (page === 'prospects') return Object.keys(MARKETING_RECORD_PAGES.prospects);
     return Object.keys(MARKETING_PAGE_TABS[page] ?? { main: [] });
   }
@@ -53,7 +51,7 @@ export function useMarketingAccess() {
   /** A page shows when at least one of its tabs does. */
   function canSeePage(page: string): boolean {
     if (!isMarketer) return MARKETING_OPEN_PAGES.includes(page);
-    if (page !== 'clients' && page !== 'prospects' && !MARKETING_PAGE_TABS[page]) return true;
+    if (page !== 'prospects' && !MARKETING_PAGE_TABS[page]) return true;
     return tabsOf(page).some((tab) => canSeeTab(page, tab));
   }
 

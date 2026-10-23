@@ -6,7 +6,7 @@ import { apiErrorMessage } from '@/lib/apiError';
 
 /**
  * Builds a `SearchSelect` `emptyState` renderer that lets the user create a new CRM Settings
- * option (business type, source type, interaction medium, decision maker or product) inline,
+ * option (business type, source type, follow-up medium, decision maker or product) inline,
  * from whatever they typed, instead of only being able to pick from what already exists.
  *
  * `label` names the thing being created ("business type", "product", …) for the button copy.

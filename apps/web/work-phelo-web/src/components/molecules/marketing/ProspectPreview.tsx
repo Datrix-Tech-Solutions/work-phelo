@@ -3,10 +3,7 @@
 import { formatMoney } from '@/lib/formatMoney';
 import { ProspectFormSection } from '@/components/molecules/marketing/ProspectFormSection';
 import { CompanyInformationFields } from '@/components/molecules/marketing/CompanyInformationForm';
-import {
-  ProductServiceRow,
-  derivedCommission,
-} from '@/components/molecules/marketing/ProductServiceForm';
+import { ProductServiceRow } from '@/components/molecules/marketing/ProductServiceForm';
 import { CompanyLocationFields } from '@/components/molecules/marketing/CompanyLocationForm';
 import { SaleStageFields } from '@/components/molecules/marketing/SaleStageForm';
 
@@ -63,7 +60,7 @@ export function ProspectPreview({
             value={labelFor(businessTypeOptions, company.businessType)}
           />
           {/* <Field label="Decision Maker" value={company.contactName} /> */}
-          <Field label="Decision Maker Role" value={labelFor(roleOptions, company.roleJobTitle)} />
+          <Field label="Contact Person Role" value={labelFor(roleOptions, company.roleJobTitle)} />
         </div>
       </ProspectFormSection>
 
@@ -72,9 +69,10 @@ export function ProspectPreview({
           <Field label="Name" value={company.contactPerson} />
           <Field label="Phone" value={company.phone} />
           <Field label="Email" value={company.email} />
+          <Field label="Date of Birth" value={company.dateOfBirth} />
           {!hideInteraction && (
             <Field
-              label="Interaction Type"
+              label="Follow-up Type"
               value={labelFor(interactionTypeOptions, company.interactionType)}
             />
           )}
@@ -88,7 +86,7 @@ export function ProspectPreview({
           {productRows.map((row) => (
             <div
               key={row.id}
-              className="grid grid-cols-6 gap-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5"
+              className="grid grid-cols-4 gap-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5"
             >
               <Field
                 label="Product/Service"
@@ -97,14 +95,6 @@ export function ProspectPreview({
               <Field label="Expected Revenue" value={formatMoney(row.expectedRevenue)} />
               <Field label="Achieved Revenue" value={formatMoney(row.achievedRevenue)} />
               <Field label="Expected Close Date" value={row.expectedCloseDate} />
-              <Field
-                label="Commission"
-                value={row.commissionRate?.trim() ? `${row.commissionRate}%` : ''}
-              />
-              <Field
-                label="Commission Amount"
-                value={row.commissionRate?.trim() ? formatMoney(derivedCommission(row)) : ''}
-              />
             </div>
           ))}
         </div>

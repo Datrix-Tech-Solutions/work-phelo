@@ -30,7 +30,6 @@ function toRows(products: ProspectDetailProduct[]): ProductServiceRow[] {
     expectedRevenue: p.expectedValue,
     achievedRevenue: p.achievedValue ?? '',
     expectedCloseDate: p.expectedCloseDate ? p.expectedCloseDate.slice(0, 10) : '',
-    commissionRate: p.commissionRate != null ? String(Number(p.commissionRate)) : '',
   }));
 }
 
@@ -63,7 +62,6 @@ export function EditProspectProductsModal({
           expectedValue: Number(row.expectedRevenue),
           achievedValue: row.achievedRevenue.trim() !== '' ? Number(row.achievedRevenue) : null,
           expectedCloseDate: row.expectedCloseDate || null,
-          commissionRate: row.commissionRate?.trim() ? Number(row.commissionRate) : null,
         })),
       },
       {
@@ -105,12 +103,7 @@ export function EditProspectProductsModal({
         </div>
       }
     >
-      <ProductServiceForm
-        rows={rows}
-        onChange={setRows}
-        productTypeOptions={options}
-        showCommission
-      />
+      <ProductServiceForm rows={rows} onChange={setRows} productTypeOptions={options} />
     </Modal>
   );
 }

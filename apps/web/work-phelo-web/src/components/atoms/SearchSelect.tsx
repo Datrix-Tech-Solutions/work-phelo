@@ -10,6 +10,8 @@ export interface SearchSelectOption {
   value: string;
   label: string;
   sublabel?: string;
+  /** Small leading visual shown beside the label in the list and in the field once selected. */
+  icon?: React.ReactNode;
   /** Shown in the list but greyed out and not selectable (e.g. a vehicle under maintenance). */
   disabled?: boolean;
   /** Short tag shown at the right of the option, typically the reason it is disabled. */
@@ -274,6 +276,7 @@ export function SearchSelect({
               : 'bg-transparent border-(--input-border,var(--color-gray-400))',
         )}
       >
+        {selected?.icon && <span className="mr-2 shrink-0 flex items-center">{selected.icon}</span>}
         <input
           ref={inputRef}
           type="text"
@@ -388,7 +391,12 @@ export function SearchSelect({
                       )}
                     >
                       <span className="flex items-center justify-between gap-2">
-                        <span className={cn(opt.disabled && 'opacity-50')}>{opt.label}</span>
+                        <span
+                          className={cn('flex items-center gap-2', opt.disabled && 'opacity-50')}
+                        >
+                          {opt.icon}
+                          {opt.label}
+                        </span>
                         {opt.tag && (
                           <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                             {opt.tag}

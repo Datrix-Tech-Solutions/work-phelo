@@ -9,7 +9,7 @@ export default function ProspectsLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const base = `/${tenantSlug}/marketing/prospects`;
 
-  const tabRoutes = [`${base}/all`, `${base}/upcoming-reminders`];
+  const tabRoutes = [`${base}/all`, `${base}/clients`];
   const showTabs = tabRoutes.some((r) => pathname === r);
 
   return (
@@ -17,7 +17,7 @@ export default function ProspectsLayout({ children }: { children: React.ReactNod
       {showTabs && (
         <div className="shrink-0">
           <div className={pageHeader}>
-            <h1 className="text-xl font-semibold text-gray-900">Prospects</h1>
+            <h1 className="text-xl font-semibold text-gray-900">Prospects & Clients</h1>
           </div>
           <ProspectsTabs base={base} className={pagePx} />
         </div>

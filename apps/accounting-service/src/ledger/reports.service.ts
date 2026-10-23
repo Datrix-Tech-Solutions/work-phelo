@@ -6,6 +6,7 @@ import {
 import {
   CashFlowCategory,
   GLAccountCategory,
+  JournalEntryType,
   JournalStatus,
   NormalBalance,
   Prisma,
@@ -291,14 +292,39 @@ export class ReportsService {
    * Income Statement's rules (posted and reversed journals, base currency, revenue as credit less
    * debit, expenses as debit less credit) so the two always agree.
    */
-  async incomeSeries(tenantId: string, query: IncomeSeriesReportQueryDto) {
-    const ranges = query.ranges.split(',').map((pair) => {
+  private parseSeriesRanges(ranges: string) {
+    return ranges.split(',').map((pair) => {
       const [fromDate, toDate] = pair.split(':');
       if (toDate < fromDate) {
         throw new BadRequestException(`Range ${pair} ends before it starts`);
       }
       return { fromDate, toDate };
     });
+  }
+
+  /** Operating, investing and financing totals for each range, for charting cash flow over time. */
+  async cashFlowSeries(tenantId: string, query: IncomeSeriesReportQueryDto) {
+    const ranges = this.parseSeriesRanges(query.ranges);
+    return Promise.all(
+      ranges.map(async ({ fromDate, toDate }) => {
+        const report = await this.cashFlowStatement(tenantId, {
+          fromDate,
+          toDate,
+        });
+        return {
+          fromDate,
+          toDate,
+          operating: report.operatingActivities.total,
+          investing: report.investingActivities.total,
+          financing: report.financingActivities.total,
+          netChangeInCash: report.netChangeInCash,
+        };
+      }),
+    );
+  }
+
+  async incomeSeries(tenantId: string, query: IncomeSeriesReportQueryDto) {
+    const ranges = this.parseSeriesRanges(query.ranges);
     const categories = [GLAccountCategory.REVENUE, GLAccountCategory.EXPENSE];
 
     const accounts = await this.prisma.gLAccount.findMany({
@@ -410,12 +436,18 @@ export class ReportsService {
 
   /**
    * Indirect-method Cash Flow Statement. Net Income is the starting line; every other account
-   * resolves to Operating (the default for asset/liability/equity), Investing, Financing or
-   * Excluded — see resolveCashFlowCategory. Cash & Bank accounts are always Excluded and instead
-   * make up the opening/closing cash figures. A revenue/expense account is normally left out
-   * entirely (it's already inside Net Income); tagging one Investing/Financing/Excluded backs
-   * it out of Operating and shows its own cash effect in that section instead — e.g. a "Gain on
-   * Sale of Equipment" account tagged Investing.
+   * resolves to Operating (the default for asset/liability), Financing (the default for equity),
+   * Investing, Financing, Cash & Cash Equivalents or Excluded — see resolveCashFlowCategory.
+   * Accounts linked in Cash & Bank, and accounts tagged Cash & Cash Equivalents (e.g. an
+   * overdraft repayable on demand), make up the opening/closing cash figures instead of a section.
+   * A revenue/expense account is normally left out entirely (it's already inside Net Income);
+   * tagging one Investing/Financing backs it out of Operating and shows its own cash effect in
+   * that section — e.g. a "Gain on Sale of Equipment" account tagged Investing. Tagging one
+   * Excluded (a non-cash item such as depreciation or a disposal gain/loss) backs it out of
+   * Operating too, and shows it in Investing/Financing only when the same journal entry also
+   * touches an account in that section (the asset being sold), so depreciation is just added back.
+   * Closing entries are ignored: they only move profit into equity and would zero out Net Income.
+   * The result carries a reconciliation of the three sections against the cash accounts' movement.
    */
   async cashFlowStatement(tenantId: string, query: CashFlowReportQueryDto) {
     const period = query.fiscalPeriodId
@@ -432,6 +464,7 @@ export class ReportsService {
         fromDate,
         toDate,
         fiscalPeriodId: query.fiscalPeriodId,
+        excludeEntryTypes: [JournalEntryType.CLOSING],
       }),
       this.findReportLines(tenantId, { beforeDate: fromDate }),
       this.prisma.accountingCashAccount.findMany({
@@ -440,6 +473,14 @@ export class ReportsService {
       }),
     ]);
     const cashAccountIds = new Set(cashAccounts.map((a) => a.glAccountId));
+    for (const line of [...periodLines, ...openingCashLines]) {
+      if (
+        this.resolveCashFlowCategory(line.glAccount) ===
+        CashFlowCategory.CASH_EQUIVALENT
+      ) {
+        cashAccountIds.add(line.glAccountId);
+      }
+    }
 
     const openingCash = this.sumIds(
       this.movementByAccount(openingCashLines),
@@ -450,6 +491,32 @@ export class ReportsService {
     const closingCash = openingCash.plus(cashMovement);
 
     const accounts = this.statementAccounts(periodLines);
+    // Which investing/financing accounts each journal entry touches, and each income/expense
+    // account's lines — used to place the investing half of a non-cash item (see doc above).
+    const entrySections = new Map<string, Set<CashFlowCategory>>();
+    const linesByAccount = new Map<string, ReportLine[]>();
+    for (const line of periodLines) {
+      const { category } = line.glAccount;
+      if (
+        category === GLAccountCategory.REVENUE ||
+        category === GLAccountCategory.EXPENSE
+      ) {
+        const list = linesByAccount.get(line.glAccountId) ?? [];
+        list.push(line);
+        linesByAccount.set(line.glAccountId, list);
+        continue;
+      }
+      if (cashAccountIds.has(line.glAccountId)) continue;
+      const section = this.balanceSheetCashFlowCategory(line.glAccount);
+      if (
+        section === CashFlowCategory.INVESTING ||
+        section === CashFlowCategory.FINANCING
+      ) {
+        const sections = entrySections.get(line.journalEntryId) ?? new Set();
+        sections.add(section);
+        entrySections.set(line.journalEntryId, sections);
+      }
+    }
     let netIncome = zero;
     let totalOperating = zero;
     let totalInvesting = zero;
@@ -490,7 +557,13 @@ export class ReportsService {
             ? netIncome.plus(normalChange)
             : netIncome.minus(normalChange);
         const category = this.resolveCashFlowCategory(account);
-        if (category === CashFlowCategory.OPERATING || !category) continue;
+        if (
+          category === CashFlowCategory.OPERATING ||
+          category === CashFlowCategory.CASH_EQUIVALENT ||
+          !category
+        ) {
+          continue;
+        }
         const row = {
           account: this.accountSummary(account),
           amount: this.money(cashEffect),
@@ -506,12 +579,39 @@ export class ReportsService {
         } else if (category === CashFlowCategory.FINANCING) {
           financingLines.push(row);
           totalFinancing = totalFinancing.plus(cashEffect);
+        } else if (category === CashFlowCategory.EXCLUDED) {
+          // Non-cash item: its cash side is whichever investing/financing account the same
+          // entry moves (the asset sold, the liability settled), if any.
+          let investingShare = zero;
+          let financingShare = zero;
+          for (const line of linesByAccount.get(account.id) ?? []) {
+            const sections = entrySections.get(line.journalEntryId);
+            const lineEffect = line.baseCredit.minus(line.baseDebit);
+            if (sections?.has(CashFlowCategory.INVESTING)) {
+              investingShare = investingShare.plus(lineEffect);
+            } else if (sections?.has(CashFlowCategory.FINANCING)) {
+              financingShare = financingShare.plus(lineEffect);
+            }
+          }
+          if (!investingShare.isZero()) {
+            investingLines.push({
+              account: row.account,
+              amount: this.money(investingShare),
+            });
+            totalInvesting = totalInvesting.plus(investingShare);
+          }
+          if (!financingShare.isZero()) {
+            financingLines.push({
+              account: row.account,
+              amount: this.money(financingShare),
+            });
+            totalFinancing = totalFinancing.plus(financingShare);
+          }
         }
         continue;
       }
 
-      const category =
-        this.resolveCashFlowCategory(account) ?? CashFlowCategory.OPERATING;
+      const category = this.balanceSheetCashFlowCategory(account);
       const row = {
         account: this.accountSummary(account),
         amount: this.money(cashEffect),
@@ -553,15 +653,42 @@ export class ReportsService {
       netChangeInCash: this.money(netChangeInCash),
       openingCash: this.money(openingCash),
       closingCash: this.money(closingCash),
+      // The three sections must add up to what the cash accounts actually did; a gap means an
+      // account that holds cash isn't linked/tagged as cash, or an account is tagged wrongly.
+      reconciliation: {
+        netChangeInCash: this.money(netChangeInCash),
+        cashMovement: this.money(cashMovement),
+        difference: this.money(netChangeInCash.minus(cashMovement)),
+        isReconciled: netChangeInCash.minus(cashMovement).abs().lessThan(0.005),
+      },
     };
   }
 
-  /** Cash accounts are always Excluded (handled by the caller, before this is reached). For
+  /** A balance sheet account's section: its own tag (account, group, classification), else
+   *  Financing for equity and Operating for everything else. */
+  private balanceSheetCashFlowCategory(account: {
+    category: GLAccountCategory;
+    cashFlowCategory: CashFlowCategory | null;
+    classification?: { cashFlowCategory: CashFlowCategory | null } | null;
+    accountGroup?: {
+      cashFlowCategory: CashFlowCategory | null;
+      classification: { cashFlowCategory: CashFlowCategory | null };
+    } | null;
+  }): CashFlowCategory {
+    return (
+      this.resolveCashFlowCategory(account) ??
+      (account.category === GLAccountCategory.EQUITY
+        ? CashFlowCategory.FINANCING
+        : CashFlowCategory.OPERATING)
+    );
+  }
+
+  /** Cash accounts are handled by the caller before this is reached. For
    *  everything else: the account's own tag, then its group's, then its classification's —
    *  the classification is read off the group when the account has one, off the account
    *  directly otherwise. Revenue/expense accounts with no tag anywhere return null (see
-   *  cashFlowStatement's isRevenueOrExpense branch); asset/liability/equity default to
-   *  Operating instead, applied by the caller. */
+   *  cashFlowStatement's isRevenueOrExpense branch); balance sheet accounts get their default
+   *  from balanceSheetCashFlowCategory. */
   private resolveCashFlowCategory(account: {
     category: GLAccountCategory;
     cashFlowCategory: CashFlowCategory | null;
@@ -598,6 +725,7 @@ export class ReportsService {
       subledgerId?: string;
       currency?: string;
       categories?: GLAccountCategory[];
+      excludeEntryTypes?: JournalEntryType[];
     },
   ) {
     return this.prisma.journalLine.findMany({
@@ -614,6 +742,9 @@ export class ReportsService {
         journalEntry: {
           tenantId,
           status: { in: reportJournalStatuses },
+          ...(filters.excludeEntryTypes
+            ? { entryType: { notIn: filters.excludeEntryTypes } }
+            : {}),
           ...(filters.fiscalPeriodId
             ? { fiscalPeriodId: filters.fiscalPeriodId }
             : {}),

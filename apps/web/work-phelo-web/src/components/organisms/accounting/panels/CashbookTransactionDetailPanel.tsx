@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -92,6 +93,7 @@ export function CashbookTransactionDetailPanel({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const { can } = useAccountingAccess();
   const postTransaction = usePostCashbookTransaction();
   const rejectTransaction = useRejectCashbookTransaction();
   const deleteDraft = useDeleteCashbookDraft();
@@ -134,17 +136,20 @@ export function CashbookTransactionDetailPanel({
   const periodOpen = isPeriodOpen(transaction?.transactionDate);
   const isReversalEntry = !!transaction?.reversalOfTransactionId;
   const canChangePosted = isDirect && transaction?.status === 'POSTED' && periodOpen;
-  const canVoidPosted = canChangePosted;
+  const canVoidPosted = canChangePosted && can('accounting.transactions:CANCEL');
   // A posted direct receipt or payment is reversed here (never from its journal), which keeps the
   // entry and its journal in step. A reversal itself is undone by voiding it.
   const canReversePosted =
     isDirect &&
     transaction?.status === 'POSTED' &&
     !isReversalEntry &&
-    transaction.transactionType !== 'TRANSFER';
-  const canRestore = isDirect && transaction?.status === 'VOIDED' && periodOpen;
+    transaction.transactionType !== 'TRANSFER' &&
+    can('accounting.transactions:DELETE');
+  const canRestore =
+    isDirect && transaction?.status === 'VOIDED' && periodOpen && can('accounting.archive:EDIT');
   // A receipt's or payment's own cash entry goes with that record, which is archived instead.
-  const canDeleteArchived = transaction?.status === 'VOIDED' && !settlementRef;
+  const canDeleteArchived =
+    transaction?.status === 'VOIDED' && !settlementRef && can('accounting.archive:DELETE');
   const restoresAsIs = !!transaction?.voidedReversalOfTransactionId;
 
   // A draft entered on the Transactions page (not raised by another module) can be redone or
@@ -162,7 +167,8 @@ export function CashbookTransactionDetailPanel({
   };
   const canRedo =
     transaction?.transactionType === 'TRANSFER' || (!!typeCode && !!redoType(transaction));
-  const canEditPosted = canChangePosted && !isReversalEntry && canRedo;
+  const canEditPosted =
+    canChangePosted && !isReversalEntry && canRedo && can('accounting.transactions:APPROVE');
 
   // A direct receipt or payment can be completed or turned down. Customer receipts and vendor
   // payments (sourceModule ACCOUNTING) are handled through their own documents instead.
@@ -343,7 +349,7 @@ export function CashbookTransactionDetailPanel({
                   Open {settlementRef.type === 'RECEIPT' ? 'receipt' : 'payment'}
                 </Button>
               )}
-              {transaction.status === 'DRAFT' && (
+              {transaction.status === 'DRAFT' && can('accounting.transactions:APPROVE') && (
                 <Button
                   onClick={handlePost}
                   isLoading={postTransaction.isPending}

@@ -1,10 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import type { PermissionSet, PermissionSetMember } from '@/types/roles';
 import type { TenantUser } from '@/types/tenant';
 
@@ -14,7 +14,7 @@ interface PermissionSetMembersPanelProps {
   permissionSet: PermissionSet;
   members: PermissionSetMember[];
   users: TenantUser[];
-  onAssign: (userId: string) => void;
+  onAssign: (userIds: string[]) => void;
   onRemove: (userId: string) => void;
   isAssigning?: boolean;
   isRemoving?: boolean;
@@ -47,7 +47,7 @@ export function PermissionSetMembersPanel({
   isRemoving,
   isLoadingMembers,
 }: PermissionSetMembersPanelProps) {
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const assignedIds = useMemo(() => new Set(members.map((member) => member.id)), [members]);
 
   const assignableUsers = useMemo(
@@ -63,15 +63,16 @@ export function PermissionSetMembersPanel({
   );
 
   const handleAssign = () => {
-    if (!selectedUserId) return;
-    onAssign(selectedUserId);
-    setSelectedUserId('');
+    if (selectedUserIds.length === 0) return;
+    onAssign(selectedUserIds);
+    setSelectedUserIds([]);
   };
 
   return (
-    <SidePanel
+    <Modal
       isOpen={isOpen}
       onClose={onClose}
+      width="max-w-2xl"
       title="Manage Members"
       description={`Assign employees to ${permissionSet.name} and remove them when they no longer need this access.`}
       footer={
@@ -133,22 +134,22 @@ export function PermissionSetMembersPanel({
 
       <div className="flex flex-col gap-3">
         <p className="text-sm font-bold text-gray-900">Add member</p>
-        <SearchSelect
-          placeholder="Select an employee..."
+        <MultiSelect
+          placeholder="Select employees..."
           options={assignableUsers}
-          value={selectedUserId}
-          onChange={setSelectedUserId}
+          value={selectedUserIds}
+          onChange={setSelectedUserIds}
         />
         <Button
           onClick={handleAssign}
-          disabled={!selectedUserId}
+          disabled={selectedUserIds.length === 0}
           isLoading={isAssigning}
           loadingText="Adding..."
           variant="secondary"
         >
-          Add Member
+          Add {selectedUserIds.length > 1 ? `${selectedUserIds.length} Members` : 'Member'}
         </Button>
       </div>
-    </SidePanel>
+    </Modal>
   );
 }

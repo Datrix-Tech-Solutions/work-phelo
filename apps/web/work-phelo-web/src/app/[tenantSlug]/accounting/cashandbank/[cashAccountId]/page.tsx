@@ -1,10 +1,12 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { CashAccountOverview } from '@/components/molecules/accounting/CashAccountOverview';
+import { ReconcileCashAccountModal } from '@/components/organisms/accounting/panels/ReconcileCashAccountModal';
 import { GLAccountLedger } from '@/components/organisms/accounting/GLAccountLedger';
 import { useCashAccount, useCashAccountStats } from '@/hooks';
 
@@ -27,8 +29,16 @@ export default function CashAccountDetailPage({
 }) {
   const { tenantSlug, cashAccountId } = use(params);
 
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+
   const { data: account, isLoading } = useCashAccount(cashAccountId);
-  const { data: stats, isLoading: isLoadingStats } = useCashAccountStats(account?.glAccountId);
+  const { data: stats, isLoading: isLoadingStats } = useCashAccountStats(account?.glAccountId, {
+    fromDate,
+    toDate,
+  });
+  const router = useRouter();
   const base = `/${tenantSlug}/accounting/cashandbank`;
 
   return (
@@ -75,7 +85,25 @@ export default function CashAccountDetailPage({
             />
           </div>
 
-          <GLAccountLedger accountId={account.glAccountId} />
+          <GLAccountLedger
+            accountId={account.glAccountId}
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onReconcile={() => setReconcileOpen(true)}
+          />
+          {reconcileOpen && (
+            <ReconcileCashAccountModal
+              accountName={account.name}
+              onClose={() => setReconcileOpen(false)}
+              onReconcile={({ fromDate, toDate, bankOpeningBalance, bankClosingBalance }) =>
+                router.push(
+                  `${base}/${cashAccountId}/reconcile?from=${fromDate}&to=${toDate}&bankOpening=${encodeURIComponent(bankOpeningBalance)}&bankClosing=${encodeURIComponent(bankClosingBalance)}`,
+                )
+              }
+            />
+          )}
         </>
       )}
     </div>

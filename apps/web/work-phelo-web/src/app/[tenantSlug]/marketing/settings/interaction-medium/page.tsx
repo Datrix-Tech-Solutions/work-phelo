@@ -86,7 +86,7 @@ export default function InteractionMediumPage() {
         (i) => i.id !== editingId && i.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
       )
     )
-      next.name = 'This interaction medium already exists. Please enter a different name.';
+      next.name = 'This follow-up medium already exists. Please enter a different name.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -103,14 +103,13 @@ export default function InteractionMediumPage() {
         { name, ...(description ? { description } : {}), displayOrder: itemData.length },
         {
           onSuccess: () => {
-            toast.success('Interaction medium added');
+            toast.success('Follow-up medium added');
             entry.finishSave(
-              { title: 'Interaction Medium Added!', message: `${name} has been added.` },
+              { title: 'Follow-up Medium Added!', message: `${name} has been added.` },
               () => setPanelOpen(false),
             );
           },
-          onError: (error) =>
-            toast.error(apiErrorMessage(error, 'Failed to add interaction medium')),
+          onError: (error) => toast.error(apiErrorMessage(error, 'Failed to add follow-up medium')),
         },
       );
     } else if (editingId) {
@@ -133,12 +132,12 @@ export default function InteractionMediumPage() {
       { id: editingId, name, description },
       {
         onSuccess: () => {
-          toast.success('Interaction medium updated');
+          toast.success('Follow-up medium updated');
           renameGuard.closeConfirm();
           setPanelOpen(false);
         },
         onError: (error) =>
-          toast.error(apiErrorMessage(error, 'Failed to update interaction medium')),
+          toast.error(apiErrorMessage(error, 'Failed to update follow-up medium')),
       },
     );
   }
@@ -152,7 +151,7 @@ export default function InteractionMediumPage() {
     if (!deleteId) return;
     deleteItem.mutate(deleteId, {
       onSuccess: () => {
-        toast.success('Interaction medium deleted');
+        toast.success('Follow-up medium deleted');
         setDeleteId(null);
       },
       onError: (error) => {
@@ -160,26 +159,26 @@ export default function InteractionMediumPage() {
           setInUseMessage(apiErrorMessage(error, 'This item is in use and cannot be deleted.'));
           return;
         }
-        toast.error(apiErrorMessage(error, 'Failed to delete interaction medium'));
+        toast.error(apiErrorMessage(error, 'Failed to delete follow-up medium'));
       },
     });
   }
 
   if (isLoading) {
-    return <p className="text-sm text-gray-400 text-center py-8">Loading interaction mediums...</p>;
+    return <p className="text-sm text-gray-400 text-center py-8">Loading follow-up mediums...</p>;
   }
 
   if (isError) {
     return (
-      <p className="text-sm text-red-500 text-center py-8">Failed to load interaction mediums.</p>
+      <p className="text-sm text-red-500 text-center py-8">Failed to load follow-up mediums.</p>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
       <CardList
-        title="Interaction Mediums"
-        addLabel="Add Interaction Medium"
+        title="Follow-up Mediums"
+        addLabel="Add Follow-up Medium"
         items={filtered}
         onAdd={openAdd}
         onEdit={openEdit}
@@ -192,7 +191,7 @@ export default function InteractionMediumPage() {
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
         {...(panelMode === 'add' ? entry.panelProps : {})}
-        title={panelMode === 'add' ? 'Add Interaction Medium' : 'Edit Interaction Medium'}
+        title={panelMode === 'add' ? 'Add Follow-up Medium' : 'Edit Follow-up Medium'}
         footer={
           <div className="flex items-center justify-end gap-3">
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
@@ -202,7 +201,7 @@ export default function InteractionMediumPage() {
               onClick={handleSave}
               isLoading={createItem.isPending || updateItem.isPending || renameGuard.isChecking}
             >
-              {panelMode === 'add' ? 'Add Interaction Medium' : 'Save Changes'}
+              {panelMode === 'add' ? 'Add Follow-up Medium' : 'Save Changes'}
             </Button>
           </div>
         }
@@ -212,7 +211,7 @@ export default function InteractionMediumPage() {
 
       <RenameInUseModal
         isOpen={renameGuard.confirmOpen}
-        itemLabel="Interaction medium"
+        itemLabel="Follow-up medium"
         isLoading={updateItem.isPending}
         onConfirm={saveUpdate}
         onClose={renameGuard.closeConfirm}
@@ -221,10 +220,10 @@ export default function InteractionMediumPage() {
       <Modal
         isOpen={!!deleteId}
         onClose={closeDelete}
-        title="Delete Interaction Medium"
+        title="Delete Follow-up Medium"
         description={
           inUseMessage ??
-          'Are you sure you want to delete this interaction medium? This action cannot be undone.'
+          'Are you sure you want to delete this follow-up medium? This action cannot be undone.'
         }
         width="max-w-sm"
         height="max-h-fit"

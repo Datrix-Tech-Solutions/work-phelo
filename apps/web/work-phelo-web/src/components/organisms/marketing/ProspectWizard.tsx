@@ -43,6 +43,7 @@ const EMPTY_COMPANY: CompanyInformationFields = {
   contactPerson: '',
   phone: '',
   email: '',
+  dateOfBirth: '',
   interactionType: '',
   roleJobTitle: '',
   sourceType: '',
@@ -245,7 +246,7 @@ export function ProspectWizard({
               toast,
             )}
             interactionTypeEmptyState={buildCreateOptionEmptyState(
-              'interaction type',
+              'follow-up type',
               createInteractionMedium,
               (id) => setCompanyForm((f) => ({ ...f, interactionType: id })),
               toast,
@@ -271,7 +272,6 @@ export function ProspectWizard({
             rows={productRows}
             onChange={setProductRows}
             productTypeOptions={productTypeOptions}
-            showCommission
           />
           {productsError && <p className="text-xs text-red-500">{productsError}</p>}
         </div>

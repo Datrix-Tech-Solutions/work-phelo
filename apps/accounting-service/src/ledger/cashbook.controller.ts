@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -21,11 +22,17 @@ import {
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { AccountingPermission } from './accounting.permissions';
+import {
+  ACCOUNTING_REFERENCE_READERS,
+  AccountingPermission,
+} from './accounting.permissions';
 import { CashbookService } from './cashbook.service';
 import { VoidEntryDto } from './dto/accounting.dto';
 import {
@@ -61,7 +68,7 @@ export class CashbookController {
     description:
       'Returns Accounting-owned cash account masters. These are linked to active, posting-enabled GL asset accounts and are independent of source modules.',
   })
-  @RequirePermissions(AccountingPermission.CASH_ACCOUNTS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   listCashAccounts(
     @Query() query: QueryCashAccountsDto,
     @Req() request: Request & { user: RequestUser },
@@ -90,7 +97,7 @@ export class CashbookController {
   @Get('cash-accounts/:cashAccountId')
   @ApiTags('Accounting - Cash Accounts')
   @ApiOperation({ summary: 'Get a tenant cash account' })
-  @RequirePermissions(AccountingPermission.CASH_ACCOUNTS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   getCashAccount(
     @Param('cashAccountId', ParseUUIDPipe) cashAccountId: string,
     @Req() request: Request & { user: RequestUser },
@@ -111,7 +118,19 @@ export class CashbookController {
     @Body() dto: UpdateCashAccountDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.updateCashAccount(request.user, cashAccountId, dto);
+    const user = request.user;
+    const admin = user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN';
+    // Activating or deactivating an account is its own permission, apart from managing it.
+    if (
+      dto.isActive !== undefined &&
+      !admin &&
+      !user.permissions.includes(AccountingPermission.CASH_ACCOUNTS_DEACTIVATE)
+    ) {
+      throw new ForbiddenException(
+        "You don't have permission to access this. Contact your administrator.",
+      );
+    }
+    return this.service.updateCashAccount(user, cashAccountId, dto);
   }
 
   @Get('cashbook')
@@ -121,7 +140,10 @@ export class CashbookController {
     description:
       'Paginated read model for standalone Accounting cashbook transactions with filters for account, date range, type, status and currency.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_VIEW)
+  @RequireAnyPermission(
+    AccountingPermission.TRANSACTIONS_VIEW,
+    AccountingPermission.CASH_ACCOUNTS_VIEW,
+  )
   listCashbook(
     @Query() query: QueryCashbookDto,
     @Req() request: Request & { user: RequestUser },
@@ -132,7 +154,10 @@ export class CashbookController {
   @Get('cashbook/:transactionId')
   @ApiTags('Accounting - Cashbook')
   @ApiOperation({ summary: 'Get a cashbook transaction with journal linkage' })
-  @RequirePermissions(AccountingPermission.CASHBOOK_VIEW)
+  @RequireAnyPermission(
+    AccountingPermission.TRANSACTIONS_VIEW,
+    AccountingPermission.CASH_ACCOUNTS_VIEW,
+  )
   getCashbookTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Req() request: Request & { user: RequestUser },
@@ -147,7 +172,7 @@ export class CashbookController {
     description:
       'Posting debits the selected cash account GL account and credits the selected offset account.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_CREATE)
   createReceipt(
     @Body() dto: CreateCashbookReceiptDto,
     @Req() request: Request & { user: RequestUser },
@@ -162,7 +187,7 @@ export class CashbookController {
     description:
       'Posting debits the selected offset account and credits the selected cash account GL account.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_CREATE)
   createPayment(
     @Body() dto: CreateCashbookPaymentDto,
     @Req() request: Request & { user: RequestUser },
@@ -177,7 +202,7 @@ export class CashbookController {
     description:
       'Posting debits the destination cash account GL account and credits the source cash account GL account. Cross-currency transfers require an agreed exchange rate; no live FX lookup is performed.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  @RequirePermissions(AccountingPermission.CASH_ACCOUNTS_MANAGE)
   createTransfer(
     @Body() dto: CreateCashbookTransferDto,
     @Req() request: Request & { user: RequestUser },
@@ -192,7 +217,7 @@ export class CashbookController {
     description:
       'Posting debits the selected expense/offset account and credits the affected cash account.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_CREATE)
   createCharge(
     @Body() dto: CreateCashbookChargeDto,
     @Req() request: Request & { user: RequestUser },
@@ -207,7 +232,7 @@ export class CashbookController {
     description:
       'Adjustments can increase or reduce the selected cash account. Corrections to posted entries should use reversal plus a new adjustment.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_CREATE)
   createAdjustment(
     @Body() dto: CreateCashbookAdjustmentDto,
     @Req() request: Request & { user: RequestUser },
@@ -222,7 +247,7 @@ export class CashbookController {
     description:
       'Changes the date, cash account, settlement method, account and references of a draft. The amount, quantity and unit price are fixed when it is raised and cannot be changed.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_CREATE)
   updateDraftTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Body() dto: UpdateCashbookDraftDto,
@@ -242,7 +267,10 @@ export class CashbookController {
     description:
       'Removes the draft for good. Posted entries are immutable. An entry raised by another module is rejected instead.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  @RequireAnyPermission(
+    AccountingPermission.TRANSACTIONS_POST,
+    AccountingPermission.CASH_ACCOUNTS_MANAGE,
+  )
   deleteDraftTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Req() request: Request & { user: RequestUser },
@@ -257,7 +285,7 @@ export class CashbookController {
     description:
       'Allowed while the entry’s fiscal period is open. The entry keeps its number and its journal is rewritten.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_POST)
   editPostedTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Body() dto: EditPostedCashbookDto,
@@ -271,7 +299,7 @@ export class CashbookController {
   @ApiOperation({
     summary: 'Void a posted cashbook entry while its period is open',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_VOID)
   voidPostedTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Body() dto: VoidEntryDto,
@@ -285,7 +313,7 @@ export class CashbookController {
   @ApiOperation({
     summary: 'Restore a voided cashbook entry, optionally with corrections',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  @RequirePermissions(AccountingPermission.ARCHIVE_RESTORE)
   restoreVoidedTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Body() dto: EditPostedCashbookDto,
@@ -305,7 +333,7 @@ export class CashbookController {
     description:
       'Marks the draft REJECTED with a reason. It never posts, keeps its record, and the module that raised it is told.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_POST)
   rejectTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Body() dto: RejectDraftDto,
@@ -321,7 +349,7 @@ export class CashbookController {
     description:
       'Atomically creates a balanced posted journal and marks the cashbook transaction POSTED. Duplicate posting is rejected.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_POST)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_POST)
   postTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Req() request: Request & { user: RequestUser },
@@ -336,7 +364,7 @@ export class CashbookController {
     description:
       'Creates an immutable linked reversal cashbook row and a reversing posted journal. Posted transaction facts are not edited.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_REVERSE)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_REVERSE)
   reverseTransaction(
     @Param('transactionId', ParseUUIDPipe) transactionId: string,
     @Body() dto: ReverseCashbookTransactionDto,

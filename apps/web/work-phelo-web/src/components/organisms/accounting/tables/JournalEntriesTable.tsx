@@ -1,5 +1,6 @@
 'use client';
 
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -61,6 +62,7 @@ function clientNames(journal: JournalEntryRecord) {
 }
 
 export function JournalEntriesTable() {
+  const { can } = useAccountingAccess();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [detailTarget, setDetailTarget] = useState<JournalEntryRecord | null>(null);
@@ -218,10 +220,14 @@ export function JournalEntriesTable() {
           setSearch(q);
           setPage(1);
         }}
-        actionButton={{
-          label: 'New Entry',
-          onClick: () => router.push(`/${tenantSlug}/accounting/journalentry/new`),
-        }}
+        actionButton={
+          can('accounting.journals:CREATE')
+            ? {
+                label: 'New Entry',
+                onClick: () => router.push(`/${tenantSlug}/accounting/journalentry/new`),
+              }
+            : undefined
+        }
         onRowClick={(row) => setDetailTarget(row)}
         emptyMessage="No journal entries found"
         currentPage={page}

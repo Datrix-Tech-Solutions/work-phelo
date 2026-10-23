@@ -123,6 +123,8 @@ export interface CreateProspectContactPayload {
   name: string;
   phone?: string;
   email?: string;
+  /** YYYY-MM-DD */
+  dateOfBirth?: string;
   decisionMakerTypeId?: string;
 }
 
@@ -206,6 +208,7 @@ export interface ProspectDetailContact {
   name: string;
   phone: string | null;
   email: string | null;
+  dateOfBirth: string | null;
   isPrimary: boolean;
   decisionMaker: ProspectReference | null;
 }
@@ -298,6 +301,8 @@ export interface UpdateProspectPayload {
     phone?: string | null;
     /** `null` removes the email address. */
     email?: string | null;
+    /** YYYY-MM-DD; `null` removes the date of birth. */
+    dateOfBirth?: string | null;
     decisionMakerTypeId?: string | null;
   };
   /** The complete desired set — existing rows left out are removed. */
@@ -309,11 +314,18 @@ export type FollowUpStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED';
 export type FollowUpSource = 'EXPLICIT' | 'DEFAULT';
 export type FollowUpUrgency = 'OVERDUE' | 'UPCOMING' | 'FUTURE';
 
+/*
+ * Naming: the code predates the current product words, so identifiers and API paths still use the
+ * old ones. In every label, message and comment people read:
+ *   "follow-up" = a contact that happened   (code: interaction, /interactions, ProspectInteraction)
+ *   "reminder"  = a scheduled future contact (code: follow-up, /follow-ups, FollowUp*, followUpId)
+ * There is no third "reminder" concept besides that second one.
+ */
 export interface FollowUpWorklistItem {
   prospectId: string;
   companyName: string;
   assignedUserId: string;
-  /** Null for a default (latest interaction + 7 days) follow-up, which can't be edited or cancelled. */
+  /** Null for a default (latest interaction + the tenant's reminder delay) follow-up, which can't be edited or cancelled. */
   followUpId: string | null;
   dueAt: string;
   note: string | null;
@@ -415,6 +427,8 @@ export interface CreateClientPayload {
   /** Products/services the client is linked to, with their terms — they start as PENDING. */
   products: AddClientProductPayload[];
   location: CreateProspectLocationPayload;
+  /** The first follow-up with the client; its date is the date contacted. */
+  initialInteraction?: { occurredAt: string };
 }
 
 export interface ConvertProspectPayload {
@@ -486,13 +500,35 @@ export interface UpdateClientPayload {
     phone?: string | null;
     /** `null` removes the email address. */
     email?: string | null;
+    /** YYYY-MM-DD; `null` removes the date of birth. */
+    dateOfBirth?: string | null;
     decisionMakerTypeId?: string | null;
   };
   location?: Partial<CreateProspectLocationPayload>;
 }
 
-/** BOOKED / ON_ROUTE come from approved trips; MAINTENANCE / RETIRED from HR. */
-export type FleetStatus = 'AVAILABLE' | 'BOOKED' | 'ON_ROUTE' | 'MAINTENANCE' | 'RETIRED';
+/**
+ * BOOKED / ON_ROUTE come from approved trips; DOCUMENTS_EXPIRED from an expired insurance or
+ * safety certificate; MAINTENANCE / RETIRED from HR.
+ */
+export type FleetStatus =
+  | 'AVAILABLE'
+  | 'BOOKED'
+  | 'ON_ROUTE'
+  | 'DOCUMENTS_EXPIRED'
+  | 'MAINTENANCE'
+  | 'RETIRED';
+
+/** A vehicle document that has expired, or will within the warning window. */
+export interface FleetDocumentAlert {
+  document: 'INSURANCE' | 'SAFETY_CERTIFICATE';
+  label: string;
+  state: 'EXPIRED' | 'EXPIRING_SOON';
+  /** YYYY-MM-DD, the last day the document is valid. */
+  expiresOn: string;
+  /** Negative once expired; 0 on the expiry day itself. */
+  daysLeft: number;
+}
 
 export type TripState = 'BOOKED' | 'ON_ROUTE';
 
@@ -526,6 +562,12 @@ export interface FleetVehicle {
   yearOfRegistration: number | null;
   fuelType: string | null;
   currentMileage: number | null;
+  /** Optional documents, YYYY-MM-DD. */
+  insuranceStartDate: string | null;
+  insuranceExpiryDate: string | null;
+  safetyCertificateIssuedOn: string | null;
+  safetyCertificateExpiresOn: string | null;
+  documentAlerts: FleetDocumentAlert[];
   branch: { id: string; name: string | null } | null;
   assignedDriver: { id: string; name: string | null } | null;
   status: FleetStatus;
@@ -567,6 +609,11 @@ export interface FleetDetailsPayload {
   fuelType: string;
   /** Optional; null clears it on update. */
   currentMileage?: number | null;
+  /** Optional documents (YYYY-MM-DD); each is a pair, and null clears it on update. */
+  insuranceStartDate?: string | null;
+  insuranceExpiryDate?: string | null;
+  safetyCertificateIssuedOn?: string | null;
+  safetyCertificateExpiresOn?: string | null;
 }
 
 export interface CreateFleetVehiclePayload extends FleetDetailsPayload {
@@ -798,7 +845,7 @@ export interface TransportRequestAllocationOptions {
 }
 
 /** Why a vehicle or driver can't be picked: maintenance, still out on an overdue trip, or booked. */
-export type AllocationBlock = 'MAINTENANCE' | 'OVERDUE' | 'BOOKED';
+export type AllocationBlock = 'MAINTENANCE' | 'DOCUMENTS' | 'OVERDUE' | 'BOOKED';
 
 export interface TransportRequestWindow {
   travelDate: string;
@@ -1523,6 +1570,12 @@ export interface MarketingSalesPersonnel {
   reps: MarketingSalesRep[];
 }
 
+/** A sales rep the Marketing dashboard can be filtered to. */
+export interface MarketingDashboardRep {
+  userId: string;
+  name: string;
+}
+
 /** Target progress for a period, optionally for one rep, plus the reps who have a target in it. */
 export interface MarketingTargetsOverview {
   count: number;
@@ -1531,4 +1584,97 @@ export interface MarketingTargetsOverview {
   remaining: string | null;
   percent: number | null;
   reps: { userId: string; name: string }[];
+}
+
+export interface CrmPreferences {
+  /** Days after a prospect's latest interaction that its automatic follow-up falls due. */
+  followUpDelayDays: number;
+}
+
+/** Company-wide transport figures for the Transport dashboard. */
+export interface TransportDashboardSummary {
+  kpis: {
+    /** Waiting for approval right now, whatever the period. */
+    pending: number;
+    /** Approved trips for today that are not completed. */
+    tripsToday: number;
+    onRoute: number;
+    overdue: number;
+    completed: { current: number; previous: number };
+    /** Requests cancelled or rejected in the period. */
+    closed: { current: number; previous: number };
+  };
+  /** Awaiting approval, oldest first, capped; `kpis.pending` is the full count. */
+  pendingRequests: {
+    requestId: string;
+    requesterName: string;
+    destination: string;
+    /** YYYY-MM-DD */
+    travelDate: string;
+    departureTime: string;
+    requestedAt: string;
+  }[];
+  /** Today's approved trips that are not completed, earliest first, capped. */
+  tripsToday: {
+    requestId: string;
+    requesterName: string;
+    destination: string;
+    departureTime: string;
+    returnTime: string | null;
+    vehicleName: string | null;
+    driverName: string | null;
+    selfDriven: boolean;
+    state: TripState;
+    overdue: boolean;
+  }[];
+  attention: {
+    overdueTrips: {
+      requestId: string;
+      requesterName: string;
+      destination: string;
+      travelDate: string;
+      returnTime: string | null;
+      vehicleName: string | null;
+    }[];
+    vehicleDocuments: {
+      assetId: string;
+      name: string;
+      assetNumber: string;
+      alerts: Pick<FleetDocumentAlert, 'label' | 'state' | 'expiresOn' | 'daysLeft'>[];
+    }[];
+    maintenance: { assetId: string; name: string; assetNumber: string }[];
+  };
+  /** Null when the fleet could not be read. */
+  fleet: {
+    /** Vehicles in service: everything but retired. */
+    total: number;
+    available: number;
+    booked: number;
+    onRoute: number;
+    documentsExpired: number;
+    maintenance: number;
+  } | null;
+}
+
+export interface TransportTrendPoint {
+  fromDate: string;
+  toDate: string;
+  requested: number;
+  completed: number;
+}
+
+/** A prospect or client contact whose birthday is coming up. */
+export interface MarketingDashboardBirthday {
+  id: string;
+  contactName: string;
+  companyName: string;
+  type: 'CLIENT' | 'PROSPECT';
+  companyId: string;
+  /** Next occurrence of the birthday, YYYY-MM-DD. */
+  date: string;
+}
+
+export interface MarketingDashboardBirthdays {
+  withinDays: number;
+  birthdays: MarketingDashboardBirthday[];
 }

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import {
   useCreateFleetVehicle,
   useFleetOptions,
@@ -22,6 +23,10 @@ interface FormValues {
   yearOfRegistration: string;
   fuelType: string;
   currentMileage: string;
+  insuranceStartDate: string;
+  insuranceExpiryDate: string;
+  safetyCertificateIssuedOn: string;
+  safetyCertificateExpiresOn: string;
   branchId: string;
   assignedDriverId: string;
   status: string;
@@ -29,7 +34,16 @@ interface FormValues {
 
 type FormErrors = Partial<
   Record<
-    'vehicleType' | 'make' | 'model' | 'yearOfRegistration' | 'fuelType' | 'currentMileage',
+    | 'vehicleType'
+    | 'make'
+    | 'model'
+    | 'yearOfRegistration'
+    | 'fuelType'
+    | 'currentMileage'
+    | 'insuranceStartDate'
+    | 'insuranceExpiryDate'
+    | 'safetyCertificateIssuedOn'
+    | 'safetyCertificateExpiresOn',
     string
   >
 >;
@@ -41,6 +55,10 @@ const EMPTY: FormValues = {
   yearOfRegistration: '',
   fuelType: '',
   currentMileage: '',
+  insuranceStartDate: '',
+  insuranceExpiryDate: '',
+  safetyCertificateIssuedOn: '',
+  safetyCertificateExpiresOn: '',
   branchId: '',
   assignedDriverId: '',
   status: 'AVAILABLE',
@@ -54,7 +72,9 @@ const INITIAL_STATUS_OPTIONS = [
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-2">{children}</p>
+    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest -mb-1">
+      {children}
+    </p>
   );
 }
 
@@ -67,6 +87,10 @@ function valuesFor(vehicle: FleetVehicle): FormValues {
     yearOfRegistration: vehicle.yearOfRegistration?.toString() ?? '',
     fuelType: vehicle.fuelType ?? '',
     currentMileage: vehicle.currentMileage?.toString() ?? '',
+    insuranceStartDate: vehicle.insuranceStartDate ?? '',
+    insuranceExpiryDate: vehicle.insuranceExpiryDate ?? '',
+    safetyCertificateIssuedOn: vehicle.safetyCertificateIssuedOn ?? '',
+    safetyCertificateExpiresOn: vehicle.safetyCertificateExpiresOn ?? '',
     branchId: vehicle.branch?.id ?? '',
   };
 }
@@ -129,6 +153,19 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
     if (values.currentMileage.trim() !== '' && (!Number.isInteger(mileage) || mileage < 0)) {
       next.currentMileage = 'Enter a valid mileage in km, or leave it blank.';
     }
+    // Insurance and the safety certificate are optional, but each needs both dates, in order.
+    const pairs = [
+      ['insuranceStartDate', 'insuranceExpiryDate', 'insurance'],
+      ['safetyCertificateIssuedOn', 'safetyCertificateExpiresOn', 'certificate'],
+    ] as const;
+    for (const [startKey, endKey, noun] of pairs) {
+      const start = values[startKey];
+      const end = values[endKey];
+      if (!start && !end) continue;
+      if (!start) next[startKey] = `Enter when the ${noun} starts, or clear the expiry date.`;
+      else if (!end) next[endKey] = `Enter when the ${noun} expires, or clear the start date.`;
+      else if (end < start) next[endKey] = 'The expiry date can’t be before the start date.';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -147,7 +184,24 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
         : vehicle
           ? { currentMileage: null }
           : {}),
+      ...documentDates(),
     };
+  }
+
+  function documentDates() {
+    const keys = [
+      'insuranceStartDate',
+      'insuranceExpiryDate',
+      'safetyCertificateIssuedOn',
+      'safetyCertificateExpiresOn',
+    ] as const;
+    // Editing: a blank date clears the stored one. Creating: just omit it.
+    const dates: Partial<Record<(typeof keys)[number], string | null>> = {};
+    for (const key of keys) {
+      if (values[key]) dates[key] = values[key];
+      else if (vehicle) dates[key] = null;
+    }
+    return dates;
   }
 
   function handleSubmit() {
@@ -252,21 +306,20 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
       <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
         <SectionTitle>Vehicle Details</SectionTitle>
 
-        <SearchSelect
-          label="Vehicle Type"
-          placeholder="Select vehicle type"
-          options={VEHICLE_TYPE_OPTIONS}
-          value={values.vehicleType}
-          onChange={(v) => set('vehicleType', v)}
-          error={errors.vehicleType}
-        />
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {textField('make', 'Make', 'eg; Toyota')}
           {textField('model', 'Model', 'eg; Hilux')}
+          <SearchSelect
+            label="Vehicle Type"
+            placeholder="Select vehicle type"
+            options={VEHICLE_TYPE_OPTIONS}
+            value={values.vehicleType}
+            onChange={(v) => set('vehicleType', v)}
+            error={errors.vehicleType}
+          />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {numberField('yearOfRegistration', 'Year of Registration', 'eg; 2022')}
           <SearchSelect
             label="Fuel Type"
@@ -276,22 +329,61 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
             onChange={(v) => set('fuelType', v)}
             error={errors.fuelType}
           />
+          {numberField('currentMileage', 'Current Mileage (km) — optional', 'eg; 45000')}
         </div>
 
-        {numberField('currentMileage', 'Current Mileage (km) — optional', 'eg; 45000')}
+        <SectionTitle>Insurance — optional</SectionTitle>
+
+        <div className="grid grid-cols-2 gap-4">
+          <DatePicker
+            label="Date Insured"
+            value={values.insuranceStartDate}
+            onChange={(v) => set('insuranceStartDate', v)}
+            error={errors.insuranceStartDate}
+          />
+          <DatePicker
+            label="Expiration Date"
+            value={values.insuranceExpiryDate}
+            onChange={(v) => set('insuranceExpiryDate', v)}
+            minDate={values.insuranceStartDate || undefined}
+            error={errors.insuranceExpiryDate}
+          />
+        </div>
+
+        <SectionTitle>Vehicle Safety Certificate — optional</SectionTitle>
+
+        <div className="grid grid-cols-2 gap-4">
+          <DatePicker
+            label="Issued On"
+            value={values.safetyCertificateIssuedOn}
+            onChange={(v) => set('safetyCertificateIssuedOn', v)}
+            error={errors.safetyCertificateIssuedOn}
+          />
+          <DatePicker
+            label="Expires On"
+            value={values.safetyCertificateExpiresOn}
+            onChange={(v) => set('safetyCertificateExpiresOn', v)}
+            minDate={values.safetyCertificateIssuedOn || undefined}
+            error={errors.safetyCertificateExpiresOn}
+          />
+        </div>
+
+        <p className="text-xs text-gray-500 -mt-1">
+          A vehicle is unavailable for use once its insurance or safety certificate has expired. You
+          get a warning 30 days before.
+        </p>
 
         <SectionTitle>Assignment</SectionTitle>
 
-        <SearchSelect
-          label="Branch"
-          placeholder="Select branch"
-          options={branchOptions}
-          value={values.branchId}
-          onChange={(v) => set('branchId', v)}
-        />
-
-        {!isEdit && (
-          <>
+        <div className="grid grid-cols-2 gap-4">
+          <SearchSelect
+            label="Branch"
+            placeholder="Select branch"
+            options={branchOptions}
+            value={values.branchId}
+            onChange={(v) => set('branchId', v)}
+          />
+          {!isEdit && (
             <SearchSelect
               label="Assigned Driver"
               placeholder="Select driver"
@@ -300,6 +392,11 @@ export function FleetVehiclePanel({ isOpen, onClose, vehicle }: Props) {
               onChange={(v) => set('assignedDriverId', v)}
               disabled={values.status === 'MAINTENANCE'}
             />
+          )}
+        </div>
+
+        {!isEdit && (
+          <>
             {options && driverOptions.length === 0 && (
               <p className="text-xs text-amber-600 -mt-1">
                 No transport officers yet. Add drivers under Transport Officers first.

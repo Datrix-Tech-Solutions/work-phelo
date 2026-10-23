@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
+import { ACCOUNTING_ADMIN_PERMISSIONS } from '@/components/molecules/accounting/AccountingPermissionSections';
 import { MARKETING_ADMIN_PERMISSIONS } from '@/components/molecules/marketing/MarketingPermissionSections';
 import type { PermissionAction, PermissionSetResourceDto } from '@/types/roles';
 
@@ -262,8 +263,9 @@ export const PERMISSION_TAG_MAPPING: Record<
 
   marketing_module_admin: MARKETING_ADMIN_PERMISSIONS,
 
+  accounting_module_admin: ACCOUNTING_ADMIN_PERMISSIONS,
+
   // Other modules — UI-only for now, not yet linked to backend permissions
-  accounting_module_admin: null,
   recruitment_module_admin: null,
 };
 

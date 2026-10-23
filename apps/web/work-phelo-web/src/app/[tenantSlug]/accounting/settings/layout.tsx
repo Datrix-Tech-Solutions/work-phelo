@@ -4,12 +4,15 @@ import { useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pagePx, pageHeader, pageContent } from '@/lib/layout';
 import { TabBar, TabGroup } from '@/components/molecules/shared/TabBar';
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 
 export default function AccountingSettingsLayout({ children }: { children: React.ReactNode }) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const base = `/${tenantSlug}/accounting/settings`;
 
-  const groups: TabGroup[] = [
+  const { canSeeTab } = useAccountingAccess();
+
+  const allGroups: TabGroup[] = [
     {
       tabs: [
         { key: 'transaction-types', label: 'Transaction Types', href: `${base}/transaction-types` },
@@ -28,6 +31,13 @@ export default function AccountingSettingsLayout({ children }: { children: React
       ],
     },
   ];
+
+  const groups = allGroups
+    .map((group) => ({
+      ...group,
+      tabs: group.tabs.filter((tab) => canSeeTab('settings', tab.key)),
+    }))
+    .filter((group) => group.tabs.length > 0);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
