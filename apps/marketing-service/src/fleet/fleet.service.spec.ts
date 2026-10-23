@@ -507,6 +507,141 @@ describe('FleetService', () => {
     });
   });
 
+  describe('vehicle documents', () => {
+    const daysFromNow = (days: number) => {
+      const date = new Date();
+      date.setUTCDate(date.getUTCDate() + days);
+      return new Date(`${date.toISOString().slice(0, 10)}T00:00:00.000Z`);
+    };
+    const listOne = async (
+      documents: Record<string, unknown>,
+      tripList: unknown[] = [],
+    ) => {
+      hr.listVehicles.mockResolvedValue([asset()]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([
+        details(documents),
+      ]);
+      trips.activeTrips.mockResolvedValue(tripList);
+      return (await service.list(user)).data[0];
+    };
+
+    it('is unaffected when no document dates are on file', async () => {
+      const row = await listOne({});
+      expect(row.status).toBe('AVAILABLE');
+      expect(row.documentAlerts).toEqual([]);
+      expect(row.insuranceExpiryDate).toBeNull();
+    });
+
+    it('becomes unavailable when the insurance has expired', async () => {
+      const row = await listOne({ insuranceExpiryDate: daysFromNow(-1) });
+      expect(row.status).toBe('DOCUMENTS_EXPIRED');
+      expect(row.documentAlerts).toMatchObject([
+        { document: 'INSURANCE', state: 'EXPIRED' },
+      ]);
+    });
+
+    it('becomes unavailable when only the safety certificate has expired', async () => {
+      const row = await listOne({
+        insuranceExpiryDate: daysFromNow(200),
+        safetyCertificateExpiresOn: daysFromNow(-5),
+      });
+      expect(row.status).toBe('DOCUMENTS_EXPIRED');
+    });
+
+    it('stays available, with a warning, until the expiry date has passed', async () => {
+      const row = await listOne({ insuranceExpiryDate: daysFromNow(0) });
+      expect(row.status).toBe('AVAILABLE');
+      expect(row.documentAlerts).toMatchObject([
+        { state: 'EXPIRING_SOON', daysLeft: 0 },
+      ]);
+    });
+
+    it('overrides a booked trip but not a trip already on the road', async () => {
+      const expired = { insuranceExpiryDate: daysFromNow(-1) };
+      expect((await listOne(expired, [trip({ state: 'BOOKED' })])).status).toBe(
+        'DOCUMENTS_EXPIRED',
+      );
+      expect(
+        (await listOne(expired, [trip({ state: 'ON_ROUTE' })])).status,
+      ).toBe('ON_ROUTE');
+    });
+
+    it('filters the list by the expired status', async () => {
+      hr.listVehicles.mockResolvedValue([
+        asset(),
+        asset({ id: 'asset-2', name: 'Other' }),
+      ]);
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([
+        details({ insuranceExpiryDate: daysFromNow(-3) }),
+        details({ assetId: 'asset-2' }),
+      ]);
+      const result = await service.list(user, { status: 'DOCUMENTS_EXPIRED' });
+      expect(result.data.map((row) => row.assetId)).toEqual(['asset-1']);
+    });
+
+    it('stores the dates when a vehicle is created', async () => {
+      hr.createVehicle.mockResolvedValue(asset());
+      prisma.marketingFleetVehicle.create.mockResolvedValue(details());
+      await service.create(user, {
+        ...(createDto as object),
+        insuranceStartDate: '2026-01-01',
+        insuranceExpiryDate: '2026-12-31',
+      } as never);
+      const [arg] = prisma.marketingFleetVehicle.create.mock.calls[0] as [
+        { data: Record<string, unknown> },
+      ];
+      expect(arg.data).toMatchObject({
+        insuranceStartDate: new Date('2026-01-01T00:00:00.000Z'),
+        insuranceExpiryDate: new Date('2026-12-31T00:00:00.000Z'),
+      });
+    });
+
+    it('refuses half a document or an expiry before its start, before touching HR', async () => {
+      await expect(
+        service.create(user, {
+          ...(createDto as object),
+          insuranceExpiryDate: '2026-12-31',
+        } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.create(user, {
+          ...(createDto as object),
+          safetyCertificateIssuedOn: '2026-05-01',
+          safetyCertificateExpiresOn: '2026-04-30',
+        } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(hr.createVehicle).not.toHaveBeenCalled();
+    });
+
+    it('checks an update against the dates already stored', async () => {
+      hr.getVehicle.mockResolvedValue(asset());
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue(
+        details({
+          insuranceStartDate: new Date('2026-06-01T00:00:00.000Z'),
+          insuranceExpiryDate: new Date('2027-05-31T00:00:00.000Z'),
+        }),
+      );
+      await expect(
+        service.update(user, 'asset-1', {
+          insuranceExpiryDate: '2026-05-31',
+        } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      prisma.marketingFleetVehicle.upsert.mockResolvedValue(details());
+      await service.update(user, 'asset-1', {
+        insuranceStartDate: null,
+        insuranceExpiryDate: null,
+      } as never);
+      const [arg] = prisma.marketingFleetVehicle.upsert.mock.calls[0] as [
+        { update: Record<string, unknown> },
+      ];
+      expect(arg.update).toMatchObject({
+        insuranceStartDate: null,
+        insuranceExpiryDate: null,
+      });
+    });
+  });
+
   describe('assignDriver', () => {
     it('only assigns active transport officers', async () => {
       officers.assertActiveOfficer.mockRejectedValue(

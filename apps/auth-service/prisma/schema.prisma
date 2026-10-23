@@ -71,6 +71,7 @@ enum PermissionAction {
   ASSIGN
   CANCEL
   VERIFY
+  DEACTIVATE
 
   @@schema("w_auth")
 }
@@ -78,47 +79,48 @@ enum PermissionAction {
 // ── Tenant ─────────────────────────────────────────────────────────────────
 
 model Tenant {
-  id             String       @id @default(uuid())
-  name           String
-  slug           String       @unique
-  email          String       @unique
-  phone          String?
-  address        String?
-  country        String       @default("GH")
-  currency       String       @default("GHS")
-  status         TenantStatus @default(PENDING)
-  moduleConfig   Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
-  featureConfig  Json         @default("{\"hr\": {\"leave\": false, \"time\": false, \"payroll\": false, \"appraisals\": false, \"projects\": false, \"assets\": false}, \"marketing\": {\"leads\": false, \"pipeline\": false, \"contacts\": false}}")
-  integrationConfig Json      @default("{}")
+  id                String       @id @default(uuid())
+  name              String
+  slug              String       @unique
+  email             String       @unique
+  phone             String?
+  address           String?
+  country           String       @default("GH")
+  currency          String       @default("GHS")
+  status            TenantStatus @default(PENDING)
+  moduleConfig      Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
+  featureConfig     Json         @default("{\"hr\": {\"leave\": false, \"time\": false, \"payroll\": false, \"appraisals\": false, \"projects\": false, \"assets\": false}, \"marketing\": {\"leads\": false, \"pipeline\": false, \"contacts\": false}}")
+  integrationConfig Json         @default("{}")
   // Per-company display names for module features, e.g. {"projects": "Case"} (singular).
-  labelConfig    Json         @default("{}")
-  logoUrl        String?
-  website        String?
-  industry       String?
-  size           String?
-  subscriptionId String?
-  trialEndsAt    DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  labelConfig       Json         @default("{}")
+  logoUrl           String?
+  website           String?
+  industry          String?
+  size              String?
+  subscriptionId    String?
+  trialEndsAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  users           User[]
-  permissionSets  PermissionSet[]
-  userPermissions UserPermission[]
-  branding        TenantBranding?
-  documentProfile TenantDocumentProfile?
-  bankAccounts    TenantBankAccount[]
+  users            User[]
+  permissionSets   PermissionSet[]
+  userPermissions  UserPermission[]
+  branding         TenantBranding?
+  documentProfile  TenantDocumentProfile?
+  bankAccounts     TenantBankAccount[]
+  documentTemplate TenantDocumentTemplate?
 
   @@schema("w_auth")
 }
 
 model TenantBranding {
-  id                  String   @id @default(uuid())
-  tenantId            String   @unique
-  appName             String?
-  appLogoObjectKey    String?
-  appLogoMimeType     String?
-  appLogoFileName     String?
-  appLogoSizeBytes    Int?
+  id                   String   @id @default(uuid())
+  tenantId             String   @unique
+  appName              String?
+  appLogoObjectKey     String?
+  appLogoMimeType      String?
+  appLogoFileName      String?
+  appLogoSizeBytes     Int?
   sidebarLogoObjectKey String?
   sidebarLogoMimeType  String?
   sidebarLogoFileName  String?
@@ -127,23 +129,23 @@ model TenantBranding {
   loginLogoMimeType    String?
   loginLogoFileName    String?
   loginLogoSizeBytes   Int?
-  logoObjectKey       String?
-  logoDisplayUrl      String?
-  faviconObjectKey    String?
-  faviconDisplayUrl   String?
-  faviconMimeType     String?
-  faviconFileName     String?
-  faviconSizeBytes    Int?
-  primaryColor        String?
-  secondaryColor      String?
-  accentColor         String?
-  sidebarColor        String?
-  emailHeaderColor    String?
-  documentHeaderColor String?
-  themeMode           String   @default("LIGHT")
-  updatedByUserId     String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  logoObjectKey        String?
+  logoDisplayUrl       String?
+  faviconObjectKey     String?
+  faviconDisplayUrl    String?
+  faviconMimeType      String?
+  faviconFileName      String?
+  faviconSizeBytes     Int?
+  primaryColor         String?
+  secondaryColor       String?
+  accentColor          String?
+  sidebarColor         String?
+  emailHeaderColor     String?
+  documentHeaderColor  String?
+  themeMode            String   @default("LIGHT")
+  updatedByUserId      String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   updatedBy User?  @relation("TenantBrandingUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
@@ -194,6 +196,29 @@ model TenantDocumentProfile {
   @@schema("w_auth")
 }
 
+model TenantDocumentTemplate {
+  id                 String   @id @default(uuid())
+  tenantId           String   @unique
+  config             Json
+  watermarkObjectKey String?
+  watermarkMimeType  String?
+  watermarkFileName  String?
+  watermarkSizeBytes Int?
+  version            Int      @default(1)
+  createdByUserId    String?
+  updatedByUserId    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("TenantDocumentTemplateCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy User?  @relation("TenantDocumentTemplateUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
+  @@schema("w_auth")
+}
+
 model TenantBankAccount {
   id              String   @id @default(uuid())
   tenantId        String
@@ -228,13 +253,13 @@ model TenantBankAccount {
 
 model Resource {
   id          String   @id @default(uuid())
-  name        String   @unique  // e.g. "employees", "leave", "payroll"
-  module      String            // e.g. "HR", "AUTH", "FINANCE"
+  name        String   @unique // e.g. "employees", "leave", "payroll"
+  module      String // e.g. "HR", "AUTH", "FINANCE"
   description String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  userPermissions       UserPermission[]
+  userPermissions        UserPermission[]
   permissionSetResources PermissionSetResource[]
 
   @@schema("w_auth")
@@ -246,16 +271,16 @@ model Resource {
 
 model UserPermission {
   id         String           @id @default(uuid())
-  tenantId   String                               // leading filter — always scope by this first
+  tenantId   String // leading filter — always scope by this first
   userId     String
   resourceId String
   action     PermissionAction
-  grantedBy  String                               // userId of who granted
+  grantedBy  String // userId of who granted
   grantedAt  DateTime         @default(now())
-  expiresAt  DateTime?                            // null = never expires
-  revokedBy  String?                              // userId of who revoked
+  expiresAt  DateTime? // null = never expires
+  revokedBy  String? // userId of who revoked
   revokedAt  DateTime?
-  isActive   Boolean          @default(true)      // false = soft-revoked
+  isActive   Boolean          @default(true) // false = soft-revoked
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user     User     @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
@@ -275,7 +300,7 @@ model PermissionSet {
   tenantId    String
   name        String
   description String?
-  isSystem    Boolean  @default(false)   // system sets cannot be deleted
+  isSystem    Boolean  @default(false) // system sets cannot be deleted
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -324,42 +349,44 @@ model UserPermissionSet {
 // ── User ───────────────────────────────────────────────────────────────────
 
 model User {
-  id                  String      @id @default(uuid())
+  id                  String     @id @default(uuid())
   tenantId            String
   email               String
   password            String?
   firstName           String
   lastName            String
   phone               String?
-  role                UserRole    @default(EMPLOYEE)
-  status              UserStatus  @default(PENDING_VERIFICATION)
+  role                UserRole   @default(EMPLOYEE)
+  status              UserStatus @default(PENDING_VERIFICATION)
   avatarUrl           String?
-  isMfaEnabled        Boolean     @default(false)
+  isMfaEnabled        Boolean    @default(false)
   mfaMethod           MfaMethod?
   mfaSecret           String?
-  forcePasswordReset  Boolean     @default(false)
-  failedLoginAttempts Int         @default(0)
+  forcePasswordReset  Boolean    @default(false)
+  failedLoginAttempts Int        @default(0)
   lockedUntil         DateTime?
-  inviteToken         String?     @unique
+  inviteToken         String?    @unique
   inviteExpiresAt     DateTime?
   emailVerifiedAt     DateTime?
   lastLoginAt         DateTime?
   passwordChangedAt   DateTime?
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
-  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  refreshTokens       RefreshToken[]
-  otpCodes            OtpCode[]
-  socialAccounts      SocialAccount[]
-  userPermissions     UserPermission[]    @relation("UserPermissions")
-  grantedPermissions  UserPermission[]    @relation("GrantedPermissions")
-  permissionSets      UserPermissionSet[]
-  brandingUpdates     TenantBranding[]     @relation("TenantBrandingUpdatedBy")
-  documentProfilesCreated   TenantDocumentProfile[] @relation("TenantDocumentProfileCreatedBy")
-  documentProfilesUpdated   TenantDocumentProfile[] @relation("TenantDocumentProfileUpdatedBy")
-  tenantBankAccountsCreated TenantBankAccount[]     @relation("TenantBankAccountCreatedBy")
-  tenantBankAccountsUpdated TenantBankAccount[]     @relation("TenantBankAccountUpdatedBy")
+  tenant                    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens             RefreshToken[]
+  otpCodes                  OtpCode[]
+  socialAccounts            SocialAccount[]
+  userPermissions           UserPermission[]         @relation("UserPermissions")
+  grantedPermissions        UserPermission[]         @relation("GrantedPermissions")
+  permissionSets            UserPermissionSet[]
+  brandingUpdates           TenantBranding[]         @relation("TenantBrandingUpdatedBy")
+  documentProfilesCreated   TenantDocumentProfile[]  @relation("TenantDocumentProfileCreatedBy")
+  documentProfilesUpdated   TenantDocumentProfile[]  @relation("TenantDocumentProfileUpdatedBy")
+  documentTemplatesCreated  TenantDocumentTemplate[] @relation("TenantDocumentTemplateCreatedBy")
+  documentTemplatesUpdated  TenantDocumentTemplate[] @relation("TenantDocumentTemplateUpdatedBy")
+  tenantBankAccountsCreated TenantBankAccount[]      @relation("TenantBankAccountCreatedBy")
+  tenantBankAccountsUpdated TenantBankAccount[]      @relation("TenantBankAccountUpdatedBy")
   documents                 UserDocument[]
 
   @@unique([tenantId, email])
@@ -372,15 +399,15 @@ model User {
 // EmployeeDocument, which HR uploads about an employee ("Company Documents").
 
 model UserDocument {
-  id         String   @id @default(uuid())
-  tenantId   String
-  userId     String
-  category   String
-  objectKey  String
-  mimeType   String
-  fileName   String
-  sizeBytes  Int
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  category  String
+  objectKey String
+  mimeType  String
+  fileName  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -390,16 +417,16 @@ model UserDocument {
 // ── RefreshToken ───────────────────────────────────────────────────────────
 
 model RefreshToken {
-  id          String   @id @default(uuid())
-  userId      String
-  token       String   @unique
-  expiresAt   DateTime
-  ipAddress   String?
-  userAgent   String?
-  deviceName  String?
-  deviceId    String?
-  isRevoked   Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  deviceName String?
+  deviceId   String?
+  isRevoked  Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

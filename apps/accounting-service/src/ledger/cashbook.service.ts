@@ -90,7 +90,10 @@ const cashbookInclude = {
   offsetGlAccount: { select: { id: true, code: true, name: true } },
   lines: {
     orderBy: { sequence: 'asc' as const },
-    include: { glAccount: { select: { id: true, code: true, name: true } } },
+    include: {
+      glAccount: { select: { id: true, code: true, name: true } },
+      taxType: { select: { id: true, code: true, name: true, rate: true } },
+    },
   },
   offsetSubledgerAccount: {
     select: { id: true, code: true, name: true, type: true },
@@ -610,11 +613,13 @@ export class CashbookService {
     if (dto.lines) {
       replacementLines = normalizeEntryLines({ lines: dto.lines });
       const { lines, total } = replacementLines;
-      await Promise.all(
-        [...new Set(lines.map((line) => line.glAccountId))].map((glAccountId) =>
-          this.assertPostingOffsetAccount(user.tenantId, glAccountId),
+      await Promise.all([
+        ...[...new Set(lines.map((line) => line.glAccountId))].map(
+          (glAccountId) =>
+            this.assertPostingOffsetAccount(user.tenantId, glAccountId),
         ),
-      );
+        this.assertTaxTypesExist(user.tenantId, lines),
+      ]);
       const cashAccount = await this.prisma.accountingCashAccount.findFirst({
         where: {
           id:
@@ -1667,6 +1672,7 @@ export class CashbookService {
             (transaction.lines ?? []).map((line) => ({
               kind: line.kind,
               glAccountId: line.glAccountId,
+              taxTypeId: line.taxTypeId,
               amount: line.amount,
               quantity: line.quantity ? Number(line.quantity.toString()) : null,
               unitPrice: line.unitPrice
@@ -1777,6 +1783,7 @@ export class CashbookService {
         (glAccountId) =>
           this.assertPostingOffsetAccount(user.tenantId, glAccountId),
       ),
+      this.assertTaxTypesExist(user.tenantId, lines),
     ]);
     this.assertLinesAvoidCashAccount(lines, cashAccount.glAccountId);
     if (cashAccount.currency !== dto.currency) {
@@ -1981,6 +1988,7 @@ export class CashbookService {
     lines: {
       kind?: CashbookLineKind;
       glAccountId: string;
+      taxTypeId?: string | null;
       amount: Prisma.Decimal;
       quantity?: number | null;
       unitPrice?: number | null;
@@ -1991,6 +1999,7 @@ export class CashbookService {
       sequence: index + 1,
       kind: line.kind ?? CashbookLineKind.ITEM,
       glAccountId: line.glAccountId,
+      taxTypeId: line.taxTypeId ?? null,
       amount: line.amount,
       quantity: line.quantity ?? null,
       unitPrice: line.unitPrice ?? null,
@@ -2096,6 +2105,23 @@ export class CashbookService {
         'Offset GL account must be active and posting-enabled',
       );
     }
+  }
+
+  private async assertTaxTypesExist(
+    tenantId: string,
+    lines: { taxTypeId?: string }[],
+  ) {
+    const ids = [
+      ...new Set(
+        lines.flatMap((line) => (line.taxTypeId ? [line.taxTypeId] : [])),
+      ),
+    ];
+    if (ids.length === 0) return;
+    const found = await this.prisma.taxType.count({
+      where: { id: { in: ids }, tenantId },
+    });
+    if (found !== ids.length)
+      throw new BadRequestException('Tax type not found');
   }
 
   private async resolveOpenPeriod(

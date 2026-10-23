@@ -1,10 +1,7 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-export default async function AccountingSettingsPage({
-  params,
-}: {
-  params: Promise<{ tenantSlug: string }>;
-}) {
-  const { tenantSlug } = await params;
-  redirect(`/${tenantSlug}/accounting/settings/transaction-types`);
+import { AccountingTabRedirect } from '@/components/molecules/accounting/AccountingTabRedirect';
+
+export default function AccountingSettingsPage() {
+  return <AccountingTabRedirect page="settings" />;
 }

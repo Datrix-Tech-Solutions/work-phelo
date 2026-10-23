@@ -16,5 +16,6 @@ import { HrFleetClient } from './hr-fleet.client';
   ],
   controllers: [FleetController],
   providers: [FleetService, HrFleetClient],
+  exports: [FleetService],
 })
 export class FleetModule {}

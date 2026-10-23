@@ -1650,6 +1650,27 @@ describe('RequestsService', () => {
         .mockResolvedValueOnce(overdue);
     }
 
+    it('flags a vehicle whose insurance or safety certificate has expired', async () => {
+      arrange();
+      prisma.marketingFleetVehicle.findMany.mockResolvedValue([
+        {
+          assetId: 'v1',
+          make: 'Toyota',
+          model: 'Hilux',
+          insuranceExpiryDate: at('2020-01-31'),
+        },
+      ]);
+
+      const result = await service.allocationOptions(user(), 'req-1');
+
+      expect(result.vehicles[0]).toMatchObject({
+        assetId: 'v1',
+        available: false,
+        unavailableKind: 'DOCUMENTS',
+        unavailableReason: 'Insurance expired 31 Jan 2020',
+      });
+    });
+
     it('flags maintenance, overdue and double-booked vehicles and drivers, and hides retired', async () => {
       arrange(
         [
@@ -3061,6 +3082,19 @@ describe('RequestsService', () => {
         }),
       ).rejects.toThrow(/either a driver or self-driven/);
       expect(prisma.marketingTransportRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a vehicle whose documents have expired', async () => {
+      fleet.getVehicle.mockResolvedValue(vehicle);
+      prisma.marketingFleetVehicle.findUnique.mockResolvedValue({
+        make: 'Toyota',
+        model: 'Hilux',
+        safetyCertificateExpiresOn: new Date('2020-03-05T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.create(user(), { ...createDto, preferredVehicleAssetId: 'v1' }),
+      ).rejects.toThrow(/Safety certificate expired 05 Mar 2020/);
     });
 
     it('refuses a vehicle that is under maintenance', async () => {

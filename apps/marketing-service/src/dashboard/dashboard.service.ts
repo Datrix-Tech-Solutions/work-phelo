@@ -9,12 +9,16 @@ import {
 import { AssigneesService } from '../assignees/assignees.service';
 import { MarketingCrmSettingsPermission as P } from '../crm-settings/crm-settings.permissions';
 import { PrismaService } from '../prisma/prisma.service';
+import { Range, inRange, toRange } from './range';
 import {
   SalesTargetsService,
   sumInvoiced,
 } from '../sales-targets/sales-targets.service';
 import {
   DashboardGrowthPoint,
+  DashboardUpcomingBirthdays,
+  QueryDashboardBirthdaysDto,
+  DashboardRep,
   DashboardRevenueByProduct,
   DashboardSalesPersonnel,
   DashboardStage,
@@ -27,19 +31,12 @@ import {
   DashboardTargetsOverview,
 } from './dto/dashboard-summary.dto';
 
-const DAY_MS = 86_400_000;
 const ZERO = new Prisma.Decimal(0);
 
-/** Half-open [from, to): `to` is the day after the last day shown. */
-type Range = { from: Date; to: Date };
+const BIRTHDAY_WINDOW_DAYS = 30;
+
 type DayRange = { from: string; to: string };
 
-const startOf = (value: string) => new Date(`${value}T00:00:00.000Z`);
-const toRange = (from: string, to: string): Range => ({
-  from: startOf(from),
-  to: new Date(startOf(to).getTime() + DAY_MS),
-});
-const inRange = (at: Date, range: Range) => at >= range.from && at < range.to;
 const money = (value: Prisma.Decimal) => value.toFixed(2);
 const chunks = <T>(items: T[], size: number) => {
   const out: T[][] = [];
@@ -74,12 +71,16 @@ export class DashboardService {
     const current = toRange(days.from, days.to);
     const previous = toRange(prevDays.from, prevDays.to);
 
-    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const prospectScope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
 
     const [
       currentFunnel,
@@ -98,7 +99,7 @@ export class DashboardService {
       this.pipeline(user.tenantId, prospectScope, current),
       this.clientCounts(user.tenantId, clientScope, current),
       this.achievedRevenue(user, clientScope, days, prevDays),
-      this.targetProgress(user, days),
+      this.targetProgress(user, days, this.repFor(user, query.userId)),
     ]);
 
     const wonNow = won.filter((deal) => inRange(deal.at, current));
@@ -146,12 +147,16 @@ export class DashboardService {
       }
       return { from, to };
     });
-    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const prospectScope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
 
     return Promise.all(
       ranges.map(async ({ from, to }) => {
@@ -178,9 +183,11 @@ export class DashboardService {
     user: RequestUser,
     query: QueryDashboardRevenueDto,
   ): Promise<DashboardRevenueByProduct> {
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
     const [invoices, currency] = await Promise.all([
       this.targets.invoiceRows(user.tenantId, clientScope),
       this.targets.baseCurrency(user),
@@ -240,12 +247,16 @@ export class DashboardService {
     const range = toRange(query.fromDate, query.toDate);
     const days: DayRange = { from: query.fromDate, to: query.toDate };
     const tenantId = user.tenantId;
-    const prospectScope = this.canViewAll(user, P.PROSPECTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
-    const clientScope = this.canViewAll(user, P.CLIENTS_VIEW_ALL)
-      ? {}
-      : { assignedUserId: user.id };
+    const prospectScope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
     const expectedCloseDate = { gte: range.from, lt: range.to };
 
     const [
@@ -363,6 +374,111 @@ export class DashboardService {
         };
       }),
     };
+  }
+
+  /**
+   * Birthdays of prospect and client primary contacts in the next 30 days, soonest first. A live
+   * look-ahead, so it takes no period. Prospects already converted to a client are left out:
+   * their contact is listed under the client.
+   */
+  async upcomingBirthdays(
+    user: RequestUser,
+    query: QueryDashboardBirthdaysDto,
+  ): Promise<DashboardUpcomingBirthdays> {
+    const rep = this.repFor(user, query.userId);
+    const prospectScope = this.scopeFor(user, P.PROSPECTS_VIEW_ALL, rep);
+    const clientScope = this.scopeFor(user, P.CLIENTS_VIEW_ALL, rep);
+    const contactWhere = {
+      tenantId: user.tenantId,
+      isPrimary: true,
+      dateOfBirth: { not: null },
+    };
+
+    const [prospectContacts, clientContacts] = await Promise.all([
+      this.prisma.marketingProspectContact.findMany({
+        where: {
+          ...contactWhere,
+          prospect: { ...prospectScope, client: { is: null } },
+        },
+        select: {
+          id: true,
+          name: true,
+          dateOfBirth: true,
+          prospect: { select: { id: true, companyName: true } },
+        },
+      }),
+      this.prisma.marketingClientContact.findMany({
+        where: { ...contactWhere, client: clientScope },
+        select: {
+          id: true,
+          name: true,
+          dateOfBirth: true,
+          client: { select: { id: true, companyName: true } },
+        },
+      }),
+    ]);
+
+    const now = new Date();
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const birthdays = [
+      ...prospectContacts.map((c) => ({
+        id: c.id,
+        contactName: c.name,
+        companyName: c.prospect.companyName,
+        type: 'PROSPECT' as const,
+        companyId: c.prospect.id,
+        dateOfBirth: c.dateOfBirth,
+      })),
+      ...clientContacts.map((c) => ({
+        id: c.id,
+        contactName: c.name,
+        companyName: c.client.companyName,
+        type: 'CLIENT' as const,
+        companyId: c.client.id,
+        dateOfBirth: c.dateOfBirth,
+      })),
+    ]
+      .flatMap(({ dateOfBirth, ...rest }) => {
+        if (!dateOfBirth) return [];
+        const month = dateOfBirth.getUTCMonth();
+        const day = dateOfBirth.getUTCDate();
+        let next = Date.UTC(now.getFullYear(), month, day);
+        if (next < today) next = Date.UTC(now.getFullYear() + 1, month, day);
+        const days = Math.round((next - today) / 86_400_000);
+        if (days > BIRTHDAY_WINDOW_DAYS) return [];
+        return [{ ...rest, date: new Date(next).toISOString().slice(0, 10) }];
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return { withinDays: BIRTHDAY_WINDOW_DAYS, birthdays };
+  }
+
+  /** Active reps the dashboard can be filtered to: everyone with view-all, otherwise only the caller. */
+  async reps(user: RequestUser): Promise<DashboardRep[]> {
+    const everyone =
+      this.canViewAll(user, P.PROSPECTS_VIEW_ALL) ||
+      this.canViewAll(user, P.CLIENTS_VIEW_ALL);
+    const reps = await this.assignees.activeUsers(user.tenantId);
+    return reps
+      .filter((rep) => everyone || rep.userId === user.id)
+      .map(({ userId, name }) => ({ userId, name }));
+  }
+
+  /**
+   * The rep a request is for. Callers without the dashboard permission only have the personal
+   * dashboard, so whatever they ask for is narrowed to themselves.
+   */
+  private repFor(user: RequestUser, userId?: string) {
+    return this.canViewAll(user, P.DASHBOARD_VIEW) ? userId : user.id;
+  }
+
+  /**
+   * Which records the caller sees: those of the picked rep when they may see everyone's,
+   * otherwise only their own, whatever rep was asked for.
+   */
+  private scopeFor(user: RequestUser, permission: string, userId?: string) {
+    if (!this.canViewAll(user, permission)) return { assignedUserId: user.id };
+    return userId ? { assignedUserId: userId } : {};
   }
 
   private canViewAll(user: RequestUser, permission: string) {
@@ -590,9 +706,15 @@ export class DashboardService {
    * Targets running during the period, added up. A rep's all-products target already includes
    * their product targets, so a rep with one counts only that; otherwise their product targets add up.
    */
-  private async targetProgress(user: RequestUser, days: DayRange) {
+  private async targetProgress(
+    user: RequestUser,
+    days: DayRange,
+    userId?: string,
+  ) {
     const rows = await this.targets.listOverlapping(user, days.from, days.to);
-    return this.sumTargets(rows);
+    return this.sumTargets(
+      userId ? rows.filter((row) => row.userId === userId) : rows,
+    );
   }
 
   /**
@@ -615,8 +737,8 @@ export class DashboardService {
       .map((userId) => ({ userId, name: names.get(userId) ?? 'Unknown rep' }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const selected = query.userId
-      ? rows.filter((row) => row.userId === query.userId)
+    const selected = this.repFor(user, query.userId)
+      ? rows.filter((row) => row.userId === this.repFor(user, query.userId))
       : rows;
     return { ...this.sumTargets(selected), reps };
   }

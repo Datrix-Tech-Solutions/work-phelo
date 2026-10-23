@@ -1,14 +1,10 @@
 'use client';
 
-import type { ClientDetailProduct } from '@/types/marketing';
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ClientBreadcrumb } from '@/components/molecules/marketing/ClientBreadcrumb';
-import {
-  ClientProductCard,
-  commissionOn,
-} from '@/components/molecules/marketing/ClientProductCard';
+import { ClientProductCard } from '@/components/molecules/marketing/ClientProductCard';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
 import { ProspectInteractionTimeline } from '@/components/molecules/marketing/ProspectInteractionTimeline';
@@ -90,7 +86,7 @@ export default function ClientDetailPage() {
   const [editingContact, setEditingContact] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const listHref = `/${tenantSlug}/marketing/clients`;
+  const listHref = `/${tenantSlug}/marketing/prospects/clients`;
   const shell = cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col gap-6');
 
   if (isLoading) {
@@ -120,23 +116,6 @@ export default function ClientDetailPage() {
   const achievedByProduct = new Map(
     (billingSummary?.products ?? []).map((p) => [p.productId, p.achievedRevenue]),
   );
-  // Only the rate is stored on a product; commission is derived from it.
-  const sumCommission = (amountFor: (p: ClientDetailProduct) => string | null | undefined) => {
-    let total = 0;
-    let any = false;
-    for (const p of client.products) {
-      const commission = commissionOn(
-        p.commissionRate != null ? Number(p.commissionRate) : null,
-        amountFor(p),
-      );
-      if (commission != null) {
-        total += commission;
-        any = true;
-      }
-    }
-    return any ? total : null;
-  };
-  const totalAchievedCommission = sumCommission((p) => achievedByProduct.get(p.product.id));
   // A transaction can be tagged to any product the client has, except one it isn't interested in.
   const billingProductOptions = client.products
     .filter((p) => p.status !== 'UNINTERESTED')
@@ -191,20 +170,23 @@ export default function ClientDetailPage() {
           <DetailField label="Source Type" value={client.sourceType?.name} />
           <DetailField label="Assigned To" value={client.assignedUserName} />
           <DetailField label="Location" value={client.location.label} />
-          <DetailField label="Decision Maker Role" value={primaryContact?.decisionMaker?.name} />
+          <DetailField label="Contact Person Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
           <DetailField label="Primary Contact Phone" value={primaryContact?.phone} />
           <DetailField label="Primary Contact Email" value={primaryContact?.email} />
           <DetailField
+            label="Primary Contact Date of Birth"
+            value={formatDate(primaryContact?.dateOfBirth ?? null)}
+          />
+          <DetailField
             label={client.convertedAt ? 'Converted On' : 'Date Created'}
             value={formatDate(client.convertedAt ?? client.createdAt)}
           />
-          <DetailField label="Last Follow up" value={formatDate(lastInteraction)} />
+          <DetailField label="Last Follow-up" value={formatDate(lastInteraction)} />
           <DetailField
             label="Achieved Revenue"
             value={formatMoney(billingSummary?.achievedRevenue)}
           />
-          <DetailField label="Achieved Commission" value={formatMoney(totalAchievedCommission)} />
           <DetailField
             label="Products/Services"
             value={
@@ -317,6 +299,7 @@ export default function ClientDetailPage() {
             name: primaryContact?.name ?? '',
             phone: primaryContact?.phone ?? null,
             email: primaryContact?.email ?? null,
+            dateOfBirth: primaryContact?.dateOfBirth?.slice(0, 10) ?? null,
             roleId: primaryContact?.decisionMaker?.id ?? '',
           }}
           isOpen
@@ -352,7 +335,7 @@ export default function ClientDetailPage() {
         <ConfirmDeleteProspectModal
           title="Delete Client"
           name={client.companyName}
-          consequence="removes its contacts and products/services, and the interactions recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
+          consequence="removes its contacts and products/services, and the follow-ups recorded after it became a client. Anything recorded while it was a prospect stays with the prospect"
           isDeleting={deleteClient.isPending}
           onConfirm={handleDelete}
           onCancel={() => setConfirmingDelete(false)}

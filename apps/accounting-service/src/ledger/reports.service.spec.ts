@@ -65,6 +65,7 @@ describe('ReportsService', () => {
     credit: number,
     options: Partial<{
       id: string;
+      entryId: string;
       date: string;
       status: JournalStatus;
       fiscalPeriodId: string;
@@ -76,7 +77,7 @@ describe('ReportsService', () => {
     return {
       id: options.id ?? `${account.id}-${debit}-${credit}`,
       tenantId,
-      journalEntryId: 'journal-1',
+      journalEntryId: options.entryId ?? 'journal-1',
       lineNumber: 1,
       glAccountId: account.id,
       subledgerAccountId: options.subledgerAccountId ?? null,
@@ -92,7 +93,7 @@ describe('ReportsService', () => {
       subledgerAccount: null,
       costCentre: null,
       journalEntry: {
-        id: 'journal-1',
+        id: options.entryId ?? 'journal-1',
         journalNumber: 'JE-001',
         status: options.status ?? JournalStatus.POSTED,
         transactionDate: date,
@@ -412,6 +413,40 @@ describe('ReportsService', () => {
     });
   });
 
+  describe('cashFlowSeries', () => {
+    it('rejects a range that ends before it starts', async () => {
+      const { service } = setup();
+
+      await expect(
+        service.cashFlowSeries(tenantId, { ranges: '2026-08-01:2026-07-01' }),
+      ).rejects.toThrow('ends before it starts');
+    });
+
+    it('returns the section totals for each range', async () => {
+      const { prisma, service } = setup();
+      prisma.journalLine.findMany.mockResolvedValue([]);
+
+      const result = await service.cashFlowSeries(tenantId, {
+        ranges: '2026-07-01:2026-07-31,2026-08-01:2026-08-31',
+      });
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          fromDate: '2026-07-01',
+          toDate: '2026-07-31',
+          operating: '0.00',
+          investing: '0.00',
+          financing: '0.00',
+          netChangeInCash: '0.00',
+        }),
+        expect.objectContaining({
+          fromDate: '2026-08-01',
+          toDate: '2026-08-31',
+        }),
+      ]);
+    });
+  });
+
   describe('cashFlowStatement', () => {
     const cashAccount = {
       id: 'cash-account',
@@ -653,6 +688,167 @@ describe('ReportsService', () => {
       // The non-cash gain is fully backed out and shown nowhere — the net change is genuinely
       // less than net income by that amount, which is the point of tagging it Excluded.
       expect(result.operatingActivities.total).toBe('300.00');
+    });
+
+    it('treats an account tagged Cash & Cash Equivalents as cash, even when not linked in Cash & Bank', async () => {
+      const overdraft = {
+        ...liabilityAccount,
+        id: 'overdraft',
+        code: '2101',
+        name: 'Bank Overdraft',
+        cashFlowCategory: 'CASH_EQUIVALENT',
+      };
+      const { service } = setupCashFlow([
+        reportLine(overdraft, 0, 100),
+        reportLine(revenueAccount, 0, 100),
+        reportLine(assetAccount, 200, 0),
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      const allLines = [
+        ...result.operatingActivities.adjustments,
+        ...result.investingActivities.lines,
+        ...result.financingActivities.lines,
+      ];
+      expect(allLines.some((line) => line.account.id === overdraft.id)).toBe(
+        false,
+      );
+      // Only the overdraft counts as cash here (the untagged asset is an ordinary account).
+      expect(result.reconciliation.cashMovement).toBe('-100.00');
+    });
+
+    it('ignores closing entries so Net Income is not zeroed out', async () => {
+      const { prisma, service } = setupCashFlow([]);
+
+      await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(prisma.journalLine.findMany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: expect.objectContaining({
+            journalEntry: expect.objectContaining({
+              entryType: { notIn: ['CLOSING'] },
+            }) as unknown,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('defaults an untagged equity account to Financing', async () => {
+      const { service } = setupCashFlow([reportLine(equityAccount, 0, 500)]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.operatingActivities.adjustments).toEqual([]);
+      expect(result.financingActivities.lines).toEqual([
+        expect.objectContaining({ amount: '500.00' }),
+      ]);
+    });
+
+    it('shows a non-cash disposal gain as an operating reversal plus an investing line, so investing equals the proceeds', async () => {
+      const equipment = {
+        ...assetAccount,
+        id: 'equipment',
+        code: '1201',
+        name: 'Equipment',
+        cashFlowCategory: 'INVESTING',
+      };
+      const gain = {
+        ...revenueAccount,
+        id: 'gain',
+        code: '4111',
+        name: 'Gain on Disposal of Assets',
+        cashFlowCategory: 'EXCLUDED',
+      };
+      const { prisma, service } = setupCashFlow([
+        reportLine(cashAccount, 130, 0, { entryId: 'sale' }),
+        reportLine(equipment, 0, 100, { entryId: 'sale' }),
+        reportLine(gain, 0, 30, { entryId: 'sale' }),
+      ]);
+      prisma.accountingCashAccount.findMany.mockResolvedValue([
+        { glAccountId: cashAccount.id },
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.operatingActivities.netIncome).toBe('30.00');
+      expect(result.operatingActivities.total).toBe('0.00');
+      expect(result.investingActivities.total).toBe('130.00');
+      expect(result.reconciliation.isReconciled).toBe(true);
+    });
+
+    it('only adds back depreciation when its entry touches no investing or financing account', async () => {
+      const depreciation = {
+        ...expenseAccount,
+        id: 'depreciation',
+        code: '5101',
+        name: 'Depreciation Expense',
+        cashFlowCategory: 'EXCLUDED',
+      };
+      const accumulated = {
+        ...assetAccount,
+        id: 'accumulated-depreciation',
+        code: '1205',
+        name: 'Accumulated Depreciation',
+        cashFlowCategory: 'EXCLUDED',
+      };
+      const { service } = setupCashFlow([
+        reportLine(depreciation, 50, 0),
+        reportLine(accumulated, 0, 50),
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.operatingActivities.netIncome).toBe('-50.00');
+      expect(result.operatingActivities.total).toBe('0.00');
+      expect(result.investingActivities.lines).toEqual([]);
+      expect(result.reconciliation.isReconciled).toBe(true);
+    });
+
+    it('reports a reconciliation gap when cash moved by more than the sections explain', async () => {
+      const unclassified = {
+        ...liabilityAccount,
+        id: 'unclassified',
+        code: '2900',
+        name: 'Suspense',
+        cashFlowCategory: 'EXCLUDED',
+      };
+      const { prisma, service } = setupCashFlow([
+        reportLine(cashAccount, 100, 0),
+        reportLine(revenueAccount, 0, 60),
+        reportLine(unclassified, 0, 40),
+      ]);
+      prisma.accountingCashAccount.findMany.mockResolvedValue([
+        { glAccountId: cashAccount.id },
+      ]);
+
+      const result = await service.cashFlowStatement(tenantId, {
+        fromDate: '2026-07-01',
+        toDate: '2026-07-31',
+      });
+
+      expect(result.reconciliation).toEqual({
+        netChangeInCash: '60.00',
+        cashMovement: '100.00',
+        difference: '-40.00',
+        isReconciled: false,
+      });
     });
   });
 });

@@ -41,12 +41,18 @@ const fmt = (value: number) =>
 interface RevenueByProductChartProps {
   period: Period;
   year: number;
+  userId?: string;
   className?: string;
 }
 
 /** Revenue invoiced in the period, split by the product it was raised for. */
-export function RevenueByProductChart({ period, year, className }: RevenueByProductChartProps) {
-  const { data, isLoading, isError } = useMarketingRevenueByProduct(period, year);
+export function RevenueByProductChart({
+  period,
+  year,
+  userId,
+  className,
+}: RevenueByProductChartProps) {
+  const { data, isLoading, isError } = useMarketingRevenueByProduct(period, year, userId);
   const [hovered, setHovered] = useState<number | null>(null);
   const [areaRef, area] = useElementSize<HTMLDivElement>();
   const isDark = useThemeStore((s) => s.theme === 'dark');

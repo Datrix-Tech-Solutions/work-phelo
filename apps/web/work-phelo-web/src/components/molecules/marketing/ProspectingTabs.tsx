@@ -14,12 +14,13 @@ export function ProspectingTabs({ base, className }: Props) {
     { key: 'product', label: 'Product/Service', href: `${base}/product` },
     { key: 'decision-maker', label: 'Decision Maker', href: `${base}/decision-maker` },
     { key: 'source-type', label: 'Source Type', href: `${base}/source-type` },
-    { key: 'interaction-medium', label: 'Interaction Medium', href: `${base}/interaction-medium` },
+    { key: 'interaction-medium', label: 'Follow-up Medium', href: `${base}/interaction-medium` },
     {
-      key: 'prospect-business-type',
-      label: 'Prospect Business Type',
-      href: `${base}/prospect-business-type`,
+      key: 'business-type',
+      label: 'Business Type',
+      href: `${base}/business-type`,
     },
+    { key: 'reminders', label: 'Reminders', href: `${base}/reminders` },
   ];
 
   const { canSeeTab } = useMarketingAccess();

@@ -1,6 +1,6 @@
 'use client';
 
-import { Banknote, CalendarDays, Package, Percent, Target } from 'lucide-react';
+import { Banknote, CalendarDays, Package, Target } from 'lucide-react';
 import { DataCard, DataCardDetail } from '@/components/organisms/shared/DataCard';
 import { frostedAvatarStyle } from '@/lib/utils';
 import type { ProspectDetailProduct } from '@/types/marketing';
@@ -43,19 +43,6 @@ export function ProspectProductCard({ product }: { product: ProspectDetailProduc
     detail(Target, 'Expected Revenue', formatMoney(product.expectedValue), 'text-blue-500'),
     detail(Banknote, 'Achieved Revenue', formatMoney(product.achievedValue), 'text-emerald-500'),
     detail(CalendarDays, 'Expected Close', formatDate(product.expectedCloseDate), 'text-rose-500'),
-    ...(product.commissionRate != null
-      ? [
-          detail(
-            Percent,
-            'Commission Rate',
-            `${Number(product.commissionRate)}%`,
-            'text-violet-500',
-          ),
-        ]
-      : []),
-    ...(product.commissionAmount != null
-      ? [detail(Banknote, 'Commission', formatMoney(product.commissionAmount), 'text-amber-500')]
-      : []),
   ];
 
   return (

@@ -47,7 +47,7 @@ export class SourceLedgerController {
   @ApiOperation({
     summary: 'List posted, source-linked open items awaiting settlement',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_VIEW)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_VIEW)
   list(
     @Query() query: QuerySourceLedgerDto,
     @Req() request: Request & { user: RequestUser },
@@ -60,7 +60,7 @@ export class SourceLedgerController {
     summary:
       "A source type's full-history summary (entry/paid counts, total amount/outstanding) — always unfiltered, independent of the list's own filters",
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_VIEW)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_VIEW)
   getSummary(
     @Query() query: QuerySourceLedgerSummaryDto,
     @Req() request: Request & { user: RequestUser },
@@ -78,7 +78,7 @@ export class SourceLedgerController {
       'Creates and posts an ordinary cashbook Payment (one journal entry) and records the ' +
       'allocation against this entry in the same action.',
   })
-  @RequirePermissions(AccountingPermission.CASHBOOK_CREATE)
+  @RequirePermissions(AccountingPermission.TRANSACTIONS_CREATE)
   async makePayment(
     @Param('entryId', ParseUUIDPipe) entryId: string,
     @Body() dto: MakeSourceLedgerPaymentDto,

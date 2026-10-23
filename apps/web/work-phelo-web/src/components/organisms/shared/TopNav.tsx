@@ -314,23 +314,47 @@ export function TopNav({ showMenuButton = false, onMenuClick, tabs, userInitials
     performLogout(undefined, { onSuccess: () => router.push(redirectTo) });
   };
 
-  // Modules that have their own layout (sidebar) and dedicated profile/settings pages.
-  // Add a module here when its layout.tsx and profile/settings pages exist.
+  // Modules that have their own layout (sidebar) and dedicated profile pages.
+  // Add a module here when its layout.tsx and profile page exist.
   const LAYOUT_MODULES = new Set(['hr', 'operations']);
+
+  // Where the account Settings page lives inside each module, so opening it keeps the
+  // module's sidebar and menu around it. Accounting and Marketing already use `settings`
+  // for their own configuration, so theirs is `account-settings`.
+  const SETTINGS_SEGMENT: Record<string, string> = {
+    hr: 'settings',
+    operations: 'settings',
+    accounting: 'account-settings',
+    marketing: 'account-settings',
+  };
 
   const currentModule = (() => {
     const segment = pathname.split('/')[2];
     return LAYOUT_MODULES.has(segment) ? segment : null;
   })();
 
+  const settingsModule = (() => {
+    const segment = pathname.split('/')[2];
+    return segment in SETTINGS_SEGMENT ? segment : null;
+  })();
+
+  // Accounting and Marketing have no profile page of their own; the profile lives under HR.
+  const PROFILE_IN_HR = new Set(['accounting', 'marketing']);
+
   const handleProfileClick = () => {
     const slug = user?.tenantSlug || pathname.split('/')[1];
-    router.push(currentModule ? `/${slug}/${currentModule}/profile` : `/${slug}/profile`);
+    const segment = pathname.split('/')[2];
+    const profileModule = PROFILE_IN_HR.has(segment) ? 'hr' : currentModule;
+    router.push(profileModule ? `/${slug}/${profileModule}/profile` : `/${slug}/profile`);
   };
 
   const handleSettingsClick = () => {
     const slug = user?.tenantSlug || pathname.split('/')[1];
-    router.push(currentModule ? `/${slug}/${currentModule}/settings` : `/${slug}/settings`);
+    router.push(
+      settingsModule
+        ? `/${slug}/${settingsModule}/${SETTINGS_SEGMENT[settingsModule]}`
+        : `/${slug}/settings`,
+    );
   };
 
   const displayName = user

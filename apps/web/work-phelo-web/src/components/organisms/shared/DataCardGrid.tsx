@@ -29,6 +29,8 @@ interface DataCardGridProps<T extends { id: string | number }> {
   secondaryButton?: { label: string; onClick: () => void; badgeCount?: number };
   secondaryButtons?: { label: string; onClick: () => void; badgeCount?: number }[];
   actionButton?: { label: string; onClick: () => void };
+  /** Replaces the default card grid, e.g. for a wider column minimum. */
+  gridClassName?: string;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -56,6 +58,7 @@ export function DataCardGrid<T extends { id: string | number }>({
   secondaryButton,
   secondaryButtons,
   actionButton,
+  gridClassName = cardGrid,
   currentPage,
   totalPages,
   onPageChange,
@@ -156,7 +159,7 @@ export function DataCardGrid<T extends { id: string | number }>({
 
       {/* Card grid */}
       {isLoading ? (
-        <div className={cardGrid}>
+        <div className={gridClassName}>
           {Array.from({ length: skeletonCount }).map((_, i) => (
             <div key={i}>{renderSkeleton ? renderSkeleton() : <DefaultSkeleton />}</div>
           ))}
@@ -172,7 +175,7 @@ export function DataCardGrid<T extends { id: string | number }>({
           </div>
         </div>
       ) : (
-        <div className={cardGrid}>
+        <div className={gridClassName}>
           {data.map((item) => (
             <div key={item.id}>{renderCard(item)}</div>
           ))}

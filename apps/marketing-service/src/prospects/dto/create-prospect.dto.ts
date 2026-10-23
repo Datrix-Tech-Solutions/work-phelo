@@ -52,6 +52,11 @@ export class CreateProspectContactDto {
   @IsOptional()
   @IsUUID()
   decisionMakerTypeId?: string;
+
+  @ApiPropertyOptional({ example: '1990-05-14' })
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
 }
 
 export class CreateProspectProductDto {

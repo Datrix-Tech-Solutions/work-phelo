@@ -16,6 +16,10 @@ interface DataCardProps {
   /** Fully-built leading visual (icon box or avatar circle) — DataCard doesn't style it. */
   icon: React.ReactNode;
   title: string;
+  /** Replaces the title's default text size/weight classes. */
+  titleClassName?: string;
+  /** Vertically centres the icon, title and badge in the header instead of top-aligning them. */
+  centerHeader?: boolean;
   /** Plain text under the title. */
   subtitle?: string;
   /** Corner element in the header row, e.g. a status badge. */
@@ -37,6 +41,8 @@ interface DataCardProps {
 export function DataCard({
   icon,
   title,
+  titleClassName = 'text-sm font-bold',
+  centerHeader = false,
   subtitle,
   badge,
   note,
@@ -61,13 +67,20 @@ export function DataCard({
       className={surface === 'card' ? cardClass(classes) : glassStrongClass(classes, 'plain')}
     >
       {/* Header: icon + title/subtitle — badge on the right */}
-      <div className={cn('flex items-start gap-3', compact ? 'p-3.5 pb-2.5' : 'p-4 pb-3')}>
+      <div
+        className={cn(
+          'flex gap-3',
+          centerHeader ? 'items-center' : 'items-start',
+          compact ? 'p-3.5 pb-2.5' : 'p-4 pb-3',
+        )}
+      >
         {icon}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-gray-900 leading-snug truncate">{title}</p>
+          <p className={cn(titleClassName, 'text-gray-900 leading-snug truncate')}>{title}</p>
           {subtitle && <p className="text-xs text-gray-400 mt-0.5 truncate">{subtitle}</p>}
         </div>
-        {badge}
+        {/* Capped so a long badge can't push the title out of the header. */}
+        {badge && <div className="min-w-0 max-w-[40%] shrink-0 flex justify-end">{badge}</div>}
       </div>
 
       {(note || (details && details.length > 0)) && (

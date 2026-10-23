@@ -4,7 +4,6 @@ import {
   BookSearch,
   Megaphone,
   SlidersHorizontal,
-  Users,
   ClipboardClock,
   ClipboardList,
   Handshake,
@@ -13,9 +12,11 @@ import {
   Truck,
   SquareUser,
   UserKey,
+  LayoutPanelTop,
 } from 'lucide-react';
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
+const SIcon = () => <LayoutPanelTop className="w-5 h-5" />;
 
 const ProspectIcon = () => <Handshake className="w-5 h-5" />;
 const AppointmentIcon = () => <ClipboardClock className="w-5 h-5" />;
@@ -23,7 +24,6 @@ const RequestsIcon = () => <ClipboardList className="w-5 h-5" />;
 const TransportOfficersIcon = () => <SquareUser className="w-5 h-5" />;
 const FleetIcon = () => <Truck className="w-5 h-5" />;
 
-const ClientsIcon = () => <Users className="w-5 h-5" />;
 const CampaignManagementIcon = () => <SlidersHorizontal className="w-5 h-5" />;
 const TargetsIcon = () => <Target className="w-5 h-5" />;
 const CampaignsIcon = () => <Megaphone className="w-5 h-5" />;
@@ -50,14 +50,6 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
     label: 'Campaign',
     items: [
       {
-        key: 'clients',
-        label: 'Clients',
-        icon: <ClientsIcon />,
-        href: 'clients',
-        enabled: true,
-        active: true,
-      },
-      {
         key: 'campaigns',
         label: 'Campaigns',
         icon: <CampaignsIcon />,
@@ -76,11 +68,19 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Prospecting',
+    label: 'Sales CRM',
     items: [
       {
+        key: 'crm-dashboard',
+        label: 'CRM Dashboard',
+        icon: <SIcon />,
+        href: 'crm-dashboard',
+        enabled: true,
+        active: true,
+      },
+      {
         key: 'prospects',
-        label: 'Prospects',
+        label: 'Prospects & Clients',
         icon: <ProspectIcon />,
         href: 'prospects',
         enabled: true,
@@ -91,6 +91,14 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
         label: 'Appointments',
         icon: <AppointmentIcon />,
         href: 'appointments',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'targets',
+        label: 'Sales Targets',
+        icon: <TargetsIcon />,
+        href: 'targets',
         enabled: true,
         active: true,
       },
@@ -107,6 +115,14 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Transport',
     items: [
+      {
+        key: 'transport-dashboard',
+        label: 'Transport Dashboard',
+        icon: <SIcon />,
+        href: 'transport-dashboard',
+        enabled: true,
+        active: true,
+      },
       {
         key: 'fleet-management',
         label: 'Fleet Management',
@@ -135,16 +151,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Targets and Reports',
-    items: [
-      {
-        key: 'targets',
-        label: 'Sales Targets',
-        icon: <TargetsIcon />,
-        href: 'targets',
-        enabled: true,
-        active: true,
-      },
-    ],
+    items: [],
   },
   {
     label: 'Administration',
@@ -167,7 +174,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
  */
 export const MARKETING_TABS = [
   { key: 'campaign', label: 'Campaign', groupLabel: 'Campaign' },
-  { key: 'prospecting', label: 'Prospecting', groupLabel: 'Prospecting' },
+  { key: 'prospecting', label: 'Sales CRM', groupLabel: 'Sales CRM' },
   { key: 'transport', label: 'Transport', groupLabel: 'Transport' },
 ] as const;
 

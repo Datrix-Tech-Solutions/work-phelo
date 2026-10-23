@@ -88,6 +88,20 @@ export class ReportsController {
     return this.service.incomeSeries(request.user.tenantId, query);
   }
 
+  @Get('cash-flow-series')
+  @ApiOperation({
+    summary: 'Cash flow totals for several date ranges at once',
+    description:
+      'Operating, investing and financing totals and the net change in cash for each range, using the Cash Flow Statement rules, for charting cash flow over consecutive periods in one request.',
+  })
+  @RequirePermissions(AccountingPermission.LEDGER_VIEW)
+  cashFlowSeries(
+    @Query() query: IncomeSeriesReportQueryDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.cashFlowSeries(request.user.tenantId, query);
+  }
+
   @Get('balance-sheet')
   @ApiOperation({
     summary: 'Run the Balance Sheet report',

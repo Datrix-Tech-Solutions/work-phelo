@@ -42,7 +42,8 @@ export function RolesContent() {
   );
   const sets: PermissionSet[] = Array.isArray(setsRaw) ? setsRaw : [];
 
-  const { mutate: assignPermissionSet, isPending: isAssigningMember } = useAssignPermissionSet();
+  const { mutateAsync: assignPermissionSet, isPending: isAssigningMember } =
+    useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemovingMember } = useRemovePermissionSet();
 
   const PAGE_SIZE = 10;
@@ -173,14 +174,20 @@ export function RolesContent() {
           isLoadingMembers={isLoadingMembers}
           isAssigning={isAssigningMember}
           isRemoving={isRemovingMember}
-          onAssign={(userId) => {
-            assignPermissionSet(
-              { userId, permissionSetId: membersTarget.id },
-              {
-                onSuccess: () => toast.success('Member added to permission set'),
-                onError: (err) => toast.error(extractError(err, 'Failed to add member')),
-              },
-            );
+          onAssign={(userIds) => {
+            Promise.all(
+              userIds.map((userId) =>
+                assignPermissionSet({ userId, permissionSetId: membersTarget.id }),
+              ),
+            )
+              .then(() =>
+                toast.success(
+                  userIds.length > 1
+                    ? 'Members added to permission set'
+                    : 'Member added to permission set',
+                ),
+              )
+              .catch((err) => toast.error(extractError(err, 'Failed to add member')));
           }}
           onRemove={(userId) => {
             removePermissionSet(

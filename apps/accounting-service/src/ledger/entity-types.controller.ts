@@ -21,11 +21,17 @@ import {
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { AccountingPermission } from './accounting.permissions';
+import {
+  ACCOUNTING_REFERENCE_READERS,
+  AccountingPermission,
+} from './accounting.permissions';
 import {
   CreateEntityTypeDto,
   UpdateEntityTypeDto,
@@ -43,14 +49,14 @@ export class EntityTypesController {
 
   @Get()
   @ApiOperation({ summary: 'List tenant entity types' })
-  @RequirePermissions(AccountingPermission.SETTINGS_VIEW)
+  @RequireAnyPermission(...ACCOUNTING_REFERENCE_READERS)
   list(@Req() request: Request & { user: RequestUser }) {
     return this.service.listEntityTypes(request.user);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create an entity type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.ENTITIES_CREATE)
   create(
     @Body() dto: CreateEntityTypeDto,
     @Req() request: Request & { user: RequestUser },
@@ -60,7 +66,7 @@ export class EntityTypesController {
 
   @Patch(':entityTypeId')
   @ApiOperation({ summary: 'Update an entity type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.ENTITIES_EDIT)
   update(
     @Param('entityTypeId', ParseUUIDPipe) entityTypeId: string,
     @Body() dto: UpdateEntityTypeDto,
@@ -72,7 +78,7 @@ export class EntityTypesController {
   @Delete(':entityTypeId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete an entity type' })
-  @RequirePermissions(AccountingPermission.SETTINGS_EDIT)
+  @RequirePermissions(AccountingPermission.ENTITIES_DELETE)
   delete(
     @Param('entityTypeId', ParseUUIDPipe) entityTypeId: string,
     @Req() request: Request & { user: RequestUser },

@@ -283,7 +283,7 @@ describe('ProspectingSettingsService', () => {
       model: 'marketingProspectInteraction',
       field: 'interactionMediumId',
       message:
-        'This interaction medium is in use by one or more prospects and cannot be deleted',
+        'This follow-up medium is in use by one or more prospects and cannot be deleted',
     },
   ] as const)(
     'blocks archiving referenced $category settings',

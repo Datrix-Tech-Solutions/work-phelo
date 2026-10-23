@@ -253,6 +253,16 @@ model MarketingCrmSettingOption {
   @@schema("marketing")
 }
 
+/// Tenant-wide CRM preferences. One row per tenant; a tenant with no row uses the defaults.
+model MarketingCrmPreference {
+  tenantId          String   @id
+  followUpDelayDays Int      @default(7)
+  updatedByUserId   String?
+  updatedAt         DateTime @updatedAt
+
+  @@schema("marketing")
+}
+
 model MarketingPipelineStage {
   id              String    @id @default(uuid())
   tenantId        String
@@ -313,6 +323,7 @@ model MarketingProspectContact {
   name                String
   phone               String?
   email               String?
+  dateOfBirth         DateTime? @db.Date
   decisionMakerTypeId String?
   isPrimary           Boolean  @default(false)
   createdAt           DateTime @default(now())
@@ -453,6 +464,7 @@ model MarketingClientContact {
   name                String
   phone               String?
   email               String?
+  dateOfBirth         DateTime? @db.Date
   decisionMakerTypeId String?
   isPrimary           Boolean  @default(false)
   createdAt           DateTime @default(now())
@@ -501,6 +513,11 @@ model MarketingFleetVehicle {
   yearOfRegistration Int
   fuelType           MarketingFleetFuelType
   currentMileage     Int?
+  // Optional papers. A vehicle with no expiry on file is never held back by them.
+  insuranceStartDate         DateTime? @db.Date
+  insuranceExpiryDate        DateTime? @db.Date
+  safetyCertificateIssuedOn  DateTime? @db.Date
+  safetyCertificateExpiresOn DateTime? @db.Date
   createdByUserId    String?
   updatedByUserId    String?
   createdAt          DateTime                  @default(now())

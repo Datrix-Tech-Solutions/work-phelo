@@ -55,6 +55,16 @@ export interface DocumentTemplate {
   signatureRules: Record<PreviewDoc, boolean>;
 }
 
+/** Upload/remove actions for the images the server stores for the template. */
+export interface TemplateAssetHandlers {
+  uploadLogo: (file: File) => void;
+  uploadSignature: (file: File) => void;
+  uploadWatermark: (file: File) => void;
+  removeWatermark: () => void;
+  /** Which asset is currently uploading or being removed. */
+  busy: 'logo' | 'signature' | 'watermark' | null;
+}
+
 export const DEFAULT_TEMPLATE: DocumentTemplate = {
   previewDoc: 'bill',
   logo: null,

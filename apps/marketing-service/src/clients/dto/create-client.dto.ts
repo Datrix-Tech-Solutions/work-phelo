@@ -18,6 +18,7 @@ import { CollapseWhitespaceString } from '../../crm-settings/dto/string.transfor
 import { ClientBillingDto } from './billing.dto';
 import {
   CreateProspectContactDto,
+  CreateProspectInitialInteractionDto,
   CreateProspectLocationDto,
 } from '../../prospects/dto/create-prospect.dto';
 
@@ -100,6 +101,16 @@ export class CreateClientDto {
   @ValidateNested()
   @Type(() => CreateProspectLocationDto)
   location!: CreateProspectLocationDto;
+
+  @ApiPropertyOptional({
+    type: CreateProspectInitialInteractionDto,
+    description:
+      'The first follow-up (contact) with the client, recorded when it is created. Its date is the date contacted.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateProspectInitialInteractionDto)
+  initialInteraction?: CreateProspectInitialInteractionDto;
 }
 
 export class ConvertProspectToClientDto {

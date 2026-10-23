@@ -1256,6 +1256,7 @@ export class JournalsService {
             id: true,
             journalNumber: true,
             status: true,
+            entryType: true,
             transactionDate: true,
             postingDate: true,
             reference: true,

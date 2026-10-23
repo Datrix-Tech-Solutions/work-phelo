@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { Icons } from '@/components/atoms/icons';
@@ -63,9 +63,10 @@ export function AddTransportOfficersPanel({ isOpen, onClose }: Props) {
   }
 
   return (
-    <SidePanel
+    <Modal
       isOpen={isOpen}
       onClose={handleClose}
+      width="max-w-xl"
       title="Add Transport Officers"
       description="Choose employees who will drive. They become available in the driver dropdowns."
       footer={
@@ -122,6 +123,6 @@ export function AddTransportOfficersPanel({ isOpen, onClose }: Props) {
           Every active employee is already a transport officer.
         </p>
       )}
-    </SidePanel>
+    </Modal>
   );
 }

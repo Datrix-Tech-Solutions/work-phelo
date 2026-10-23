@@ -10,6 +10,8 @@ import { TenantDocumentProfileInternalController } from './tenant-document-profi
 import { TenantModulesInternalController } from './tenant-modules-internal.controller';
 import { TenantIntegrationInternalController } from './tenant-integration-internal.controller';
 import { TenantDocumentProfileService } from './tenant-document-profile.service';
+import { TenantDocumentTemplateController } from './tenant-document-template.controller';
+import { TenantDocumentTemplateService } from './tenant-document-template.service';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { AuditModule } from '../audit/audit.module';
 
@@ -18,6 +20,7 @@ import { AuditModule } from '../audit/audit.module';
   controllers: [
     TenantsController,
     TenantDocumentProfileController,
+    TenantDocumentTemplateController,
     TenantDocumentProfileInternalController,
     TenantIntegrationInternalController,
     TenantModulesInternalController,
@@ -29,6 +32,7 @@ import { AuditModule } from '../audit/audit.module';
     TenantBrandingService,
     TenantAssetStorageService,
     TenantDocumentProfileService,
+    TenantDocumentTemplateService,
   ],
   exports: [TenantLifecycleService, TenantAssetStorageService],
 })

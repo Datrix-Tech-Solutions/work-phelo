@@ -29,13 +29,16 @@ describe('DashboardService', () => {
     moduleConfig: {},
     featureConfig: {},
     integrationConfig: {},
-    permissions: [],
+    permissions: [P.DASHBOARD_VIEW],
   };
   const manager: RequestUser = {
     ...rep,
     id: 'mgr-1',
-    permissions: [P.PROSPECTS_VIEW_ALL, P.CLIENTS_VIEW_ALL],
+    permissions: [P.DASHBOARD_VIEW, P.PROSPECTS_VIEW_ALL, P.CLIENTS_VIEW_ALL],
   };
+
+  // Without the dashboard permission a caller only gets their personal dashboard.
+  const personal: RequestUser = { ...rep, permissions: [] };
 
   const query = {
     fromDate: '2026-10-01',
@@ -237,6 +240,29 @@ describe('DashboardService', () => {
       for (const [args] of calls) {
         expect(args.where.assignedUserId).toBe('rep-1');
       }
+    }
+  });
+
+  it('narrows a caller without the dashboard permission to themselves, whoever they ask for', async () => {
+    await service.summary(personal, { ...query, userId: 'mgr-1' });
+
+    const calls = prisma.marketingProspect.count.mock.calls as [
+      { where: Record<string, unknown> },
+    ][];
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [args] of calls) {
+      expect(args.where.assignedUserId).toBe('rep-1');
+    }
+  });
+
+  it('filters to the picked rep for a caller with the dashboard and view-all permissions', async () => {
+    await service.summary(manager, { ...query, userId: 'rep-1' });
+
+    const calls = prisma.marketingProspect.count.mock.calls as [
+      { where: Record<string, unknown> },
+    ][];
+    for (const [args] of calls) {
+      expect(args.where.assignedUserId).toBe('rep-1');
     }
   });
 

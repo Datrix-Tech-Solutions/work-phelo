@@ -11,7 +11,7 @@
 export const MARKETING_PERMISSION_PREFIX = 'marketing.';
 
 /** Pages open to every employee, marketer or not: each person raises and sees their own, approvers see more. */
-export const MARKETING_OPEN_PAGES: readonly string[] = ['requests'];
+export const MARKETING_OPEN_PAGES: readonly string[] = ['requests', 'account-settings'];
 
 /**
  * Pages that take a permission. A marketer sees anything not listed here (dashboard, appointments,
@@ -34,7 +34,8 @@ export const MARKETING_PAGE_TABS: Record<string, Record<string, string[]>> = {
     'decision-maker': ['marketing.crm-settings:VIEW', 'marketing.decision-makers:VIEW'],
     'source-type': ['marketing.crm-settings:VIEW', 'marketing.source-types:VIEW'],
     'interaction-medium': ['marketing.crm-settings:VIEW', 'marketing.interaction-media:VIEW'],
-    'prospect-business-type': ['marketing.crm-settings:VIEW', 'marketing.business-types:VIEW'],
+    'business-type': ['marketing.crm-settings:VIEW', 'marketing.business-types:VIEW'],
+    reminders: ['marketing.crm-settings:VIEW'],
   },
   'user-management': {
     'roles-permissions': ['permission-sets:VIEW'],
@@ -43,13 +44,12 @@ export const MARKETING_PAGE_TABS: Record<string, Record<string, string[]>> = {
 };
 
 /**
- * Clients and Prospects are open to anyone with records assigned to them, so beyond the permissions
- * below they also show for a user who has at least one assigned.
+ * Prospects and Clients share one page with a tab each. Both are open to anyone with records assigned
+ * to them, so beyond the permissions below a tab also shows for a user who has at least one assigned.
  */
 export const MARKETING_RECORD_PAGES = {
-  clients: { main: ['marketing.clients:VIEW', 'marketing.clients.all:VIEW'] },
   prospects: {
     all: ['marketing.prospects:VIEW', 'marketing.prospects.all:VIEW'],
-    'upcoming-reminders': ['marketing.follow-ups:VIEW', 'marketing.follow-ups.all:VIEW'],
+    clients: ['marketing.clients:VIEW', 'marketing.clients.all:VIEW'],
   },
 } as const;

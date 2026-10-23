@@ -63,9 +63,17 @@ export const CASH_FLOW_LABEL_BY_VALUE: Record<CashFlowCategory, string> = Object
   CASH_FLOW_CATEGORY_OPTIONS.map((o) => [o.value, o.label]),
 ) as Record<CashFlowCategory, string>;
 
-export const CASH_FLOW_VALUE_BY_LABEL: Record<string, CashFlowCategory> = Object.fromEntries(
-  CASH_FLOW_CATEGORY_OPTIONS.map((o) => [o.label.toLowerCase(), o.value]),
-);
+export const CASH_FLOW_VALUE_BY_LABEL: Record<string, CashFlowCategory> = {
+  ...Object.fromEntries(CASH_FLOW_CATEGORY_OPTIONS.map((o) => [o.label.toLowerCase(), o.value])),
+  // The wording the IAS 7 chart of accounts template uses.
+  'operating activity': 'OPERATING',
+  'investing activity': 'INVESTING',
+  'financing activity': 'FINANCING',
+  'non-cash adjustment': 'EXCLUDED',
+  'non-cash': 'EXCLUDED',
+  excluded: 'EXCLUDED',
+  'cash and cash equivalents': 'CASH_EQUIVALENT',
+};
 
 /** Mirrors the numbering blocks the accounting service enforces per account type
  *  (CATEGORY_CODE_RANGES in accounting-master-data.service.ts). */
