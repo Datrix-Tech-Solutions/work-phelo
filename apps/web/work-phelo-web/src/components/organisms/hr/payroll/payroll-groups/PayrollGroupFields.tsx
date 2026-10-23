@@ -53,7 +53,7 @@ export function eligibleEmployees(employees: Employee[], payslipType: PayslipTyp
 }
 
 /** A bordered block whose body folds away behind a header that says what is inside. */
-function CollapsibleSection({
+export function CollapsibleSection({
   title,
   summary,
   children,

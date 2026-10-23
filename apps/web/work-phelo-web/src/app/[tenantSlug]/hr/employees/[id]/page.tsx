@@ -30,6 +30,7 @@ import { ProfileBanner } from '@/components/molecules/hr/employees/ProfileBanner
 import { EmployeeDetailSidebar } from '@/components/molecules/hr/employees/EmployeeDetailSidebar';
 import { PersonalInformationSection } from '@/components/molecules/hr/employees/PersonalInformationSection';
 import { cardClass } from '@/lib/utils';
+import { EmployeeAssessmentsSection } from '@/components/molecules/hr/employees/EmployeeAssessmentsSection';
 import { ObjectivesSection } from '@/components/molecules/hr/employees/ObjectivesSection';
 import { PerformanceTab } from '@/components/molecules/hr/employees/PerformanceTab';
 import { EmployeeLeaveBalancesSection } from '@/components/molecules/hr/employees/EmployeeLeaveBalancesSection';
@@ -243,7 +244,12 @@ export default function EmployeeDetailPage({
             </div>
           )}
           {activeTab === 'performance' && (
-            <PerformanceTab objectives={<ObjectivesSection projects={employeeProjects} />} />
+            <PerformanceTab
+              objectives={
+                <ObjectivesSection employeeId={employee.id} projects={employeeProjects} />
+              }
+              assessments={<EmployeeAssessmentsSection employeeId={employee.id} />}
+            />
           )}
           {activeTab === 'documents' && <EmployeeDocumentsTab employee={employee} />}
         </div>

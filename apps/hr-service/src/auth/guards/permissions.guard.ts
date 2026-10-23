@@ -71,6 +71,12 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.READ_RECRUITMENT_CANDIDATES]: [
     { resource: 'recruitment.candidates', actions: ['VIEW'] },
   ],
+  // The applicant list (name, stage, score) is open to vacancy viewers; the full
+  // candidate record is not.
+  [Permission.READ_RECRUITMENT_APPLICANTS]: [
+    { resource: 'recruitment.vacancies', actions: ['VIEW'] },
+    { resource: 'recruitment.candidates', actions: ['VIEW'] },
+  ],
   [Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE]: [
     { resource: 'recruitment.candidates', actions: ['EDIT'] },
   ],
@@ -78,16 +84,18 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'recruitment.candidates', actions: ['EDIT'] },
   ],
   [Permission.READ_RECRUITMENT_STAGES]: [
-    { resource: 'recruitment.stages', actions: ['VIEW'] },
+    { resource: 'recruitment.settings', actions: ['VIEW'] },
+    { resource: 'recruitment.vacancies', actions: ['VIEW'] },
+    { resource: 'recruitment.candidates', actions: ['VIEW'] },
   ],
   [Permission.CREATE_RECRUITMENT_STAGE]: [
-    { resource: 'recruitment.stages', actions: ['CREATE'] },
+    { resource: 'recruitment.settings', actions: ['CREATE'] },
   ],
   [Permission.UPDATE_RECRUITMENT_STAGE]: [
-    { resource: 'recruitment.stages', actions: ['EDIT'] },
+    { resource: 'recruitment.settings', actions: ['EDIT'] },
   ],
   [Permission.DELETE_RECRUITMENT_STAGE]: [
-    { resource: 'recruitment.stages', actions: ['DELETE'] },
+    { resource: 'recruitment.settings', actions: ['DELETE'] },
   ],
 
   // ── Departments ───────────────────────────────────────────────────────────

@@ -589,7 +589,7 @@ export class RecruitmentController {
 
   @Get('candidates')
   @ApiTags('HR Recruitment - Candidates')
-  @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
+  @RequirePermissions(Permission.READ_RECRUITMENT_APPLICANTS)
   @ApiOperation({
     summary: 'List recruitment candidates/applications',
     description:

@@ -18,6 +18,7 @@ import {
   stageVariant,
 } from '@/components/molecules/hr/recruitment/candidateUtils';
 import { usePermission } from '@/hooks/hr/usePermission';
+import { cn } from '@/lib/utils';
 import {
   useCandidates,
   useMoveApplicantsToScreening,
@@ -45,15 +46,19 @@ function CandidateCard({
   onOpen,
 }: {
   candidate: RecruitmentCandidate;
-  onOpen: () => void;
+  /** Left out when the user may see who applied but not open their record. */
+  onOpen?: () => void;
 }) {
   const name = candidateFullName(candidate);
   const score = candidate.matchScore;
+  const Wrapper = onOpen ? 'button' : 'div';
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full flex-col gap-2 rounded-card border border-gray-200 bg-white p-3 text-left transition-colors hover:bg-gray-50"
+    <Wrapper
+      {...(onOpen ? { type: 'button' as const, onClick: onOpen } : {})}
+      className={cn(
+        'flex w-full flex-col gap-2 rounded-card border border-gray-200 bg-white p-3 text-left',
+        onOpen && 'transition-colors hover:bg-gray-50',
+      )}
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <Avatar name={name} size="sm" />
@@ -70,7 +75,7 @@ function CandidateCard({
         <span>Applied {formatDate(candidate.submittedAt ?? candidate.appliedAt)}</span>
       </div>
       {score !== null && <Badge label={`${score}% match`} variant={matchVariant(score)} />}
-    </button>
+    </Wrapper>
   );
 }
 
@@ -203,8 +208,6 @@ export function JobOpeningPipeline({
     );
   };
 
-  if (canReadCandidates === false) return null;
-
   if (stagesLoading || candidatesLoading) {
     return (
       <div className="flex gap-4 overflow-hidden">
@@ -276,8 +279,11 @@ export function JobOpeningPipeline({
                     <CandidateCard
                       key={c.id}
                       candidate={c}
-                      onOpen={() =>
-                        router.push(`/${params.tenantSlug}/hr/recruitment/candidates/${c.id}`)
+                      onOpen={
+                        canReadCandidates
+                          ? () =>
+                              router.push(`/${params.tenantSlug}/hr/recruitment/candidates/${c.id}`)
+                          : undefined
                       }
                     />
                   ))

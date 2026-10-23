@@ -34,7 +34,7 @@ export default function AppraisalCyclesPage({
           Schedule and manage performance review cycles across departments
         </p>
       </div>
-      <AppraisalCyclesList tenantSlug={tenantSlug} />
+      <AppraisalCyclesList />
     </div>
   );
 }

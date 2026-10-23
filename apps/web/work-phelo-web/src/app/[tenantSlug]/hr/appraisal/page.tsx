@@ -4,7 +4,7 @@ import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { useTeamAppraisals } from '@/hooks';
+import { useIsManager } from '@/hooks/hr/useIsManager';
 import { Permission } from '@/lib/permissionMap';
 
 /**
@@ -25,8 +25,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   const canApproveAppraisal = usePermission(Permission.FINALIZE_APPRAISAL);
   const canViewAppraisals = canCreateAppraisal || canConfigureAppraisal || canApproveAppraisal;
 
-  const { data: teamData } = useTeamAppraisals();
-  const isManager = (teamData?.length ?? 0) > 0;
+  const { isManager } = useIsManager();
 
   useEffect(() => {
     if (user === null) return;

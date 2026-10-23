@@ -60,9 +60,9 @@ export const RESOURCES = [
     description: 'Recruitment candidate applications and stage movement',
   },
   {
-    name: 'recruitment.stages',
+    name: 'recruitment.settings',
     module: 'HR',
-    description: 'Tenant recruitment pipeline stage configuration',
+    description: 'Manage hiring settings (pipeline stages)',
   },
   {
     name: 'leave',

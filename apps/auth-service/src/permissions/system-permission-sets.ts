@@ -122,7 +122,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
           PermissionAction.VIEW,
           PermissionAction.EDIT,
         ],
-        'recruitment.stages': [
+        'recruitment.settings': [
           PermissionAction.VIEW,
           PermissionAction.CREATE,
           PermissionAction.EDIT,
@@ -560,7 +560,7 @@ const RECRUITER_PERMISSIONS: PermissionResourceMap = {
     PermissionAction.EDIT,
   ],
   'recruitment.candidates': [PermissionAction.VIEW],
-  'recruitment.stages': [PermissionAction.VIEW],
+  'recruitment.settings': [PermissionAction.VIEW],
 };
 
 /**
