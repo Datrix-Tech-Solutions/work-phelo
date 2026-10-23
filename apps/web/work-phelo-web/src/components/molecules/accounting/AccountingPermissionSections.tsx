@@ -222,6 +222,22 @@ export const ACCOUNTING_PERMISSION_TAG_MAPPING: Record<string, PermissionPair[]>
   manage_accounting_settings: pairs('accounting.settings', ['VIEW', 'EDIT']),
 };
 
+/** Lets an accounting admin create roles and assign them; the backend scopes this to accounting. */
+const ROLE_MANAGEMENT_PERMISSIONS: PermissionPair[] = [
+  ...pairs('permission-sets', ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN']),
+  ...pairs('users', ['VIEW']),
+];
+
+/** Every accounting permission plus role management — granted by the Accounting Admin tag in HR roles. */
+export const ACCOUNTING_ADMIN_PERMISSIONS: PermissionPair[] = [
+  ...new Map(
+    [
+      ...Object.values(ACCOUNTING_PERMISSION_TAG_MAPPING).flat(),
+      ...ROLE_MANAGEMENT_PERMISSIONS,
+    ].map((p) => [`${p.resource}:${p.action}`, p] as const),
+  ).values(),
+];
+
 /** Turns the selected pills into the resource/action DTOs the permission-set API expects. */
 export function buildAccountingPermissionResources(
   selectedKeys: string[],
