@@ -2,7 +2,7 @@ import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS, HR_TAB_KEYS } from '@/config/hr-nav';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { useTeamAppraisals } from '@/hooks';
+import { useIsManager } from '@/hooks/hr/useIsManager';
 import { Permission } from '@/lib/permissionMap';
 
 /**
@@ -36,8 +36,7 @@ export function useHrNavAccess(): Record<string, boolean> {
   const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
   const canFinalizeAppraisal = usePermission(Permission.FINALIZE_APPRAISAL);
   const canViewAppraisals = canCreateAppraisal || canConfigureAppraisal || canFinalizeAppraisal;
-  const { data: teamAppraisals } = useTeamAppraisals();
-  const isAppraisalManager = (teamAppraisals?.length ?? 0) > 0;
+  const { isManager: isAppraisalManager } = useIsManager();
   const canAccessAppraisal = canViewAppraisals || isAppraisalManager;
   // Leave section: Requests (APPROVE_LEAVE or tenant admin) + config (MANAGE_LEAVE_TYPES).
   const canApproveLeave = usePermission(Permission.APPROVE_LEAVE);

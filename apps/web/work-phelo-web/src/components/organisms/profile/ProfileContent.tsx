@@ -26,7 +26,7 @@ import { ProfileSummaryCard } from '@/components/molecules/hr/employees/ProfileS
 import { ObjectivesSection } from '@/components/molecules/hr/employees/ObjectivesSection';
 import { PerformanceTab } from '@/components/molecules/hr/employees/PerformanceTab';
 import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
-import { ProfilePerformanceSummaryCard } from '@/components/molecules/hr/employees/ProfilePerformanceSummaryCard';
+import { PerformanceSummaryCard } from '@/components/molecules/hr/employees/PerformanceSummaryCard';
 import { PersonalInformationSection } from '@/components/molecules/hr/employees/PersonalInformationSection';
 import { cardClass } from '@/lib/utils';
 import { RolesAndPermissionsCard } from '@/components/molecules/hr/employees/RolesAndPermissionsCard';
@@ -320,7 +320,7 @@ export function ProfileContent() {
 
           {activeTab === 'performance' && (
             <PerformanceTab
-              objectives={<ObjectivesSection projects={myProjects} />}
+              objectives={<ObjectivesSection employeeId={employee.id} projects={myProjects} />}
               assessments={
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
                   <div className="xl:col-span-2 min-w-0">
@@ -337,7 +337,7 @@ export function ProfileContent() {
                     />
                   </div>
                   <div className="xl:col-span-1">
-                    <ProfilePerformanceSummaryCard />
+                    <PerformanceSummaryCard employeeId={employee.id} />
                   </div>
                 </div>
               }

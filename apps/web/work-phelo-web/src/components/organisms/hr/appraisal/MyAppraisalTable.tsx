@@ -3,46 +3,20 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useMyAppraisals, useAppraisalCycles } from '@/hooks/hr/useAppraisals';
+import { useMyProfile } from '@/hooks/hr/useEmployees';
+import { STATUS_LABELS, goalsWithObjectives, overallScore } from '@/lib/appraisalAssessments';
+import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
+import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
+import {
+  useAppraisalAssessmentsStore,
+  type AssessmentStatus,
+} from '@/store/appraisalAssessments.store';
+import { StatusLabel } from './CycleAssessments';
 import { Column, DataTable } from '../../shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { cardClass, cn } from '@/lib/utils';
-
-type MyAppraisalStatus =
-  | 'In Progress'
-  | 'Pending Manager'
-  | 'Pending Approval'
-  | 'Completed'
-  | 'Overdue'
-  | 'Cancelled';
-
-const STATUS_CONFIG: Record<MyAppraisalStatus, { dot: string; text: string }> = {
-  'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
-  'Pending Manager': { dot: 'bg-amber-400', text: 'text-amber-500' },
-  'Pending Approval': { dot: 'bg-purple-400', text: 'text-purple-600' },
-  Completed: { dot: 'bg-green-500', text: 'text-green-600' },
-  Overdue: { dot: 'bg-red-500', text: 'text-red-500' },
-  Cancelled: { dot: 'bg-gray-300', text: 'text-gray-400' },
-};
-
-function deriveStatus(
-  overallStatus: string,
-  cycleStatus: string,
-  deadline: string,
-): MyAppraisalStatus {
-  if (overallStatus === 'CANCELLED' || cycleStatus === 'CANCELLED') return 'Cancelled';
-  if (overallStatus === 'Finalized') return 'Completed';
-  if (overallStatus === 'ManagerSubmitted' || overallStatus === 'PendingFinalization')
-    return 'Pending Approval';
-  if (overallStatus === 'SelfSubmitted') return 'Pending Manager';
-  if (deadline) {
-    const today = new Date().toISOString().slice(0, 10);
-    if (deadline.slice(0, 10) < today) return 'Overdue';
-  }
-  return 'In Progress';
-}
+import { cardClass } from '@/lib/utils';
 
 function formatDeadline(d: string): string {
   if (!d) return '—';
@@ -65,34 +39,35 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [statusFilter, setStatusFilter] = useState('');
 
-  const { data: myData, isLoading } = useMyAppraisals();
-  const { data: cycles = [] } = useAppraisalCycles();
+  const { data: me, isLoading } = useMyProfile();
+  const cycles = useAppraisalGoalsStore((s) => s.cycles);
+  const goals = useAppraisalGoalsStore((s) => s.goals);
+  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
+  const assessments = useAppraisalAssessmentsStore((s) => s.assessments);
 
-  const myRows = useMemo(() => {
-    const list = Array.isArray(myData) ? myData : [];
-    return list.map(
-      (r: {
-        id: unknown;
-        cycleId: unknown;
-        cycleName?: unknown;
-        cycleStatus?: string;
-        overallStatus?: string;
-        finalScore?: number | null;
-      }) => {
-        const cycleId = String(r.cycleId ?? '');
-        const cycle = cycles.find((c) => c.id === cycleId);
-        return {
-          id: String(r.id),
-          cycleId,
-          cycleName: String(r.cycleName ?? cycle?.title ?? ''),
-          cycleStatus: r.cycleStatus ?? 'Upcoming',
-          overallStatus: r.overallStatus ?? 'NotStarted',
-          overallScore: r.finalScore != null ? Math.round(Number(r.finalScore)) : undefined,
-          selfAssessmentDeadline: cycle?.selfAssessmentDeadline ?? '',
-        };
-      },
-    );
-  }, [myData, cycles]);
+  const myRows = useMemo(
+    () =>
+      assessments
+        .filter((a) => a.employeeId === me?.id)
+        .flatMap((a) => {
+          const cycle = cycles.find((c) => c.id === a.cycleId);
+          if (!cycle || cycle.status === 'CANCELLED') return [];
+          return [
+            {
+              id: a.id,
+              cycleId: cycle.id,
+              cycleName: cycle.title,
+              status: a.status,
+              overallScore: overallScore(
+                a,
+                goalsWithObjectives(cycle, goals, objectives, a.employeeId),
+              ),
+              selfAssessmentDeadline: cycle.selfAssessmentDeadline,
+            },
+          ];
+        }),
+    [assessments, cycles, goals, objectives, me?.id],
+  );
 
   const filteredRows = useMemo(() => {
     let rows = myRows;
@@ -100,17 +75,7 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
       const q = search.toLowerCase();
       rows = rows.filter((r) => r.cycleName.toLowerCase().includes(q));
     }
-    if (statusFilter) {
-      rows = rows.filter(
-        (r) =>
-          deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline) === statusFilter,
-      );
-    } else {
-      rows = rows.filter(
-        (r) =>
-          deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline) !== 'Cancelled',
-      );
-    }
+    if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     return rows;
   }, [myRows, search, statusFilter]);
 
@@ -118,6 +83,12 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
 
   type MyRow = (typeof myRows)[0];
+  const open = (r: MyRow) =>
+    router.push(
+      `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/${
+        r.status === 'NOT_STARTED' ? 'self-assessment' : 'results'
+      }/${r.id}`,
+    );
 
   const columns: Column<MyRow>[] = [
     {
@@ -138,66 +109,33 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
       key: 'overallScore',
       label: 'Overall Score',
       width: '150px',
-      render: (r) => {
-        const managerReviewed =
-          r.overallStatus === 'Finalized' || r.overallStatus === 'ManagerSubmitted';
-        if (managerReviewed && r.overallScore != null) {
-          return <span className="font-medium text-gray-900">{r.overallScore}%</span>;
-        }
-        return <span className="text-gray-400">—</span>;
-      },
+      render: (r) =>
+        r.overallScore != null ? (
+          <span className="font-medium text-gray-900">{r.overallScore}%</span>
+        ) : (
+          <span className="text-gray-400">—</span>
+        ),
     },
     {
       key: 'status',
       label: 'Status',
-      width: '130px',
-      render: (r) => {
-        const status = deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline);
-        const s = STATUS_CONFIG[status];
-        return (
-          <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
-            <span className={cn('w-2 h-2 rounded-full shrink-0', s.dot)} />
-            {status}
-          </span>
-        );
-      },
+      width: '160px',
+      render: (r) => <StatusLabel status={r.status} />,
     },
     {
       key: 'action',
       label: '',
       width: '160px',
-      render: (r) => {
-        const status = deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline);
-        if (status === 'Cancelled') return null;
-        if (status === 'In Progress' || status === 'Overdue') {
-          return (
-            <div onClick={(e) => e.stopPropagation()}>
-              <TableButton
-                variant="green"
-                onClick={() =>
-                  router.push(
-                    `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`,
-                  )
-                }
-              >
-                Start
-              </TableButton>
-            </div>
-          );
-        }
-        return (
-          <div onClick={(e) => e.stopPropagation()}>
-            <TableButton
-              variant="blue"
-              onClick={() =>
-                router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
-              }
-            >
-              View Assessment
-            </TableButton>
-          </div>
-        );
-      },
+      render: (r) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <TableButton
+            variant={r.status === 'NOT_STARTED' ? 'green' : 'blue'}
+            onClick={() => open(r)}
+          >
+            {r.status === 'NOT_STARTED' ? 'Start' : 'View Assessment'}
+          </TableButton>
+        </div>
+      ),
     },
   ];
 
@@ -213,9 +151,9 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
               placeholder="Status"
               showAllOption
               allLabel="All"
-              options={Object.keys(STATUS_CONFIG).map((status) => ({
+              options={(Object.keys(STATUS_LABELS) as AssessmentStatus[]).map((status) => ({
                 value: status,
-                label: status,
+                label: STATUS_LABELS[status],
               }))}
               value={statusFilter}
               onChange={(value) => {
@@ -244,15 +182,7 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
         currentPage={page}
         totalPages={totalPages}
         onPageChange={onPageChange}
-        onRowClick={(r) => {
-          const status = deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline);
-          if (status === 'Cancelled') return;
-          if (status === 'In Progress' || status === 'Overdue') {
-            router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`);
-          } else {
-            router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`);
-          }
-        }}
+        onRowClick={open}
         noInternalScroll
       />
     </div>

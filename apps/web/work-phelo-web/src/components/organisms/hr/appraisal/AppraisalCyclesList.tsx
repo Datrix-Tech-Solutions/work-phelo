@@ -1,30 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useQueries } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateCyclePanel } from '@/components/organisms/hr/appraisal/CreateCyclePanel';
-import {
-  useAppraisalCycles,
-  useDeleteAppraisalCycle,
-  useStartAppraisalCycle,
-  useSeedCycleFromTemplate,
-  useCancelAppraisalCycle,
-} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
-import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { api } from '@/lib/api';
-import { AppraisalCycle } from '@/types/hr';
+import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
+import { useAppraisalGoalsStore, type LocalCycle } from '@/store/appraisalGoals.store';
 import { cn } from '@/lib/utils';
-
-interface Props {
-  tenantSlug: string;
-}
 
 type DerivedStatus = 'Upcoming' | 'In Progress' | 'Completed' | 'Expired' | 'Cancelled';
 
@@ -36,50 +22,11 @@ const STATUS_STYLES: Record<DerivedStatus, { dot: string; text: string }> = {
   Cancelled: { dot: 'bg-red-300', text: 'text-red-400' },
 };
 
-/**
- * Batches per-cycle appraisal-completion queries so derived status can be computed for every
- * row up front (rowActions/column renderers run outside component context, so hooks can't be
- * called per-row there). Shares the cache with useCycleAppraisals via a matching query key.
- */
-function useDerivedCycleStatuses(cycles: AppraisalCycle[]): Map<string, DerivedStatus> {
-  const queries = useQueries({
-    queries: cycles.map((c) => ({
-      queryKey: ['cycle-appraisals', c.id],
-      queryFn: () => api.get(`/hr/appraisals/cycles/${c.id}/appraisals`).then((r) => r.data),
-      enabled: !!c.id,
-    })),
-  });
-
-  return useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const map = new Map<string, DerivedStatus>();
-
-    cycles.forEach((cycle, i) => {
-      const raw = queries[i]?.data;
-      const appraisals: { selfStatus?: string; managerStatus?: string }[] = Array.isArray(raw)
-        ? raw
-        : raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).data)
-          ? (raw as { data: { selfStatus?: string; managerStatus?: string }[] }).data
-          : [];
-
-      const total = appraisals.length;
-      const selfCompleted = appraisals.filter((a) => a.selfStatus === 'SUBMITTED').length;
-      const managerCompleted = appraisals.filter((a) => a.managerStatus === 'SUBMITTED').length;
-      const rate =
-        total > 0 ? Math.round(((selfCompleted + managerCompleted) / (total * 2)) * 100) : 0;
-
-      let status: DerivedStatus;
-      if (cycle.status === 'CANCELLED') status = 'Cancelled';
-      else if (rate >= 100) status = 'Completed';
-      else if (cycle.endDate < today) status = 'Expired';
-      else if (cycle.status === 'UPCOMING') status = 'Upcoming';
-      else status = 'In Progress';
-
-      map.set(cycle.id, status);
-    });
-
-    return map;
-  }, [cycles, queries]);
+function deriveStatus(cycle: LocalCycle): DerivedStatus {
+  const today = new Date().toISOString().slice(0, 10);
+  if (cycle.status === 'CANCELLED') return 'Cancelled';
+  if (cycle.endDate < today) return 'Expired';
+  return cycle.status === 'UPCOMING' ? 'Upcoming' : 'In Progress';
 }
 
 function CycleStatusBadge({ status }: { status: DerivedStatus }) {
@@ -92,65 +39,55 @@ function CycleStatusBadge({ status }: { status: DerivedStatus }) {
   );
 }
 
-export function AppraisalCyclesList({ tenantSlug }: Props) {
+export function AppraisalCyclesList() {
   const toast = useToast();
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
-  const [editCycle, setEditCycle] = useState<AppraisalCycle | undefined>();
+  const [editCycle, setEditCycle] = useState<LocalCycle | undefined>();
   const [forceCreate, setForceCreate] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<AppraisalCycle | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<AppraisalCycle | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LocalCycle | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<LocalCycle | null>(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [startTarget, setStartTarget] = useState<AppraisalCycle | null>(null);
+  const [startTarget, setStartTarget] = useState<LocalCycle | null>(null);
+  const [restartTarget, setRestartTarget] = useState<LocalCycle | null>(null);
 
   const PAGE_SIZE = 10;
-  const { data, isLoading } = useAppraisalCycles({ page, search: search || undefined });
-  const allCycles: AppraisalCycle[] = data ?? [];
+  const storedCycles = useAppraisalGoalsStore((s) => s.cycles);
+  const removeCycle = useAppraisalGoalsStore((s) => s.removeCycle);
+  const startCycle = useAppraisalGoalsStore((s) => s.startCycle);
+  const cancelCycle = useAppraisalGoalsStore((s) => s.cancelCycle);
+  const goals = useAppraisalGoalsStore((s) => s.goals);
+  const createAssessments = useAppraisalAssessmentsStore((s) => s.createForCycle);
+  const removeAssessments = useAppraisalAssessmentsStore((s) => s.removeForCycle);
+  const allCycles = useMemo(
+    () => storedCycles.filter((c) => c.title.toLowerCase().includes(search.trim().toLowerCase())),
+    [storedCycles, search],
+  );
   const totalPages = Math.max(1, Math.ceil(allCycles.length / PAGE_SIZE));
   const cycles = allCycles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const statusMap = useDerivedCycleStatuses(cycles);
 
-  const { mutate: startCycle, isPending: isStarting } = useStartAppraisalCycle();
-  const { mutate: seedKpis, isPending: isSeeding } = useSeedCycleFromTemplate();
-  const { mutate: deleteCycle, isPending: isDeleting } = useDeleteAppraisalCycle();
-  const { mutate: cancelCycle, isPending: isCancelling } = useCancelAppraisalCycle();
-
-  const handleStart = (cycle: AppraisalCycle) => {
-    const doStart = () =>
-      startCycle(cycle.id, {
-        onSuccess: () => {
-          toast.success('Cycle started');
-          setStartTarget(null);
-        },
-        onError: (err) => toast.error(extractError(err, 'Failed to start cycle')),
-      });
-
-    if (cycle.templateId) {
-      seedKpis(cycle.id, {
-        onSuccess: doStart,
-        onError: (err) => toast.error(extractError(err, 'Failed to seed KPIs from template')),
-      });
-    } else {
-      doStart();
-    }
+  // Everyone a goal in the cycle covers gets an assessment of their own.
+  const generateAssessments = (cycle: LocalCycle) => {
+    const employeeIds = [
+      ...new Set(goals.filter((g) => cycle.goalIds.includes(g.id)).flatMap((g) => g.employeeIds)),
+    ];
+    createAssessments(cycle.id, employeeIds);
   };
 
-  const columns: Column<AppraisalCycle>[] = [
+  const columns: Column<LocalCycle>[] = [
     {
       key: 'title',
       label: 'Cycle Name',
       width: 'minmax(200px, 1fr)',
-      render: (row) => (
-        <Link
-          href={`/${tenantSlug}/hr/appraisal/settings/cycles/${row.id}`}
-          className="font-medium text-gray-900 hover:text-brand hover:underline transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {row.title}
-        </Link>
-      ),
+      render: (row) => <span className="font-medium text-gray-900">{row.title}</span>,
+    },
+    {
+      key: 'goals',
+      label: 'Goals',
+      width: '100px',
+      render: (row) => <span className="tabular-nums">{row.goalIds.length}</span>,
     },
     {
       key: 'startDate',
@@ -168,14 +105,14 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
       key: 'status',
       label: 'Status',
       width: '140px',
-      render: (row) => <CycleStatusBadge status={statusMap.get(row.id) ?? 'Upcoming'} />,
+      render: (row) => <CycleStatusBadge status={deriveStatus(row)} />,
     },
     {
       key: 'actions',
       label: '',
       width: '220px',
       render: (row) => {
-        const status = statusMap.get(row.id) ?? 'Upcoming';
+        const status = deriveStatus(row);
         const edit = () => {
           setForceCreate(false);
           setEditCycle(row);
@@ -200,6 +137,9 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
 
             {status === 'In Progress' && (
               <>
+                <TableButton variant="blue" onClick={() => setRestartTarget(row)}>
+                  Restart
+                </TableButton>
                 <TableButton variant="gray" onClick={edit}>
                   Edit
                 </TableButton>
@@ -243,7 +183,6 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
       <DataTable
         columns={columns}
         data={cycles}
-        isLoading={isLoading}
         emptyMessage="No appraisal cycles yet — create your first one"
         searchPlaceholder="Search cycles..."
         onSearch={setSearch}
@@ -284,18 +223,13 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
             </Button>
             <Button
               variant="danger"
-              isLoading={isDeleting}
-              loadingText="Deleting..."
-              onClick={() =>
-                deleteTarget &&
-                deleteCycle(deleteTarget.id, {
-                  onSuccess: () => {
-                    toast.success('Cycle deleted');
-                    setDeleteTarget(null);
-                  },
-                  onError: (err) => toast.error(extractError(err, 'Failed to delete cycle')),
-                })
-              }
+              onClick={() => {
+                if (!deleteTarget) return;
+                removeCycle(deleteTarget.id);
+                removeAssessments(deleteTarget.id);
+                toast.success('Cycle deleted');
+                setDeleteTarget(null);
+              }}
             >
               Delete
             </Button>
@@ -325,23 +259,14 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
             </Button>
             <Button
               variant="danger"
-              isLoading={isCancelling}
-              loadingText="Cancelling..."
               disabled={!cancelReason.trim()}
-              onClick={() =>
-                cancelTarget &&
-                cancelCycle(
-                  { id: cancelTarget.id, reason: cancelReason.trim() },
-                  {
-                    onSuccess: () => {
-                      toast.success('Cycle cancelled');
-                      setCancelTarget(null);
-                      setCancelReason('');
-                    },
-                    onError: (err) => toast.error(extractError(err, 'Failed to cancel cycle')),
-                  },
-                )
-              }
+              onClick={() => {
+                if (!cancelTarget) return;
+                cancelCycle(cancelTarget.id, cancelReason.trim());
+                toast.success('Cycle cancelled');
+                setCancelTarget(null);
+                setCancelReason('');
+              }}
             >
               Cancel Cycle
             </Button>
@@ -365,18 +290,49 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
         isOpen={!!startTarget}
         onClose={() => setStartTarget(null)}
         title="Start Appraisal Cycle"
-        description={`Start "${startTarget?.title}"? This will generate appraisal records for all employees.`}
+        description={`Start "${startTarget?.title}"? Everyone its goals cover gets an assessment to rate themselves on.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setStartTarget(null)}>
               Cancel
             </Button>
             <Button
-              isLoading={isSeeding || isStarting}
-              loadingText={isSeeding ? 'Seeding KPIs...' : 'Starting...'}
-              onClick={() => startTarget && handleStart(startTarget)}
+              onClick={() => {
+                if (!startTarget) return;
+                startCycle(startTarget.id);
+                generateAssessments(startTarget);
+                toast.success('Cycle started');
+                setStartTarget(null);
+              }}
             >
               Start Cycle
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Restart modal — In Progress; temporary, until cycles are kept by the backend */}
+      <Modal
+        isOpen={!!restartTarget}
+        onClose={() => setRestartTarget(null)}
+        title="Restart Appraisal Cycle"
+        description={`Restart "${restartTarget?.title}"? Its assessments are made again from the cycle's current goals, and every rating given so far is cleared.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setRestartTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (!restartTarget) return;
+                removeAssessments(restartTarget.id);
+                generateAssessments(restartTarget);
+                toast.success('Cycle restarted');
+                setRestartTarget(null);
+              }}
+            >
+              Restart Cycle
             </Button>
           </div>
         }

@@ -4,16 +4,18 @@ import {
   LayoutTemplate,
   CalendarRange,
   SlidersHorizontal,
+  Target,
 } from 'lucide-react';
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { useTeamAppraisals } from '@/hooks';
+import { useIsManager } from '@/hooks/hr/useIsManager';
 import { Permission } from '@/lib/permissionMap';
 
 /* ── Icons ── */
 const HrReviewIcon = () => <ClipboardCheck className="w-5 h-5" />;
 const TeamReviewIcon = () => <Users2 className="w-5 h-5" />;
 const TemplatesIcon = () => <LayoutTemplate className="w-5 h-5" />;
+const GoalsIcon = () => <Target className="w-5 h-5" />;
 const CyclesIcon = () => <CalendarRange className="w-5 h-5" />;
 const SettingsIcon = () => <SlidersHorizontal className="w-5 h-5" />;
 
@@ -34,8 +36,7 @@ export function useAppraisalSidebarGroups(tenantSlug: string): {
   const canApproveAppraisal = usePermission(Permission.FINALIZE_APPRAISAL);
   const canViewAppraisals = canCreateAppraisal || canConfigureAppraisal || canApproveAppraisal;
 
-  const { data: teamData } = useTeamAppraisals();
-  const isManager = (teamData?.length ?? 0) > 0;
+  const { isManager } = useIsManager();
 
   const base = `/${tenantSlug}/hr/appraisal`;
 
@@ -69,6 +70,14 @@ export function useAppraisalSidebarGroups(tenantSlug: string): {
           label: 'Templates',
           icon: <TemplatesIcon />,
           href: `${base}/settings/templates`,
+          enabled: canConfigureAppraisal,
+          active: true,
+        },
+        {
+          key: 'goals',
+          label: 'Goals',
+          icon: <GoalsIcon />,
+          href: `${base}/settings/goals`,
           enabled: canConfigureAppraisal,
           active: true,
         },

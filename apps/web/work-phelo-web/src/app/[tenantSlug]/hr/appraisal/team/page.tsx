@@ -2,15 +2,14 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTeamAppraisals } from '@/hooks';
+import { useIsManager } from '@/hooks/hr/useIsManager';
 import { TeamReviewTable } from '@/components/organisms/hr/appraisal/TeamReviewTable';
 import { pageHeader, pageContent } from '@/lib/layout';
 
 export default function TeamReviewPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
-  const { data: teamData, isLoading } = useTeamAppraisals();
-  const isManager = (teamData?.length ?? 0) > 0;
+  const { isManager, isLoading } = useIsManager();
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);

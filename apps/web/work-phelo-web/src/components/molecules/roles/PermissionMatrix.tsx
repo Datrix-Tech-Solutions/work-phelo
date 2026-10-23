@@ -176,6 +176,22 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     resources: ['payroll', 'allowances'],
   },
   {
+    label: 'Hiring',
+    description:
+      'Job openings, who applied and the full candidate record, and the hiring pipeline settings',
+    resources: ['recruitment.vacancies', 'recruitment.candidates', 'recruitment.settings'],
+    resourceLabels: {
+      'recruitment.vacancies': 'Vacancies',
+      'recruitment.candidates': 'Candidates',
+      'recruitment.settings': 'Manage Hiring Settings',
+    },
+    resourceActions: {
+      'recruitment.vacancies': ['VIEW', 'CREATE', 'EDIT'],
+      'recruitment.candidates': ['VIEW', 'EDIT'],
+      'recruitment.settings': ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+    },
+  },
+  {
     label: 'HR Settings',
     description: 'Departments, branches, appraisal configuration and other settings',
     resources: ['departments', 'branches', 'leave-settings', 'appraisal-settings', 'hr-settings'],

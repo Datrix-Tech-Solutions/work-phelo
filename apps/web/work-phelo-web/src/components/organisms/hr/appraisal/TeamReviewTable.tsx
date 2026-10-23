@@ -1,18 +1,14 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { formatDate } from '@/lib/formatters';
+import { TableButton } from '@/components/atoms/TableButton';
 import { Column, DataTable } from '../../shared/DataTable';
-import { api } from '@/lib/api';
-
-function daysUntil(dateStr: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
+import { useAllEmployees, useMyProfile } from '@/hooks/hr/useEmployees';
+import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
+import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
+import { useIsManager } from '@/hooks/hr/useIsManager';
+import { StatusLabel } from './CycleAssessments';
 
 const PAGE_SIZE = 10;
 
@@ -23,153 +19,97 @@ interface Props {
   onPageChange: (page: number) => void;
 }
 
+/** The assessments of the people who report to the signed-in manager, once they have rated themselves. */
 export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const { data: teamData, isLoading } = useQuery({
-    queryKey: ['team-appraisals'],
-    queryFn: () => api.get('/hr/appraisals/team').then((r) => r.data),
-  });
+  const { data: me } = useMyProfile();
+  const { reviewsAll } = useIsManager();
+  const { data: employeeData, isLoading } = useAllEmployees();
+  const cycles = useAppraisalGoalsStore((s) => s.cycles);
+  const assessments = useAppraisalAssessmentsStore((s) => s.assessments);
 
-  const teamRows = useMemo(() => {
-    const list = Array.isArray(teamData) ? teamData : (teamData?.data ?? []);
-    return list
-      .filter((r: { overallStatus?: string }) =>
-        ['SelfSubmitted', 'ManagerSubmitted', 'Finalized'].includes(r.overallStatus ?? ''),
-      )
-      .map(
-        (r: {
-          id: unknown;
-          employeeId: unknown;
-          employeeName?: unknown;
-          cycleId: unknown;
-          cycleName?: unknown;
-          selfSubmittedAt?: unknown;
-          managerReviewDeadline?: unknown;
-          overallStatus?: string;
-        }) => ({
-          id: String(r.id),
-          employeeId: String(r.employeeId),
-          employeeName: String(r.employeeName ?? ''),
-          cycleId: String(r.cycleId),
-          cycleName: String(r.cycleName ?? ''),
-          selfSubmittedAt: r.selfSubmittedAt ? String(r.selfSubmittedAt) : undefined,
-          managerReviewDeadline: String(r.managerReviewDeadline ?? ''),
-          overallStatus: r.overallStatus ?? 'NotStarted',
-        }),
-      );
-  }, [teamData]);
-
-  const filteredRows = useMemo(() => {
-    if (!search) return teamRows;
-    const q = search.toLowerCase();
-    return teamRows.filter(
-      (r: (typeof teamRows)[0]) =>
-        r.employeeName.toLowerCase().includes(q) || r.cycleName.toLowerCase().includes(q),
+  const rows = useMemo(() => {
+    const team = (employeeData?.data ?? []).filter(
+      (e) => reviewsAll || (e.managerId && e.managerId === me?.id),
     );
-  }, [teamRows, search]);
+    return assessments.flatMap((a) => {
+      const employee = team.find((e) => e.id === a.employeeId);
+      const cycle = cycles.find((c) => c.id === a.cycleId);
+      if (!employee || !cycle || cycle.status === 'CANCELLED' || a.status === 'NOT_STARTED') {
+        return [];
+      }
+      const employeeName = `${employee.firstName} ${employee.lastName}`;
+      if (
+        search &&
+        !`${employeeName} ${cycle.title}`.toLowerCase().includes(search.toLowerCase())
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: a.id,
+          cycleId: cycle.id,
+          employeeName,
+          cycleName: cycle.title,
+          managerReviewDeadline: cycle.managerReviewDeadline,
+          status: a.status,
+        },
+      ];
+    });
+  }, [assessments, cycles, employeeData, me?.id, reviewsAll, search]);
 
-  const pageData = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  type Row = (typeof rows)[0];
+  const open = (r: Row) =>
+    router.push(
+      `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/${
+        r.status === 'SELF_SUBMITTED' ? 'manager-review' : 'results'
+      }/${r.id}`,
+    );
 
-  type TeamRow = (typeof teamRows)[0];
-  const columns: Column<TeamRow>[] = [
+  const columns: Column<Row>[] = [
     {
       key: 'employeeName',
       label: 'Employee',
-      width: 'minmax(150px, 1.5fr)',
       render: (r) => <span className="font-medium text-gray-900">{r.employeeName}</span>,
     },
+    { key: 'cycleName', label: 'Cycle', render: (r) => r.cycleName },
     {
-      key: 'cycleName',
-      label: 'Cycle',
-      width: 'minmax(100px, 1fr)',
-      render: (r) => <span className="text-gray-700">{r.cycleName}</span>,
+      key: 'deadline',
+      label: 'Review deadline',
+      render: (r) => (r.managerReviewDeadline ? formatDate(r.managerReviewDeadline) : '—'),
     },
-    {
-      key: 'selfSubmittedAt',
-      label: 'Self Submitted',
-      width: '150px',
-      render: (r) =>
-        r.selfSubmittedAt ? (
-          <span className="text-sm text-gray-700">{formatDate(r.selfSubmittedAt)}</span>
-        ) : (
-          <span className="text-sm text-gray-400">Pending</span>
-        ),
-    },
-    {
-      key: 'managerReviewDeadline',
-      label: 'Manager Deadline',
-      width: '150px',
-      render: (r) => (
-        <span className="text-sm text-gray-700">{formatDate(r.managerReviewDeadline)}</span>
-      ),
-    },
-    {
-      key: 'daysLeft',
-      label: 'Days Left',
-      width: '120px',
-      render: (r) => {
-        const days = daysUntil(r.managerReviewDeadline);
-        return (
-          <span
-            className={`font-semibold text-sm ${days < 0 ? 'text-red-500' : days <= 3 ? 'text-orange-500' : 'text-gray-700'}`}
-          >
-            {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
-          </span>
-        );
-      },
-    },
+    { key: 'status', label: 'Status', render: (r) => <StatusLabel status={r.status} /> },
     {
       key: 'action',
       label: '',
-      width: '120px',
-      render: (r) => {
-        if (r.overallStatus === 'ManagerSubmitted' || r.overallStatus === 'Finalized') {
-          return (
-            <button
-              onClick={() =>
-                router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
-              }
-              className="text-sm font-medium text-gray-600 hover:text-brand transition-colors"
-            >
-              View Results
-            </button>
-          );
-        }
-        if (r.overallStatus === 'SelfSubmitted') {
-          return (
-            <button
-              onClick={() =>
-                router.push(
-                  `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/manager-review/${r.id}`,
-                )
-              }
-              className="px-4 py-1.5 rounded-full border border-blue-700 bg-white text-sm font-medium text-gray-700 hover:bg-blue-300 transition-colors"
-            >
-              Review
-            </button>
-          );
-        }
-        return <span className="text-sm text-gray-400">Awaiting employee</span>;
-      },
+      width: '160px',
+      render: (r) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <TableButton
+            variant={r.status === 'SELF_SUBMITTED' ? 'green' : 'blue'}
+            onClick={() => open(r)}
+          >
+            {r.status === 'SELF_SUBMITTED' ? 'Review' : 'View'}
+          </TableButton>
+        </div>
+      ),
     },
   ];
 
   return (
     <DataTable
       columns={columns}
-      data={pageData}
+      data={rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)}
       isLoading={isLoading}
-      searchPlaceholder="Search employee or cycle..."
+      searchPlaceholder="Search team..."
+      searchValue={search}
       onSearch={onSearch}
-      onRowClick={(r) =>
-        router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/manager-review/${r.id}`)
-      }
+      onRowClick={open}
       currentPage={page}
-      totalPages={totalPages}
+      totalPages={Math.max(1, Math.ceil(rows.length / PAGE_SIZE))}
       onPageChange={onPageChange}
-      emptyMessage="No team members have active appraisals"
+      emptyMessage="No team assessments to review yet"
       noInternalScroll
     />
   );

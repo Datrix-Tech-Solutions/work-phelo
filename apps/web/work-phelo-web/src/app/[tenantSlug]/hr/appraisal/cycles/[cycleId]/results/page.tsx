@@ -1,7 +1,7 @@
 'use client';
 
 import { use } from 'react';
-import { CycleResultsContent } from '@/components/organisms/hr/appraisal/CycleResultsContent';
+import { CycleAssessments } from '@/components/organisms/hr/appraisal/CycleAssessments';
 
 export default function CycleResultsPage({
   params,
@@ -9,5 +9,5 @@ export default function CycleResultsPage({
   params: Promise<{ tenantSlug: string; cycleId: string }>;
 }) {
   const { tenantSlug, cycleId } = use(params);
-  return <CycleResultsContent tenantSlug={tenantSlug} cycleId={cycleId} />;
+  return <CycleAssessments tenantSlug={tenantSlug} cycleId={cycleId} />;
 }
