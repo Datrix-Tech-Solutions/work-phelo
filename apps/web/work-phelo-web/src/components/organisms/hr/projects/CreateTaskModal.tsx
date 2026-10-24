@@ -6,6 +6,7 @@ import { Search } from 'lucide-react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { Toggle } from '@/components/atoms/Toggle';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { useProjectMembers } from '@/hooks';
 import { inputClass, cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ interface Props {
     objectiveId?: string;
     workType?: string;
     priority?: string;
+    timed?: boolean;
   }) => void;
   isCreating?: boolean;
   /** The project's objectives; the field only shows when there are some. */
@@ -67,6 +69,7 @@ export function CreateTaskModal({
   const [objectiveId, setObjectiveId] = useState(defaultObjectiveId ?? '');
   const [workType, setWorkType] = useState(defaultWorkType);
   const [priority, setPriority] = useState(defaultPriority);
+  const [timed, setTimed] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -105,6 +108,7 @@ export function CreateTaskModal({
     setObjectiveId(defaultObjectiveId ?? '');
     setWorkType(defaultWorkType);
     setPriority(defaultPriority);
+    setTimed(false);
     onClose();
   };
 
@@ -120,11 +124,13 @@ export function CreateTaskModal({
       objectiveId: objectiveId || undefined,
       workType: workType || undefined,
       priority: priority || undefined,
+      timed,
     });
     reset({ name: '', dueDate: '' });
     setObjectiveId(defaultObjectiveId ?? '');
     setWorkType(defaultWorkType);
     setPriority(defaultPriority);
+    setTimed(false);
     setEmployeeSearch('');
     setSelectedIds([]);
   };
@@ -210,6 +216,15 @@ export function CreateTaskModal({
             />
           )}
         />
+
+        {/* Timed */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <label className="text-sm font-medium text-gray-700">Timed task</label>
+            <p className="text-xs text-gray-400">Assignees can start and pause a timer on it.</p>
+          </div>
+          <Toggle enabled={timed} onChange={setTimed} />
+        </div>
 
         {/* Assign to employee */}
         <div className="flex flex-col gap-2">

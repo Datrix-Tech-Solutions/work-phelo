@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useTaskTimeStore } from '@/store/taskTime.store';
 import {
   ProjectDetail,
   ProjectTask,
@@ -196,7 +197,8 @@ export function useUpdateProjectTask() {
       const res = await api.patch<ProjectTask>(`/hr/projects/${projectId}/tasks/${taskId}`, data);
       return res.data;
     },
-    onSuccess: (_, { projectId }) => {
+    onSuccess: (_, { projectId, taskId, data }) => {
+      if (data.status === 'DONE') useTaskTimeStore.getState().pauseAll(taskId);
       queryClient.invalidateQueries({ queryKey: [KEY, projectId] });
       queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'tasks'] });
     },
@@ -212,6 +214,8 @@ export function useUpdateTaskStatus() {
       return res.data;
     },
     onSuccess: (_, { taskId, status }) => {
+      // Finished means the last stage of the workflow, whatever it is called: stop the clocks.
+      if (status === 'DONE') useTaskTimeStore.getState().pauseAll(taskId);
       // Put the new status straight into the cached task lists, so the board doesn't show the
       // old one until the refetch below lands.
       queryClient.setQueriesData<ProjectTask[]>(

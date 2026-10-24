@@ -6,6 +6,7 @@ import { Search } from 'lucide-react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { Toggle } from '@/components/atoms/Toggle';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { inputClass, cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ interface Props {
       objectiveId?: string;
       workType?: string;
       priority?: string;
+      timed?: boolean;
     },
   ) => void;
   isSaving?: boolean;
@@ -39,6 +41,7 @@ interface Props {
   priorityOptions?: SearchSelectOption[];
   currentWorkType?: string;
   currentPriority?: string;
+  currentTimed?: boolean;
   /** Everyone the task is assigned to now. */
   currentAssignees?: TaskAssignee[];
 }
@@ -62,11 +65,13 @@ export function EditTaskModal({
   priorityOptions = [],
   currentWorkType,
   currentPriority,
+  currentTimed = false,
   currentAssignees = [],
 }: Props) {
   const [objectiveId, setObjectiveId] = useState(currentObjectiveId ?? '');
   const [workType, setWorkType] = useState(currentWorkType ?? '');
   const [priority, setPriority] = useState(currentPriority ?? '');
+  const [timed, setTimed] = useState(currentTimed);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(task?.id ?? null);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(currentAssignees.map((a) => a.id));
@@ -82,6 +87,7 @@ export function EditTaskModal({
     setObjectiveId(currentObjectiveId ?? '');
     setWorkType(currentWorkType ?? '');
     setPriority(currentPriority ?? '');
+    setTimed(currentTimed);
   }
 
   const { data: employees = [], isLoading: loadingEmployees } = useEmployeeOptions();
@@ -134,6 +140,7 @@ export function EditTaskModal({
 
   const handleClose = () => {
     reset();
+    setTimed(currentTimed);
     setEmployeeSearch('');
     setSelectedIds(currentAssignees.map((a) => a.id));
     onClose();
@@ -147,6 +154,7 @@ export function EditTaskModal({
       objectiveId: objectiveId || undefined,
       workType: workType || undefined,
       priority: priority || undefined,
+      timed,
     });
   };
 
@@ -240,6 +248,15 @@ export function EditTaskModal({
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Timed */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <label className="text-sm font-medium text-gray-700">Timed task</label>
+            <p className="text-xs text-gray-400">Assignees can start and pause a timer on it.</p>
+          </div>
+          <Toggle enabled={timed} onChange={setTimed} />
         </div>
 
         {/* Assign to employee */}

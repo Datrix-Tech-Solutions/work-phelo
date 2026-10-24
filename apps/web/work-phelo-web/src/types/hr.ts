@@ -490,6 +490,23 @@ export type {
 // ── Project ───────────────────────────────────────────────
 export type ProjectStatus = 'PLANNING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 
+export interface ProjectMilestone {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate?: string;
+}
+
+/** What a billable client project charges, by how it is billed. */
+export type ProjectPricing =
+  | { type: 'FLAT_RATE'; price: number }
+  | { type: 'TIMED'; hourlyRate: number; estimatedHours: number }
+  | { type: 'MILESTONE'; milestones: ProjectMilestone[] }
+  | { type: 'RETAINER'; monthlyAmount: number };
+
+/** How a billable client project is charged. */
+export type ProjectBillingType = 'FLAT_RATE' | 'TIMED' | 'MILESTONE' | 'RETAINER';
+
 export type ProjectType =
   | 'CLIENT'
   | 'INTERNAL'

@@ -36,6 +36,7 @@ import { glassStrongClass, cn, todayLocal } from '@/lib/utils';
 import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { useProjectWorkStore } from '@/store/projectWork.store';
 import { WorkTypeIconBadge } from '@/lib/workTypeIcons';
+import { TaskTimeBadge } from '@/components/molecules/hr/projects/TaskTimeBadge';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { TaskDetailsPanel } from '@/components/organisms/hr/projects/TaskDetailsPanel';
 
@@ -149,6 +150,7 @@ function CardBody({ item, objectiveEdit }: { item: BoardItem; objectiveEdit?: Ob
           </div>
         )}
       </div>
+      <TaskTimeBadge taskId={item.id} />
       {item.subtaskProgress && (
         <div className="flex flex-col gap-1">
           <p className="text-xs text-gray-500">

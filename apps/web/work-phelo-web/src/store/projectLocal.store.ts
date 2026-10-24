@@ -1,13 +1,20 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { BLANK_PROJECT_CONFIG } from '@/lib/defaultProjectTemplates';
-import { ProjectConfig, ProjectFeature, ProjectType } from '@/types/hr';
+import { ProjectConfig, ProjectFeature, ProjectPricing, ProjectType } from '@/types/hr';
 
 interface ProjectLocalDetails {
   /** Missing for a project that was made before types existed. */
   projectType?: ProjectType;
   /** Name of the template it started from; null for a blank slate. */
   templateName: string | null;
+  /** For a client project: whether the work is billed, and the marketing client it is for (optional). */
+  billable?: boolean;
+  /** How a billable project is charged, and the price that goes with it. */
+  pricing?: ProjectPricing;
+  /** What the client's page needs to list the project, kept here so it doesn't depend on HR access. */
+  summary?: { name: string; startDate: string; endDate?: string; createdAt: string };
+  client?: { id: string; name: string };
   /** The project's own workflow, work types, features and priority levels. A copy, so editing it
    *  never changes the template, and later template edits don't change the project. */
   config: ProjectConfig;

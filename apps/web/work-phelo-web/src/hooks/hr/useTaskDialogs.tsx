@@ -17,6 +17,7 @@ import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { useProjectWorkStore } from '@/store/projectWork.store';
+import { useTaskTimeStore } from '@/store/taskTime.store';
 import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { projectTaskOptions } from '@/lib/projectTaskOptions';
 import { taskAssignees } from '@/lib/taskAssignees';
@@ -51,6 +52,8 @@ export function useTaskDialogs(projectId: string) {
   const setTaskMeta = useProjectWorkStore((s) => s.setTaskMeta);
   const assigneesByTaskId = useProjectWorkStore((s) => s.assigneesByTaskId);
   const setTaskAssignees = useProjectWorkStore((s) => s.setTaskAssignees);
+  const timedByTaskId = useTaskTimeStore((s) => s.timedByTaskId);
+  const setTimed = useTaskTimeStore((s) => s.setTimed);
   const config = useProjectLocalStore((s) => s.byProjectId[projectId]?.config);
   const { workTypeOptions, priorityOptions, defaultWorkType, defaultPriority } = useMemo(
     () => projectTaskOptions(config),
@@ -80,6 +83,7 @@ export function useTaskDialogs(projectId: string) {
     objectiveId?: string;
     workType?: string;
     priority?: string;
+    timed?: boolean;
   }) => {
     try {
       const task = await createTask.mutateAsync({
@@ -92,6 +96,7 @@ export function useTaskDialogs(projectId: string) {
         },
       });
       setTaskAssignees(task.id, values.assignees);
+      if (values.timed) setTimed(task.id, true);
       if (values.objectiveId) setTaskObjective(task.id, values.objectiveId);
       if (values.workType || values.priority)
         setTaskMeta(task.id, { workType: values.workType ?? '', priority: values.priority ?? '' });
@@ -111,6 +116,7 @@ export function useTaskDialogs(projectId: string) {
       objectiveId?: string;
       workType?: string;
       priority?: string;
+      timed?: boolean;
     },
   ) => {
     try {
@@ -125,6 +131,8 @@ export function useTaskDialogs(projectId: string) {
         },
       });
       setTaskAssignees(taskId, values.assignees);
+      setTimed(taskId, !!values.timed);
+      if (values.status === 'DONE') useTaskTimeStore.getState().pauseAll(taskId);
       setTaskObjective(taskId, values.objectiveId ?? null);
       if (values.workType || values.priority)
         setTaskMeta(taskId, { workType: values.workType ?? '', priority: values.priority ?? '' });
@@ -195,6 +203,7 @@ export function useTaskDialogs(projectId: string) {
         priorityOptions={priorityOptions}
         currentWorkType={editTask ? taskMeta[editTask.id]?.workType : undefined}
         currentPriority={editTask ? taskMeta[editTask.id]?.priority : undefined}
+        currentTimed={editTask ? !!timedByTaskId[editTask.id] : false}
         currentAssignees={editTask ? taskAssignees(editTask, assigneesByTaskId) : []}
       />
     </>
