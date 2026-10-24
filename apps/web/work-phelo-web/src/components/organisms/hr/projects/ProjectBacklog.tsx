@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { ChevronRight, Search, Timer } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { TaskTimeBadge } from '@/components/molecules/hr/projects/TaskTimeBadge';
 import { AvatarStack } from '@/components/atoms/AvatarStack';
 import { TableButton } from '@/components/atoms/TableButton';
 import { ThreeDotMenu } from '@/components/organisms/shared/DataTable';
@@ -28,10 +29,10 @@ import type { ProjectSprint, TaskStatus } from '@/types/hr';
 
 // One grid for every row, so the columns line up from section to section.
 const ROW_GRID =
-  'grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_110px_120px_120px] items-center gap-x-4';
+  'grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_110px_120px_120px_90px] items-center gap-x-4';
 // The List adds three date columns after those.
 const LIST_ROW_GRID =
-  'grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_110px_120px_120px_100px_100px_100px] items-center gap-x-4';
+  'grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_110px_120px_120px_90px_100px_100px_100px] items-center gap-x-4';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -268,6 +269,7 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
         ) : (
           <span className="text-gray-400">—</span>
         )}
+        <TaskTimeBadge taskId={row.id} empty={<span className="text-gray-400">—</span>} />
         {isList && (
           <>
             <DateCell label="Created" value={row.task.createdAt} />

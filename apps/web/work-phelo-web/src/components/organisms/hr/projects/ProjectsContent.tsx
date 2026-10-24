@@ -19,7 +19,13 @@ import {
   usePermission,
 } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
-import { CreateProjectDto, ProjectConfig, ProjectTemplate, ProjectType } from '@/types/hr';
+import {
+  CreateProjectDto,
+  ProjectConfig,
+  ProjectPricing,
+  ProjectTemplate,
+  ProjectType,
+} from '@/types/hr';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { useProjectLocalStore } from '@/store/projectLocal.store';
@@ -144,6 +150,11 @@ export function ProjectsContent({ tenantSlug }: Props) {
     data: CreateProjectDto,
     projectType: ProjectType,
     config: ProjectConfig,
+    clientInfo?: {
+      billable: boolean;
+      pricing?: ProjectPricing;
+      client?: { id: string; name: string };
+    },
   ) => {
     try {
       const project = await createProject.mutateAsync(data);
@@ -151,6 +162,15 @@ export function ProjectsContent({ tenantSlug }: Props) {
         projectType,
         config,
         templateName: selectedTemplate?.name ?? null,
+        ...clientInfo,
+        summary: clientInfo?.client
+          ? {
+              name: project.name,
+              startDate: data.startDate,
+              endDate: data.endDate,
+              createdAt: project.createdAt,
+            }
+          : undefined,
       });
       setPanelOpen(false);
     } catch (err) {

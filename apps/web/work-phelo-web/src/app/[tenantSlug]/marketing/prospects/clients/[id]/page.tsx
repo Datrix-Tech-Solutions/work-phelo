@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ClientBreadcrumb } from '@/components/molecules/marketing/ClientBreadcrumb';
+import { ClientProjectCard } from '@/components/molecules/marketing/ClientProjectCard';
+import { useClientProjects } from '@/hooks/hr/useClientProjects';
 import { ClientProductCard } from '@/components/molecules/marketing/ClientProductCard';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
@@ -85,6 +87,7 @@ export default function ClientDetailPage() {
   const [changingLocation, setChangingLocation] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const clientProjects = useClientProjects(id);
 
   const listHref = `/${tenantSlug}/marketing/prospects/clients`;
   const shell = cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col gap-6');
@@ -113,6 +116,15 @@ export default function ClientDetailPage() {
     null,
   );
   const purchased = client.products.filter((p) => p.status === 'PURCHASED').length;
+  // The client's products and services, then the projects started for it.
+  const productRows = [
+    ...client.products.map((product) => ({ kind: 'product' as const, id: product.id, product })),
+    ...clientProjects.map((project) => ({
+      kind: 'project' as const,
+      id: `project-${project.id}`,
+      project,
+    })),
+  ];
   const achievedByProduct = new Map(
     (billingSummary?.products ?? []).map((p) => [p.productId, p.achievedRevenue]),
   );
@@ -190,9 +202,11 @@ export default function ClientDetailPage() {
           <DetailField
             label="Products/Services"
             value={
-              client.products.length === 0
+              productRows.length === 0
                 ? '—'
-                : `${client.products.length} (${purchased} purchased)`
+                : `${productRows.length} (${purchased} purchased${
+                    clientProjects.length > 0 ? `, ${clientProjects.length} projects` : ''
+                  })`
             }
           />
           <DetailField
@@ -214,13 +228,20 @@ export default function ClientDetailPage() {
 
       {activeTab === 'products' && (
         <DataCardGrid
-          data={client.products}
-          renderCard={(product) => (
-            <ClientProductCard
-              product={product}
-              achievedRevenue={achievedByProduct.get(product.product.id)}
-            />
-          )}
+          data={productRows}
+          renderCard={(row) =>
+            row.kind === 'project' ? (
+              <ClientProjectCard
+                project={row.project}
+                onOpen={() => router.push(`/${tenantSlug}/hr/projects/${row.project.id}/summary`)}
+              />
+            ) : (
+              <ClientProductCard
+                product={row.product}
+                achievedRevenue={achievedByProduct.get(row.product.product.id)}
+              />
+            )
+          }
           emptyMessage="No products/services on record"
           currentPage={1}
           totalPages={0}

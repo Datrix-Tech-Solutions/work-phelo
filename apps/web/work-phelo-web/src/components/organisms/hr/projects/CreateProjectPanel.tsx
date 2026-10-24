@@ -2,16 +2,32 @@
 
 import { useCallback, useState } from 'react';
 import { ChevronDown, FilePlus2, LayoutTemplate } from 'lucide-react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Toggle } from '@/components/atoms/Toggle';
+import { useClients } from '@/hooks/marketing/useClients';
 import { inputClass } from '@/lib/utils';
-import { CreateProjectDto, ProjectConfig, ProjectTemplate, ProjectType } from '@/types/hr';
-import { PROJECT_TYPE_OPTIONS } from '@/lib/projectTypes';
+import {
+  CreateProjectDto,
+  ProjectBillingType,
+  ProjectConfig,
+  ProjectPricing,
+  ProjectTemplate,
+  ProjectType,
+} from '@/types/hr';
+import { BILLING_TYPE_OPTIONS, PROJECT_TYPE_OPTIONS } from '@/lib/projectTypes';
+import { ProjectPricingFields } from '@/components/molecules/hr/projects/ProjectPricingFields';
+import {
+  EMPTY_PRICING_DRAFT,
+  PricingDraft,
+  buildPricing,
+  pricingError,
+} from '@/lib/projectPricing';
 import { BLANK_PROJECT_CONFIG } from '@/lib/defaultProjectTemplates';
 import { pickConfig } from '@/lib/projectConfig';
 import {
@@ -26,7 +42,17 @@ interface CreateProjectPanelProps {
   onClose: () => void;
   employees: EmployeeOption[];
   /** `projectType` and `config` aren't part of the API payload yet, so they come alongside it. */
-  onSubmit: (data: CreateProjectDto, projectType: ProjectType, config: ProjectConfig) => void;
+  onSubmit: (
+    data: CreateProjectDto,
+    projectType: ProjectType,
+    config: ProjectConfig,
+    /** Only for a client project. */
+    clientInfo?: {
+      billable: boolean;
+      pricing?: ProjectPricing;
+      client?: { id: string; name: string };
+    },
+  ) => void;
   isSubmitting?: boolean;
   /** Template the project is being created from; null is a blank slate. A blank slate shows the setup fields
    *  to fill in for this project only; a template brings its own. Remount (key) to reapply a different one. */
@@ -41,6 +67,10 @@ type FormValues = {
   endDate: string;
   budget: string;
   managerId: string;
+  billable: boolean;
+  billingType: ProjectBillingType | '';
+  pricing: PricingDraft;
+  clientId: string;
   config: ProjectConfig;
 };
 
@@ -68,9 +98,24 @@ export function CreateProjectPanel({
       budget: '',
       managerId: '',
       projectType: '',
+      billable: false,
+      billingType: '',
+      pricing: EMPTY_PRICING_DRAFT,
+      clientId: '',
       config: template ? pickConfig(template) : BLANK_PROJECT_CONFIG,
     },
   });
+
+  const projectType = useWatch({ control, name: 'projectType' });
+  const isClientProject = projectType === 'CLIENT';
+  const billable = useWatch({ control, name: 'billable' });
+  const billingType = useWatch({ control, name: 'billingType' });
+  const startDate = useWatch({ control, name: 'startDate' });
+  const endDate = useWatch({ control, name: 'endDate' });
+  // Just a pick-list of the marketing clients, so it isn't held back by the person's marketing access.
+  const { data: clientList } = useClients({ limit: 100 }, isClientProject);
+  const clients = clientList?.data ?? [];
+  const clientOptions = clients.map((c) => ({ value: c.id, label: c.companyName }));
 
   const handleClose = useCallback(() => {
     onClose();
@@ -88,6 +133,18 @@ export function CreateProjectPanel({
       },
       values.projectType as ProjectType,
       values.config,
+      values.projectType === 'CLIENT'
+        ? {
+            billable: values.billable,
+            pricing:
+              values.billable && values.billingType
+                ? buildPricing(values.billingType, values.pricing)
+                : undefined,
+            client: clients
+              .filter((c) => c.id === values.clientId)
+              .map((c) => ({ id: c.id, name: c.companyName }))[0],
+          }
+        : undefined,
     );
   };
 
@@ -158,6 +215,83 @@ export function CreateProjectPanel({
           />
         </div>
 
+        {isClientProject && (
+          <div
+            className={
+              billable
+                ? 'grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-4 items-start'
+                : 'grid grid-cols-1 sm:grid-cols-2 gap-4 items-start'
+            }
+          >
+            <Controller
+              name="clientId"
+              control={control}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Client"
+                  placeholder="Select client (optional)"
+                  options={clientOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            <Controller
+              name="billable"
+              control={control}
+              render={({ field }) => (
+                <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
+                  <label className="text-sm font-bold text-gray-900">Billable</label>
+                  <div className="flex items-center gap-3 h-10">
+                    <Toggle enabled={field.value} onChange={field.onChange} />
+                    <span className="text-sm text-gray-600">{field.value ? 'Yes' : 'No'}</span>
+                  </div>
+                </div>
+              )}
+            />
+            {billable && (
+              <Controller
+                name="billingType"
+                control={control}
+                rules={{ required: 'Choose how it is billed' }}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Billing Type"
+                    placeholder="Select billing type"
+                    options={BILLING_TYPE_OPTIONS}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.billingType?.message}
+                  />
+                )}
+              />
+            )}
+          </div>
+        )}
+
+        {isClientProject && billable && billingType && (
+          <Controller
+            name="pricing"
+            control={control}
+            rules={{
+              validate: (v, form) =>
+                form.billingType
+                  ? (pricingError(form.billingType, v, form.startDate, form.endDate) ?? true)
+                  : true,
+            }}
+            render={({ field, fieldState }) => (
+              <ProjectPricingFields
+                type={billingType}
+                value={field.value}
+                onChange={field.onChange}
+                startDate={startDate}
+                endDate={endDate}
+                error={fieldState.error?.message}
+              />
+            )}
+          />
+        )}
+
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <label className="text-sm font-bold text-gray-900">
             Description <span className="text-gray-400 font-normal">(optional)</span>
@@ -205,7 +339,11 @@ export function CreateProjectPanel({
           rules={{ min: { value: 0, message: 'Budget must be a positive number' } }}
           render={({ field }) => (
             <NumberField
-              label="Budget (GHS)"
+              label={
+                isClientProject && billable
+                  ? 'Budget (GHS) — internal spending limit, optional'
+                  : 'Budget (GHS)'
+              }
               value={field.value ? Number(field.value) : 0}
               onChange={(n) => field.onChange(String(n))}
               error={errors.budget?.message}

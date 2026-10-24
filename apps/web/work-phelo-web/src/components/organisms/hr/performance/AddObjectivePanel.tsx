@@ -93,7 +93,7 @@ export function AddObjectivePanel({ isOpen, onClose, projects, onSave }: Props) 
           rules={{ required: 'Required' }}
           render={({ field, fieldState }) => (
             <SearchSelect
-              label="Goal"
+              label="Goals"
               placeholder={goals.length === 0 ? 'No goals yet' : 'Select goal'}
               options={goals.map((g) => ({ value: g.id, label: g.name }))}
               value={field.value}
