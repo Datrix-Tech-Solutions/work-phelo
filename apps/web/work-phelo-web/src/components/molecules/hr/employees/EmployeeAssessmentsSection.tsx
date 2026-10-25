@@ -6,39 +6,33 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { TableButton } from '@/components/atoms/TableButton';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
 import { StatusLabel } from '@/components/organisms/hr/appraisal/CycleAssessments';
-import { goalsWithObjectives, overallScore } from '@/lib/appraisalAssessments';
-import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
-import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
+import { overallScore } from '@/lib/appraisalAssessments';
+import { useEmployeeAssessments, useGoalCycles } from '@/hooks/hr/useGoalAppraisals';
 import { PerformanceSummaryCard } from './PerformanceSummaryCard';
 
 /** An employee's appraisals as HR sees them: every cycle they are in, and their scores. */
 export function EmployeeAssessmentsSection({ employeeId }: { employeeId: string }) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const assessments = useAppraisalAssessmentsStore((s) => s.assessments);
-  const cycles = useAppraisalGoalsStore((s) => s.cycles);
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
+  const { assessments } = useEmployeeAssessments(employeeId);
+  const { cycles } = useGoalCycles();
 
   const rows = useMemo(
     () =>
-      assessments
-        .filter((a) => a.employeeId === employeeId)
-        .flatMap((a) => {
-          const cycle = cycles.find((c) => c.id === a.cycleId);
-          if (!cycle || cycle.status === 'CANCELLED') return [];
-          return [
-            {
-              id: a.id,
-              cycleId: cycle.id,
-              cycleName: cycle.title,
-              status: a.status,
-              score: overallScore(a, goalsWithObjectives(cycle, goals, objectives, employeeId, a)),
-            },
-          ];
-        }),
-    [assessments, cycles, goals, objectives, employeeId],
+      assessments.flatMap((a) => {
+        const cycle = cycles.find((c) => c.id === a.cycleId);
+        if (!cycle || cycle.status === 'CANCELLED') return [];
+        return [
+          {
+            id: a.id,
+            cycleId: cycle.id,
+            cycleName: cycle.title,
+            status: a.status,
+            score: overallScore(a, a.entries),
+          },
+        ];
+      }),
+    [assessments, cycles],
   );
   type Row = (typeof rows)[0];
 

@@ -4,8 +4,8 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../../shared/DataTable';
 import { cn } from '@/lib/utils';
-import { useAppraisalGoalsStore, type LocalCycle } from '@/store/appraisalGoals.store';
-import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
+import { useGoalCycles } from '@/hooks/hr/useGoalAppraisals';
+import type { GoalCycle } from '@/types/appraisal';
 
 interface Props {
   search: string;
@@ -30,37 +30,25 @@ const PAGE_SIZE = 10;
 export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Props) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const cycles = useAppraisalGoalsStore((s) => s.cycles);
-  const assessments = useAppraisalAssessmentsStore((s) => s.assessments);
+  const { cycles } = useGoalCycles();
 
   const rows = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return cycles
       .filter((c) => c.title.toLowerCase().includes(search.trim().toLowerCase()))
       .map((c) => {
-        const own = assessments.filter((a) => a.cycleId === c.id);
-        const done = own.reduce(
-          (sum, a) =>
-            sum +
-            (a.status === 'FINALIZED'
-              ? 2
-              : a.status === 'MANAGER_SUBMITTED'
-                ? 2
-                : a.status === 'SELF_SUBMITTED'
-                  ? 1
-                  : 0),
-          0,
-        );
-        const rate = own.length > 0 ? Math.round((done / (own.length * 2)) * 100) : 0;
+        const stats = c.stats ?? { employees: 0, done: 0, allApproved: false };
+        const rate =
+          stats.employees > 0 ? Math.round((stats.done / (stats.employees * 2)) * 100) : 0;
         let status: CycleStatus;
         if (c.status === 'CANCELLED') status = 'Cancelled';
         else if (c.status === 'CLOSED') status = 'Closed';
         else if (c.status === 'UPCOMING') status = c.endDate < today ? 'Expired' : 'Upcoming';
-        else if (own.length > 0 && own.every((a) => a.status === 'FINALIZED')) status = 'Completed';
+        else if (stats.allApproved) status = 'Completed';
         else status = c.endDate < today ? 'Expired' : 'In Progress';
-        return { id: c.id, cycle: c, employees: own.length, rate, status };
+        return { id: c.id, cycle: c, employees: stats.employees, rate, status };
       });
-  }, [cycles, assessments, search]);
+  }, [cycles, search]);
 
   type Row = (typeof rows)[0];
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -78,7 +66,7 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       label: 'Date range',
       width: '200px',
       render: (r: Row) => {
-        const c: LocalCycle = r.cycle;
+        const c: GoalCycle = r.cycle;
         return (
           <span className="text-xs text-gray-600">
             {formatDate(c.startDate)} – {formatDate(c.endDate)}

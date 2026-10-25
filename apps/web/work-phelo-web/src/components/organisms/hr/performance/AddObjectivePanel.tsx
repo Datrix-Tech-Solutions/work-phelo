@@ -8,12 +8,12 @@ import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
+import { useGoals } from '@/hooks/hr/useGoalAppraisals';
 import { useProjectWorkStore } from '@/store/projectWork.store';
 
 export interface ObjectiveInput {
+  /** Empty when the objective is left without a goal, to be linked later. */
   goalId: string;
-  goal: string;
   /** Picked from the person's project objectives or typed fresh; only the name is kept, with no link back. */
   name: string;
   comments: string[];
@@ -43,7 +43,7 @@ export function AddObjectivePanel({ isOpen, onClose, projects, onSave }: Props) 
   const form = useForm<FormValues>({ defaultValues: EMPTY });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'comments' });
 
-  const goals = useAppraisalGoalsStore((s) => s.goals);
+  const { goals } = useGoals();
   const name = useWatch({ control: form.control, name: 'name' });
 
   const allProjectObjectives = useProjectWorkStore((s) => s.objectives);
@@ -64,7 +64,6 @@ export function AddObjectivePanel({ isOpen, onClose, projects, onSave }: Props) 
   const submit = form.handleSubmit((data) => {
     onSave({
       goalId: data.goalId,
-      goal: goals.find((g) => g.id === data.goalId)?.name ?? '',
       name: data.name.trim(),
       comments: data.comments.map((c) => c.value.trim()).filter(Boolean),
     });
@@ -90,10 +89,9 @@ export function AddObjectivePanel({ isOpen, onClose, projects, onSave }: Props) 
         <Controller
           control={form.control}
           name="goalId"
-          rules={{ required: 'Required' }}
           render={({ field, fieldState }) => (
             <SearchSelect
-              label="Goals"
+              label="Goal (optional)"
               placeholder={goals.length === 0 ? 'No goals yet' : 'Select goal'}
               options={goals.map((g) => ({ value: g.id, label: g.name }))}
               value={field.value}

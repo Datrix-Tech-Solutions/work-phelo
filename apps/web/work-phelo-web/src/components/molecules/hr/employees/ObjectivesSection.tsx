@@ -1,16 +1,21 @@
-'use client';
-
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { useMyProfile } from '@/hooks/hr/useEmployees';
 import {
-  useEmployeeObjectivesStore,
-  type EmployeeObjective,
-} from '@/store/employeeObjectives.store';
-import { useAuthStore } from '@/store/auth.store';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
+  useAddObjectiveComment,
+  useCreateObjective,
+  useEmployeeObjectives,
+  useGoalCycles,
+  useGoals,
+  useLinkObjective,
+} from '@/hooks/hr/useGoalAppraisals';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { cyclesForObjective } from '@/lib/appraisalAssessments';
+import { Permission } from '@/lib/permissionMap';
 import { cardClass, cn } from '@/lib/utils';
+import type { EmployeeObjective } from '@/types/appraisal';
 import { AddObjectivePanel } from '@/components/organisms/hr/performance/AddObjectivePanel';
 
 interface Props {
@@ -20,25 +25,29 @@ interface Props {
 }
 
 export function ObjectivesSection({ employeeId, projects }: Props) {
-  const allObjectives = useEmployeeObjectivesStore((s) => s.objectives);
-  const addObjective = useEmployeeObjectivesStore((s) => s.addObjective);
-  const addComment = useEmployeeObjectivesStore((s) => s.addComment);
-  const objectives = useMemo(
-    () => allObjectives.filter((o) => o.employeeId === employeeId),
-    [allObjectives, employeeId],
-  );
-  const cycles = useAppraisalGoalsStore((s) => s.cycles);
+  const { objectives } = useEmployeeObjectives(employeeId);
+  const { cycles } = useGoalCycles();
+  const { goals } = useGoals();
+  const createObjective = useCreateObjective();
+  const linkObjective = useLinkObjective();
+  const addComment = useAddObjectiveComment();
   const [panelOpen, setPanelOpen] = useState(false);
-  const user = useAuthStore((s) => s.user);
-  const creatorName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Unknown';
+
+  // Adding for yourself and for someone else are separate permissions.
+  const { data: me } = useMyProfile();
+  const canCreateOwn = usePermission(Permission.CREATE_OWN_OBJECTIVE);
+  const canCreateForOthers = usePermission(Permission.CREATE_OBJECTIVE_FOR_OTHERS);
+  const canAdd = me?.id === employeeId ? canCreateOwn : canCreateForOthers;
 
   return (
     <div className="flex flex-col gap-4">
       <div className={cardClass('px-4 py-2 flex items-center justify-between gap-3')}>
         <h3 className="text-sm font-semibold text-gray-900">Objectives</h3>
-        <Button onClick={() => setPanelOpen(true)}>
-          <Plus className="w-4 h-4" /> Add objective
-        </Button>
+        {canAdd && (
+          <Button onClick={() => setPanelOpen(true)}>
+            <Plus className="w-4 h-4" /> Add objective
+          </Button>
+        )}
       </div>
 
       {objectives.length === 0 ? (
@@ -50,7 +59,9 @@ export function ObjectivesSection({ employeeId, projects }: Props) {
               key={o.id}
               objective={o}
               cycleNames={cyclesForObjective(o, cycles).map((c) => c.title)}
-              onAddComment={(text) => addComment(o.id, text)}
+              goalOptions={canAdd ? goals.map((g) => ({ value: g.id, label: g.name })) : undefined}
+              onLink={(goalId) => linkObjective.mutate({ id: o.id, goalId })}
+              onAddComment={(body) => addComment.mutate({ id: o.id, body })}
             />
           ))}
         </div>
@@ -61,12 +72,10 @@ export function ObjectivesSection({ employeeId, projects }: Props) {
         onClose={() => setPanelOpen(false)}
         projects={projects}
         onSave={(o) =>
-          addObjective({
+          createObjective.mutate({
             employeeId,
-            goalId: o.goalId,
-            goal: o.goal,
+            goalId: o.goalId || undefined,
             name: o.name,
-            createdBy: creatorName,
             comments: o.comments,
           })
         }
@@ -78,10 +87,15 @@ export function ObjectivesSection({ employeeId, projects }: Props) {
 function ObjectiveCard({
   objective,
   cycleNames,
+  goalOptions,
+  onLink,
   onAddComment,
 }: {
   objective: EmployeeObjective;
   cycleNames: string[];
+  /** Goals it can be linked to; left out when the viewer can't change objectives. */
+  goalOptions?: { value: string; label: string }[];
+  onLink: (goalId: string) => void;
   onAddComment: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -98,11 +112,13 @@ function ObjectiveCard({
       >
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">{objective.name}</p>
-          <p className="text-xs text-gray-500 mt-0.5">Goal: {objective.goal}</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {objective.goal ? `Goal: ${objective.goal.name}` : 'No goal yet'}
+          </p>
           {cycleNames.length > 0 && (
             <p className="text-xs text-gray-500 mt-0.5">Cycle: {cycleNames.join(', ')}</p>
           )}
-          <p className="text-xs text-gray-400 mt-1">Created by {objective.createdBy}</p>
+          <p className="text-xs text-gray-400 mt-1">Created by {objective.createdByName}</p>
           {!expanded && total > 0 && (
             <p className="text-xs text-gray-500 mt-3">
               {total} {total === 1 ? 'comment' : 'comments'}
@@ -123,12 +139,22 @@ function ObjectiveCard({
             <p className="text-sm text-gray-400">No comments added.</p>
           ) : (
             <ul className="flex flex-col gap-3">
-              {objective.comments.map((c, i) => (
-                <li key={i} className="text-sm text-gray-700">
-                  {c}
+              {objective.comments.map((c) => (
+                <li key={c.id} className="text-sm text-gray-700">
+                  {c.body}
                 </li>
               ))}
             </ul>
+          )}
+          {!objective.goal && goalOptions && (
+            <SearchSelect
+              label="Link to a goal"
+              placeholder={goalOptions.length === 0 ? 'No goals yet' : 'Select goal'}
+              options={goalOptions}
+              value=""
+              onChange={(goalId) => goalId && onLink(goalId)}
+              disabled={goalOptions.length === 0}
+            />
           )}
           <form
             className="flex items-center gap-2"

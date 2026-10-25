@@ -10,8 +10,9 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { CollapsibleSection } from '@/components/organisms/hr/payroll/payroll-groups/PayrollGroupFields';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
+import { useGoals } from '@/hooks/hr/useGoalAppraisals';
 import type { Employee, EmploymentType } from '@/types/hr';
-import type { Goal, GoalInput } from '@/store/appraisalGoals.store';
+import type { Goal, GoalInput } from '@/types/appraisal';
 
 interface FormValues {
   name: string;
@@ -46,6 +47,7 @@ interface Props {
 }
 
 export function CreateGoalModal({ isOpen, onClose, employees, onSave, goal }: Props) {
+  const otherGoals = useGoals().goals.filter((g) => g.id !== goal?.id);
   const {
     register,
     handleSubmit,
@@ -127,7 +129,12 @@ export function CreateGoalModal({ isOpen, onClose, employees, onSave, goal }: Pr
       <div className="flex flex-col gap-4 mt-4">
         <FormField
           label="Goal Name"
-          registration={register('name', { required: 'Goal name is required' })}
+          registration={register('name', {
+            required: 'Goal name is required',
+            validate: (v) =>
+              !otherGoals.some((g) => g.name.trim().toLowerCase() === v.trim().toLowerCase()) ||
+              'A goal with this name already exists',
+          })}
           error={errors.name}
           placeholder="eg; Improve customer response time"
         />

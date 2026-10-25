@@ -9,17 +9,17 @@ import {
   CreateGoalModal,
   eligibleEmployees,
 } from '@/components/organisms/hr/appraisal/CreateGoalModal';
-import { useAppraisalGoalsStore, type Goal, type GoalInput } from '@/store/appraisalGoals.store';
+import { useDeleteGoal, useGoals, useSaveGoal } from '@/hooks/hr/useGoalAppraisals';
+import type { Goal, GoalInput } from '@/types/appraisal';
 
 export function GoalsContent() {
   const toast = useToast();
   const { data: employeeData } = useAllEmployees();
   const employees = useMemo(() => employeeData?.data ?? [], [employeeData]);
 
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const addGoal = useAppraisalGoalsStore((s) => s.addGoal);
-  const updateGoal = useAppraisalGoalsStore((s) => s.updateGoal);
-  const removeGoal = useAppraisalGoalsStore((s) => s.removeGoal);
+  const { goals } = useGoals();
+  const saveGoal = useSaveGoal();
+  const deleteGoal = useDeleteGoal();
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<{ goal?: Goal } | null>(null);
   const [deleting, setDeleting] = useState<Goal | null>(null);
@@ -60,21 +60,22 @@ export function GoalsContent() {
   ];
 
   const save = (input: GoalInput) => {
-    if (modal?.goal) {
-      updateGoal(modal.goal.id, input);
-      toast.success(`Saved "${input.name}"`);
-    } else {
-      addGoal(input);
-      toast.success(`Created "${input.name}"`);
-    }
+    const editing = modal?.goal;
+    saveGoal.mutate(
+      { id: editing?.id, input },
+      {
+        onSuccess: () => toast.success(`${editing ? 'Saved' : 'Created'} "${input.name}"`),
+      },
+    );
   };
 
   const confirmDelete = () => {
     if (!deleting) return;
     const target = deleting;
     setDeleting(null);
-    removeGoal(target.id);
-    toast.success(`Deleted "${target.name}"`);
+    deleteGoal.mutate(target.id, {
+      onSuccess: () => toast.success(`Deleted "${target.name}"`),
+    });
   };
 
   return (
@@ -89,7 +90,14 @@ export function GoalsContent() {
         onRowClick={(g) => setModal({ goal: g })}
         rowActions={(g) => [
           { label: 'Edit', onClick: () => setModal({ goal: g }) },
-          { label: 'Delete', onClick: () => setDeleting(g), danger: true },
+          {
+            label: 'Delete',
+            onClick: () =>
+              g.inCycle
+                ? toast.error('This goal is part of a cycle and cannot be deleted')
+                : setDeleting(g),
+            danger: true,
+          },
         ]}
         emptyMessage="No goals yet. Create one to choose who it applies to."
         currentPage={1}
@@ -112,7 +120,7 @@ export function GoalsContent() {
       <ConfirmModal
         isOpen={deleting !== null}
         title="Delete goal"
-        description={`Delete "${deleting?.name ?? ''}"? Employees will no longer be appraised on it.`}
+        description={`Delete "${deleting?.name ?? ''}"? Objectives written under it are kept but no longer belong to a goal.`}
         confirmLabel="Delete"
         danger
         onCancel={() => setDeleting(null)}

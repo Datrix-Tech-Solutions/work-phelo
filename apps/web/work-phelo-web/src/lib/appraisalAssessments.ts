@@ -1,7 +1,11 @@
-import type { Assessment, AssessmentStatus } from '@/store/appraisalAssessments.store';
-import type { EmployeeObjective } from '@/store/employeeObjectives.store';
-import type { Goal, LocalCycle } from '@/store/appraisalGoals.store';
-import { DEFAULT_PERFORMANCE_BANDS, type FinalRating } from '@/types/hr';
+import type {
+  Assessment,
+  AssessmentEntry,
+  AssessmentStatus,
+  EmployeeObjective,
+  GoalCycle,
+} from '@/types/appraisal';
+import type { FinalRating } from '@/types/hr';
 
 export const RATING_MAX = 5;
 
@@ -21,37 +25,30 @@ export const STATUS_STYLES: Record<AssessmentStatus, { dot: string; text: string
 
 const dayOf = (iso: string) => iso.slice(0, 10);
 
-/** The local calendar day of a timestamp, as YYYY-MM-DD. */
-function localDay(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** The calendar day of a timestamp, as YYYY-MM-DD. Days are UTC, as on the server. */
+const utcDay = (iso: string) => new Date(iso).toISOString().slice(0, 10);
+
+/** Whether the objective was linked to its goal while the cycle's dates were running. An objective with no goal never counts. */
+export function objectiveInCycle(objective: EmployeeObjective, cycle: GoalCycle) {
+  if (!objective.linkedAt) return false;
+  const day = utcDay(objective.linkedAt);
+  return day >= dayOf(cycle.startDate) && day <= dayOf(cycle.endDate);
 }
 
-/** When the cycle stopped counting new objectives: its end date, or the day it was closed or cancelled if sooner. */
-function lastDay(cycle: LocalCycle) {
-  const end = dayOf(cycle.endDate);
-  const stopped = cycle.closedAt ?? cycle.cancelledAt;
-  return stopped && stopped < end ? stopped : end;
-}
-
-/** Whether the objective was added while the cycle's dates were running. Older objectives with no date always count. */
-export function objectiveInCycle(objective: EmployeeObjective, cycle: LocalCycle) {
-  if (!objective.createdAt) return true;
-  const day = localDay(objective.createdAt);
-  return day >= dayOf(cycle.startDate) && day <= lastDay(cycle);
-}
-
-/** The cycles that count this objective: they run its goal and were still running when it was added. */
-export function cyclesForObjective(objective: EmployeeObjective, cycles: LocalCycle[]) {
+/** The cycles that count this objective: they run its goal and were running when it was linked. Cancelled cycles are void. */
+export function cyclesForObjective(objective: EmployeeObjective, cycles: GoalCycle[]) {
   return cycles.filter(
-    (c) => c.goalIds.includes(objective.goalId) && objectiveInCycle(objective, c),
+    (c) =>
+      c.status !== 'CANCELLED' &&
+      !!objective.goalId &&
+      c.goalIds.includes(objective.goalId) &&
+      objectiveInCycle(objective, c),
   );
 }
 
 /** Other live cycles that run one of these goals during any of the given dates. */
 export function overlappingCycles(
-  cycles: LocalCycle[],
+  cycles: GoalCycle[],
   goalIds: string[],
   startDate: string,
   endDate: string,
@@ -69,41 +66,10 @@ export function overlappingCycles(
 }
 
 /**
- * The goals the cycle runs, each with the employee's objectives under it. Only objectives added
- * during the cycle's dates count, and goals with none are left out. Once the employee has
- * submitted, the objectives they rated are the ones that stay.
- */
-export function goalsWithObjectives(
-  cycle: LocalCycle,
-  goals: Goal[],
-  objectives: EmployeeObjective[],
-  employeeId: string,
-  assessment?: Assessment,
-) {
-  const locked = assessment && assessment.status !== 'NOT_STARTED';
-  return cycle.goalIds
-    .map((goalId) => goals.find((g) => g.id === goalId))
-    .filter((g): g is Goal => !!g)
-    .map((goal) => ({
-      goal,
-      objectives: objectives.filter(
-        (o) =>
-          o.employeeId === employeeId &&
-          o.goalId === goal.id &&
-          (locked ? o.id in assessment.selfRatings : objectiveInCycle(o, cycle)),
-      ),
-    }))
-    .filter((entry) => entry.objectives.length > 0);
-}
-
-/**
  * The overall score as a percentage: each objective's self and manager ratings are blended by its
  * goal's weights, then averaged. Null until the manager has rated.
  */
-export function overallScore(
-  assessment: Assessment,
-  entries: ReturnType<typeof goalsWithObjectives>,
-): number | null {
+export function overallScore(assessment: Assessment, entries: AssessmentEntry[]): number | null {
   if (assessment.status !== 'MANAGER_SUBMITTED' && assessment.status !== 'FINALIZED') return null;
   const scores = entries.flatMap(({ goal, objectives }) =>
     objectives.map((o) => {
@@ -117,7 +83,7 @@ export function overallScore(
   return Math.round((average / RATING_MAX) * 100);
 }
 
-type Entries = ReturnType<typeof goalsWithObjectives>;
+type Entries = AssessmentEntry[];
 
 /** One side's average rating as a percentage of the top rating; null when nothing is rated. */
 function sidePct(ratings: Assessment['selfRatings'], entries: Entries): number | null {
@@ -139,12 +105,31 @@ export const RATINGS: FinalRating[] = [
   'Needs Improvement',
 ];
 
-export function ratingForScore(score: number | null): FinalRating | undefined {
+/** The lowest percentage for each rating above Needs Improvement; set under appraisal settings. */
+export interface RatingThresholds {
+  outstanding: number;
+  veryGood: number;
+  good: number;
+  satisfactory: number;
+}
+
+export const DEFAULT_THRESHOLDS: RatingThresholds = {
+  outstanding: 90,
+  veryGood: 80,
+  good: 70,
+  satisfactory: 60,
+};
+
+export function ratingForScore(
+  score: number | null,
+  thresholds: RatingThresholds = DEFAULT_THRESHOLDS,
+): FinalRating | undefined {
   if (score === null) return undefined;
-  return (
-    DEFAULT_PERFORMANCE_BANDS.find((b) => score >= b.minPercent && score <= b.maxPercent)?.rating ??
-    'Needs Improvement'
-  );
+  if (score >= thresholds.outstanding) return 'Outstanding';
+  if (score >= thresholds.veryGood) return 'Very Good';
+  if (score >= thresholds.good) return 'Good';
+  if (score >= thresholds.satisfactory) return 'Satisfactory';
+  return 'Needs Improvement';
 }
 
 /** Each goal's score in the assessment: its objectives' blended ratings, averaged, as a percentage. */

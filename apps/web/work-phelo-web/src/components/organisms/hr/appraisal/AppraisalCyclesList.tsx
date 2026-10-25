@@ -8,10 +8,14 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateCyclePanel } from '@/components/organisms/hr/appraisal/CreateCyclePanel';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/formatters';
-import { goalsWithObjectives } from '@/lib/appraisalAssessments';
-import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
-import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
-import { useAppraisalGoalsStore, type LocalCycle } from '@/store/appraisalGoals.store';
+import {
+  useCancelCycle,
+  useCloseCycle,
+  useDeleteCycle,
+  useGoalCycles,
+  useStartCycle,
+} from '@/hooks/hr/useGoalAppraisals';
+import type { GoalCycle } from '@/types/appraisal';
 import { cn } from '@/lib/utils';
 
 type DerivedStatus = 'Upcoming' | 'In Progress' | 'Completed' | 'Expired' | 'Cancelled' | 'Closed';
@@ -25,7 +29,7 @@ const STATUS_STYLES: Record<DerivedStatus, { dot: string; text: string }> = {
   Closed: { dot: 'bg-gray-500', text: 'text-gray-600' },
 };
 
-function deriveStatus(cycle: LocalCycle): DerivedStatus {
+function deriveStatus(cycle: GoalCycle): DerivedStatus {
   const today = new Date().toISOString().slice(0, 10);
   if (cycle.status === 'CANCELLED') return 'Cancelled';
   if (cycle.status === 'CLOSED') return 'Closed';
@@ -49,24 +53,20 @@ export function AppraisalCyclesList() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
-  const [editCycle, setEditCycle] = useState<LocalCycle | undefined>();
+  const [editCycle, setEditCycle] = useState<GoalCycle | undefined>();
   const [forceCreate, setForceCreate] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<LocalCycle | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<LocalCycle | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GoalCycle | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<GoalCycle | null>(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [startTarget, setStartTarget] = useState<LocalCycle | null>(null);
-  const [closeTarget, setCloseTarget] = useState<LocalCycle | null>(null);
+  const [startTarget, setStartTarget] = useState<GoalCycle | null>(null);
+  const [closeTarget, setCloseTarget] = useState<GoalCycle | null>(null);
 
   const PAGE_SIZE = 10;
-  const storedCycles = useAppraisalGoalsStore((s) => s.cycles);
-  const removeCycle = useAppraisalGoalsStore((s) => s.removeCycle);
-  const startCycle = useAppraisalGoalsStore((s) => s.startCycle);
-  const cancelCycle = useAppraisalGoalsStore((s) => s.cancelCycle);
-  const closeCycle = useAppraisalGoalsStore((s) => s.closeCycle);
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
-  const createAssessments = useAppraisalAssessmentsStore((s) => s.createForCycle);
-  const removeAssessments = useAppraisalAssessmentsStore((s) => s.removeForCycle);
+  const { cycles: storedCycles } = useGoalCycles();
+  const removeCycle = useDeleteCycle();
+  const startCycle = useStartCycle();
+  const cancelCycle = useCancelCycle();
+  const closeCycle = useCloseCycle();
   const allCycles = useMemo(
     () => storedCycles.filter((c) => c.title.toLowerCase().includes(search.trim().toLowerCase())),
     [storedCycles, search],
@@ -74,24 +74,12 @@ export function AppraisalCyclesList() {
   const totalPages = Math.max(1, Math.ceil(allCycles.length / PAGE_SIZE));
   const cycles = allCycles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Everyone a goal in the cycle covers, and who has added an objective during its dates, gets an
-  // assessment of their own. Returns how many covered employees had nothing to rate.
-  const generateAssessments = (cycle: LocalCycle) => {
-    const covered = [
-      ...new Set(goals.filter((g) => cycle.goalIds.includes(g.id)).flatMap((g) => g.employeeIds)),
-    ];
-    const employeeIds = covered.filter(
-      (id) => goalsWithObjectives(cycle, goals, objectives, id).length > 0,
-    );
-    createAssessments(cycle.id, employeeIds);
-    return covered.length - employeeIds.length;
-  };
   const startedMessage = (skipped: number) =>
     skipped > 0
       ? `Cycle started. ${skipped} ${skipped === 1 ? 'employee has' : 'employees have'} no objectives in this period and was skipped`
       : 'Cycle started';
 
-  const columns: Column<LocalCycle>[] = [
+  const columns: Column<GoalCycle>[] = [
     {
       key: 'title',
       label: 'Cycle Name',
@@ -240,9 +228,9 @@ export function AppraisalCyclesList() {
               variant="danger"
               onClick={() => {
                 if (!deleteTarget) return;
-                removeCycle(deleteTarget.id);
-                removeAssessments(deleteTarget.id);
-                toast.success('Cycle deleted');
+                removeCycle.mutate(deleteTarget.id, {
+                  onSuccess: () => toast.success('Cycle deleted'),
+                });
                 setDeleteTarget(null);
               }}
             >
@@ -277,8 +265,10 @@ export function AppraisalCyclesList() {
               disabled={!cancelReason.trim()}
               onClick={() => {
                 if (!cancelTarget) return;
-                cancelCycle(cancelTarget.id, cancelReason.trim());
-                toast.success('Cycle cancelled');
+                cancelCycle.mutate(
+                  { id: cancelTarget.id, reason: cancelReason.trim() },
+                  { onSuccess: () => toast.success('Cycle cancelled') },
+                );
                 setCancelTarget(null);
                 setCancelReason('');
               }}
@@ -314,9 +304,9 @@ export function AppraisalCyclesList() {
             <Button
               onClick={() => {
                 if (!startTarget) return;
-                startCycle(startTarget.id);
-                const skipped = generateAssessments(startTarget);
-                toast.success(startedMessage(skipped));
+                startCycle.mutate(startTarget.id, {
+                  onSuccess: (result) => toast.success(startedMessage(result.skipped)),
+                });
                 setStartTarget(null);
               }}
             >
@@ -340,8 +330,9 @@ export function AppraisalCyclesList() {
             <Button
               onClick={() => {
                 if (!closeTarget) return;
-                closeCycle(closeTarget.id);
-                toast.success('Cycle closed');
+                closeCycle.mutate(closeTarget.id, {
+                  onSuccess: () => toast.success('Cycle closed'),
+                });
                 setCloseTarget(null);
               }}
             >

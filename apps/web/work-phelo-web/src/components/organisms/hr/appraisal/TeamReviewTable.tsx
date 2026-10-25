@@ -4,10 +4,8 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { formatDate } from '@/lib/formatters';
 import { TableButton } from '@/components/atoms/TableButton';
 import { Column, DataTable } from '../../shared/DataTable';
-import { useAllEmployees, useMyProfile } from '@/hooks/hr/useEmployees';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
-import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
-import { useIsManager } from '@/hooks/hr/useIsManager';
+import { useAllEmployees } from '@/hooks/hr/useEmployees';
+import { useGoalCycles, useTeamAssessments } from '@/hooks/hr/useGoalAppraisals';
 import { StatusLabel } from './CycleAssessments';
 
 const PAGE_SIZE = 10;
@@ -23,16 +21,13 @@ interface Props {
 export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const { data: me } = useMyProfile();
-  const { reviewsAll } = useIsManager();
   const { data: employeeData, isLoading } = useAllEmployees();
-  const cycles = useAppraisalGoalsStore((s) => s.cycles);
-  const assessments = useAppraisalAssessmentsStore((s) => s.assessments);
+  const { cycles } = useGoalCycles();
+  // The server returns the signed-in person's reports, or everyone's for HR.
+  const { assessments } = useTeamAssessments();
 
   const rows = useMemo(() => {
-    const team = (employeeData?.data ?? []).filter(
-      (e) => reviewsAll || (e.managerId && e.managerId === me?.id),
-    );
+    const team = employeeData?.data ?? [];
     return assessments.flatMap((a) => {
       const employee = team.find((e) => e.id === a.employeeId);
       const cycle = cycles.find((c) => c.id === a.cycleId);
@@ -57,7 +52,7 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
         },
       ];
     });
-  }, [assessments, cycles, employeeData, me?.id, reviewsAll, search]);
+  }, [assessments, cycles, employeeData, search]);
 
   type Row = (typeof rows)[0];
   const open = (r: Row) =>

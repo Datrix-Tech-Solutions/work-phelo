@@ -23,11 +23,13 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AppraisalsService } from './appraisals.service';
-import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
-import { UpdateAppraisalCycleDto } from './dto/update-cycle.dto';
-import { SubmitReviewDto } from './dto/submit-review.dto';
+import { AppraisalGoalCyclesService } from '../appraisal-goals/appraisal-goal-cycles.service';
+import {
+  CreateGoalCycleDto,
+  SubmitObjectiveRatingsDto,
+  UpdateGoalCycleDto,
+} from '../appraisal-goals/dto/cycle.dto';
 import { CreateAppraisalTemplateDto } from './dto/create-template.dto';
-import { CreateAppraisalKpiDto } from './dto/create-kpi.dto';
 import { CancelAppraisalCycleDto } from './dto/cancel-cycle.dto';
 import { FinalizeAppraisalDto } from './dto/finalize-appraisal.dto';
 import { ReopenAppraisalDto } from './dto/reopen-appraisal.dto';
@@ -52,7 +54,10 @@ type AuthenticatedRequest = Request & { user: RequestUser };
 @RequireFeature('hr', 'appraisals')
 @ApiBearerAuth('access-token')
 export class AppraisalsController {
-  constructor(private readonly appraisalsService: AppraisalsService) {}
+  constructor(
+    private readonly appraisalsService: AppraisalsService,
+    private readonly goalCycles: AppraisalGoalCyclesService,
+  ) {}
 
   // ── Cycles ──────────────────────────────────────────────────────────────────
 
@@ -60,24 +65,20 @@ export class AppraisalsController {
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
   @ApiOperation({ summary: 'Create a new appraisal cycle' })
-  @ApiBody({ type: CreateAppraisalCycleDto })
+  @ApiBody({ type: CreateGoalCycleDto })
   @ApiResponse({ status: 201, description: 'Appraisal cycle created' })
   createCycle(
-    @Body() dto: CreateAppraisalCycleDto,
+    @Body() dto: CreateGoalCycleDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.createCycle(
-      req.user.tenantId,
-      req.user.id,
-      dto,
-    );
+    return this.goalCycles.createCycle(req.user.tenantId, req.user.id, dto);
   }
 
   @Get('cycles')
   @ApiOperation({ summary: 'List all appraisal cycles for the tenant' })
   @ApiResponse({ status: 200, description: 'Appraisal cycles retrieved' })
   getCycles(@Req() req: AuthenticatedRequest) {
-    return this.appraisalsService.getCycles(req.user.tenantId);
+    return this.goalCycles.listCycles(req.user.tenantId);
   }
 
   @Get('cycles/:cycleId')
@@ -88,21 +89,21 @@ export class AppraisalsController {
     @Param('cycleId') cycleId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.getCycle(req.user.tenantId, cycleId);
+    return this.goalCycles.getCycle(req.user.tenantId, cycleId);
   }
 
   @Patch('cycles/:cycleId')
   @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
   @ApiOperation({ summary: 'Update an appraisal cycle' })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
-  @ApiBody({ type: UpdateAppraisalCycleDto })
+  @ApiBody({ type: UpdateGoalCycleDto })
   @ApiResponse({ status: 200, description: 'Appraisal cycle updated' })
   updateCycle(
     @Param('cycleId') cycleId: string,
-    @Body() dto: UpdateAppraisalCycleDto,
+    @Body() dto: UpdateGoalCycleDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.updateCycle(req.user.tenantId, cycleId, dto);
+    return this.goalCycles.updateCycle(req.user.tenantId, cycleId, dto);
   }
 
   @Delete('cycles/:cycleId')
@@ -115,7 +116,7 @@ export class AppraisalsController {
     @Param('cycleId') cycleId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.deleteCycle(req.user.tenantId, cycleId);
+    return this.goalCycles.deleteCycle(req.user.tenantId, cycleId);
   }
 
   @Post('cycles/:cycleId/start')
@@ -130,11 +131,7 @@ export class AppraisalsController {
     @Param('cycleId') cycleId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.startCycle(
-      req.user.tenantId,
-      cycleId,
-      req.user,
-    );
+    return this.goalCycles.startCycle(req.user.tenantId, cycleId, req.user);
   }
 
   @Patch('cycles/:cycleId/cancel')
@@ -148,11 +145,75 @@ export class AppraisalsController {
     @Body() dto: CancelAppraisalCycleDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.cancelCycle(
+    return this.goalCycles.cancelCycle(req.user.tenantId, cycleId, dto.reason);
+  }
+
+  @Patch('cycles/:cycleId/close')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({
+    summary:
+      'Close an in-progress cycle — brings the end date forward and stops new objectives counting',
+  })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'Appraisal cycle closed' })
+  closeCycle(
+    @Param('cycleId') cycleId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.goalCycles.closeCycle(req.user.tenantId, cycleId);
+  }
+
+  @Get('cycles/:cycleId/assessments')
+  @ApiOperation({ summary: "Every employee's assessment in a cycle (HR)" })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  listAssessments(
+    @Param('cycleId') cycleId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.goalCycles.listAssessments(
       req.user.tenantId,
+      req.user,
       cycleId,
-      dto.reason,
     );
+  }
+
+  @Get('assessments/mine')
+  @RequirePermissions(Permission.READ_OWN_REVIEW)
+  @ApiOperation({ summary: "The logged-in employee's assessments" })
+  myAssessments(@Req() req: AuthenticatedRequest) {
+    return this.goalCycles.myAssessments(req.user.tenantId, req.user);
+  }
+
+  @Get('assessments/team')
+  @RequirePermissions(Permission.SUBMIT_MANAGER_REVIEW)
+  @ApiOperation({ summary: 'Assessments waiting on, or done by, the manager' })
+  teamAssessments(@Req() req: AuthenticatedRequest) {
+    return this.goalCycles.teamAssessments(req.user.tenantId, req.user);
+  }
+
+  @Get('assessments/employee/:employeeId')
+  @ApiOperation({
+    summary: "An employee's assessments across cycles (HR or themselves)",
+  })
+  @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
+  employeeAssessments(
+    @Param('employeeId') employeeId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.goalCycles.employeeAssessments(
+      req.user.tenantId,
+      req.user,
+      employeeId,
+    );
+  }
+
+  @Get('assessments/:id')
+  @ApiOperation({
+    summary: 'One assessment with its goals, objectives and ratings',
+  })
+  @ApiParam({ name: 'id', description: 'Appraisal UUID' })
+  getAssessment(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.goalCycles.getAssessment(req.user.tenantId, req.user, id);
   }
 
   @Get('cycles/:cycleId/appraisals')
@@ -181,86 +242,6 @@ export class AppraisalsController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.appraisalsService.getCycleResults(req.user.tenantId, cycleId);
-  }
-
-  // ── KPIs ────────────────────────────────────────────────────────────────────
-
-  @Get('cycles/:cycleId/kpis')
-  @ApiOperation({ summary: 'Get KPIs for a cycle' })
-  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
-  @ApiResponse({ status: 200, description: 'KPIs retrieved' })
-  getCycleKpis(
-    @Param('cycleId') cycleId: string,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    return this.appraisalsService.getCycleKpis(req.user.tenantId, cycleId);
-  }
-
-  @Post('cycles/:cycleId/kpis')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create a KPI for a cycle' })
-  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
-  @ApiBody({ type: CreateAppraisalKpiDto })
-  @ApiResponse({ status: 201, description: 'KPI created' })
-  createCycleKpi(
-    @Param('cycleId') cycleId: string,
-    @Body() dto: CreateAppraisalKpiDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    return this.appraisalsService.createCycleKpi(
-      req.user.tenantId,
-      cycleId,
-      req.user,
-      dto,
-    );
-  }
-
-  @Put('cycles/:cycleId/kpis/:kpiId')
-  @ApiOperation({ summary: 'Update a KPI for a cycle' })
-  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
-  @ApiParam({ name: 'kpiId', description: 'KPI UUID' })
-  @ApiBody({ type: CreateAppraisalKpiDto })
-  @ApiResponse({ status: 200, description: 'KPI updated' })
-  updateCycleKpi(
-    @Param('cycleId') cycleId: string,
-    @Param('kpiId') kpiId: string,
-    @Body() dto: Partial<CreateAppraisalKpiDto>,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    return this.appraisalsService.updateCycleKpi(
-      req.user.tenantId,
-      cycleId,
-      kpiId,
-      req.user,
-      dto,
-    );
-  }
-
-  @Post('cycles/:cycleId/seed-from-template')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
-  @ApiOperation({
-    summary:
-      'Seed cycle KPIs from its linked template — copies template KPIs and weights into the cycle',
-  })
-  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
-  @ApiResponse({ status: 200, description: 'KPIs seeded from template' })
-  @ApiResponse({
-    status: 400,
-    description: 'Cycle has no linked template, or template has no KPIs',
-  })
-  @ApiResponse({
-    status: 409,
-    description: 'Cycle already has KPIs — remove them first',
-  })
-  seedCycleFromTemplate(
-    @Param('cycleId') cycleId: string,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    return this.appraisalsService.seedCycleFromTemplate(
-      req.user.tenantId,
-      cycleId,
-    );
   }
 
   // ── Templates ───────────────────────────────────────────────────────────────
@@ -361,18 +342,18 @@ export class AppraisalsController {
   @RequirePermissions(Permission.SUBMIT_SELF_ASSESSMENT)
   @ApiOperation({ summary: 'Submit self-assessment for an appraisal' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
-  @ApiBody({ type: SubmitReviewDto })
+  @ApiBody({ type: SubmitObjectiveRatingsDto })
   @ApiResponse({ status: 200, description: 'Self-assessment submitted' })
   submitSelf(
     @Param('id') id: string,
-    @Body() dto: SubmitReviewDto,
+    @Body() dto: SubmitObjectiveRatingsDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.submitSelfAssessment(
+    return this.goalCycles.submitSelf(
       req.user.tenantId,
-      id,
       req.user,
-      dto,
+      id,
+      dto.ratings,
     );
   }
 
@@ -380,18 +361,19 @@ export class AppraisalsController {
   @RequirePermissions(Permission.SUBMIT_MANAGER_REVIEW)
   @ApiOperation({ summary: 'Submit manager review for an appraisal' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
-  @ApiBody({ type: SubmitReviewDto })
+  @ApiBody({ type: SubmitObjectiveRatingsDto })
   @ApiResponse({ status: 200, description: 'Manager review submitted' })
   submitManagerReview(
     @Param('id') id: string,
-    @Body() dto: SubmitReviewDto,
+    @Body() dto: SubmitObjectiveRatingsDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.submitManagerReview(
+    return this.goalCycles.submitManager(
       req.user.tenantId,
-      id,
       req.user,
-      dto,
+      id,
+      dto.ratings,
+      dto.comment,
     );
   }
 
@@ -406,12 +388,7 @@ export class AppraisalsController {
     @Body() dto: FinalizeAppraisalDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.finalizeAppraisal(
-      req.user.tenantId,
-      id,
-      req.user,
-      dto,
-    );
+    return this.goalCycles.finalize(req.user.tenantId, req.user, id, dto.note);
   }
 
   @Patch(':id/reopen')

@@ -38,7 +38,11 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         attendance: [PermissionAction.CREATE],
         'time-corrections': [PermissionAction.CREATE],
         'payslip-self': [PermissionAction.VIEW],
-        'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'self-appraisals': [
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.CREATE,
+        ],
         resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
         announcements: [PermissionAction.VIEW],
         schedules: [PermissionAction.VIEW],
@@ -54,7 +58,11 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         attendance: [PermissionAction.CREATE, PermissionAction.VIEW],
         'time-corrections': [PermissionAction.CREATE, PermissionAction.APPROVE],
         'payslip-self': [PermissionAction.VIEW],
-        'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'self-appraisals': [
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.CREATE,
+        ],
         resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
         announcements: [PermissionAction.VIEW],
         employees: [PermissionAction.VIEW],
@@ -152,7 +160,11 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
           PermissionAction.APPROVE,
         ],
         'appraisal-settings': [PermissionAction.EDIT],
-        'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'self-appraisals': [
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.CREATE,
+        ],
         'appraisal-reviews': [PermissionAction.EDIT],
         assets: [
           PermissionAction.VIEW,

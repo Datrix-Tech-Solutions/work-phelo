@@ -223,6 +223,13 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.READ_OWN_REVIEW]: [
     { resource: 'self-appraisals', actions: ['VIEW'] },
   ],
+  [Permission.CREATE_OWN_OBJECTIVE]: [
+    { resource: 'self-appraisals', actions: ['CREATE'] },
+  ],
+  // Team reviewers (appraisal-reviews:EDIT) can add objectives for their people without a separate grant.
+  [Permission.CREATE_OBJECTIVE_FOR_OTHERS]: [
+    { resource: 'appraisal-reviews', actions: ['CREATE', 'EDIT'] },
+  ],
 };
 
 @Injectable()

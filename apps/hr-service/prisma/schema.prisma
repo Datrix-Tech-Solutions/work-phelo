@@ -132,6 +132,8 @@ enum AppraisalCycleStatus {
   UPCOMING
   IN_PROGRESS
   COMPLETED
+  /// Ended on purpose, or by itself once every assessment was approved. COMPLETED stays for cycles that ran on templates.
+  CLOSED
   CANCELLED
 
   @@schema("hr")
@@ -575,6 +577,7 @@ model Employee {
   shiftOverrides         ShiftAssignmentOverride[]
   payrollItems           PayrollItem[]
   appraisals             Appraisal[]                 @relation("AppraisalEmployee")
+  appraisalObjectives    AppraisalObjective[]
   managedAppraisals      Appraisal[]                 @relation("AppraisalManager")
   documents              EmployeeDocument[]
   driverLicence          EmployeeDriverLicence?
@@ -1970,6 +1973,7 @@ model AppraisalCycle {
   employmentTypes         String[]             @default([])
   employmentStatuses      EmploymentStatus[]   @default([])
   employeeIds             String[]             @default([])
+  /// Only on cycles that ran on a template. New cycles run goals and leave this empty.
   templateId              String?
   selfAssessmentWeight    Int                  @default(40)
   managerAssessmentWeight Int                  @default(60)
@@ -1978,13 +1982,16 @@ model AppraisalCycle {
   activatedAt             DateTime?
   cancelledAt             DateTime?
   cancelledReason         String?
+  /// When it was closed. Closing or cancelling early also brings endDate forward to that day.
+  closedAt                DateTime?
   createdBy               String
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
 
   appraisals Appraisal[]
   kpis       AppraisalKpi[]
-  template   AppraisalTemplate? @relation(fields: [templateId], references: [id])
+  goals      AppraisalCycleGoal[]
+  template   AppraisalTemplate?   @relation(fields: [templateId], references: [id])
 
   @@unique([tenantId, title])
   @@schema("hr")
@@ -2027,6 +2034,9 @@ model Appraisal {
   managerStatus      ReviewStatus @default(PENDING)
   managerSubmittedAt DateTime?
 
+  /// The objectives this assessment covers, fixed when the employee submits (goals-based cycles only).
+  objectiveIds String[] @default([])
+
   finalScore       Float?
   finalComment     String?
   completedAt      DateTime?
@@ -2040,12 +2050,13 @@ model Appraisal {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  cycle        AppraisalCycle             @relation(fields: [cycleId], references: [id])
-  employee     Employee                   @relation("AppraisalEmployee", fields: [employeeId], references: [id])
-  manager      Employee?                  @relation("AppraisalManager", fields: [managerId], references: [id])
-  kpiScores    AppraisalKpiScore[]
-  reminderLogs AppraisalReminderLog[]
-  revisionLogs AppraisalRevisionHistory[]
+  cycle           AppraisalCycle             @relation(fields: [cycleId], references: [id])
+  employee        Employee                   @relation("AppraisalEmployee", fields: [employeeId], references: [id])
+  manager         Employee?                  @relation("AppraisalManager", fields: [managerId], references: [id])
+  kpiScores       AppraisalKpiScore[]
+  objectiveScores AppraisalObjectiveScore[]
+  reminderLogs    AppraisalReminderLog[]
+  revisionLogs    AppraisalRevisionHistory[]
 
   @@unique([cycleId, employeeId])
   @@schema("hr")
@@ -2088,6 +2099,102 @@ model AppraisalKpiScore {
   kpi       AppraisalKpi @relation(fields: [kpiId], references: [id], onDelete: Cascade)
 
   @@unique([appraisalId, kpiId, reviewType])
+  @@schema("hr")
+}
+
+/// What cycles run: a named set of weights and the employees it is for. Objectives are written under a goal.
+model AppraisalGoal {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  name                    String
+  selfAssessmentWeight    Int      @default(40)
+  managerAssessmentWeight Int      @default(60)
+  employeeIds             String[] @default([])
+  createdBy               String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  cycleGoals AppraisalCycleGoal[]
+  objectives AppraisalObjective[]
+
+  @@unique([tenantId, name])
+  @@schema("hr")
+}
+
+/// A goal in a cycle. The name and weights are copied here when the cycle starts, so editing the goal later never changes a running or finished cycle.
+model AppraisalCycleGoal {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  cycleId                 String
+  goalId                  String
+  goalName                String?
+  selfAssessmentWeight    Int?
+  managerAssessmentWeight Int?
+  createdAt               DateTime @default(now())
+
+  cycle AppraisalCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  /// Restrict: a goal that is in a cycle cannot be deleted.
+  goal  AppraisalGoal  @relation(fields: [goalId], references: [id], onDelete: Restrict)
+
+  @@unique([cycleId, goalId])
+  @@index([tenantId, goalId])
+  @@schema("hr")
+}
+
+/// What an employee is working towards; takes the place of a KPI. A cycle counts it when its goal is in the cycle and linkedAt falls between the cycle's dates.
+model AppraisalObjective {
+  id         String    @id @default(uuid())
+  tenantId   String
+  employeeId String
+  /// Empty while the objective has no goal; deleting a goal leaves its objectives orphaned.
+  goalId     String?
+  name       String
+  createdBy  String
+  /// When it was attached to its goal; the date cycles compare against. Set on creation when a goal is given.
+  linkedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  employee Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  goal     AppraisalGoal?              @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  comments AppraisalObjectiveComment[]
+  scores   AppraisalObjectiveScore[]
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, goalId, linkedAt])
+  @@schema("hr")
+}
+
+model AppraisalObjectiveComment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  objectiveId String
+  body        String
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  objective AppraisalObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+
+  @@index([objectiveId])
+  @@schema("hr")
+}
+
+/// A rating on one objective, from the employee (SELF) or their manager (MANAGER).
+model AppraisalObjectiveScore {
+  id          String   @id @default(uuid())
+  tenantId    String
+  appraisalId String
+  objectiveId String
+  reviewType  String
+  score       Int
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  appraisal Appraisal          @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+  /// Restrict: a rated objective cannot be deleted.
+  objective AppraisalObjective @relation(fields: [objectiveId], references: [id], onDelete: Restrict)
+
+  @@unique([appraisalId, objectiveId, reviewType])
   @@schema("hr")
 }
 

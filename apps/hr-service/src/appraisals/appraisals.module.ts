@@ -4,9 +4,14 @@ import { AppraisalsController } from './appraisals.controller';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AppraisalsCronService } from './appraisals.cron';
+import { AppraisalGoalsModule } from '../appraisal-goals/appraisal-goals.module';
 
 @Module({
-  imports: [forwardRef(() => RabbitMQModule), NotificationsModule],
+  imports: [
+    forwardRef(() => RabbitMQModule),
+    NotificationsModule,
+    AppraisalGoalsModule,
+  ],
   controllers: [AppraisalsController],
   providers: [AppraisalsService, AppraisalsCronService],
   exports: [AppraisalsService],
