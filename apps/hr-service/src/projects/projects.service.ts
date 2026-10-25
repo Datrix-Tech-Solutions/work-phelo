@@ -9,6 +9,8 @@ import {
   EmploymentStatus,
   Prisma,
   ProjectActivityType,
+  ProjectBillingType,
+  ProjectKind,
   ProjectMemberRole,
   ProjectStatus,
   ProjectTask,
@@ -24,8 +26,22 @@ import {
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
+import { ProjectPricingDto } from './dto/project-config.dto';
+import {
+  assertTaskMeta,
+  firstStage,
+  statusForStage,
+} from './project-config.util';
+import { closeRunningTimers } from './project-time.util';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
+
+const ASSIGNEES_INCLUDE = {
+  include: {
+    employee: { select: { id: true, firstName: true, lastName: true } },
+  },
+  orderBy: [{ createdAt: 'asc' }],
+} satisfies Prisma.ProjectTask$assigneesArgs;
 
 const PROJECT_INCLUDE = {
   manager: {
@@ -51,9 +67,11 @@ const PROJECT_INCLUDE = {
       assignedEmployee: {
         select: { id: true, firstName: true, lastName: true },
       },
+      assignees: ASSIGNEES_INCLUDE,
     },
     orderBy: [{ createdAt: 'desc' }],
   },
+  milestones: { orderBy: [{ position: 'asc' }] },
 } satisfies Prisma.ProjectInclude;
 
 type ProjectWithDetails = Prisma.ProjectGetPayload<{
@@ -197,6 +215,84 @@ export class ProjectsService {
     }
   }
 
+  /** A client project's pricing, checked and split into the project's columns. Null for no pricing. */
+  private pricingColumns(
+    kind: ProjectKind,
+    billable: boolean | undefined,
+    pricing?: ProjectPricingDto,
+  ) {
+    if (kind !== ProjectKind.CLIENT || !billable) {
+      if (pricing) {
+        throw new BadRequestException(
+          'Only a billable client project can have pricing',
+        );
+      }
+      return null;
+    }
+    if (!pricing) {
+      throw new BadRequestException('Choose how the project is billed');
+    }
+    const need = (value: unknown, message: string) => {
+      if (value === undefined || value === null) {
+        throw new BadRequestException(message);
+      }
+    };
+    switch (pricing.type) {
+      case ProjectBillingType.FLAT_RATE:
+        need(pricing.price, 'Enter the price');
+        return { billingType: pricing.type, flatPrice: pricing.price };
+      case ProjectBillingType.TIMED:
+        need(pricing.hourlyRate, 'Enter the rate per hour');
+        return {
+          billingType: pricing.type,
+          hourlyRate: pricing.hourlyRate,
+          estimatedHours: pricing.estimatedHours ?? 0,
+        };
+      case ProjectBillingType.RETAINER:
+        need(pricing.monthlyAmount, 'Enter the amount per month');
+        return {
+          billingType: pricing.type,
+          retainerAmount: pricing.monthlyAmount,
+        };
+      case ProjectBillingType.MILESTONE:
+        if (!pricing.milestones?.length) {
+          throw new BadRequestException('Add at least one milestone');
+        }
+        return { billingType: pricing.type };
+    }
+  }
+
+  private serializePricing(project: ProjectWithDetails) {
+    const num = (value: Prisma.Decimal | null) => value?.toNumber() ?? 0;
+    switch (project.billingType) {
+      case ProjectBillingType.FLAT_RATE:
+        return { type: project.billingType, price: num(project.flatPrice) };
+      case ProjectBillingType.TIMED:
+        return {
+          type: project.billingType,
+          hourlyRate: num(project.hourlyRate),
+          estimatedHours: project.estimatedHours ?? 0,
+        };
+      case ProjectBillingType.RETAINER:
+        return {
+          type: project.billingType,
+          monthlyAmount: num(project.retainerAmount),
+        };
+      case ProjectBillingType.MILESTONE:
+        return {
+          type: project.billingType,
+          milestones: project.milestones.map((m) => ({
+            id: m.id,
+            name: m.name,
+            amount: m.amount.toNumber(),
+            dueDate: m.dueDate?.toISOString().slice(0, 10),
+          })),
+        };
+      default:
+        return undefined;
+    }
+  }
+
   private serializeProject(project: ProjectWithDetails) {
     const totalTasks = project.tasks.length;
     const completedTasks = project.tasks.filter(
@@ -205,8 +301,17 @@ export class ProjectsService {
     const progress =
       totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
+    const {
+      flatPrice: _flatPrice,
+      hourlyRate: _hourlyRate,
+      retainerAmount: _retainerAmount,
+      milestones: _milestones,
+      ...rest
+    } = project;
+
     return {
-      ...project,
+      ...rest,
+      pricing: this.serializePricing(project),
       budget:
         project.budget instanceof Prisma.Decimal
           ? project.budget.toNumber()
@@ -237,10 +342,18 @@ export class ProjectsService {
         firstName: string;
         lastName: string;
       } | null;
+      assignees?: {
+        employee: { id: string; firstName: string; lastName: string };
+      }[];
     },
   ) {
+    const { assignees, ...rest } = task;
     return {
-      ...task,
+      ...rest,
+      assignees: (assignees ?? []).map((a) => ({
+        id: a.employee.id,
+        name: `${a.employee.firstName} ${a.employee.lastName}`,
+      })),
       assignedEmployeeName: task.assignedEmployee
         ? `${task.assignedEmployee.firstName} ${task.assignedEmployee.lastName}`
         : undefined,
@@ -294,13 +407,42 @@ export class ProjectsService {
         OR: [
           { managerId: actorEmployeeId },
           { members: { some: { employeeId: actorEmployeeId } } },
-          { tasks: { some: { assignedEmployeeId: actorEmployeeId } } },
+          {
+            tasks: {
+              some: {
+                OR: [
+                  { assignedEmployeeId: actorEmployeeId },
+                  { assignees: { some: { employeeId: actorEmployeeId } } },
+                ],
+              },
+            },
+          },
         ],
       },
       select: { id: true },
     });
 
     return Boolean(project);
+  }
+
+  /** For other project services: the caller must be able to see the project. */
+  async assertCanView(tenantId: string, projectId: string, user: RequestUser) {
+    this.assertAccess(await this.canAccessProject(tenantId, projectId, user));
+  }
+
+  /** For other project services: who the caller is on the project, and whether they manage its work. */
+  async getWorkAccess(tenantId: string, projectId: string, user: RequestUser) {
+    await this.assertCanView(tenantId, projectId, user);
+    const employeeId = await this.getActorEmployeeId(tenantId, user);
+    const membership = await this.getProjectMembership(
+      tenantId,
+      projectId,
+      employeeId,
+    );
+    return {
+      employeeId,
+      canManage: this.canEditTask(user) || this.isProjectLead(membership?.role),
+    };
   }
 
   private async logActivity(
@@ -343,7 +485,18 @@ export class ProjectsService {
               { managerId: actorEmployeeId ?? '' },
               { members: { some: { employeeId: actorEmployeeId ?? '' } } },
               {
-                tasks: { some: { assignedEmployeeId: actorEmployeeId ?? '' } },
+                tasks: {
+                  some: {
+                    OR: [
+                      { assignedEmployeeId: actorEmployeeId ?? '' },
+                      {
+                        assignees: {
+                          some: { employeeId: actorEmployeeId ?? '' },
+                        },
+                      },
+                    ],
+                  },
+                },
               },
             ],
           }),
@@ -369,7 +522,16 @@ export class ProjectsService {
         OR: [
           { managerId: employeeId },
           { members: { some: { employeeId } } },
-          { tasks: { some: { assignedEmployeeId: employeeId } } },
+          {
+            tasks: {
+              some: {
+                OR: [
+                  { assignedEmployeeId: employeeId },
+                  { assignees: { some: { employeeId: employeeId } } },
+                ],
+              },
+            },
+          },
         ],
       },
       include: PROJECT_INCLUDE,
@@ -390,7 +552,16 @@ export class ProjectsService {
         OR: [
           { managerId: actorEmployeeId },
           { members: { some: { employeeId: actorEmployeeId } } },
-          { tasks: { some: { assignedEmployeeId: actorEmployeeId } } },
+          {
+            tasks: {
+              some: {
+                OR: [
+                  { assignedEmployeeId: actorEmployeeId },
+                  { assignees: { some: { employeeId: actorEmployeeId } } },
+                ],
+              },
+            },
+          },
         ],
       },
       include: PROJECT_INCLUDE,
@@ -418,6 +589,11 @@ export class ProjectsService {
       await this.ensureEmployee(tenantId, dto.managerId);
     }
 
+    const pricingColumns = this.pricingColumns(
+      dto.kind,
+      dto.billable,
+      dto.pricing,
+    );
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
 
     return this.prisma.$transaction(async (tx) => {
@@ -431,8 +607,30 @@ export class ProjectsService {
           budget: dto.budget,
           managerId: dto.managerId ?? null,
           createdByUserId: user.id,
+          kind: dto.kind,
+          templateName: dto.templateName?.trim() || null,
+          config: dto.config as unknown as Prisma.InputJsonValue,
+          clientId:
+            dto.kind === ProjectKind.CLIENT ? dto.clientId || null : null,
+          clientName:
+            dto.kind === ProjectKind.CLIENT ? dto.clientName || null : null,
+          billable: pricingColumns ? true : false,
+          ...(pricingColumns ?? {}),
         },
       });
+
+      if (dto.pricing?.milestones?.length && pricingColumns) {
+        await tx.projectMilestone.createMany({
+          data: dto.pricing.milestones.map((m, position) => ({
+            tenantId,
+            projectId: project.id,
+            name: m.name.trim(),
+            amount: m.amount,
+            dueDate: m.dueDate ? new Date(m.dueDate) : null,
+            position,
+          })),
+        });
+      }
 
       const memberSeeds = new Map<string, ProjectMemberRole>();
       // Designated owner (selected in the form) takes OWNER role.
@@ -721,6 +919,7 @@ export class ProjectsService {
         assignedEmployee: {
           select: { id: true, firstName: true, lastName: true },
         },
+        assignees: ASSIGNEES_INCLUDE,
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
     });
@@ -735,7 +934,10 @@ export class ProjectsService {
     const tasks = await this.prisma.projectTask.findMany({
       where: {
         tenantId,
-        assignedEmployeeId: actorEmployeeId,
+        OR: [
+          { assignedEmployeeId: actorEmployeeId },
+          { assignees: { some: { employeeId: actorEmployeeId } } },
+        ],
         project: { isArchived: false },
       },
       include: {
@@ -743,6 +945,7 @@ export class ProjectsService {
         assignedEmployee: {
           select: { id: true, firstName: true, lastName: true },
         },
+        assignees: ASSIGNEES_INCLUDE,
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
     });
@@ -751,6 +954,91 @@ export class ProjectsService {
       ...this.serializeTask(task),
       project: task.project,
     }));
+  }
+
+  /** Everyone a task should be assigned to, from the list or the single older field; undefined = no change. */
+  private requestedAssignees(dto: {
+    assigneeIds?: string[];
+    assignedEmployeeId?: string;
+  }) {
+    if (dto.assigneeIds !== undefined) return [...new Set(dto.assigneeIds)];
+    if (dto.assignedEmployeeId) return [dto.assignedEmployeeId];
+    return undefined;
+  }
+
+  /** Makes `employeeIds` the task's assignees and members of the project; returns who is new. */
+  private async setTaskAssignees(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    projectId: string,
+    taskId: string,
+    employeeIds: string[],
+  ) {
+    const current = await tx.projectTaskAssignee.findMany({
+      where: { taskId },
+      select: { employeeId: true },
+    });
+    const had = new Set(current.map((c) => c.employeeId));
+    const added = employeeIds.filter((id) => !had.has(id));
+
+    await tx.projectTaskAssignee.deleteMany({
+      where: { taskId, employeeId: { notIn: employeeIds } },
+    });
+    if (added.length > 0) {
+      await tx.projectTaskAssignee.createMany({
+        data: added.map((employeeId) => ({ tenantId, taskId, employeeId })),
+      });
+    }
+    for (const employeeId of employeeIds) {
+      await tx.projectMember.upsert({
+        where: { projectId_employeeId: { projectId, employeeId } },
+        update: {},
+        create: {
+          tenantId,
+          projectId,
+          employeeId,
+          role: ProjectMemberRole.MEMBER,
+        },
+      });
+    }
+    await tx.projectTask.update({
+      where: { id: taskId },
+      data: { assignedEmployeeId: employeeIds[0] ?? null },
+    });
+    return added;
+  }
+
+  private async ensureObjective(
+    tenantId: string,
+    projectId: string,
+    objectiveId: string,
+  ) {
+    const objective = await this.prisma.projectObjective.findFirst({
+      where: { id: objectiveId, tenantId, projectId },
+      select: { id: true },
+    });
+    if (!objective) throw new NotFoundException('Objective not found');
+  }
+
+  /** Marks the project completed when its last task is done. */
+  private async completeProjectIfFinished(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    projectId: string,
+  ) {
+    const remaining = await tx.projectTask.count({
+      where: { projectId, tenantId, status: { not: ProjectTaskStatus.DONE } },
+    });
+    if (remaining === 0) {
+      await tx.project.updateMany({
+        where: {
+          id: projectId,
+          tenantId,
+          status: { not: ProjectStatus.CANCELLED },
+        },
+        data: { status: ProjectStatus.COMPLETED },
+      });
+    }
   }
 
   async createTask(
@@ -771,9 +1059,20 @@ export class ProjectsService {
       this.canCreateTask(user) || this.isProjectLead(membership?.role),
     );
 
-    const assignedEmployee = dto.assignedEmployeeId
-      ? await this.ensureEmployee(tenantId, dto.assignedEmployeeId)
-      : null;
+    assertTaskMeta(project.config, dto);
+    if (dto.objectiveId) {
+      await this.ensureObjective(tenantId, projectId, dto.objectiveId);
+    }
+
+    const assigneeIds = this.requestedAssignees(dto) ?? [];
+    const assignees = await Promise.all(
+      assigneeIds.map((id) => this.ensureEmployee(tenantId, id)),
+    );
+
+    const stage = dto.stage ?? firstStage(project.config);
+    const status = stage
+      ? statusForStage(project.config, stage)
+      : ProjectTaskStatus.TODO;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const task = await tx.projectTask.create({
@@ -784,34 +1083,24 @@ export class ProjectsService {
           description: dto.description?.trim() || null,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
           priority: dto.priority,
-          assignedEmployeeId: dto.assignedEmployeeId ?? null,
+          status,
+          stage,
+          workType: dto.workType ?? null,
+          priorityName: dto.priorityName ?? null,
+          isTimed: dto.isTimed ?? false,
+          objectiveId: dto.objectiveId ?? null,
           createdByUserId: user.id,
-          completedAt: null,
-        },
-        include: {
-          assignedEmployee: {
-            select: { id: true, firstName: true, lastName: true },
-          },
+          completedAt: status === ProjectTaskStatus.DONE ? new Date() : null,
         },
       });
 
-      if (dto.assignedEmployeeId) {
-        await tx.projectMember.upsert({
-          where: {
-            projectId_employeeId: {
-              projectId,
-              employeeId: dto.assignedEmployeeId,
-            },
-          },
-          update: {},
-          create: {
-            tenantId,
-            projectId,
-            employeeId: dto.assignedEmployeeId,
-            role: ProjectMemberRole.MEMBER,
-          },
-        });
-      }
+      await this.setTaskAssignees(
+        tx,
+        tenantId,
+        projectId,
+        task.id,
+        assigneeIds,
+      );
 
       await this.logActivity(
         tx,
@@ -823,14 +1112,24 @@ export class ProjectsService {
         { taskId: task.id },
       );
 
-      return this.serializeTask(task);
+      return this.serializeTask(
+        await tx.projectTask.findUniqueOrThrow({
+          where: { id: task.id },
+          include: {
+            assignedEmployee: {
+              select: { id: true, firstName: true, lastName: true },
+            },
+            assignees: ASSIGNEES_INCLUDE,
+          },
+        }),
+      );
     });
 
-    if (assignedEmployee) {
+    for (const assignee of assignees) {
       await this.notifyTaskAssigned(
         tenantId,
         user,
-        assignedEmployee,
+        assignee,
         projectId,
         project.name,
         result.id,
@@ -862,99 +1161,87 @@ export class ProjectsService {
 
     const task = await this.prisma.projectTask.findFirst({
       where: { id: taskId, tenantId, projectId },
-      select: { id: true, name: true, assignedEmployeeId: true },
+      select: { id: true, name: true },
     });
     if (!task) throw new NotFoundException('Project task not found');
 
-    let newlyAssignedEmployee: { userId: string | null } | null = null;
-    if (dto.assignedEmployeeId) {
+    assertTaskMeta(project.config, dto);
+    if (dto.objectiveId) {
+      await this.ensureObjective(tenantId, projectId, dto.objectiveId);
+    }
+
+    const assigneeIds = this.requestedAssignees(dto);
+    let newlyAssigned: { id: string; userId: string | null }[] = [];
+    if (assigneeIds) {
       this.assertAccess(
         this.canAssignTask(user) || this.isProjectLead(membership?.role),
       );
-      const employee = await this.ensureEmployee(
-        tenantId,
-        dto.assignedEmployeeId,
-      );
-      // Only notify when the assignee actually changes — not on every edit.
-      if (dto.assignedEmployeeId !== task.assignedEmployeeId) {
-        newlyAssignedEmployee = employee;
-      }
     }
+    const employees = assigneeIds
+      ? await Promise.all(
+          assigneeIds.map((id) => this.ensureEmployee(tenantId, id)),
+        )
+      : [];
+
+    // A stage decides the status: the last stage is Done.
+    const status =
+      dto.stage !== undefined
+        ? statusForStage(project.config, dto.stage)
+        : dto.status;
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const status = dto.status;
-      const updated = await tx.projectTask.update({
+      await tx.projectTask.update({
         where: { id: taskId },
         data: {
           ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
           ...(dto.description !== undefined
             ? { description: dto.description.trim() || null }
             : {}),
-          ...(dto.status !== undefined ? { status } : {}),
+          ...(status !== undefined ? { status } : {}),
+          ...(dto.stage !== undefined ? { stage: dto.stage } : {}),
           ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+          ...(dto.workType !== undefined ? { workType: dto.workType } : {}),
+          ...(dto.priorityName !== undefined
+            ? { priorityName: dto.priorityName }
+            : {}),
+          ...(dto.isTimed !== undefined ? { isTimed: dto.isTimed } : {}),
+          ...(dto.objectiveId !== undefined
+            ? { objectiveId: dto.objectiveId }
+            : {}),
           ...(dto.dueDate !== undefined
             ? { dueDate: dto.dueDate ? new Date(dto.dueDate) : null }
             : {}),
-          ...(dto.assignedEmployeeId !== undefined
-            ? { assignedEmployeeId: dto.assignedEmployeeId || null }
-            : {}),
-          ...(dto.status !== undefined
+          ...(status !== undefined
             ? {
                 completedAt:
-                  dto.status === ProjectTaskStatus.DONE ? new Date() : null,
+                  status === ProjectTaskStatus.DONE ? new Date() : null,
               }
             : {}),
         },
-        include: {
-          assignedEmployee: {
-            select: { id: true, firstName: true, lastName: true },
-          },
-        },
       });
 
-      if (dto.assignedEmployeeId) {
-        await tx.projectMember.upsert({
-          where: {
-            projectId_employeeId: {
-              projectId,
-              employeeId: dto.assignedEmployeeId,
-            },
-          },
-          update: {},
-          create: {
-            tenantId,
-            projectId,
-            employeeId: dto.assignedEmployeeId,
-            role: ProjectMemberRole.MEMBER,
-          },
-        });
+      if (assigneeIds) {
+        const added = await this.setTaskAssignees(
+          tx,
+          tenantId,
+          projectId,
+          taskId,
+          assigneeIds,
+        );
+        // Only notify people newly put on the task, not on every edit.
+        newlyAssigned = employees.filter((e) => added.includes(e.id));
       }
 
-      if (dto.status === ProjectTaskStatus.IN_PROGRESS) {
+      if (status === ProjectTaskStatus.IN_PROGRESS) {
         await tx.project.updateMany({
           where: { id: projectId, tenantId, status: ProjectStatus.PLANNING },
           data: { status: ProjectStatus.ACTIVE },
         });
       }
 
-      if (dto.status === ProjectTaskStatus.DONE) {
-        const remaining = await tx.projectTask.count({
-          where: {
-            projectId,
-            tenantId,
-            status: { not: ProjectTaskStatus.DONE },
-          },
-        });
-        if (remaining === 0) {
-          await tx.project.updateMany({
-            where: {
-              id: projectId,
-              tenantId,
-              status: { not: ProjectStatus.CANCELLED },
-            },
-            data: { status: ProjectStatus.COMPLETED },
-          });
-        }
+      if (status === ProjectTaskStatus.DONE) {
+        await closeRunningTimers(tx, taskId);
+        await this.completeProjectIfFinished(tx, tenantId, projectId);
       }
 
       await this.logActivity(
@@ -963,18 +1250,28 @@ export class ProjectsService {
         projectId,
         user,
         ProjectActivityType.TASK_UPDATED,
-        `Task "${updated.name}" was updated.`,
+        `Task "${dto.name?.trim() || task.name}" was updated.`,
         { taskId },
       );
 
-      return this.serializeTask(updated);
+      return this.serializeTask(
+        await tx.projectTask.findUniqueOrThrow({
+          where: { id: taskId },
+          include: {
+            assignedEmployee: {
+              select: { id: true, firstName: true, lastName: true },
+            },
+            assignees: ASSIGNEES_INCLUDE,
+          },
+        }),
+      );
     });
 
-    if (newlyAssignedEmployee) {
+    for (const assignee of newlyAssigned) {
       await this.notifyTaskAssigned(
         tenantId,
         user,
-        newlyAssignedEmployee,
+        assignee,
         projectId,
         project.name,
         result.id,
@@ -989,14 +1286,18 @@ export class ProjectsService {
     tenantId: string,
     taskId: string,
     user: RequestUser,
-    status: ProjectTaskStatus,
+    change: { status?: ProjectTaskStatus; stage?: string },
   ) {
+    if (!change.status && !change.stage) {
+      throw new BadRequestException('Send a stage or a status');
+    }
     const task = await this.prisma.projectTask.findFirst({
       where: { id: taskId, tenantId, project: { isArchived: false } },
       include: {
         project: {
           select: {
             id: true,
+            config: true,
             members: {
               where: {
                 employee: { userId: user.id },
@@ -1011,26 +1312,29 @@ export class ProjectsService {
         assignedEmployee: {
           select: { id: true, firstName: true, lastName: true, userId: true },
         },
+        assignees: { select: { employee: { select: { userId: true } } } },
       },
     });
 
     if (!task) throw new NotFoundException('Project task not found');
 
-    const isAssignedEmployee = task.assignedEmployee?.userId === user.id;
+    const isAssigned =
+      task.assignedEmployee?.userId === user.id ||
+      task.assignees.some((a) => a.employee.userId === user.id);
     const isLead = task.project.members.length > 0;
-    this.assertAccess(isAssignedEmployee || isLead || this.canEditTask(user));
+    this.assertAccess(isAssigned || isLead || this.canEditTask(user));
+
+    const status = change.stage
+      ? statusForStage(task.project.config, change.stage)
+      : (change.status as ProjectTaskStatus);
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.projectTask.update({
+      await tx.projectTask.update({
         where: { id: task.id },
         data: {
           status,
+          ...(change.stage ? { stage: change.stage } : {}),
           completedAt: status === ProjectTaskStatus.DONE ? new Date() : null,
-        },
-        include: {
-          assignedEmployee: {
-            select: { id: true, firstName: true, lastName: true },
-          },
         },
       });
 
@@ -1046,23 +1350,8 @@ export class ProjectsService {
       }
 
       if (status === ProjectTaskStatus.DONE) {
-        const remaining = await tx.projectTask.count({
-          where: {
-            projectId: task.projectId,
-            tenantId,
-            status: { not: ProjectTaskStatus.DONE },
-          },
-        });
-        if (remaining === 0) {
-          await tx.project.updateMany({
-            where: {
-              id: task.projectId,
-              tenantId,
-              status: { not: ProjectStatus.CANCELLED },
-            },
-            data: { status: ProjectStatus.COMPLETED },
-          });
-        }
+        await closeRunningTimers(tx, task.id);
+        await this.completeProjectIfFinished(tx, tenantId, task.projectId);
       }
 
       await this.logActivity(
@@ -1071,11 +1360,19 @@ export class ProjectsService {
         task.projectId,
         user,
         ProjectActivityType.TASK_STATUS_CHANGED,
-        `Task "${task.name}" moved to ${status}.`,
-        { taskId: task.id, metadata: { status } },
+        `Task "${task.name}" moved to ${change.stage ?? status}.`,
+        { taskId: task.id, metadata: { status, stage: change.stage ?? null } },
       );
 
-      return result;
+      return tx.projectTask.findUniqueOrThrow({
+        where: { id: task.id },
+        include: {
+          assignedEmployee: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+          assignees: ASSIGNEES_INCLUDE,
+        },
+      });
     });
 
     return this.serializeTask(updated);

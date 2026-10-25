@@ -9,6 +9,8 @@ export interface EmployeeObjective {
   name: string;
   createdBy: string;
   comments: string[];
+  /** When it was added; decides which cycles count it. Missing on objectives made before this existed. */
+  createdAt?: string;
 }
 export type EmployeeObjectiveInput = Pick<
   EmployeeObjective,
@@ -28,7 +30,12 @@ export const useEmployeeObjectivesStore = create<EmployeeObjectivesStore>()(
     (set) => ({
       objectives: [],
       addObjective: (dto) =>
-        set((s) => ({ objectives: [{ id: crypto.randomUUID(), ...dto }, ...s.objectives] })),
+        set((s) => ({
+          objectives: [
+            { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...dto },
+            ...s.objectives,
+          ],
+        })),
       addComment: (id, text) =>
         set((s) => ({
           objectives: s.objectives.map((o) =>

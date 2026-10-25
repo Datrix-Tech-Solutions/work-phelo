@@ -60,7 +60,7 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
               status: a.status,
               overallScore: overallScore(
                 a,
-                goalsWithObjectives(cycle, goals, objectives, a.employeeId),
+                goalsWithObjectives(cycle, goals, objectives, a.employeeId, a),
               ),
               selfAssessmentDeadline: cycle.selfAssessmentDeadline,
             },

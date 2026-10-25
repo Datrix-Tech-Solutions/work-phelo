@@ -14,11 +14,12 @@ interface Props {
   onPageChange: (page: number) => void;
 }
 
-type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired' | 'Cancelled';
+type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired' | 'Cancelled' | 'Closed';
 
 const CYCLE_STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = {
   'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
   Completed: { dot: 'bg-green-500', text: 'text-green-600' },
+  Closed: { dot: 'bg-gray-500', text: 'text-gray-600' },
   Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
   Expired: { dot: 'bg-red-400', text: 'text-red-500' },
   Cancelled: { dot: 'bg-red-300', text: 'text-red-400' },
@@ -53,6 +54,7 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
         const rate = own.length > 0 ? Math.round((done / (own.length * 2)) * 100) : 0;
         let status: CycleStatus;
         if (c.status === 'CANCELLED') status = 'Cancelled';
+        else if (c.status === 'CLOSED') status = 'Closed';
         else if (c.status === 'UPCOMING') status = c.endDate < today ? 'Expired' : 'Upcoming';
         else if (own.length > 0 && own.every((a) => a.status === 'FINALIZED')) status = 'Completed';
         else status = c.endDate < today ? 'Expired' : 'In Progress';

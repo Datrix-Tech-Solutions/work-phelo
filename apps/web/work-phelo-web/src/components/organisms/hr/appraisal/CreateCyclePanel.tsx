@@ -9,6 +9,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { useToast } from '@/hooks/useToast';
+import { overlappingCycles } from '@/lib/appraisalAssessments';
 import {
   useAppraisalGoalsStore,
   type CycleInput,
@@ -82,6 +83,16 @@ export function CreateCyclePanel({
   }, [editCycle, reset]);
 
   const startDate = useWatch({ control, name: 'startDate' });
+  const endDate = useWatch({ control, name: 'endDate' });
+  const goalIds = useWatch({ control, name: 'goalIds' });
+  const cycles = useAppraisalGoalsStore((s) => s.cycles);
+  const overlaps = overlappingCycles(
+    cycles,
+    goalIds ?? [],
+    startDate,
+    endDate,
+    isEditing ? editCycle!.id : undefined,
+  );
 
   const onSubmit = (values: FormValues) => {
     if (!values.selfAssessmentDeadline || !values.managerReviewDeadline) {
@@ -162,7 +173,6 @@ export function CreateCyclePanel({
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.startDate?.message}
-                disablePast
               />
             )}
           />
@@ -179,7 +189,6 @@ export function CreateCyclePanel({
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.endDate?.message}
-                disablePast
               />
             )}
           />
@@ -231,6 +240,13 @@ export function CreateCyclePanel({
             />
           )}
         />
+
+        {overlaps.length > 0 && (
+          <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            A selected goal is already running in {overlaps.map((c) => `"${c.title}"`).join(', ')}{' '}
+            during these dates. Objectives added in both periods will be rated in each cycle.
+          </div>
+        )}
       </div>
     </SidePanel>
   );

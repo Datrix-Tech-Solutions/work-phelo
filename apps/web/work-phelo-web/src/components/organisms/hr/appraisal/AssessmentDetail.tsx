@@ -49,6 +49,7 @@ export function AssessmentDetail({
   const rejectReview = useAppraisalAssessmentsStore((s) => s.rejectReview);
   const cycle = useAppraisalGoalsStore((s) => s.cycles.find((c) => c.id === assessment?.cycleId));
   const goals = useAppraisalGoalsStore((s) => s.goals);
+  const closeCycle = useAppraisalGoalsStore((s) => s.closeCycle);
   const objectives = useEmployeeObjectivesStore((s) => s.objectives);
   const { data: employeeData } = useAllEmployees();
 
@@ -61,7 +62,7 @@ export function AssessmentDetail({
   const entries = useMemo(
     () =>
       assessment && cycle
-        ? goalsWithObjectives(cycle, goals, objectives, assessment.employeeId)
+        ? goalsWithObjectives(cycle, goals, objectives, assessment.employeeId, assessment)
         : [],
     [assessment, cycle, goals, objectives],
   );
@@ -217,6 +218,11 @@ export function AssessmentDetail({
             <Button
               onClick={() => {
                 finalize(assessment.id, note.trim());
+                // The cycle closes itself once every assessment in it has been approved.
+                const inCycle = useAppraisalAssessmentsStore
+                  .getState()
+                  .assessments.filter((a) => a.cycleId === assessment.cycleId);
+                if (inCycle.every((a) => a.status === 'FINALIZED')) closeCycle(assessment.cycleId);
                 toast.success('Assessment approved');
                 close();
               }}

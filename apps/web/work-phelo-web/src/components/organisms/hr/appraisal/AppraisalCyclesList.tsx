@@ -8,11 +8,13 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateCyclePanel } from '@/components/organisms/hr/appraisal/CreateCyclePanel';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/formatters';
+import { goalsWithObjectives } from '@/lib/appraisalAssessments';
+import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
 import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
 import { useAppraisalGoalsStore, type LocalCycle } from '@/store/appraisalGoals.store';
 import { cn } from '@/lib/utils';
 
-type DerivedStatus = 'Upcoming' | 'In Progress' | 'Completed' | 'Expired' | 'Cancelled';
+type DerivedStatus = 'Upcoming' | 'In Progress' | 'Completed' | 'Expired' | 'Cancelled' | 'Closed';
 
 const STATUS_STYLES: Record<DerivedStatus, { dot: string; text: string }> = {
   'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
@@ -20,11 +22,13 @@ const STATUS_STYLES: Record<DerivedStatus, { dot: string; text: string }> = {
   Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
   Expired: { dot: 'bg-red-400', text: 'text-red-500' },
   Cancelled: { dot: 'bg-red-300', text: 'text-red-400' },
+  Closed: { dot: 'bg-gray-500', text: 'text-gray-600' },
 };
 
 function deriveStatus(cycle: LocalCycle): DerivedStatus {
   const today = new Date().toISOString().slice(0, 10);
   if (cycle.status === 'CANCELLED') return 'Cancelled';
+  if (cycle.status === 'CLOSED') return 'Closed';
   if (cycle.endDate < today) return 'Expired';
   return cycle.status === 'UPCOMING' ? 'Upcoming' : 'In Progress';
 }
@@ -51,14 +55,16 @@ export function AppraisalCyclesList() {
   const [cancelTarget, setCancelTarget] = useState<LocalCycle | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [startTarget, setStartTarget] = useState<LocalCycle | null>(null);
-  const [restartTarget, setRestartTarget] = useState<LocalCycle | null>(null);
+  const [closeTarget, setCloseTarget] = useState<LocalCycle | null>(null);
 
   const PAGE_SIZE = 10;
   const storedCycles = useAppraisalGoalsStore((s) => s.cycles);
   const removeCycle = useAppraisalGoalsStore((s) => s.removeCycle);
   const startCycle = useAppraisalGoalsStore((s) => s.startCycle);
   const cancelCycle = useAppraisalGoalsStore((s) => s.cancelCycle);
+  const closeCycle = useAppraisalGoalsStore((s) => s.closeCycle);
   const goals = useAppraisalGoalsStore((s) => s.goals);
+  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
   const createAssessments = useAppraisalAssessmentsStore((s) => s.createForCycle);
   const removeAssessments = useAppraisalAssessmentsStore((s) => s.removeForCycle);
   const allCycles = useMemo(
@@ -68,13 +74,22 @@ export function AppraisalCyclesList() {
   const totalPages = Math.max(1, Math.ceil(allCycles.length / PAGE_SIZE));
   const cycles = allCycles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Everyone a goal in the cycle covers gets an assessment of their own.
+  // Everyone a goal in the cycle covers, and who has added an objective during its dates, gets an
+  // assessment of their own. Returns how many covered employees had nothing to rate.
   const generateAssessments = (cycle: LocalCycle) => {
-    const employeeIds = [
+    const covered = [
       ...new Set(goals.filter((g) => cycle.goalIds.includes(g.id)).flatMap((g) => g.employeeIds)),
     ];
+    const employeeIds = covered.filter(
+      (id) => goalsWithObjectives(cycle, goals, objectives, id).length > 0,
+    );
     createAssessments(cycle.id, employeeIds);
+    return covered.length - employeeIds.length;
   };
+  const startedMessage = (skipped: number) =>
+    skipped > 0
+      ? `Cycle started. ${skipped} ${skipped === 1 ? 'employee has' : 'employees have'} no objectives in this period and was skipped`
+      : 'Cycle started';
 
   const columns: Column<LocalCycle>[] = [
     {
@@ -137,8 +152,8 @@ export function AppraisalCyclesList() {
 
             {status === 'In Progress' && (
               <>
-                <TableButton variant="blue" onClick={() => setRestartTarget(row)}>
-                  Restart
+                <TableButton variant="blue" onClick={() => setCloseTarget(row)}>
+                  Close
                 </TableButton>
                 <TableButton variant="gray" onClick={edit}>
                   Edit
@@ -160,7 +175,7 @@ export function AppraisalCyclesList() {
               </>
             )}
 
-            {status === 'Cancelled' && (
+            {(status === 'Cancelled' || status === 'Closed') && (
               <TableButton
                 variant="blue"
                 onClick={() => {
@@ -300,8 +315,8 @@ export function AppraisalCyclesList() {
               onClick={() => {
                 if (!startTarget) return;
                 startCycle(startTarget.id);
-                generateAssessments(startTarget);
-                toast.success('Cycle started');
+                const skipped = generateAssessments(startTarget);
+                toast.success(startedMessage(skipped));
                 setStartTarget(null);
               }}
             >
@@ -311,28 +326,26 @@ export function AppraisalCyclesList() {
         }
       />
 
-      {/* Restart modal — In Progress; temporary, until cycles are kept by the backend */}
+      {/* Close modal — In Progress */}
       <Modal
-        isOpen={!!restartTarget}
-        onClose={() => setRestartTarget(null)}
-        title="Restart Appraisal Cycle"
-        description={`Restart "${restartTarget?.title}"? Its assessments are made again from the cycle's current goals, and every rating given so far is cleared.`}
+        isOpen={!!closeTarget}
+        onClose={() => setCloseTarget(null)}
+        title="Close Appraisal Cycle"
+        description={`Close "${closeTarget?.title}"? Objectives added from today on will no longer count for it. Assessments already started can still be completed.`}
         footer={
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setRestartTarget(null)}>
-              Cancel
+            <Button variant="secondary" onClick={() => setCloseTarget(null)}>
+              Back
             </Button>
             <Button
-              variant="danger"
               onClick={() => {
-                if (!restartTarget) return;
-                removeAssessments(restartTarget.id);
-                generateAssessments(restartTarget);
-                toast.success('Cycle restarted');
-                setRestartTarget(null);
+                if (!closeTarget) return;
+                closeCycle(closeTarget.id);
+                toast.success('Cycle closed');
+                setCloseTarget(null);
               }}
             >
-              Restart Cycle
+              Close Cycle
             </Button>
           </div>
         }

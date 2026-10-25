@@ -54,6 +54,7 @@ export function useTaskDialogs(projectId: string) {
   const setTaskAssignees = useProjectWorkStore((s) => s.setTaskAssignees);
   const timedByTaskId = useTaskTimeStore((s) => s.timedByTaskId);
   const setTimed = useTaskTimeStore((s) => s.setTimed);
+  const pricing = useProjectLocalStore((s) => s.byProjectId[projectId]?.pricing);
   const config = useProjectLocalStore((s) => s.byProjectId[projectId]?.config);
   const { workTypeOptions, priorityOptions, defaultWorkType, defaultPriority } = useMemo(
     () => projectTaskOptions(config),
@@ -156,6 +157,7 @@ export function useTaskDialogs(projectId: string) {
           priorityOptions={priorityOptions}
           defaultWorkType={defaultWorkType}
           defaultPriority={defaultPriority}
+          defaultTimed={pricing?.type === 'TIMED'}
         />
       )}
 

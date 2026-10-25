@@ -349,6 +349,33 @@ enum ProjectTaskPriority {
   @@schema("hr")
 }
 
+enum ProjectKind {
+  CLIENT
+  INTERNAL
+  RESEARCH
+  IMPLEMENTATION
+  OPERATIONS
+  OTHER
+
+  @@schema("hr")
+}
+
+enum ProjectBillingType {
+  FLAT_RATE
+  TIMED
+  MILESTONE
+  RETAINER
+
+  @@schema("hr")
+}
+
+enum ProjectTimeSource {
+  TIMER
+  MANUAL
+
+  @@schema("hr")
+}
+
 enum ProjectActivityType {
   PROJECT_CREATED
   PROJECT_UPDATED
@@ -531,38 +558,40 @@ model Employee {
   createdAt            DateTime                 @default(now())
   updatedAt            DateTime                 @updatedAt
 
-  department            Department?                 @relation(fields: [departmentId], references: [id])
-  branch                Branch?                     @relation(fields: [branchId], references: [id])
-  payrollGroup          PayrollGroup?               @relation(fields: [payrollGroupId], references: [id], onDelete: SetNull)
-  leaveBalances         LeaveBalance[]
-  leaveRequests         LeaveRequest[]
-  coveringLeaveRequests LeaveRequest[]              @relation("LeaveCoverageEmployee")
-  clockRecords          ClockRecord[]
-  timesheets            Timesheet[]
-  timeCorrections       TimeCorrection[]
-  schedules             ShiftSchedule[]
-  requestedShiftSwaps   ShiftSwapRequest[]          @relation("ShiftSwapRequester")
-  targetShiftSwaps      ShiftSwapRequest[]          @relation("ShiftSwapTarget")
-  managedShiftSwaps     ShiftSwapRequest[]          @relation("ShiftSwapManager")
-  shiftSwapActionLogs   ShiftSwapActionLog[]
-  shiftOverrides        ShiftAssignmentOverride[]
-  payrollItems          PayrollItem[]
-  appraisals            Appraisal[]                 @relation("AppraisalEmployee")
-  managedAppraisals     Appraisal[]                 @relation("AppraisalManager")
-  documents             EmployeeDocument[]
-  driverLicence        EmployeeDriverLicence?
-  agreementSignatures   CompanyAgreementSignature[]
-  allowances            EmployeeAllowance[]
-  deductions            EmployeeDeduction[]
-  assignedAssets        Asset[]                     @relation("AssignedAssets")
-  assetAssignments      AssetAssignment[]           @relation("EmployeeAssetAssignments")
-  managedProjects       Project[]                   @relation("ManagedProjects")
-  projectMemberships    ProjectMember[]
-  assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
-  recruitmentStageMoves RecruitmentStageHistory[]   @relation("RecruitmentStageChangedBy")
-  scheduledInterviews   RecruitmentInterview[]      @relation("RecruitmentInterviewScheduledBy")
-  offboarding           OffboardingRecord?
-  resignation           ResignationRecord?
+  department             Department?                 @relation(fields: [departmentId], references: [id])
+  branch                 Branch?                     @relation(fields: [branchId], references: [id])
+  payrollGroup           PayrollGroup?               @relation(fields: [payrollGroupId], references: [id], onDelete: SetNull)
+  leaveBalances          LeaveBalance[]
+  leaveRequests          LeaveRequest[]
+  coveringLeaveRequests  LeaveRequest[]              @relation("LeaveCoverageEmployee")
+  clockRecords           ClockRecord[]
+  timesheets             Timesheet[]
+  timeCorrections        TimeCorrection[]
+  schedules              ShiftSchedule[]
+  requestedShiftSwaps    ShiftSwapRequest[]          @relation("ShiftSwapRequester")
+  targetShiftSwaps       ShiftSwapRequest[]          @relation("ShiftSwapTarget")
+  managedShiftSwaps      ShiftSwapRequest[]          @relation("ShiftSwapManager")
+  shiftSwapActionLogs    ShiftSwapActionLog[]
+  shiftOverrides         ShiftAssignmentOverride[]
+  payrollItems           PayrollItem[]
+  appraisals             Appraisal[]                 @relation("AppraisalEmployee")
+  managedAppraisals      Appraisal[]                 @relation("AppraisalManager")
+  documents              EmployeeDocument[]
+  driverLicence          EmployeeDriverLicence?
+  agreementSignatures    CompanyAgreementSignature[]
+  allowances             EmployeeAllowance[]
+  deductions             EmployeeDeduction[]
+  assignedAssets         Asset[]                     @relation("AssignedAssets")
+  assetAssignments       AssetAssignment[]           @relation("EmployeeAssetAssignments")
+  managedProjects        Project[]                   @relation("ManagedProjects")
+  projectMemberships     ProjectMember[]
+  assignedProjectTasks   ProjectTask[]               @relation("AssignedProjectTasks")
+  projectTaskAssignments ProjectTaskAssignee[]
+  projectTimeEntries     ProjectTimeEntry[]
+  recruitmentStageMoves  RecruitmentStageHistory[]   @relation("RecruitmentStageChangedBy")
+  scheduledInterviews    RecruitmentInterview[]      @relation("RecruitmentInterviewScheduledBy")
+  offboarding            OffboardingRecord?
+  resignation            ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
@@ -573,25 +602,45 @@ model Employee {
 // ── Projects & Tasks ─────────────────────────────────────────────────────
 
 model Project {
-  id              String        @id @default(uuid())
+  id              String              @id @default(uuid())
   tenantId        String
   name            String
   description     String?
-  status          ProjectStatus @default(PLANNING)
+  status          ProjectStatus       @default(PLANNING)
   startDate       DateTime
   endDate         DateTime?
-  budget          Decimal?      @db.Decimal(15, 2)
+  budget          Decimal?            @db.Decimal(15, 2)
   managerId       String?
   createdByUserId String?
-  isArchived      Boolean       @default(false)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  isArchived      Boolean             @default(false)
+  kind            ProjectKind?
+  /// Name of the template it started from; null for a blank slate.
+  templateName    String?
+  /// The project's own workflow, work types, features and priority levels (a copy of the template).
+  config          Json                @default("{}")
+  /// The marketing client a client project is for, with its name as it was last read.
+  clientId        String?
+  clientName      String?
+  billable        Boolean             @default(false)
+  billingType     ProjectBillingType?
+  flatPrice       Decimal?            @db.Decimal(15, 2)
+  hourlyRate      Decimal?            @db.Decimal(15, 2)
+  estimatedHours  Int?
+  retainerAmount  Decimal?            @db.Decimal(15, 2)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
-  manager    Employee?         @relation("ManagedProjects", fields: [managerId], references: [id])
+  manager    Employee?          @relation("ManagedProjects", fields: [managerId], references: [id])
   members    ProjectMember[]
   tasks      ProjectTask[]
   activities ProjectActivity[]
+  objectives ProjectObjective[]
+  sprints    ProjectSprint[]
+  milestones ProjectMilestone[]
+  subtasks   ProjectSubtask[]
+  invoices   ProjectInvoice[]
 
+  @@index([tenantId, clientId])
   @@index([tenantId, status])
   @@index([tenantId, managerId])
   @@index([tenantId, createdAt])
@@ -629,12 +678,25 @@ model ProjectTask {
   assignedEmployeeId String?
   createdByUserId    String?
   completedAt        DateTime?
+  /// The workflow stage the task sits in. `status` follows it: the last stage is DONE.
+  stage              String?
+  workType           String?
+  /// The priority level's name from the project's own set-up.
+  priorityName       String?
+  isTimed            Boolean             @default(false)
+  objectiveId        String?
+  sprintId           String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignedEmployee Employee?         @relation("AssignedProjectTasks", fields: [assignedEmployeeId], references: [id])
+  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedEmployee Employee?             @relation("AssignedProjectTasks", fields: [assignedEmployeeId], references: [id])
+  objective        ProjectObjective?     @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+  sprint           ProjectSprint?        @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   activities       ProjectActivity[]
+  assignees        ProjectTaskAssignee[]
+  subtasks         ProjectSubtask[]
+  timeEntries      ProjectTimeEntry[]
 
   @@index([tenantId, projectId])
   @@index([tenantId, assignedEmployeeId])
@@ -660,6 +722,155 @@ model ProjectActivity {
 
   @@index([tenantId, projectId, createdAt])
   @@index([tenantId, taskId])
+  @@schema("hr")
+}
+
+/// Everyone a task is assigned to; `ProjectTask.assignedEmployeeId` keeps the first for older views.
+model ProjectTaskAssignee {
+  id         String   @id @default(uuid())
+  tenantId   String
+  taskId     String
+  employeeId String
+  createdAt  DateTime @default(now())
+
+  task     ProjectTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employee Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, employeeId])
+  @@index([tenantId, employeeId])
+  @@schema("hr")
+}
+
+/// A named group of a project's tasks; its progress comes from its tasks.
+model ProjectObjective {
+  id          String   @id @default(uuid())
+  tenantId    String
+  projectId   String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   ProjectTask[]
+
+  @@index([tenantId, projectId])
+  @@schema("hr")
+}
+
+/// A step towards finishing a task. It always belongs to a task.
+model ProjectSubtask {
+  id        String   @id @default(uuid())
+  tenantId  String
+  projectId String
+  taskId    String
+  name      String
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    ProjectTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, projectId])
+  @@index([taskId])
+  @@schema("hr")
+}
+
+/// A time-boxed collection of a project's tasks. A task is in at most one sprint.
+model ProjectSprint {
+  id          String    @id @default(uuid())
+  tenantId    String
+  projectId   String
+  name        String
+  startDate   DateTime  @db.Date
+  endDate     DateTime  @db.Date
+  completedAt DateTime? @db.Date
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   ProjectTask[]
+
+  @@index([tenantId, projectId])
+  @@schema("hr")
+}
+
+/// A payment a milestone-billed client project is due to collect.
+model ProjectMilestone {
+  id        String    @id @default(uuid())
+  tenantId  String
+  projectId String
+  name      String
+  amount    Decimal   @db.Decimal(15, 2)
+  dueDate   DateTime? @db.Date
+  position  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, projectId])
+  @@schema("hr")
+}
+
+/// An invoice raised from a project. The invoice itself is the Accounting transaction; this keeps what it
+/// was raised for (`lines`: a task's time, the project price, a milestone or a retainer month).
+model ProjectInvoice {
+  id              String   @id
+  tenantId        String
+  projectId       String
+  clientId        String
+  /// The Accounting transaction the invoice became, to read its state back.
+  transactionId   String
+  description     String
+  amount          Decimal  @db.Decimal(15, 2)
+  lines           Json     @default("[]")
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, projectId])
+  @@schema("hr")
+}
+
+/// A piece of one person's time on a task. A running timer has no `endedAt`; a manual add or a
+/// correction is a row with `source` MANUAL (a correction can be negative; whole minutes are summed from seconds so short sessions aren't lost). Totals are sums.
+model ProjectTimeEntry {
+  id         String            @id @default(uuid())
+  tenantId   String
+  projectId  String
+  taskId     String
+  employeeId String
+  source     ProjectTimeSource
+  startedAt  DateTime?
+  endedAt    DateTime?
+  seconds    Int               @default(0)
+  note       String?
+  createdAt  DateTime          @default(now())
+
+  task     ProjectTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employee Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, projectId])
+  @@index([taskId, employeeId])
+  @@schema("hr")
+}
+
+/// A saved set-up that new projects can start from. The built-in ones ship with the app;
+/// `defaultKey` marks a company's edit of one of them.
+model ProjectTemplate {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  config      Json
+  defaultKey  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, defaultKey])
+  @@index([tenantId])
   @@schema("hr")
 }
 
@@ -1416,19 +1627,19 @@ model ShiftAssignmentOverride {
 // ── Payroll ───────────────────────────────────────────────────────────────
 
 model PayrollRun {
-  id                          String         @id @default(uuid())
+  id                          String          @id @default(uuid())
   tenantId                    String
   month                       Int
   year                        Int
-  status                      PayrollStatus  @default(DRAFT)
-  totalGross                  Decimal        @db.Decimal(15, 2)
-  totalNet                    Decimal        @db.Decimal(15, 2)
-  totalSSNIT                  Decimal        @db.Decimal(15, 2)
-  totalTier1                  Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier2                  Decimal        @default(0) @db.Decimal(15, 2)
-  totalTier3                  Decimal        @default(0) @db.Decimal(15, 2)
-  totalPAYE                   Decimal        @db.Decimal(15, 2)
-  totalEmployerCost           Decimal        @default(0) @db.Decimal(15, 2)
+  status                      PayrollStatus   @default(DRAFT)
+  totalGross                  Decimal         @db.Decimal(15, 2)
+  totalNet                    Decimal         @db.Decimal(15, 2)
+  totalSSNIT                  Decimal         @db.Decimal(15, 2)
+  totalTier1                  Decimal         @default(0) @db.Decimal(15, 2)
+  totalTier2                  Decimal         @default(0) @db.Decimal(15, 2)
+  totalTier3                  Decimal         @default(0) @db.Decimal(15, 2)
+  totalPAYE                   Decimal         @db.Decimal(15, 2)
+  totalEmployerCost           Decimal         @default(0) @db.Decimal(15, 2)
   runBy                       String
   submittedBy                 String?
   submittedAt                 DateTime?
@@ -1441,27 +1652,27 @@ model PayrollRun {
   /// True when the run was approved while payroll was linked to Accounting, so its accrual was
   /// posted there and it is settled there. Fixed at approval: linking or unlinking later never
   /// changes a run that already exists.
-  postedToAccounting          Boolean        @default(false)
+  postedToAccounting          Boolean         @default(false)
   notes                       String?
   /// Set only by the older fixed-country payroll. Runs from payroll configurations leave it empty:
   /// their currency is just a label.
   payrollCountry              PayrollCountry?
-  payrollCurrency             String         @default("GHS")
-  tier3Enabled                Boolean        @default(false)
-  tier3Rate                   Decimal?       @db.Decimal(5, 2)
+  payrollCurrency             String          @default("GHS")
+  tier3Enabled                Boolean         @default(false)
+  tier3Rate                   Decimal?        @db.Decimal(5, 2)
   tier3SchemeName             String?
   /// "legacy" for runs made by the old calculators; otherwise the payslip type the run is for
   /// (monthly, commission or monthly_commission), so each type has its own run each month.
-  payslipKey                  String         @default("legacy")
+  payslipKey                  String          @default("legacy")
   /// Totals by accounting role, for runs made with payroll configurations. Old runs keep the
   /// tier and PAYE columns above and leave these at zero.
-  totalEmployeeSocialSecurity Decimal        @default(0) @db.Decimal(15, 2)
-  totalPension                Decimal        @default(0) @db.Decimal(15, 2)
-  totalIncomeTax              Decimal        @default(0) @db.Decimal(15, 2)
-  totalOtherDeductions        Decimal        @default(0) @db.Decimal(15, 2)
-  totalEmployerSocialSecurity Decimal        @default(0) @db.Decimal(15, 2)
-  createdAt                   DateTime       @default(now())
-  updatedAt                   DateTime       @updatedAt
+  totalEmployeeSocialSecurity Decimal         @default(0) @db.Decimal(15, 2)
+  totalPension                Decimal         @default(0) @db.Decimal(15, 2)
+  totalIncomeTax              Decimal         @default(0) @db.Decimal(15, 2)
+  totalOtherDeductions        Decimal         @default(0) @db.Decimal(15, 2)
+  totalEmployerSocialSecurity Decimal         @default(0) @db.Decimal(15, 2)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 
   items PayrollItem[]
 

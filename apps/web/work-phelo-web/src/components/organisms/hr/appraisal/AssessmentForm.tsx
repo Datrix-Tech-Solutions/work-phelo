@@ -64,8 +64,8 @@ export function AssessmentForm({
   const goals = useAppraisalGoalsStore((s) => s.goals);
   const allObjectives = useEmployeeObjectivesStore((s) => s.objectives);
   const entries = useMemo(
-    () => goalsWithObjectives(cycle, goals, allObjectives, assessment.employeeId),
-    [cycle, goals, allObjectives, assessment.employeeId],
+    () => goalsWithObjectives(cycle, goals, allObjectives, assessment.employeeId, assessment),
+    [cycle, goals, allObjectives, assessment],
   );
   const objectiveCount = entries.reduce((sum, e) => sum + e.objectives.length, 0);
 

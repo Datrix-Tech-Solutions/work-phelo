@@ -51,6 +51,8 @@ interface Props {
   priorityOptions?: SearchSelectOption[];
   defaultWorkType?: string;
   defaultPriority?: string;
+  /** Whether new tasks start as timed, e.g. on a project billed by time. */
+  defaultTimed?: boolean;
 }
 
 export function CreateTaskModal({
@@ -65,11 +67,12 @@ export function CreateTaskModal({
   priorityOptions = [],
   defaultWorkType = '',
   defaultPriority = '',
+  defaultTimed = false,
 }: Props) {
   const [objectiveId, setObjectiveId] = useState(defaultObjectiveId ?? '');
   const [workType, setWorkType] = useState(defaultWorkType);
   const [priority, setPriority] = useState(defaultPriority);
-  const [timed, setTimed] = useState(false);
+  const [timed, setTimed] = useState(defaultTimed);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -108,7 +111,7 @@ export function CreateTaskModal({
     setObjectiveId(defaultObjectiveId ?? '');
     setWorkType(defaultWorkType);
     setPriority(defaultPriority);
-    setTimed(false);
+    setTimed(defaultTimed);
     onClose();
   };
 
@@ -130,7 +133,7 @@ export function CreateTaskModal({
     setObjectiveId(defaultObjectiveId ?? '');
     setWorkType(defaultWorkType);
     setPriority(defaultPriority);
-    setTimed(false);
+    setTimed(defaultTimed);
     setEmployeeSearch('');
     setSelectedIds([]);
   };

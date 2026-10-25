@@ -34,7 +34,7 @@ export function EmployeeAssessmentsSection({ employeeId }: { employeeId: string 
               cycleId: cycle.id,
               cycleName: cycle.title,
               status: a.status,
-              score: overallScore(a, goalsWithObjectives(cycle, goals, objectives, employeeId)),
+              score: overallScore(a, goalsWithObjectives(cycle, goals, objectives, employeeId, a)),
             },
           ];
         }),

@@ -40,6 +40,9 @@ export default function ProjectDetailLayout({
   // The project's own features (from its template or blank-slate setup) decide its tabs.
   const features = useProjectLocalStore((s) => s.byProjectId[id]?.config.features);
   const addFeature = useProjectLocalStore((s) => s.addFeature);
+  const isBillable = useProjectLocalStore(
+    (s) => !!s.byProjectId[id]?.billable && !!s.byProjectId[id]?.pricing,
+  );
   const router = useRouter();
   const { data: myProfile } = useMyProfile();
   const canManageProjects = usePermission(Permission.CREATE_PROJECT);
@@ -78,7 +81,16 @@ export default function ProjectDetailLayout({
   const activeFeatures: ProjectFeature[] = features ?? ['LIST', 'BOARD'];
   const unusedTabs = PROJECT_FEATURE_OPTIONS.filter((o) => !activeFeatures.includes(o.value));
 
-  const tabs = [{ label: `${labels.singular} Summary`, href: `${root}/summary` }, ...featureTabs];
+  // A billable project also gets a billing tab, for raising invoices and looking back over them.
+  const billingTabs = isBillable
+    ? [{ label: `${labels.singular} Billing`, href: `${root}/billing` }]
+    : [];
+
+  const tabs = [
+    { label: `${labels.singular} Summary`, href: `${root}/summary` },
+    ...featureTabs,
+    ...billingTabs,
+  ];
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

@@ -1,9 +1,17 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { ProjectTaskStatus } from '../../../prisma/generated/client';
 
 export class UpdateTaskStatusDto {
-  @ApiProperty({ enum: ProjectTaskStatus, example: ProjectTaskStatus.DONE })
+  @ApiPropertyOptional({ enum: ProjectTaskStatus })
+  @IsOptional()
   @IsEnum(ProjectTaskStatus)
-  status!: ProjectTaskStatus;
+  status?: ProjectTaskStatus;
+
+  @ApiPropertyOptional({
+    description: 'A workflow stage of the project; the status follows it',
+  })
+  @IsOptional()
+  @IsString()
+  stage?: string;
 }

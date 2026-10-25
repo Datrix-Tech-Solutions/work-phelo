@@ -1,13 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { ProjectKind } from '../../../prisma/generated/client';
+import { ProjectConfigDto, ProjectPricingDto } from './project-config.dto';
 
 export class CreateProjectDto {
   @ApiProperty({ example: 'Payroll self-service rollout' })
@@ -44,4 +50,43 @@ export class CreateProjectDto {
   @IsOptional()
   @IsUUID()
   managerId?: string;
+
+  @ApiProperty({ enum: ProjectKind })
+  @IsEnum(ProjectKind)
+  kind!: ProjectKind;
+
+  @ApiPropertyOptional({
+    description: 'Template the project started from; omit for a blank slate',
+  })
+  @IsOptional()
+  @IsString()
+  templateName?: string;
+
+  @ApiProperty({ type: ProjectConfigDto })
+  @ValidateNested()
+  @Type(() => ProjectConfigDto)
+  config!: ProjectConfigDto;
+
+  @ApiPropertyOptional({
+    description: 'Marketing client a client project is for',
+  })
+  @IsOptional()
+  @IsString()
+  clientId?: string;
+
+  @ApiPropertyOptional({ description: 'The client name as shown now' })
+  @IsOptional()
+  @IsString()
+  clientName?: string;
+
+  @ApiPropertyOptional({ description: 'Whether a client project is billed' })
+  @IsOptional()
+  @IsBoolean()
+  billable?: boolean;
+
+  @ApiPropertyOptional({ type: ProjectPricingDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProjectPricingDto)
+  pricing?: ProjectPricingDto;
 }

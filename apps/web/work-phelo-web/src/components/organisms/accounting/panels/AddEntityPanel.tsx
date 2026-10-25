@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, useWatch, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
@@ -133,14 +133,13 @@ export function AddEntityPanel({
     register,
     handleSubmit,
     control,
-    watch,
     reset,
     setValue,
     getValues,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
-  const monitorWithAml = watch('monitorWithAml');
+  const monitorWithAml = useWatch({ control, name: 'monitorWithAml' });
 
   useEffect(() => {
     if (!isOpen) return;

@@ -30,6 +30,46 @@ export function formatHoursMinutes(ms: number): string {
   return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 }
 
+/** A person's billable time on a project. */
+export interface PersonProjectTime {
+  personId: string;
+  personName: string;
+  ms: number;
+}
+
+/** The time logged on a project's timed tasks, in total and by person. Untimed tasks don't count. */
+export function projectBillableTime(
+  timersByTaskId: Record<string, Record<string, PersonTimer>>,
+  timedByTaskId: Record<string, boolean>,
+  projectId: string,
+  now: number,
+): { totalMs: number; people: PersonProjectTime[]; running: boolean } {
+  const byPerson = new Map<string, PersonProjectTime>();
+  let running = false;
+  for (const [taskId, timers] of Object.entries(timersByTaskId)) {
+    if (!timedByTaskId[taskId]) continue;
+    for (const t of Object.values(timers)) {
+      if (t.projectId !== projectId) continue;
+      if (t.runningSince) running = true;
+      const entry = byPerson.get(t.personId) ?? {
+        personId: t.personId,
+        personName: t.personName,
+        ms: 0,
+      };
+      entry.ms += timerElapsedMs(t, now);
+      byPerson.set(t.personId, entry);
+    }
+  }
+  const people = [...byPerson.values()].sort((a, b) => b.ms - a.ms);
+  return { totalMs: people.reduce((sum, p) => sum + p.ms, 0), people, running };
+}
+
+/** What the logged time is worth at an hourly rate, counted to the exact minute. */
+export function accruedAmount(totalMs: number, hourlyRate: number): number {
+  const minutes = Math.floor(Math.max(0, totalMs) / 60000);
+  return Math.round((minutes / 60) * hourlyRate * 100) / 100;
+}
+
 /** The current time, refreshed every second while `active`; otherwise it holds still. */
 export function useNow(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());

@@ -133,6 +133,7 @@ export function TaskDetailsPanel({
               <TaskTimer
                 taskId={task.id}
                 taskName={task.name}
+                projectId={projectId}
                 canTrack={canManageSubtasks || assignees.some((a) => a.id === me?.id)}
                 finished={task.status === 'DONE'}
               />
