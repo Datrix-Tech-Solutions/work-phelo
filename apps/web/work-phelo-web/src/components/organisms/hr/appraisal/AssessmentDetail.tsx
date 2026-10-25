@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useRatingThresholds } from '@/hooks/hr/useRatingThresholds';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/atoms/Button';
 import { RatingBadge } from '@/components/molecules/hr/appraisal/RatingBadge';
@@ -10,16 +11,18 @@ import { useToast } from '@/hooks/useToast';
 import { pageContent } from '@/lib/layout';
 import {
   RATING_MAX,
-  goalsWithObjectives,
   managerScorePct,
   overallScore,
   ratingForScore,
   selfScorePct,
 } from '@/lib/appraisalAssessments';
 import { cardClass, cn } from '@/lib/utils';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
-import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
-import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
+import {
+  useApproveAssessment,
+  useAssessment,
+  useGoalCycle,
+  useRejectAssessment,
+} from '@/hooks/hr/useGoalAppraisals';
 import { StatusLabel } from './CycleAssessments';
 
 const pct = (value: number | null) => (value === null ? '—' : `${value}%`);
@@ -42,15 +45,11 @@ export function AssessmentDetail({
   assessmentId: string;
 }) {
   const toast = useToast();
-  const assessment = useAppraisalAssessmentsStore((s) =>
-    s.assessments.find((a) => a.id === assessmentId),
-  );
-  const finalize = useAppraisalAssessmentsStore((s) => s.finalize);
-  const rejectReview = useAppraisalAssessmentsStore((s) => s.rejectReview);
-  const cycle = useAppraisalGoalsStore((s) => s.cycles.find((c) => c.id === assessment?.cycleId));
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const closeCycle = useAppraisalGoalsStore((s) => s.closeCycle);
-  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
+  const { assessment, isLoading } = useAssessment(assessmentId);
+  const approve = useApproveAssessment();
+  const reject = useRejectAssessment();
+  const { cycle } = useGoalCycle(assessment?.cycleId ?? '');
+  const thresholds = useRatingThresholds();
   const { data: employeeData } = useAllEmployees();
 
   const [approveOpen, setApproveOpen] = useState(false);
@@ -59,14 +58,11 @@ export function AssessmentDetail({
 
   const employee = employeeData?.data?.find((e) => e.id === assessment?.employeeId);
   const manager = employeeData?.data?.find((e) => e.id === employee?.managerId);
-  const entries = useMemo(
-    () =>
-      assessment && cycle
-        ? goalsWithObjectives(cycle, goals, objectives, assessment.employeeId, assessment)
-        : [],
-    [assessment, cycle, goals, objectives],
-  );
+  const entries = assessment?.entries ?? [];
 
+  if (isLoading) {
+    return <div className={cn(pageContent, 'text-sm text-gray-400')}>Loading…</div>;
+  }
   if (!assessment || !cycle) {
     return <div className={cn(pageContent, 'text-sm text-red-500')}>Assessment not found.</div>;
   }
@@ -74,7 +70,7 @@ export function AssessmentDetail({
   const name = employee ? `${employee.firstName} ${employee.lastName}` : 'Employee';
   const cycleHref = `/${tenantSlug}/hr/appraisal/cycles/${cycle.id}`;
   const final = overallScore(assessment, entries);
-  const rating = ratingForScore(final);
+  const rating = ratingForScore(final, thresholds);
   const awaitingHr = assessment.status === 'MANAGER_SUBMITTED';
   const close = () => {
     setApproveOpen(false);
@@ -217,13 +213,11 @@ export function AssessmentDetail({
             </Button>
             <Button
               onClick={() => {
-                finalize(assessment.id, note.trim());
-                // The cycle closes itself once every assessment in it has been approved.
-                const inCycle = useAppraisalAssessmentsStore
-                  .getState()
-                  .assessments.filter((a) => a.cycleId === assessment.cycleId);
-                if (inCycle.every((a) => a.status === 'FINALIZED')) closeCycle(assessment.cycleId);
-                toast.success('Assessment approved');
+                // The server closes the cycle itself once every assessment in it is approved.
+                approve.mutate(
+                  { id: assessment.id, note: note.trim() },
+                  { onSuccess: () => toast.success('Assessment approved') },
+                );
                 close();
               }}
             >
@@ -255,8 +249,10 @@ export function AssessmentDetail({
               variant="danger"
               disabled={!note.trim()}
               onClick={() => {
-                rejectReview(assessment.id, note.trim());
-                toast.success('Review sent back to the manager');
+                reject.mutate(
+                  { id: assessment.id, reason: note.trim() },
+                  { onSuccess: () => toast.success('Review sent back to the manager') },
+                );
                 close();
               }}
             >

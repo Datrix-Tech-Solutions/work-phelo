@@ -10,11 +10,8 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { useToast } from '@/hooks/useToast';
 import { overlappingCycles } from '@/lib/appraisalAssessments';
-import {
-  useAppraisalGoalsStore,
-  type CycleInput,
-  type LocalCycle,
-} from '@/store/appraisalGoals.store';
+import { useGoalCycles, useGoals, useSaveCycle } from '@/hooks/hr/useGoalAppraisals';
+import type { CycleInput, GoalCycle } from '@/types/appraisal';
 
 const FREQUENCY_OPTIONS = [
   { value: 'ANNUAL', label: 'Annual' },
@@ -26,7 +23,7 @@ const FREQUENCY_OPTIONS = [
 interface CreateCyclePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  editCycle?: LocalCycle;
+  editCycle?: GoalCycle;
   forceCreate?: boolean;
 }
 
@@ -52,9 +49,10 @@ export function CreateCyclePanel({
   const toast = useToast();
   const isEditing = !!editCycle && !forceCreate;
 
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const addCycle = useAppraisalGoalsStore((s) => s.addCycle);
-  const updateCycle = useAppraisalGoalsStore((s) => s.updateCycle);
+  const { goals } = useGoals();
+  const saveCycle = useSaveCycle();
+  // Once a cycle has started only its name and description can change.
+  const locked = isEditing && editCycle!.status !== 'UPCOMING';
   const goalOptions = goals.map((g) => ({ value: g.id, label: g.name }));
 
   const {
@@ -85,7 +83,7 @@ export function CreateCyclePanel({
   const startDate = useWatch({ control, name: 'startDate' });
   const endDate = useWatch({ control, name: 'endDate' });
   const goalIds = useWatch({ control, name: 'goalIds' });
-  const cycles = useAppraisalGoalsStore((s) => s.cycles);
+  const { cycles } = useGoalCycles();
   const overlaps = overlappingCycles(
     cycles,
     goalIds ?? [],
@@ -95,19 +93,23 @@ export function CreateCyclePanel({
   );
 
   const onSubmit = (values: FormValues) => {
-    if (!values.selfAssessmentDeadline || !values.managerReviewDeadline) {
+    if (!locked && (!values.selfAssessmentDeadline || !values.managerReviewDeadline)) {
       toast.error('Self-assessment and manager review deadlines are required');
       return;
     }
-    if (isEditing) {
-      updateCycle(editCycle!.id, values);
-      toast.success('Cycle updated');
-    } else {
-      addCycle(values);
-      toast.success('Cycle created');
-    }
-    reset(EMPTY);
-    onClose();
+    const input = locked
+      ? { title: values.title.trim(), description: values.description }
+      : { ...values, title: values.title.trim(), frequency: values.frequency || undefined };
+    saveCycle.mutate(
+      { id: isEditing ? editCycle!.id : undefined, input },
+      {
+        onSuccess: () => {
+          toast.success(isEditing ? 'Cycle updated' : 'Cycle created');
+          reset(EMPTY);
+          onClose();
+        },
+      },
+    );
   };
 
   return (
@@ -127,7 +129,7 @@ export function CreateCyclePanel({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)}>
+          <Button onClick={handleSubmit(onSubmit)} disabled={saveCycle.isPending}>
             {isEditing ? 'Save Changes' : 'Create Cycle'}
           </Button>
         </div>
@@ -148,104 +150,113 @@ export function CreateCyclePanel({
           placeholder="Optional description"
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Controller
-            name="frequency"
-            control={control}
-            render={({ field }) => (
-              <SearchSelect
-                label="Frequency"
-                placeholder="Select frequency"
-                options={FREQUENCY_OPTIONS}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.frequency?.message}
+        {locked ? (
+          <p className="text-sm text-gray-500">
+            This cycle has started, so only its name and description can change.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Controller
+                name="frequency"
+                control={control}
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Frequency"
+                    placeholder="Select frequency"
+                    options={FREQUENCY_OPTIONS}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.frequency?.message}
+                  />
+                )}
               />
-            )}
-          />
-          <Controller
-            name="startDate"
-            control={control}
-            rules={{ required: 'Start date is required' }}
-            render={({ field }) => (
-              <DatePicker
-                label="Start Date"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.startDate?.message}
+              <Controller
+                name="startDate"
+                control={control}
+                rules={{ required: 'Start date is required' }}
+                render={({ field }) => (
+                  <DatePicker
+                    label="Start Date"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.startDate?.message}
+                  />
+                )}
               />
-            )}
-          />
-          <Controller
-            name="endDate"
-            control={control}
-            rules={{
-              required: 'End date is required',
-              validate: (v) => !startDate || v >= startDate || 'Cannot be before start date',
-            }}
-            render={({ field }) => (
-              <DatePicker
-                label="End Date"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.endDate?.message}
+              <Controller
+                name="endDate"
+                control={control}
+                rules={{
+                  required: 'End date is required',
+                  validate: (v) => !startDate || v >= startDate || 'Cannot be before start date',
+                }}
+                render={({ field }) => (
+                  <DatePicker
+                    label="End Date"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.endDate?.message}
+                  />
+                )}
               />
-            )}
-          />
-        </div>
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Controller
-            name="selfAssessmentDeadline"
-            control={control}
-            render={({ field }) => (
-              <DatePicker
-                label="Self Assessment Deadline"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.selfAssessmentDeadline?.message}
-                disablePast
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Controller
+                name="selfAssessmentDeadline"
+                control={control}
+                render={({ field }) => (
+                  <DatePicker
+                    label="Self Assessment Deadline"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.selfAssessmentDeadline?.message}
+                    disablePast
+                  />
+                )}
               />
-            )}
-          />
-          <Controller
-            name="managerReviewDeadline"
-            control={control}
-            render={({ field }) => (
-              <DatePicker
-                label="Manager Review Deadline"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.managerReviewDeadline?.message}
-                disablePast
+              <Controller
+                name="managerReviewDeadline"
+                control={control}
+                render={({ field }) => (
+                  <DatePicker
+                    label="Manager Review Deadline"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.managerReviewDeadline?.message}
+                    disablePast
+                  />
+                )}
               />
-            )}
-          />
-        </div>
+            </div>
 
-        <Controller
-          name="goalIds"
-          control={control}
-          rules={{ validate: (v) => v.length > 0 || 'Pick at least one goal' }}
-          render={({ field, fieldState }) => (
-            <MultiSelect
-              label="Goals"
-              placeholder={
-                goals.length === 0 ? 'No goals yet. Create one under Goals' : 'Select goals'
-              }
-              options={goalOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={fieldState.error?.message}
+            <Controller
+              name="goalIds"
+              control={control}
+              rules={{ validate: (v) => v.length > 0 || 'Pick at least one goal' }}
+              render={({ field, fieldState }) => (
+                <MultiSelect
+                  label="Goals"
+                  placeholder={
+                    goals.length === 0 ? 'No goals yet. Create one under Goals' : 'Select goals'
+                  }
+                  options={goalOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message}
+                />
+              )}
             />
-          )}
-        />
 
-        {overlaps.length > 0 && (
-          <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            A selected goal is already running in {overlaps.map((c) => `"${c.title}"`).join(', ')}{' '}
-            during these dates. Objectives added in both periods will be rated in each cycle.
-          </div>
+            {overlaps.length > 0 && (
+              <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                A selected goal is already running in{' '}
+                {overlaps.map((c) => `"${c.title}"`).join(', ')} during these dates. Objectives
+                added in both periods will be rated in each cycle.
+              </div>
+            )}
+          </>
         )}
       </div>
     </SidePanel>

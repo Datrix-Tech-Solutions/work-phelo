@@ -1,18 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { cardClass, cn } from '@/lib/utils';
-import { RATING_MAX, goalsWithObjectives, overallScore } from '@/lib/appraisalAssessments';
-import { useAppraisalGoalsStore, type LocalCycle } from '@/store/appraisalGoals.store';
-import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
-import type { Assessment, Ratings } from '@/store/appraisalAssessments.store';
+import { RATING_MAX, overallScore } from '@/lib/appraisalAssessments';
+import type { Assessment, GoalCycle, Ratings } from '@/types/appraisal';
 
 export type AssessmentMode = 'self' | 'manager' | 'view';
 
 interface Props {
   assessment: Assessment;
-  cycle: LocalCycle;
+  cycle: GoalCycle;
   employeeName: string;
   mode: AssessmentMode;
   onSubmit?: (ratings: Ratings, comment: string) => void;
@@ -61,12 +59,7 @@ export function AssessmentForm({
   onSubmit,
   onCancel,
 }: Props) {
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const allObjectives = useEmployeeObjectivesStore((s) => s.objectives);
-  const entries = useMemo(
-    () => goalsWithObjectives(cycle, goals, allObjectives, assessment.employeeId, assessment),
-    [cycle, goals, allObjectives, assessment],
-  );
+  const entries = assessment.entries;
   const objectiveCount = entries.reduce((sum, e) => sum + e.objectives.length, 0);
 
   const [ratings, setRatings] = useState<Ratings>(

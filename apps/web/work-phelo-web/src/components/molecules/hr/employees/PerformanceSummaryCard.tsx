@@ -1,44 +1,42 @@
 'use client';
 
+import { useRatingThresholds } from '@/hooks/hr/useRatingThresholds';
 import { useMemo, useState } from 'react';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { RatingBadge } from '@/components/molecules/hr/appraisal/RatingBadge';
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import {
   goalScores,
-  goalsWithObjectives,
   overallScore,
   ratingForScore,
+  type RatingThresholds,
 } from '@/lib/appraisalAssessments';
 import type { FinalRating } from '@/types/hr';
-import { useAppraisalAssessmentsStore } from '@/store/appraisalAssessments.store';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
-import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
+import { useEmployeeAssessments, useGoalCycles } from '@/hooks/hr/useGoalAppraisals';
 
 /**
  * Three scores from the employee's finalized appraisals: overall (across every cycle), the
  * chosen cycle's, and each goal's within that cycle, since several goals can run at once.
  */
 export function PerformanceSummaryCard({ employeeId }: { employeeId?: string }) {
-  const assessments = useAppraisalAssessmentsStore((s) => s.assessments);
-  const cycles = useAppraisalGoalsStore((s) => s.cycles);
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
+  const { assessments } = useEmployeeAssessments(employeeId);
+  const { cycles } = useGoalCycles();
+  const thresholds = useRatingThresholds();
   const [cycleId, setCycleId] = useState('');
 
   // Cycles are stored newest first, so the first one is the latest.
   const finalized = useMemo(
     () =>
       assessments
-        .filter((a) => a.employeeId === employeeId && a.status === 'FINALIZED')
+        .filter((a) => a.status === 'FINALIZED')
         .flatMap((a) => {
           const cycle = cycles.find((c) => c.id === a.cycleId);
           if (!cycle) return [];
-          const entries = goalsWithObjectives(cycle, goals, objectives, a.employeeId, a);
+          const entries = a.entries;
           return [{ cycle, entries, assessment: a, score: overallScore(a, entries) }];
         })
         .sort((a, b) => cycles.indexOf(a.cycle) - cycles.indexOf(b.cycle)),
-    [assessments, cycles, goals, objectives, employeeId],
+    [assessments, cycles],
   );
 
   const scored = finalized.filter((f) => f.score !== null);
@@ -64,7 +62,7 @@ export function PerformanceSummaryCard({ employeeId }: { employeeId?: string }) 
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
               Overall score
             </span>
-            <RatingBadge rating={ratingForScore(overall)} />
+            <RatingBadge rating={ratingForScore(overall, thresholds)} />
             <span className="text-xs text-gray-500">
               Across {scored.length} finalized {scored.length === 1 ? 'appraisal' : 'appraisals'}
             </span>
@@ -86,7 +84,7 @@ export function PerformanceSummaryCard({ employeeId }: { employeeId?: string }) 
               <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Cycle score
               </span>
-              <RatingBadge rating={ratingForScore(selected.score)} />
+              <RatingBadge rating={ratingForScore(selected.score, thresholds)} />
             </div>
             <span className="text-3xl font-bold leading-none text-gray-900">{selected.score}%</span>
           </div>
@@ -103,7 +101,7 @@ export function PerformanceSummaryCard({ employeeId }: { employeeId?: string }) 
                 <span className="flex min-w-0 items-center gap-2">
                   <span
                     className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: colorFor(score) }}
+                    style={{ backgroundColor: colorFor(score, thresholds) }}
                   />
                   <span className="truncate text-sm text-gray-700">{goal.name}</span>
                 </span>
@@ -112,7 +110,7 @@ export function PerformanceSummaryCard({ employeeId }: { employeeId?: string }) 
               <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
                 <div
                   className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${score}%`, backgroundColor: colorFor(score) }}
+                  style={{ width: `${score}%`, backgroundColor: colorFor(score, thresholds) }}
                 />
               </div>
             </div>
@@ -131,10 +129,12 @@ const RATING_COLORS: Record<FinalRating, string> = {
   'Needs Improvement': '#dc2626',
 };
 
-const colorFor = (score: number) => RATING_COLORS[ratingForScore(score) ?? 'Needs Improvement'];
+const colorFor = (score: number, thresholds: RatingThresholds) =>
+  RATING_COLORS[ratingForScore(score, thresholds) ?? 'Needs Improvement'];
 
 /** A circular gauge of a percentage, in the colour of its rating. */
 function ScoreRing({ score }: { score: number }) {
+  const thresholds = useRatingThresholds();
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
   const clamped = Math.min(100, Math.max(0, score));
@@ -156,7 +156,7 @@ function ScoreRing({ score }: { score: number }) {
           fill="none"
           strokeWidth="9"
           strokeLinecap="round"
-          stroke={colorFor(score)}
+          stroke={colorFor(score, thresholds)}
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - clamped / 100)}
           className="transition-all duration-700"

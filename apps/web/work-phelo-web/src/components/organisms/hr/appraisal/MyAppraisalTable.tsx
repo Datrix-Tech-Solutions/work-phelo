@@ -3,14 +3,9 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
-import { useMyProfile } from '@/hooks/hr/useEmployees';
-import { STATUS_LABELS, goalsWithObjectives, overallScore } from '@/lib/appraisalAssessments';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
-import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
-import {
-  useAppraisalAssessmentsStore,
-  type AssessmentStatus,
-} from '@/store/appraisalAssessments.store';
+import { STATUS_LABELS, overallScore } from '@/lib/appraisalAssessments';
+import { useGoalCycles, useMyAssessments } from '@/hooks/hr/useGoalAppraisals';
+import type { AssessmentStatus } from '@/types/appraisal';
 import { StatusLabel } from './CycleAssessments';
 import { Column, DataTable } from '../../shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
@@ -39,34 +34,27 @@ export function MyAppraisalsTable({ search, page, onPageChange, onManage }: Prop
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [statusFilter, setStatusFilter] = useState('');
 
-  const { data: me, isLoading } = useMyProfile();
-  const cycles = useAppraisalGoalsStore((s) => s.cycles);
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
-  const assessments = useAppraisalAssessmentsStore((s) => s.assessments);
+  const { cycles, isLoading: loadingCycles } = useGoalCycles();
+  const { assessments, isLoading: loadingAssessments } = useMyAssessments();
+  const isLoading = loadingCycles || loadingAssessments;
 
   const myRows = useMemo(
     () =>
-      assessments
-        .filter((a) => a.employeeId === me?.id)
-        .flatMap((a) => {
-          const cycle = cycles.find((c) => c.id === a.cycleId);
-          if (!cycle || cycle.status === 'CANCELLED') return [];
-          return [
-            {
-              id: a.id,
-              cycleId: cycle.id,
-              cycleName: cycle.title,
-              status: a.status,
-              overallScore: overallScore(
-                a,
-                goalsWithObjectives(cycle, goals, objectives, a.employeeId, a),
-              ),
-              selfAssessmentDeadline: cycle.selfAssessmentDeadline,
-            },
-          ];
-        }),
-    [assessments, cycles, goals, objectives, me?.id],
+      assessments.flatMap((a) => {
+        const cycle = cycles.find((c) => c.id === a.cycleId);
+        if (!cycle || cycle.status === 'CANCELLED') return [];
+        return [
+          {
+            id: a.id,
+            cycleId: cycle.id,
+            cycleName: cycle.title,
+            status: a.status,
+            overallScore: overallScore(a, a.entries),
+            selfAssessmentDeadline: cycle.selfAssessmentDeadline,
+          },
+        ];
+      }),
+    [assessments, cycles],
   );
 
   const filteredRows = useMemo(() => {

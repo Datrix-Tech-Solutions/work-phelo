@@ -1,5 +1,6 @@
 'use client';
 
+import { useRatingThresholds } from '@/hooks/hr/useRatingThresholds';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BarChart2, CalendarCheck, User, Users } from 'lucide-react';
@@ -18,16 +19,14 @@ import {
   RATINGS,
   STATUS_LABELS,
   STATUS_STYLES,
-  goalsWithObjectives,
   managerScorePct,
   overallScore,
   ratingForScore,
   selfScorePct,
 } from '@/lib/appraisalAssessments';
 import { cardClass, cn } from '@/lib/utils';
-import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
-import { useEmployeeObjectivesStore } from '@/store/employeeObjectives.store';
-import { useAppraisalAssessmentsStore, type Assessment } from '@/store/appraisalAssessments.store';
+import { useCycleAssessments, useGoalCycle } from '@/hooks/hr/useGoalAppraisals';
+import type { Assessment } from '@/types/appraisal';
 
 type Tab = 'overview' | 'results';
 
@@ -46,10 +45,9 @@ const pct = (value: number | null) => (value === null ? '—' : `${value}%`);
 /** HR's view of a cycle: how far it has got, and every employee's result. */
 export function CycleAssessments({ tenantSlug, cycleId }: { tenantSlug: string; cycleId: string }) {
   const router = useRouter();
-  const cycle = useAppraisalGoalsStore((s) => s.cycles.find((c) => c.id === cycleId));
-  const goals = useAppraisalGoalsStore((s) => s.goals);
-  const objectives = useEmployeeObjectivesStore((s) => s.objectives);
-  const allAssessments = useAppraisalAssessmentsStore((s) => s.assessments);
+  const { cycle } = useGoalCycle(cycleId);
+  const { assessments: allAssessments } = useCycleAssessments(cycleId);
+  const thresholds = useRatingThresholds();
   const { data: employeeData } = useAllEmployees();
   const employees = useMemo(() => employeeData?.data ?? [], [employeeData]);
 
@@ -61,11 +59,10 @@ export function CycleAssessments({ tenantSlug, cycleId }: { tenantSlug: string; 
   const all = useMemo(() => {
     if (!cycle) return [];
     return allAssessments
-      .filter((a) => a.cycleId === cycleId)
       .map((a) => {
         const employee = employees.find((e) => e.id === a.employeeId);
         const manager = employees.find((e) => e.id === employee?.managerId);
-        const entries = goalsWithObjectives(cycle, goals, objectives, a.employeeId, a);
+        const entries = a.entries;
         const final = overallScore(a, entries);
         return {
           id: a.id,
@@ -76,11 +73,11 @@ export function CycleAssessments({ tenantSlug, cycleId }: { tenantSlug: string; 
           self: selfScorePct(a, entries),
           manager: managerScorePct(a, entries),
           final,
-          rating: ratingForScore(final),
+          rating: ratingForScore(final, thresholds),
         };
       })
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [allAssessments, cycle, cycleId, employees, goals, objectives]);
+  }, [allAssessments, cycle, employees, thresholds]);
 
   type Row = (typeof all)[0];
 

@@ -968,6 +968,8 @@ export class AppraisalsService {
       where: {
         status: 'IN_PROGRESS',
         endDate: { lt: new Date() },
+        // Goal-based cycles stay open past their end date until they are closed or every assessment is approved.
+        goals: { none: {} },
       },
       data: {
         status: 'COMPLETED',

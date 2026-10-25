@@ -14,6 +14,7 @@ import { PayrollConfigurationModule } from './payroll-configuration/payroll-conf
 import { PayrollGroupsModule } from './payroll-groups/payroll-groups.module';
 import { PayrollRunsModule } from './payroll-runs/payroll-runs.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
+import { AppraisalGoalsModule } from './appraisal-goals/appraisal-goals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
@@ -56,6 +57,7 @@ import { RecruitmentModule } from './recruitment/recruitment.module';
     PayrollGroupsModule,
     PayrollRunsModule,
     AppraisalsModule,
+    AppraisalGoalsModule,
     DashboardModule,
     ReportsModule,
     AssetsModule,

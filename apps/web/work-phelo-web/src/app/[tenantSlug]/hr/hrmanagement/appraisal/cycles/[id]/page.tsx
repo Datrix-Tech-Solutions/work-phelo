@@ -3,7 +3,7 @@
 import { use } from 'react';
 import Link from 'next/link';
 import { Badge } from '@/components/atoms/Badge';
-import { useAppraisalCycles } from '@/hooks';
+import { useGoalCycle, useGoals } from '@/hooks/hr/useGoalAppraisals';
 import { formatDate } from '@/lib/formatters';
 import { Icons } from '@/components/atoms/icons';
 import { pageContent } from '@/lib/layout';
@@ -26,8 +26,8 @@ export default function CycleDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
 
-  const { data: cycles = [], isLoading } = useAppraisalCycles();
-  const cycle = cycles.find((c) => c.id === id);
+  const { cycle, isLoading } = useGoalCycle(id);
+  const { goals } = useGoals();
 
   if (isLoading) return <div className="p-4 sm:p-6 lg:p-8 text-sm text-gray-400">Loading...</div>;
   if (!cycle) return <div className="p-4 sm:p-6 lg:p-8 text-sm text-red-400">Cycle not found.</div>;
@@ -47,8 +47,8 @@ export default function CycleDetailPage({
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold text-gray-900">{cycle.title}</h1>
             <Badge
-              variant={cycle.isActive ? 'success' : 'neutral'}
-              label={cycle.isActive ? 'Active' : 'Inactive'}
+              variant={cycle.status === 'ACTIVE' ? 'success' : 'neutral'}
+              label={cycle.status.charAt(0) + cycle.status.slice(1).toLowerCase()}
             />
           </div>
           <p className="text-sm text-gray-500">
@@ -58,8 +58,14 @@ export default function CycleDetailPage({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6 max-w-2xl">
-        <DetailRow label="Frequency" value={cycle.frequency ?? '—'} />
-        <DetailRow label="Appraisals" value={cycle._count?.appraisals ?? 0} />
+        <DetailRow label="Frequency" value={cycle.frequency || '—'} />
+        <DetailRow label="Appraisals" value={cycle.stats?.employees ?? 0} />
+        <DetailRow
+          label="Goals"
+          value={cycle.goalIds
+            .map((id) => goals.find((g) => g.id === id)?.name ?? 'Goal')
+            .join(', ')}
+        />
         {cycle.selfAssessmentDeadline && (
           <DetailRow
             label="Self-Assessment Deadline"

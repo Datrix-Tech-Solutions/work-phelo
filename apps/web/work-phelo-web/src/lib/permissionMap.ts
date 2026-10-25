@@ -88,6 +88,8 @@ export enum Permission {
   SUBMIT_MANAGER_REVIEW = 'submit:manager_review',
   FINALIZE_APPRAISAL = 'finalize:appraisal',
   READ_OWN_REVIEW = 'read:own_review',
+  CREATE_OWN_OBJECTIVE = 'create:own_objective',
+  CREATE_OBJECTIVE_FOR_OTHERS = 'create:objective_for_others',
 
   // ── Assets ────────────────────────────────────────────────────────────────
   MANAGE_ASSETS = 'manage:assets',
@@ -218,6 +220,9 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.SUBMIT_MANAGER_REVIEW]: ['appraisal-reviews:EDIT'],
   [Permission.FINALIZE_APPRAISAL]: ['appraisals:APPROVE'],
   [Permission.READ_OWN_REVIEW]: ['self-appraisals:VIEW'],
+  [Permission.CREATE_OWN_OBJECTIVE]: ['self-appraisals:CREATE'],
+  // Team reviewers (appraisal-reviews:EDIT) can add objectives for their people without a separate grant.
+  [Permission.CREATE_OBJECTIVE_FOR_OTHERS]: ['appraisal-reviews:CREATE', 'appraisal-reviews:EDIT'],
 
   // Assets
   [Permission.MANAGE_ASSETS]: ['assets:CREATE', 'assets:EDIT'],
