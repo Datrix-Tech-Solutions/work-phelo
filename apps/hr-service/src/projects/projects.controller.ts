@@ -84,7 +84,7 @@ export class ProjectsController {
       req.user.tenantId,
       taskId,
       req.user,
-      dto.status,
+      dto,
     );
   }
 

@@ -14,6 +14,10 @@ import { taskAssignees } from '@/lib/taskAssignees';
 import { WORK_TYPE_ICONS } from '@/lib/workTypeIcons';
 import { cardClass } from '@/lib/utils';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
+import { ProgressBar } from '@/components/atoms/ProgressBar';
+import { useProjectTime } from '@/hooks/hr/useProjectTime';
+import { accruedAmount, formatHoursMinutes } from '@/lib/taskTime';
+import { formatMoney } from '@/lib/projectPricing';
 import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { useProjectWorkStore } from '@/store/projectWork.store';
 import type { ProjectTask, TaskStatus } from '@/types/hr';
@@ -302,12 +306,87 @@ function ObjectiveProgress({ projectId, tasks }: { projectId: string; tasks: Pro
   );
 }
 
+/** For a project billed by time: the hours logged on its timed tasks against the estimate, and what they are worth. */
+function TimeAndBilling({
+  projectId,
+  hourlyRate,
+  estimatedHours,
+}: {
+  projectId: string;
+  hourlyRate: number;
+  estimatedHours: number;
+}) {
+  const { totalMs, people } = useProjectTime(projectId);
+  const estimatedMs = estimatedHours * 3_600_000;
+  const accrued = accruedAmount(totalMs, hourlyRate);
+  const expected = hourlyRate * estimatedHours;
+  const over = totalMs > estimatedMs;
+
+  return (
+    <SummaryCard title="Time & billing">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-medium text-gray-900">Hours logged</p>
+              <p className="text-xs text-gray-400">
+                <span className="text-sm font-bold text-gray-900">
+                  {formatHoursMinutes(totalMs)}
+                </span>{' '}
+                of {estimatedHours} h estimated
+              </p>
+            </div>
+            <ProgressBar
+              value={estimatedMs > 0 ? Math.min(100, Math.round((totalMs / estimatedMs) * 100)) : 0}
+            />
+            {over && (
+              <p className="text-xs font-medium text-red-600">
+                {formatHoursMinutes(totalMs - estimatedMs)} over the estimate
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+              Accrued so far
+            </p>
+            <p className="text-sm text-gray-500">
+              <span className="text-lg font-bold text-gray-900">{formatMoney(accrued)}</span> of{' '}
+              {formatMoney(expected)} expected · {formatMoney(hourlyRate)} per hour
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+            Hours by person
+          </p>
+          {people.length === 0 ? (
+            <p className="text-sm text-gray-400">No time logged yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {people.map((p) => (
+                <li key={p.personId} className="flex items-center justify-between text-sm">
+                  <span className="truncate text-gray-900">{p.personName}</span>
+                  <span className="tabular-nums font-semibold text-gray-700">
+                    {formatHoursMinutes(p.ms)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </SummaryCard>
+  );
+}
+
 /**
  * The project at a glance, top to bottom: the work (its status, types and objectives), then the people
  * (who is carrying it, and who is on the project).
  */
 export function ProjectSummary({ projectId }: { projectId: string }) {
   const { data: tasks = [], isLoading } = useProjectTasks(projectId);
+  const pricing = useProjectLocalStore((s) => s.byProjectId[projectId]?.pricing);
 
   if (isLoading) {
     return <div className="h-48 rounded-card bg-gray-100 animate-pulse" />;
@@ -315,6 +394,13 @@ export function ProjectSummary({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {pricing?.type === 'TIMED' && (
+        <TimeAndBilling
+          projectId={projectId}
+          hourlyRate={pricing.hourlyRate}
+          estimatedHours={pricing.estimatedHours}
+        />
+      )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <SummaryCard title="Status overview">
           <StatusOverview tasks={tasks} />

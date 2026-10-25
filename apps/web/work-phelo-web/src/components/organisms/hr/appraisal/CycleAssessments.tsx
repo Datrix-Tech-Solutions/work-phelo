@@ -65,7 +65,7 @@ export function CycleAssessments({ tenantSlug, cycleId }: { tenantSlug: string; 
       .map((a) => {
         const employee = employees.find((e) => e.id === a.employeeId);
         const manager = employees.find((e) => e.id === employee?.managerId);
-        const entries = goalsWithObjectives(cycle, goals, objectives, a.employeeId);
+        const entries = goalsWithObjectives(cycle, goals, objectives, a.employeeId, a);
         const final = overallScore(a, entries);
         return {
           id: a.id,

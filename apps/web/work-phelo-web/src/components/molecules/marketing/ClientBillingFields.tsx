@@ -82,6 +82,8 @@ interface Props {
   lockedEntityTypeId?: string | null;
   /** The client's products the transaction can be tagged to. Optional, and never sent to Accounting. */
   productOptions?: { value: string; label: string }[];
+  /** The amount is worked out elsewhere (e.g. from a project's lines), so it can't be typed over. */
+  lockAmount?: boolean;
 }
 
 export function ClientBillingFields({
@@ -91,6 +93,7 @@ export function ClientBillingFields({
   errors,
   lockedEntityTypeId,
   productOptions = [],
+  lockAmount,
 }: Props) {
   const entityTypeId = resolveEntityTypeId(values, options, lockedEntityTypeId);
   const entityTypeOptions = options.entityTypes.map((t) => ({ value: t.id, label: t.name }));
@@ -140,6 +143,7 @@ export function ClientBillingFields({
         value={values.amount}
         onChange={(e) => onChange({ ...values, amount: e.target.value })}
         error={errors?.amount}
+        readOnly={lockAmount}
       />
       {productOptions.length > 0 && (
         <SearchSelect

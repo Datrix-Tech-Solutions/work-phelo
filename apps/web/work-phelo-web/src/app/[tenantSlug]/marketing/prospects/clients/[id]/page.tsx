@@ -6,6 +6,7 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ClientBreadcrumb } from '@/components/molecules/marketing/ClientBreadcrumb';
 import { ClientProjectCard } from '@/components/molecules/marketing/ClientProjectCard';
 import { useClientProjects } from '@/hooks/hr/useClientProjects';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 import { ClientProductCard } from '@/components/molecules/marketing/ClientProductCard';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
@@ -88,6 +89,7 @@ export default function ClientDetailPage() {
   const [editingContact, setEditingContact] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const clientProjects = useClientProjects(id);
+  const projectLabels = useProjectLabels();
 
   const listHref = `/${tenantSlug}/marketing/prospects/clients`;
   const shell = cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col gap-6');
@@ -205,7 +207,9 @@ export default function ClientDetailPage() {
               productRows.length === 0
                 ? '—'
                 : `${productRows.length} (${purchased} purchased${
-                    clientProjects.length > 0 ? `, ${clientProjects.length} projects` : ''
+                    clientProjects.length > 0
+                      ? `, ${clientProjects.length} ${projectLabels.pluralLower}`
+                      : ''
                   })`
             }
           />

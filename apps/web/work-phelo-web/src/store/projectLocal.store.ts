@@ -26,6 +26,8 @@ interface ProjectLocalStore {
   stageByTaskId: Record<string, string>;
   setProjectDetails: (projectId: string, details: ProjectLocalDetails) => void;
   setTaskStage: (taskId: string, stage: string) => void;
+  /** Replaces a client project's pricing, e.g. a new flat-rate price. */
+  setPricing: (projectId: string, pricing: ProjectPricing) => void;
   /** Turns a feature (a tab) on for one project, leaving its template alone. */
   addFeature: (projectId: string, feature: ProjectFeature) => void;
 }
@@ -60,6 +62,12 @@ export const useProjectLocalStore = create<ProjectLocalStore>()(
               },
             },
           };
+        }),
+      setPricing: (projectId, pricing) =>
+        set((s) => {
+          const current = s.byProjectId[projectId];
+          if (!current) return s;
+          return { byProjectId: { ...s.byProjectId, [projectId]: { ...current, pricing } } };
         }),
       setTaskStage: (taskId, stage) =>
         set((s) => ({ stageByTaskId: { ...s.stageByTaskId, [taskId]: stage } })),

@@ -1381,3 +1381,31 @@ export type CreateProjectTemplateDto = Pick<
   ProjectTemplate,
   'name' | 'description' | 'workflow' | 'workTypes' | 'features' | 'priorities'
 >;
+
+/** One line of a project invoice: a task's time, the project price, a milestone or a retainer month. */
+export interface ProjectInvoiceLine {
+  /** Task id, milestone id, a retainer month, or "price". */
+  key: string;
+  label: string;
+  amount: number;
+  /** For a task's time: the minutes this invoice billed. */
+  minutes?: number;
+}
+
+/** An invoice raised from a project and sent to Accounting through marketing. */
+export interface ProjectInvoice {
+  id: string;
+  projectId: string;
+  clientId: string;
+  /** The Accounting transaction the invoice became, to read its state back. */
+  transactionId: string;
+  description: string;
+  amount: number;
+  lines: ProjectInvoiceLine[];
+  createdAt: string;
+}
+
+export type RecordProjectInvoiceDto = Pick<
+  ProjectInvoice,
+  'id' | 'transactionId' | 'description' | 'amount' | 'lines'
+>;

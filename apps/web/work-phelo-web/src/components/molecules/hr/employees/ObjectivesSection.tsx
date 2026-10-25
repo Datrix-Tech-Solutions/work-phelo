@@ -8,6 +8,8 @@ import {
   type EmployeeObjective,
 } from '@/store/employeeObjectives.store';
 import { useAuthStore } from '@/store/auth.store';
+import { useAppraisalGoalsStore } from '@/store/appraisalGoals.store';
+import { cyclesForObjective } from '@/lib/appraisalAssessments';
 import { cardClass, cn } from '@/lib/utils';
 import { AddObjectivePanel } from '@/components/organisms/hr/performance/AddObjectivePanel';
 
@@ -25,6 +27,7 @@ export function ObjectivesSection({ employeeId, projects }: Props) {
     () => allObjectives.filter((o) => o.employeeId === employeeId),
     [allObjectives, employeeId],
   );
+  const cycles = useAppraisalGoalsStore((s) => s.cycles);
   const [panelOpen, setPanelOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const creatorName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Unknown';
@@ -46,6 +49,7 @@ export function ObjectivesSection({ employeeId, projects }: Props) {
             <ObjectiveCard
               key={o.id}
               objective={o}
+              cycleNames={cyclesForObjective(o, cycles).map((c) => c.title)}
               onAddComment={(text) => addComment(o.id, text)}
             />
           ))}
@@ -73,9 +77,11 @@ export function ObjectivesSection({ employeeId, projects }: Props) {
 
 function ObjectiveCard({
   objective,
+  cycleNames,
   onAddComment,
 }: {
   objective: EmployeeObjective;
+  cycleNames: string[];
   onAddComment: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -93,6 +99,9 @@ function ObjectiveCard({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">{objective.name}</p>
           <p className="text-xs text-gray-500 mt-0.5">Goal: {objective.goal}</p>
+          {cycleNames.length > 0 && (
+            <p className="text-xs text-gray-500 mt-0.5">Cycle: {cycleNames.join(', ')}</p>
+          )}
           <p className="text-xs text-gray-400 mt-1">Created by {objective.createdBy}</p>
           {!expanded && total > 0 && (
             <p className="text-xs text-gray-500 mt-3">

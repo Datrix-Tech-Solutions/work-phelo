@@ -34,7 +34,7 @@ export function PerformanceSummaryCard({ employeeId }: { employeeId?: string }) 
         .flatMap((a) => {
           const cycle = cycles.find((c) => c.id === a.cycleId);
           if (!cycle) return [];
-          const entries = goalsWithObjectives(cycle, goals, objectives, a.employeeId);
+          const entries = goalsWithObjectives(cycle, goals, objectives, a.employeeId, a);
           return [{ cycle, entries, assessment: a, score: overallScore(a, entries) }];
         })
         .sort((a, b) => cycles.indexOf(a.cycle) - cycles.indexOf(b.cycle)),

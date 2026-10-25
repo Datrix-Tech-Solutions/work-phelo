@@ -1,11 +1,12 @@
 'use client';
 
-import { Banknote, CalendarDays, FolderKanban, Receipt } from 'lucide-react';
+import { Banknote, CalendarDays, Clock, FolderKanban, Receipt } from 'lucide-react';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { DataCard, type DataCardDetail } from '@/components/organisms/shared/DataCard';
 import { formatMoney } from '@/lib/formatMoney';
 import { BILLING_TYPE_LABELS } from '@/lib/projectTypes';
 import { frostedAvatarStyle } from '@/lib/utils';
+import { useProjectLabels } from '@/hooks/useModuleLabels';
 import type { ClientProject } from '@/hooks/hr/useClientProjects';
 
 function row(
@@ -32,8 +33,12 @@ export function ClientProjectCard({
   project: ClientProject;
   onOpen: () => void;
 }) {
+  const labels = useProjectLabels();
   const details: DataCardDetail[] = [
     row(Banknote, 'Expected Revenue', formatMoney(project.expectedValue), 'text-blue-500'),
+    ...(project.accrued === null
+      ? []
+      : [row(Clock, 'Accrued', formatMoney(project.accrued), 'text-amber-500')]),
     row(
       Receipt,
       'Billing',
@@ -63,7 +68,7 @@ export function ClientProjectCard({
         </div>
       }
       title={project.name}
-      badge={<TypeChip label="Project" color="teal" />}
+      badge={<TypeChip label={labels.singular} color="teal" />}
       details={details}
       surface="card"
       onClick={onOpen}
