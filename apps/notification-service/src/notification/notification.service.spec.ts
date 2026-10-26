@@ -22,6 +22,7 @@ describe('NotificationService announcement delivery channels', () => {
     sendAnnouncementPublishedNotification: jest.fn(),
     sendEmployeeInviteEmail: jest.fn(),
     sendTenantAdminWelcomeEmail: jest.fn(),
+    sendRecruiterConfirmationEmail: jest.fn(),
   };
   const sms = {
     sendMessage: jest.fn(),
@@ -36,6 +37,7 @@ describe('NotificationService announcement delivery channels', () => {
     email.sendAnnouncementPublishedNotification.mockResolvedValue(true);
     email.sendEmployeeInviteEmail.mockResolvedValue(true);
     email.sendTenantAdminWelcomeEmail.mockResolvedValue(true);
+    email.sendRecruiterConfirmationEmail.mockResolvedValue(true);
     sms.sendMessage.mockResolvedValue({
       success: true,
       status: 'SENT',
@@ -102,6 +104,27 @@ describe('NotificationService announcement delivery channels', () => {
         status: 'SENT',
       }),
     );
+  });
+
+  it('sends the website confirmation email for recruiter invites', async () => {
+    await service.sendInvite({
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      email: 'ama@acme.test',
+      firstName: 'Ama',
+      tenantName: 'Acme',
+      acceptInviteUrl: 'https://careers.test/auth/recruiter/confirm?token=abc',
+      inviteKind: 'RECRUITER',
+    });
+
+    expect(email.sendRecruiterConfirmationEmail).toHaveBeenCalledWith(
+      'ama@acme.test',
+      'Ama',
+      'Acme',
+      'https://careers.test/auth/recruiter/confirm?token=abc',
+    );
+    expect(email.sendEmployeeInviteEmail).not.toHaveBeenCalled();
+    expect(email.sendTenantAdminWelcomeEmail).not.toHaveBeenCalled();
   });
 
   it('suppresses duplicate new invite emails but allows explicit invite resends', async () => {

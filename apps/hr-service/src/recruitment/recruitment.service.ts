@@ -9,11 +9,15 @@ import { RequestUser } from '@work-phelo/types';
 import {
   Prisma,
   RecruitmentApplicationStatus,
+  RecruitmentInterviewMode,
+  RecruitmentInterviewStatus,
   RecruitmentQuestionType,
   RecruitmentSalaryType,
+  RecruitmentScreeningDecision,
   RecruitmentVacancyStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { computeMatchScore, computeOverallScore } from './candidate-match';
 import {
   CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
@@ -22,14 +26,20 @@ import {
   UpdateRecruitmentApplicationProfessionalInfoDto,
 } from './dto/candidate.dto';
 import {
+  CreateRecruitmentInterviewDto,
+  UpdateRecruitmentInterviewDto,
+} from './dto/interview.dto';
+import {
   CreateRecruitmentStageDto,
   UpdateRecruitmentStageDto,
 } from './dto/stage.dto';
 import {
   CreateRecruitmentVacancyDto,
+  QueryPublicRecruitmentBoardDto,
   QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
   RecruitmentVacancyQuestionDto,
+  SetRecruitmentCutoffDto,
   UpdateRecruitmentVacancyDto,
 } from './dto/vacancy.dto';
 import {
@@ -37,6 +47,10 @@ import {
   questionBehaviour,
 } from './question-types';
 import { renderRequirementsText, VacancyDetails } from './vacancy-requirements';
+import {
+  ACTIVE_RECRUITMENT_DOCUMENTS,
+  lockRecruitmentApplication,
+} from './recruitment-document';
 
 const DEFAULT_RECRUITMENT_STAGES = [
   'Applied',
@@ -52,7 +66,12 @@ const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 
 const RECRUITMENT_CANDIDATE_INCLUDE = {
-  vacancy: true,
+  managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
+  vacancy: {
+    include: {
+      _count: { select: { questions: { where: { retiredAt: null } } } },
+    },
+  },
   currentStage: true,
   answers: {
     include: { question: true },
@@ -61,7 +80,14 @@ const RECRUITMENT_CANDIDATE_INCLUDE = {
   _count: { select: { stageHistory: true } },
 } satisfies Prisma.RecruitmentApplicationInclude;
 
+const RECRUITMENT_INTERVIEW_INCLUDE = {
+  createdByEmployee: {
+    select: { id: true, firstName: true, lastName: true },
+  },
+} satisfies Prisma.RecruitmentInterviewInclude;
+
 const RECRUITMENT_PUBLIC_APPLICATION_INCLUDE = {
+  managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
   vacancy: {
     include: {
       department: { select: { id: true, name: true } },
@@ -159,6 +185,7 @@ export class RecruitmentService {
       const created = await tx.recruitmentVacancy.create({
         data: {
           tenantId,
+          companyName: this.optionalTrim(user.tenantName),
           title: this.optionalTrim(dto.title),
           departmentId: dto.departmentId ?? undefined,
           branchId: dto.branchId ?? undefined,
@@ -215,7 +242,7 @@ export class RecruitmentService {
     const tenantId = this.requirePublicTenantId(query.tenantId);
     const where: Prisma.RecruitmentVacancyWhereInput = {
       tenantId,
-      ...this.acceptingApplicationsWhere(),
+      ...(await this.acceptingApplicationsWhere()),
       ...(query.search?.trim()
         ? {
             OR: [
@@ -243,7 +270,59 @@ export class RecruitmentService {
     ]);
 
     return {
-      items: items.map((item) => this.serializePublicVacancy(item)),
+      items: await this.serializePublicVacancies(items),
+      meta: { page, limit, total },
+    };
+  }
+
+  /** Open vacancies across every company, for the public job board. */
+  async listPublicBoard(query: QueryPublicRecruitmentBoardDto) {
+    const page = this.page(query.page);
+    const limit = this.limit(query.limit);
+    const search = query.search?.trim();
+    const where: Prisma.RecruitmentVacancyWhereInput = {
+      AND: [
+        await this.acceptingApplicationsWhere(),
+        ...(search
+          ? [
+              {
+                OR: [
+                  { title: { contains: search, mode: 'insensitive' as const } },
+                  {
+                    location: {
+                      contains: search,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                  { city: { contains: search, mode: 'insensitive' as const } },
+                  {
+                    companyName: {
+                      contains: search,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+      ...(query.jobType ? { jobType: query.jobType } : {}),
+      ...(query.workMode ? { workMode: query.workMode } : {}),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.recruitmentVacancy.findMany({
+        where,
+        include: RECRUITMENT_VACANCY_INCLUDE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.recruitmentVacancy.count({ where }),
+    ]);
+
+    return {
+      items: await this.serializePublicVacancies(items),
       meta: { page, limit, total },
     };
   }
@@ -254,12 +333,13 @@ export class RecruitmentService {
       where: {
         tenantId: publicTenantId,
         id: vacancyId,
-        ...this.acceptingApplicationsWhere(),
+        ...(await this.acceptingApplicationsWhere()),
       },
       include: RECRUITMENT_VACANCY_INCLUDE,
     });
     if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
-    return this.serializePublicVacancy(vacancy);
+    const [serialized] = await this.serializePublicVacancies([vacancy]);
+    return serialized;
   }
 
   async updateVacancy(
@@ -308,6 +388,9 @@ export class RecruitmentService {
       await tx.recruitmentVacancy.update({
         where: { id: vacancyId },
         data: {
+          ...(user.tenantName?.trim()
+            ? { companyName: user.tenantName.trim() }
+            : {}),
           ...(dto.title !== undefined
             ? { title: this.optionalTrim(dto.title) ?? null }
             : {}),
@@ -383,6 +466,200 @@ export class RecruitmentService {
     });
 
     return this.serializeVacancy(vacancy);
+  }
+
+  /** Puts a closed vacancy back on the board. Applications and stage history are untouched. */
+  async reopenVacancy(tenantId: string, user: RequestUser, vacancyId: string) {
+    const existing = await this.prisma.recruitmentVacancy.findFirst({
+      where: { tenantId, id: vacancyId },
+    });
+    if (!existing) throw new NotFoundException('Recruitment vacancy not found');
+    if (existing.status !== RecruitmentVacancyStatus.CLOSED) {
+      throw new ConflictException('Only closed vacancies can be reopened');
+    }
+    this.assertPublishable(existing);
+    if (existing.closingDate && existing.closingDate < this.startOfTodayUtc()) {
+      throw new BadRequestException(
+        'The closing date has passed. Update the closing date before reopening',
+      );
+    }
+
+    const vacancy = await this.prisma.recruitmentVacancy.update({
+      where: { id: vacancyId },
+      data: {
+        status: RecruitmentVacancyStatus.OPEN,
+        closedAt: null,
+        closedByUserId: null,
+        updatedByUserId: user.id,
+      },
+      include: RECRUITMENT_VACANCY_INCLUDE,
+    });
+    return this.serializeVacancy(vacancy);
+  }
+
+  /**
+   * Sets or clears the vacancy's match-score cut-off and applies it to the applicants already
+   * waiting in the entry stage: those below it move to Rejected, and applicants the cut-off
+   * itself rejected earlier come back when they now clear it. Nobody a person has moved is
+   * touched. With `dryRun` it only reports the counts.
+   */
+  async setVacancyCutoff(
+    tenantId: string,
+    user: RequestUser,
+    vacancyId: string,
+    dto: SetRecruitmentCutoffDto,
+  ) {
+    const vacancy = await this.prisma.recruitmentVacancy.findFirst({
+      where: { tenantId, id: vacancyId },
+      select: { id: true, details: true },
+    });
+    if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
+
+    const cutoff = dto.cutoffScore;
+    if (cutoff !== null) {
+      const scoreable = computeMatchScore(
+        {
+          skills: [],
+          languages: [],
+          certificates: [],
+          yearsOfExperience: null,
+          highestEducationLevel: null,
+        },
+        vacancy.details,
+      );
+      if (scoreable === null) {
+        throw new BadRequestException(
+          'Add skills, certificates, education, minimum experience or languages to this opening before setting a cut-off',
+        );
+      }
+    }
+
+    const [defaultStage, rejectedStage] = await Promise.all([
+      this.getDefaultStage(tenantId),
+      this.findRejectedStage(tenantId),
+    ]);
+    if (!rejectedStage) {
+      throw new ConflictException(
+        'A "Rejected" recruitment stage is required to use a cut-off',
+      );
+    }
+
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: user.id },
+      select: { id: true },
+    });
+
+    const applicants = await this.prisma.recruitmentApplication.findMany({
+      where: {
+        tenantId,
+        vacancyId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+        OR: [
+          { currentStageId: defaultStage.id, autoRejectedAt: null },
+          { currentStageId: rejectedStage.id, autoRejectedAt: { not: null } },
+        ],
+      },
+      select: {
+        id: true,
+        currentStageId: true,
+        autoRejectedAt: true,
+        skills: true,
+        languages: true,
+        certificates: true,
+        yearsOfExperience: true,
+        highestEducationLevel: true,
+      },
+    });
+
+    const toReject: Array<{ id: string; score: number }> = [];
+    const toRestore: Array<{ id: string; score: number | null }> = [];
+    for (const applicant of applicants) {
+      const score = computeMatchScore(applicant, vacancy.details);
+      if (applicant.autoRejectedAt) {
+        if (cutoff === null || score === null || score >= cutoff) {
+          toRestore.push({ id: applicant.id, score });
+        }
+      } else if (cutoff !== null && score !== null && score < cutoff) {
+        toReject.push({ id: applicant.id, score });
+      }
+    }
+
+    if (dto.dryRun) {
+      return {
+        cutoffScore: cutoff,
+        rejected: toReject.length,
+        restored: toRestore.length,
+        applied: false,
+      };
+    }
+
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.recruitmentVacancy.update({
+        where: { id: vacancyId },
+        data: { cutoffScore: cutoff, updatedByUserId: user.id },
+      });
+
+      for (const { id, score } of toReject) {
+        await tx.recruitmentApplication.update({
+          where: { id },
+          data: {
+            currentStageId: rejectedStage.id,
+            autoRejectedAt: now,
+            autoRejectedScore: score,
+          },
+        });
+        await tx.recruitmentStageHistory.create({
+          data: {
+            tenantId,
+            applicationId: id,
+            previousStageId: defaultStage.id,
+            newStageId: rejectedStage.id,
+            changedByUserId: user.id,
+            changedByEmployeeId: actorEmployee?.id,
+            note: `Auto-rejected: ${score}% match, cut-off ${cutoff}%`,
+          },
+        });
+      }
+
+      for (const { id, score } of toRestore) {
+        await tx.recruitmentApplication.update({
+          where: { id },
+          data: {
+            currentStageId: defaultStage.id,
+            autoRejectedAt: null,
+            autoRejectedScore: null,
+          },
+        });
+        await tx.recruitmentStageHistory.create({
+          data: {
+            tenantId,
+            applicationId: id,
+            previousStageId: rejectedStage.id,
+            newStageId: defaultStage.id,
+            changedByUserId: user.id,
+            changedByEmployeeId: actorEmployee?.id,
+            note:
+              cutoff === null
+                ? 'Cut-off cleared'
+                : `Back above cut-off: ${score}% match, cut-off ${cutoff}%`,
+          },
+        });
+      }
+    });
+
+    return {
+      cutoffScore: cutoff,
+      rejected: toReject.length,
+      restored: toRestore.length,
+      applied: true,
+    };
+  }
+
+  private findRejectedStage(tenantId: string) {
+    return this.prisma.recruitmentStage.findFirst({
+      where: { tenantId, normalizedName: this.normalizeName('Rejected') },
+    });
   }
 
   async closeVacancy(tenantId: string, user: RequestUser, vacancyId: string) {
@@ -574,6 +851,7 @@ export class RecruitmentService {
         coverLetterFileName: true,
         portfolioUrl: true,
         githubUrl: true,
+        managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
       },
     });
     if (!candidate)
@@ -606,15 +884,25 @@ export class RecruitmentService {
 
     const targetStage = await this.prisma.recruitmentStage.findFirst({
       where: { tenantId, id: stageId },
-      select: { id: true },
+      select: { id: true, isDefault: true },
     });
     if (!targetStage)
       throw new NotFoundException('Recruitment stage not found');
+    // The default stage is where applying puts a candidate, so it is never a place to move back to.
+    if (targetStage.isDefault && candidate.currentStageId !== targetStage.id) {
+      throw new ConflictException(
+        'Candidates cannot be moved back to the first stage',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.recruitmentApplication.update({
         where: { id: candidateId },
-        data: { currentStageId: stageId },
+        data: {
+          currentStageId: stageId,
+          autoRejectedAt: null,
+          autoRejectedScore: null,
+        },
       });
       await tx.recruitmentStageHistory.create({
         data: {
@@ -636,6 +924,103 @@ export class RecruitmentService {
     });
   }
 
+  /**
+   * Records a reviewer's accept/decline on one screening answer, or clears it with null. This
+   * never moves the candidate; moving to Screening is a separate step.
+   */
+  async setScreeningDecision(
+    tenantId: string,
+    user: RequestUser,
+    candidateId: string,
+    questionId: string,
+    decision: RecruitmentScreeningDecision | null,
+  ) {
+    const answer = await this.prisma.recruitmentApplicationAnswer.findFirst({
+      where: {
+        tenantId,
+        applicationId: candidateId,
+        questionId,
+        application: { status: RecruitmentApplicationStatus.SUBMITTED },
+      },
+      select: { id: true },
+    });
+    if (!answer) throw new NotFoundException('Screening answer not found');
+
+    await this.prisma.recruitmentApplicationAnswer.update({
+      where: { id: answer.id },
+      data: {
+        screeningDecision: decision,
+        screeningDecidedAt: decision ? new Date() : null,
+        screeningDecidedByUserId: decision ? user.id : null,
+      },
+    });
+    return this.getCandidate(tenantId, candidateId);
+  }
+
+  /**
+   * Moves every applicant of a vacancy who is still in the entry stage into Screening, with
+   * stage history, in one transaction. Applicants a cut-off rejected stay where they are.
+   */
+  async moveVacancyApplicantsToScreening(
+    tenantId: string,
+    user: RequestUser,
+    vacancyId: string,
+  ) {
+    const vacancy = await this.prisma.recruitmentVacancy.findFirst({
+      where: { tenantId, id: vacancyId },
+      select: { id: true },
+    });
+    if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
+
+    const [defaultStage, screeningStage, actorEmployee] = await Promise.all([
+      this.getDefaultStage(tenantId),
+      this.prisma.recruitmentStage.findFirst({
+        where: { tenantId, normalizedName: this.normalizeName('Screening') },
+      }),
+      this.prisma.employee.findFirst({
+        where: { tenantId, userId: user.id },
+        select: { id: true },
+      }),
+    ]);
+    if (!screeningStage) {
+      throw new ConflictException(
+        'A "Screening" recruitment stage is required',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const applicants = await tx.recruitmentApplication.findMany({
+        where: {
+          tenantId,
+          vacancyId,
+          status: RecruitmentApplicationStatus.SUBMITTED,
+          currentStageId: defaultStage.id,
+          autoRejectedAt: null,
+        },
+        select: { id: true },
+      });
+      if (applicants.length === 0) return { moved: 0 };
+
+      const ids = applicants.map((applicant) => applicant.id);
+      await tx.recruitmentApplication.updateMany({
+        where: { id: { in: ids } },
+        data: { currentStageId: screeningStage.id },
+      });
+      await tx.recruitmentStageHistory.createMany({
+        data: ids.map((applicationId) => ({
+          tenantId,
+          applicationId,
+          previousStageId: defaultStage.id,
+          newStageId: screeningStage.id,
+          changedByUserId: user.id,
+          changedByEmployeeId: actorEmployee?.id,
+          note: 'Moved to Screening from the job opening',
+        })),
+      });
+      return { moved: ids.length };
+    });
+  }
+
   async getCandidateStageHistory(tenantId: string, candidateId: string) {
     await this.getCandidate(tenantId, candidateId);
     return this.prisma.recruitmentStageHistory.findMany({
@@ -651,6 +1036,288 @@ export class RecruitmentService {
     });
   }
 
+  async listCandidateInterviews(tenantId: string, candidateId: string) {
+    await this.getCandidateForInterviews(tenantId, candidateId);
+    const interviews = await this.prisma.recruitmentInterview.findMany({
+      where: { tenantId, applicationId: candidateId },
+      include: RECRUITMENT_INTERVIEW_INCLUDE,
+      orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
+    });
+    return interviews.map((interview) => this.serializeInterview(interview));
+  }
+
+  async scheduleCandidateInterview(
+    tenantId: string,
+    user: RequestUser,
+    candidateId: string,
+    dto: CreateRecruitmentInterviewDto,
+  ) {
+    const candidate = await this.getCandidateForInterviews(
+      tenantId,
+      candidateId,
+    );
+    const scheduledAt = this.parseInterviewTime(dto.scheduledAt);
+    const channel = this.resolveInterviewChannel({
+      mode: dto.mode,
+      platform: dto.platform,
+      meetingLink: dto.meetingLink,
+      phone: dto.phone,
+      location: dto.location,
+    });
+    const interviewStage = await this.stageForNewInterview(
+      tenantId,
+      candidate.currentStage,
+    );
+
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: user.id },
+      select: { id: true },
+    });
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const interview = await tx.recruitmentInterview.create({
+        data: {
+          tenantId,
+          applicationId: candidateId,
+          mode: dto.mode,
+          scheduledAt,
+          durationMinutes: dto.durationMinutes,
+          ...channel,
+          notes: this.optionalTrim(dto.notes) ?? null,
+          createdByUserId: user.id,
+          createdByEmployeeId: actorEmployee?.id,
+        },
+        include: RECRUITMENT_INTERVIEW_INCLUDE,
+      });
+      if (interviewStage) {
+        await tx.recruitmentApplication.update({
+          where: { id: candidateId },
+          data: {
+            currentStageId: interviewStage.id,
+            autoRejectedAt: null,
+            autoRejectedScore: null,
+          },
+        });
+        await tx.recruitmentStageHistory.create({
+          data: {
+            tenantId,
+            applicationId: candidateId,
+            previousStageId: candidate.currentStageId,
+            newStageId: interviewStage.id,
+            changedByUserId: user.id,
+            changedByEmployeeId: actorEmployee?.id,
+            note: 'Moved automatically: interview scheduled',
+          },
+        });
+      }
+      return interview;
+    });
+    return this.serializeInterview(created);
+  }
+
+  async updateCandidateInterview(
+    tenantId: string,
+    user: RequestUser,
+    candidateId: string,
+    interviewId: string,
+    dto: UpdateRecruitmentInterviewDto,
+  ) {
+    const candidate = await this.getCandidateForInterviews(
+      tenantId,
+      candidateId,
+    );
+    const existing = await this.prisma.recruitmentInterview.findFirst({
+      where: { tenantId, applicationId: candidateId, id: interviewId },
+    });
+    if (!existing) throw new NotFoundException('Interview not found');
+
+    const data: Prisma.RecruitmentInterviewUpdateInput = {};
+    const isScheduled =
+      existing.status === RecruitmentInterviewStatus.SCHEDULED;
+
+    if (dto.status === RecruitmentInterviewStatus.SCHEDULED && !isScheduled) {
+      throw new ConflictException(
+        'A completed or cancelled interview cannot be scheduled again',
+      );
+    }
+
+    const changesDetails =
+      dto.mode !== undefined ||
+      dto.scheduledAt !== undefined ||
+      dto.durationMinutes !== undefined ||
+      dto.platform !== undefined ||
+      dto.meetingLink !== undefined ||
+      dto.phone !== undefined ||
+      dto.location !== undefined ||
+      dto.notes !== undefined;
+
+    if (!isScheduled) {
+      // Finished interviews keep their schedule; only the feedback can still be written.
+      if (changesDetails || dto.status !== undefined) {
+        throw new ConflictException('Only scheduled interviews can be changed');
+      }
+      if (existing.status !== RecruitmentInterviewStatus.COMPLETED) {
+        throw new ConflictException(
+          'Feedback can only be added to a completed interview',
+        );
+      }
+    }
+
+    if (changesDetails) {
+      const mode = dto.mode ?? existing.mode;
+      const modeChanged = dto.mode !== undefined && dto.mode !== existing.mode;
+      // Values for the new mode must be sent when the mode changes; otherwise unsent fields keep
+      // what is stored.
+      const channel = this.resolveInterviewChannel({
+        mode,
+        platform: this.pickChannelValue(
+          dto.platform,
+          existing.platform,
+          modeChanged,
+        ),
+        meetingLink: this.pickChannelValue(
+          dto.meetingLink,
+          existing.meetingLink,
+          modeChanged,
+        ),
+        phone: this.pickChannelValue(dto.phone, existing.phone, modeChanged),
+        location: this.pickChannelValue(
+          dto.location,
+          existing.location,
+          modeChanged,
+        ),
+      });
+      data.mode = mode;
+      data.platform = channel.platform;
+      data.meetingLink = channel.meetingLink;
+      data.phone = channel.phone;
+      data.location = channel.location;
+    }
+    if (dto.scheduledAt !== undefined) {
+      data.scheduledAt = this.parseInterviewTime(dto.scheduledAt);
+    }
+    if (dto.durationMinutes !== undefined) {
+      data.durationMinutes = dto.durationMinutes;
+    }
+    if (dto.notes !== undefined) {
+      data.notes = this.optionalTrim(dto.notes) ?? null;
+    }
+    if (dto.feedback !== undefined) {
+      data.feedback = this.optionalTrim(dto.feedback) ?? null;
+    }
+    if (dto.status !== undefined && dto.status !== existing.status) {
+      data.status = dto.status;
+    }
+
+    const finishing = data.status as RecruitmentInterviewStatus | undefined;
+    if (
+      dto.stageId !== undefined &&
+      finishing !== RecruitmentInterviewStatus.COMPLETED
+    ) {
+      throw new BadRequestException(
+        'A stage can only be chosen when completing an interview',
+      );
+    }
+    const completionStage =
+      dto.stageId !== undefined
+        ? await this.requireCompletionStage(tenantId, dto.stageId)
+        : null;
+
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: user.id },
+      select: { id: true },
+    });
+    const moveTo = async (
+      tx: Prisma.TransactionClient,
+      stageId: string,
+      note: string,
+    ) => {
+      await tx.recruitmentApplication.update({
+        where: { id: candidateId },
+        data: {
+          currentStageId: stageId,
+          autoRejectedAt: null,
+          autoRejectedScore: null,
+        },
+      });
+      await tx.recruitmentStageHistory.create({
+        data: {
+          tenantId,
+          applicationId: candidateId,
+          previousStageId: candidate.currentStageId,
+          newStageId: stageId,
+          changedByUserId: user.id,
+          changedByEmployeeId: actorEmployee?.id,
+          note,
+        },
+      });
+    };
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const interview = await tx.recruitmentInterview.update({
+        where: { id: interviewId },
+        data,
+        include: RECRUITMENT_INTERVIEW_INCLUDE,
+      });
+
+      if (completionStage && completionStage.id !== candidate.currentStageId) {
+        await moveTo(
+          tx,
+          completionStage.id,
+          `Moved to ${completionStage.name}: interview completed`,
+        );
+      } else if (finishing === RecruitmentInterviewStatus.CANCELLED) {
+        // Cancelling sends the candidate back to Screening, unless they have moved on from
+        // Interview or another interview is still booked.
+        const inInterview =
+          candidate.currentStage?.normalizedName ===
+          this.normalizeName('Interview');
+        if (inInterview) {
+          const stillBooked = await tx.recruitmentInterview.count({
+            where: {
+              tenantId,
+              applicationId: candidateId,
+              status: RecruitmentInterviewStatus.SCHEDULED,
+              id: { not: interviewId },
+            },
+          });
+          const screening = await tx.recruitmentStage.findFirst({
+            where: {
+              tenantId,
+              normalizedName: this.normalizeName('Screening'),
+            },
+          });
+          if (stillBooked === 0 && screening) {
+            await moveTo(
+              tx,
+              screening.id,
+              'Moved to Screening: interview cancelled',
+            );
+          }
+        }
+      }
+      return interview;
+    });
+    return this.serializeInterview(updated);
+  }
+
+  /** The stages a completed interview can move a candidate to: anything after Screening. */
+  private async requireCompletionStage(tenantId: string, stageId: string) {
+    const stage = await this.prisma.recruitmentStage.findFirst({
+      where: { tenantId, id: stageId },
+    });
+    if (!stage) throw new NotFoundException('Recruitment stage not found');
+    if (
+      stage.isDefault ||
+      stage.normalizedName === this.normalizeName('Screening')
+    ) {
+      throw new BadRequestException(
+        'A completed interview cannot move a candidate back to Applied or Screening',
+      );
+    }
+    return stage;
+  }
+
   async createApplication(
     tenantId: string,
     user: RequestUser | null,
@@ -664,7 +1331,7 @@ export class RecruitmentService {
       where: {
         tenantId,
         id: vacancyId,
-        ...this.acceptingApplicationsWhere(),
+        ...(await this.acceptingApplicationsWhere()),
       },
       include: {
         questions: {
@@ -675,7 +1342,7 @@ export class RecruitmentService {
     });
     if (!vacancy) throw new NotFoundException('Recruitment vacancy not found');
 
-    this.assertApplicationComplete(dto, vacancy.questions);
+    this.assertApplicationComplete(dto, vacancy.questions, vacancy.details);
     await this.assertNoSubmittedDuplicate(
       tenantId,
       vacancyId,
@@ -729,6 +1396,12 @@ export class RecruitmentService {
           coverLetterFileName: this.optionalTrim(dto.coverLetterFileName),
           portfolioUrl: this.optionalTrim(dto.portfolioUrl),
           githubUrl: this.optionalTrim(dto.githubUrl),
+          languages: this.cleanList(dto.languages ?? []),
+          certificates: this.cleanList(dto.certificates ?? []),
+          ...this.professionalInfoData({
+            educationHistory: dto.educationHistory,
+            workHistory: dto.workHistory,
+          }),
         },
       });
       if (answers.length > 0) {
@@ -774,7 +1447,7 @@ export class RecruitmentService {
       where: {
         tenantId: publicTenantId,
         id: vacancyId,
-        ...this.acceptingApplicationsWhere(),
+        ...(await this.acceptingApplicationsWhere()),
       },
       include: {
         questions: {
@@ -899,6 +1572,7 @@ export class RecruitmentService {
     const missing = this.applicationMissingFields(
       draft,
       draft.vacancy.questions,
+      draft.vacancy.details,
     );
     return {
       application: this.serializePublicApplication(draft),
@@ -908,30 +1582,43 @@ export class RecruitmentService {
   }
 
   async submitPublicApplication(applicationId: string, accessToken?: string) {
-    const draft = await this.getDraftApplicationByToken(
-      applicationId,
-      accessToken,
-    );
-    const missing = this.applicationMissingFields(
-      draft,
-      draft.vacancy.questions,
-    );
-    if (missing.length > 0) {
-      throw new BadRequestException({
-        message: 'Recruitment application is incomplete',
-        missing,
-      });
-    }
-    await this.assertNoSubmittedDuplicate(
-      draft.tenantId,
-      draft.vacancyId,
-      draft.email?.trim().toLowerCase(),
-      draft.id,
-    );
-    const initialStage = await this.getDefaultStage(draft.tenantId);
-    const now = new Date();
-
     return this.prisma.$transaction(async (tx) => {
+      await lockRecruitmentApplication(tx, applicationId);
+      const draft = await this.getDraftApplicationByToken(
+        applicationId,
+        accessToken,
+        tx,
+      );
+      const missing = this.applicationMissingFields(
+        draft,
+        draft.vacancy.questions,
+        draft.vacancy.details,
+      );
+      if (missing.length > 0) {
+        throw new BadRequestException({
+          message: 'Recruitment application is incomplete',
+          missing,
+        });
+      }
+      await this.assertNoSubmittedDuplicate(
+        draft.tenantId,
+        draft.vacancyId,
+        draft.email?.trim().toLowerCase(),
+        draft.id,
+      );
+      const defaultStage = await this.getDefaultStage(draft.tenantId);
+      const now = new Date();
+
+      // A vacancy cut-off sends applicants who score below it straight to Rejected. If the tenant
+      // has no Rejected stage the applicant is kept in the default stage rather than refused.
+      const score = computeMatchScore(draft, draft.vacancy.details);
+      const cutoff = draft.vacancy.cutoffScore;
+      const rejectedStage =
+        cutoff !== null && score !== null && score < cutoff
+          ? await this.findRejectedStage(draft.tenantId)
+          : null;
+      const initialStage = rejectedStage ?? defaultStage;
+
       await tx.recruitmentApplication.update({
         where: { id: draft.id },
         data: {
@@ -940,6 +1627,9 @@ export class RecruitmentService {
           submittedAt: now,
           appliedAt: now,
           accessTokenHash: null,
+          ...(rejectedStage
+            ? { autoRejectedAt: now, autoRejectedScore: score }
+            : {}),
         },
       });
       await tx.recruitmentStageHistory.create({
@@ -950,7 +1640,9 @@ export class RecruitmentService {
           newStageId: initialStage.id,
           changedByUserId: null,
           changedByEmployeeId: null,
-          note: 'Initial application stage',
+          note: rejectedStage
+            ? `Auto-rejected: ${score}% match, cut-off ${cutoff}%`
+            : 'Initial application stage',
         },
       });
 
@@ -1079,9 +1771,10 @@ export class RecruitmentService {
     }
   }
 
-  private async getDraftApplicationByToken(
+  async getDraftApplicationByToken(
     applicationId: string,
     accessToken?: string,
+    client: Prisma.TransactionClient = this.prisma,
   ) {
     const tokenHash = accessToken
       ? this.hashAccessToken(accessToken)
@@ -1090,7 +1783,7 @@ export class RecruitmentService {
       throw new NotFoundException('Recruitment application not found');
     }
 
-    const application = await this.prisma.recruitmentApplication.findFirst({
+    const application = await client.recruitmentApplication.findFirst({
       where: {
         id: applicationId,
         accessTokenHash: tokenHash,
@@ -1098,7 +1791,7 @@ export class RecruitmentService {
       },
       include: RECRUITMENT_PUBLIC_APPLICATION_INCLUDE,
     });
-    if (!application) {
+    if (!application?.vacancy) {
       throw new NotFoundException('Recruitment application not found');
     }
     if (
@@ -1155,8 +1848,48 @@ export class RecruitmentService {
     coverLetterFileName?: string;
     portfolioUrl?: string;
     githubUrl?: string;
+    languages?: string[];
+    certificates?: string[];
+    educationHistory?: Array<{
+      level: string;
+      qualification?: string;
+      institution?: string;
+    }>;
+    workHistory?: Array<{
+      role: string;
+      company?: string;
+      start?: string;
+      end?: string;
+    }>;
   }) {
     return {
+      ...(dto.languages !== undefined
+        ? { languages: this.cleanList(dto.languages) }
+        : {}),
+      ...(dto.certificates !== undefined
+        ? { certificates: this.cleanList(dto.certificates) }
+        : {}),
+      ...(dto.educationHistory !== undefined
+        ? {
+            educationHistory: dto.educationHistory.map((entry) => ({
+              level: entry.level,
+              qualification: entry.qualification?.trim() ?? '',
+              institution: entry.institution?.trim() ?? '',
+            })) as Prisma.InputJsonValue,
+          }
+        : {}),
+      ...(dto.workHistory !== undefined
+        ? {
+            workHistory: dto.workHistory
+              .filter((entry) => entry.role.trim())
+              .map((entry) => ({
+                role: entry.role.trim(),
+                company: entry.company?.trim() ?? '',
+                start: entry.start ?? '',
+                end: entry.end ?? '',
+              })) as Prisma.InputJsonValue,
+          }
+        : {}),
       ...(dto.professionalSummary !== undefined
         ? { professionalSummary: this.optionalTrim(dto.professionalSummary) }
         : {}),
@@ -1369,6 +2102,7 @@ export class RecruitmentService {
       options: Prisma.JsonValue | null;
       required: boolean;
     }>,
+    vacancyDetails: Prisma.JsonValue | null,
   ) {
     const missing = this.applicationMissingFields(
       {
@@ -1381,6 +2115,7 @@ export class RecruitmentService {
         })),
       },
       questions,
+      vacancyDetails,
     );
     if (missing.length > 0) {
       throw new BadRequestException({
@@ -1388,6 +2123,28 @@ export class RecruitmentService {
         missing,
       });
     }
+  }
+
+  /** Which requirements the vacancy setup marked as required. A missing key is not required. */
+  private requiredRequirements(details: Prisma.JsonValue | null) {
+    const read = (key: string) => {
+      const value =
+        details && typeof details === 'object' && !Array.isArray(details)
+          ? (details as Record<string, unknown>)[key]
+          : undefined;
+      return (
+        !!value &&
+        typeof value === 'object' &&
+        (value as { required?: unknown }).required === true
+      );
+    };
+    return {
+      education: read('education'),
+      experience: read('experience'),
+      skills: read('skills'),
+      languages: read('languages'),
+      certificates: read('certificates'),
+    };
   }
 
   private applicationMissingFields(
@@ -1402,7 +2159,10 @@ export class RecruitmentService {
       currentJobTitle?: string | null;
       highestEducationLevel?: string | null;
       skills?: string[];
+      languages?: string[];
+      certificates?: string[];
       noticePeriod?: string | null;
+      managedDocuments?: Array<{ type: string }>;
       answers?: Array<{
         questionId: string;
         answer?: string | null;
@@ -1417,40 +2177,82 @@ export class RecruitmentService {
       options: Prisma.JsonValue | null;
       required: boolean;
     }>,
+    vacancyDetails: Prisma.JsonValue | null = null,
   ) {
     const missing: Array<{ field: string; label: string }> = [];
+    const documentRequirements =
+      vacancyDetails &&
+      typeof vacancyDetails === 'object' &&
+      !Array.isArray(vacancyDetails)
+        ? (vacancyDetails as unknown as VacancyDetails).documents
+        : undefined;
+    for (const [flag, type, label] of [
+      ['resume', 'RESUME', 'Resume'],
+      ['coverLetter', 'COVER_LETTER', 'Cover letter'],
+    ] as const) {
+      if (
+        documentRequirements?.[flag] &&
+        !application.managedDocuments?.some(
+          (document) => document.type === type,
+        )
+      ) {
+        missing.push({ field: flag, label });
+      }
+    }
+    // Contact details, current job and notice period are asked on every application. The
+    // rest is only required when the vacancy setup marked that requirement as required.
+    const required = this.requiredRequirements(vacancyDetails);
     const requiredTextFields: Array<
-      [string, string, string | null | undefined]
+      [string, string, string | null | undefined, boolean]
     > = [
-      ['firstName', 'First name', application.firstName],
-      ['lastName', 'Last name', application.lastName],
-      ['email', 'Email', application.email],
-      ['phone', 'Phone', application.phone],
-      ['country', 'Country', application.country],
-      ['city', 'City', application.city],
-      ['currentJobTitle', 'Current job title', application.currentJobTitle],
+      ['firstName', 'First name', application.firstName, true],
+      ['lastName', 'Last name', application.lastName, true],
+      ['email', 'Email', application.email, true],
+      ['phone', 'Phone', application.phone, true],
+      ['country', 'Country', application.country, true],
+      ['city', 'City', application.city, true],
+      [
+        'currentJobTitle',
+        'Current job title',
+        application.currentJobTitle,
+        true,
+      ],
+      ['noticePeriod', 'Notice period', application.noticePeriod, true],
       [
         'highestEducationLevel',
         'Highest education level',
         application.highestEducationLevel,
+        required.education,
       ],
-      ['noticePeriod', 'Notice period', application.noticePeriod],
     ];
 
-    for (const [field, label, value] of requiredTextFields) {
-      if (!value?.trim()) missing.push({ field, label });
+    for (const [field, label, value, isRequired] of requiredTextFields) {
+      if (isRequired && !value?.trim()) missing.push({ field, label });
     }
     if (
-      application.yearsOfExperience === undefined ||
-      application.yearsOfExperience === null
+      required.experience &&
+      (application.yearsOfExperience === undefined ||
+        application.yearsOfExperience === null)
     ) {
       missing.push({
         field: 'yearsOfExperience',
         label: 'Years of experience',
       });
     }
-    if (!application.skills || application.skills.length === 0) {
-      missing.push({ field: 'skills', label: 'Skills' });
+    const lists: Array<[string, string, string[] | undefined, boolean]> = [
+      ['skills', 'Skills', application.skills, required.skills],
+      ['languages', 'Languages', application.languages, required.languages],
+      [
+        'certificates',
+        'Certificates',
+        application.certificates,
+        required.certificates,
+      ],
+    ];
+    for (const [field, label, value, isRequired] of lists) {
+      if (isRequired && (!value || value.length === 0)) {
+        missing.push({ field, label });
+      }
     }
 
     const answersByQuestionId = new Map(
@@ -1472,6 +2274,10 @@ export class RecruitmentService {
     }
 
     return missing;
+  }
+
+  private cleanList(values: string[]): string[] {
+    return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
   }
 
   private async assertNoSubmittedDuplicate(
@@ -1571,6 +2377,28 @@ export class RecruitmentService {
     };
   }
 
+  /** Public vacancies plus whether each company carries the verified check mark. */
+  private async serializePublicVacancies(
+    vacancies: Prisma.RecruitmentVacancyGetPayload<{
+      include: typeof RECRUITMENT_VACANCY_INCLUDE;
+    }>[],
+  ) {
+    const tenantIds = [...new Set(vacancies.map((v) => v.tenantId))];
+    const employers =
+      tenantIds.length > 0
+        ? await this.prisma.recruitmentEmployer.findMany({
+            where: { tenantId: { in: tenantIds } },
+            select: { tenantId: true, isVerified: true },
+          })
+        : [];
+    const verified = new Map(employers.map((e) => [e.tenantId, e.isVerified]));
+    return vacancies.map((vacancy) => ({
+      ...this.serializePublicVacancy(vacancy),
+      // Companies HR has no record of were set up by the platform.
+      companyVerified: verified.get(vacancy.tenantId) ?? true,
+    }));
+  }
+
   private serializePublicVacancy(
     vacancy: Prisma.RecruitmentVacancyGetPayload<{
       include: typeof RECRUITMENT_VACANCY_INCLUDE;
@@ -1579,6 +2407,7 @@ export class RecruitmentService {
     return {
       id: vacancy.id,
       tenantId: vacancy.tenantId,
+      companyName: vacancy.companyName,
       title: vacancy.title,
       department: vacancy.department?.name ?? null,
       branch: vacancy.branch?.name ?? null,
@@ -1618,11 +2447,25 @@ export class RecruitmentService {
     }>,
   ) {
     const { accessTokenHash: _accessTokenHash, ...safeCandidate } = candidate;
+    const { _count: vacancyCounts, ...vacancy } = candidate.vacancy;
+    // Answers to questions since retired no longer take part in the screening share.
+    const activeAnswers = candidate.answers.filter(
+      (answer) => answer.question.retiredAt === null,
+    );
+    const matchScore = computeOverallScore(candidate, vacancy.details, {
+      total: vacancyCounts.questions,
+      accepted: activeAnswers.filter(
+        (answer) => answer.screeningDecision === 'ACCEPTED',
+      ).length,
+      decided: activeAnswers.filter((answer) => answer.screeningDecision)
+        .length,
+    });
     return {
       ...safeCandidate,
+      matchScore,
       expectedSalary: this.decimalToNumber(candidate.expectedSalary),
       vacancy: {
-        ...candidate.vacancy,
+        ...vacancy,
         salaryMin: this.decimalToNumber(candidate.vacancy.salaryMin),
         salaryMax: this.decimalToNumber(candidate.vacancy.salaryMax),
       },
@@ -1635,6 +2478,8 @@ export class RecruitmentService {
         answerText: answer.answerText,
         selectedOptions: answer.selectedOptions,
         createdAt: answer.createdAt,
+        screeningDecision: answer.screeningDecision,
+        screeningDecidedAt: answer.screeningDecidedAt,
       })),
       documents: this.serializeCandidateDocuments(candidate),
     };
@@ -1678,6 +2523,14 @@ export class RecruitmentService {
     coverLetterFileName: string | null;
     portfolioUrl: string | null;
     githubUrl: string | null;
+    managedDocuments?: Array<{
+      id: string;
+      type: string;
+      originalFileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      createdAt: Date;
+    }>;
   }) {
     return {
       candidateId: candidate.id,
@@ -1697,6 +2550,29 @@ export class RecruitmentService {
         : null,
       portfolioUrl: candidate.portfolioUrl,
       githubUrl: candidate.githubUrl,
+      managedDocuments: candidate.managedDocuments ?? [],
+      legacyDocuments: [
+        ...(candidate.resumeUrl
+          ? [
+              {
+                type: 'RESUME',
+                source: 'LEGACY_EXTERNAL',
+                url: candidate.resumeUrl,
+                fileName: candidate.resumeFileName,
+              },
+            ]
+          : []),
+        ...(candidate.coverLetterUrl
+          ? [
+              {
+                type: 'COVER_LETTER',
+                source: 'LEGACY_EXTERNAL',
+                url: candidate.coverLetterUrl,
+                fileName: candidate.coverLetterFileName,
+              },
+            ]
+          : []),
+      ],
     };
   }
 
@@ -1927,8 +2803,16 @@ export class RecruitmentService {
   }
 
   /** Open, and not past its closing date: the vacancies applicants can see and apply to. */
-  private acceptingApplicationsWhere(): Prisma.RecruitmentVacancyWhereInput {
+  /** Open, unexpired vacancies of companies that are not blocked. */
+  private async acceptingApplicationsWhere(): Promise<Prisma.RecruitmentVacancyWhereInput> {
+    const blocked = await this.prisma.recruitmentEmployer.findMany({
+      where: { isBlocked: true },
+      select: { tenantId: true },
+    });
     return {
+      ...(blocked.length > 0
+        ? { NOT: { tenantId: { in: blocked.map((b) => b.tenantId) } } }
+        : {}),
       status: RecruitmentVacancyStatus.OPEN,
       OR: [
         { closingDate: null },
@@ -2010,6 +2894,154 @@ export class RecruitmentService {
 
   private hashAccessToken(accessToken: string) {
     return createHash('sha256').update(accessToken).digest('hex');
+  }
+
+  private async getCandidateForInterviews(
+    tenantId: string,
+    candidateId: string,
+  ) {
+    const candidate = await this.prisma.recruitmentApplication.findFirst({
+      where: {
+        tenantId,
+        id: candidateId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+      },
+      select: {
+        id: true,
+        currentStageId: true,
+        currentStage: { select: { normalizedName: true, sortOrder: true } },
+      },
+    });
+    if (!candidate)
+      throw new NotFoundException('Recruitment candidate not found');
+    return candidate;
+  }
+
+  /**
+   * The Interview stage a candidate moves to when an interview is scheduled, or null to leave
+   * them where they are: no Interview stage, already in it, or already past it (Offer, Hired).
+   * A rejected candidate does move, since scheduling an interview is a recruiter's decision.
+   */
+  private async stageForNewInterview(
+    tenantId: string,
+    current: { normalizedName: string; sortOrder: number } | null,
+  ) {
+    const interview = await this.prisma.recruitmentStage.findFirst({
+      where: { tenantId, normalizedName: this.normalizeName('Interview') },
+    });
+    if (!interview) return null;
+    if (current) {
+      if (current.normalizedName === interview.normalizedName) return null;
+      const rejected =
+        current.normalizedName === this.normalizeName('Rejected');
+      if (!rejected && current.sortOrder > interview.sortOrder) return null;
+    }
+    return interview;
+  }
+
+  private parseInterviewTime(value: string) {
+    const scheduledAt = new Date(value);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      throw new BadRequestException('scheduledAt must be a valid date-time');
+    }
+    if (scheduledAt.getTime() <= Date.now()) {
+      throw new BadRequestException(
+        'Interviews must be scheduled in the future',
+      );
+    }
+    return scheduledAt;
+  }
+
+  /** On a mode change nothing from the previous mode carries over; otherwise unsent keeps stored. */
+  private pickChannelValue(
+    sent: string | null | undefined,
+    stored: string | null,
+    modeChanged: boolean,
+  ) {
+    if (sent !== undefined) return sent;
+    return modeChanged ? null : stored;
+  }
+
+  /**
+   * Each mode needs one set of details and drops the rest, so an interview never carries a
+   * stale link or number from a different mode.
+   */
+  private resolveInterviewChannel(input: {
+    mode: RecruitmentInterviewMode;
+    platform?: string | null;
+    meetingLink?: string | null;
+    phone?: string | null;
+    location?: string | null;
+  }) {
+    const none = {
+      platform: null as string | null,
+      meetingLink: null as string | null,
+      phone: null as string | null,
+      location: null as string | null,
+    };
+
+    if (input.mode === RecruitmentInterviewMode.VIDEO) {
+      const platform = this.optionalTrim(input.platform);
+      const meetingLink = this.optionalTrim(input.meetingLink);
+      if (!platform) {
+        throw new BadRequestException(
+          'platform is required for a video interview',
+        );
+      }
+      if (!meetingLink) {
+        throw new BadRequestException(
+          'meetingLink is required for a video interview',
+        );
+      }
+      if (!/^https?:\/\/\S+$/i.test(meetingLink)) {
+        throw new BadRequestException(
+          'meetingLink must be a valid http or https link',
+        );
+      }
+      return { ...none, platform, meetingLink };
+    }
+
+    if (input.mode === RecruitmentInterviewMode.PHONE) {
+      const phone = this.optionalTrim(input.phone);
+      if (!phone) {
+        throw new BadRequestException(
+          'phone is required for a phone interview',
+        );
+      }
+      return { ...none, phone };
+    }
+
+    const location = this.optionalTrim(input.location);
+    if (!location) {
+      throw new BadRequestException(
+        'location is required for an in-person interview',
+      );
+    }
+    return { ...none, location };
+  }
+
+  private serializeInterview(
+    interview: Prisma.RecruitmentInterviewGetPayload<{
+      include: typeof RECRUITMENT_INTERVIEW_INCLUDE;
+    }>,
+  ) {
+    return {
+      id: interview.id,
+      candidateId: interview.applicationId,
+      mode: interview.mode,
+      status: interview.status,
+      scheduledAt: interview.scheduledAt,
+      durationMinutes: interview.durationMinutes,
+      platform: interview.platform,
+      meetingLink: interview.meetingLink,
+      phone: interview.phone,
+      location: interview.location,
+      notes: interview.notes,
+      feedback: interview.feedback,
+      scheduledBy: interview.createdByEmployee,
+      createdAt: interview.createdAt,
+      updatedAt: interview.updatedAt,
+    };
   }
 
   private optionalTrim(value?: string | null) {

@@ -423,7 +423,8 @@ describe('UsersService.acceptInvite after resend token rotation', () => {
     const prisma = makePrisma();
     prisma.user.findUnique
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(pendingAdmin);
+      .mockResolvedValueOnce(pendingAdmin)
+      .mockResolvedValueOnce(null);
     prisma.user.update.mockResolvedValue({
       ...pendingAdmin,
       status: 'ACTIVE',
@@ -466,6 +467,7 @@ describe('UsersService.acceptInvite after resend token rotation', () => {
         where: { id: pendingAdmin.id },
         data: expect.objectContaining({
           status: 'ACTIVE',
+          emailVerifiedAt: expect.any(Date),
           inviteToken: null,
           inviteExpiresAt: null,
         }),
@@ -477,5 +479,11 @@ describe('UsersService.acceptInvite after resend token rotation', () => {
     });
     expect(result.accessToken).toBe('access-token');
     expect(result.refreshToken).toBe('refresh-token');
+    await expect(
+      service.acceptInvite({
+        inviteToken: 'new-token',
+        password: 'Password123!',
+      }),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

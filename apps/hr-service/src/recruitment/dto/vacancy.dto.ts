@@ -16,6 +16,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -485,4 +486,68 @@ export class QueryPublicRecruitmentVacanciesDto {
   @Min(1)
   @Max(100)
   limit?: number;
+}
+
+export class QueryPublicRecruitmentBoardDto {
+  @ApiPropertyOptional({
+    description: 'Search title, company, city or location',
+    example: 'engineer',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ enum: EmploymentType })
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  jobType?: EmploymentType;
+
+  @ApiPropertyOptional({ enum: WorkMode })
+  @IsOptional()
+  @IsEnum(WorkMode)
+  workMode?: WorkMode;
+
+  @ApiPropertyOptional({ description: 'Page number', minimum: 1, example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({
+    description: 'Page size',
+    minimum: 1,
+    maximum: 100,
+    example: 25,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class SetRecruitmentCutoffDto {
+  @ApiProperty({
+    nullable: true,
+    minimum: 0,
+    maximum: 100,
+    description:
+      'Minimum match score. Applicants below it are moved to Rejected. Null clears the cut-off.',
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  cutoffScore!: number | null;
+
+  @ApiPropertyOptional({
+    description: 'When true, report who would move without changing anything.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }

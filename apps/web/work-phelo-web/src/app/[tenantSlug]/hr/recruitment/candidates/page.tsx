@@ -4,6 +4,7 @@ import { use } from 'react';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useRedirectWhenDenied } from '@/hooks/hr/useRedirectWhenDenied';
 import { Permission } from '@/lib/permissionMap';
+import { CandidatesTable } from '@/components/organisms/hr/recruitment/CandidatesTable';
 import { pageHeader, pageContent } from '@/lib/layout';
 
 export default function CandidatesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
@@ -20,7 +21,7 @@ export default function CandidatesPage({ params }: { params: Promise<{ tenantSlu
         <h1 className="text-xl font-bold text-gray-900">Candidates</h1>
       </div>
       <div className={`${pageContent} flex-1 min-h-0 overflow-y-auto flex flex-col`}>
-        <p className="text-sm text-gray-500">Candidates will appear here.</p>
+        <CandidatesTable />
       </div>
     </div>
   );

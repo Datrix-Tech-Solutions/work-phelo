@@ -12,6 +12,7 @@ import {
   getConfiguredGatewayServices,
   getGatewayServiceUrl,
 } from '../config/runtime-env';
+import { isAllowedForCareersToken } from './careers-scope';
 
 const permissionsCache = new Map<
   string,
@@ -31,9 +32,11 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/google(?:\/callback)?$/,
   /^\/api\/v1\/auth\/microsoft(?:\/callback)?$/,
   /^\/api\/v1\/auth\/tenants\/register$/,
+  /^\/api\/v1\/auth\/recruiters\/(?:register|confirm-email|resend-confirmation|login)$/,
   /^\/api\/v1\/auth\/tenants\/slug\/[^/]+\/branding$/,
   /^\/api\/v1\/auth\/users\/accept-invite$/,
   /^\/api\/v1\/auth\/mfa\/send-sms$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/board$/,
   /^\/api\/v1\/hr\/recruitment\/public\/vacancies$/,
   /^\/api\/v1\/hr\/recruitment\/public\/vacancies\/[^/]+$/,
   /^\/api\/v1\/hr\/recruitment\/public\/vacancies\/[^/]+\/applications$/,
@@ -43,6 +46,9 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/questions$/,
   /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/review$/,
   /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/submit$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/documents$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/documents\/upload$/,
+  /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/documents\/[^/]+$/,
   /^\/api\/v1\/operations\/reinsurance\/health$/,
   /^\/api\/v1\/accounting\/health$/,
 ];
@@ -197,6 +203,18 @@ export class ProxyController {
           token,
           process.env.JWT_SECRET!,
         ) as JwtPayload;
+
+        // Tokens issued to the careers site may only reach the job-posting routes.
+        if (
+          payload.scope === 'careers' &&
+          !isAllowedForCareersToken(req.method, req.path)
+        ) {
+          return res.status(403).json({
+            message: 'This session cannot access this resource',
+            statusCode: 403,
+          });
+        }
+
         req.headers['x-user-id'] = payload.sub;
         req.headers['x-user-email'] = payload.email;
         req.headers['x-user-role'] = payload.role;

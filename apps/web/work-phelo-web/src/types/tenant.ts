@@ -1,5 +1,7 @@
 export type TenantStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
 
+export type TenantSource = 'PLATFORM' | 'WEBSITE';
+
 export interface Tenant {
   id: string;
   name: string;
@@ -12,6 +14,10 @@ export interface Tenant {
   industry?: string;
   size?: string;
   status: TenantStatus;
+  /** WEBSITE = a recruiter who signed up on the careers site. */
+  source?: TenantSource;
+  /** Shows the verified check mark next to the company on the careers site. */
+  isVerified?: boolean;
   createdAt: string;
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;
@@ -81,4 +87,5 @@ export interface Company {
   contact: string;
   industry: string;
   status: TenantStatus;
+  isVerified: boolean;
 }

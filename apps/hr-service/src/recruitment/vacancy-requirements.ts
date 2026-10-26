@@ -17,6 +17,43 @@ export const RECRUITMENT_EDUCATION_LEVELS = [
 export const RECRUITMENT_EDUCATION_LEVEL_CODES: string[] =
   RECRUITMENT_EDUCATION_LEVELS.map((level) => level.code);
 
+/**
+ * Maps what an applicant wrote as their highest education (a code, a label or free text such as
+ * "Bachelor Degree" or "BSc") to a ladder code. Null when it cannot be recognised.
+ */
+export function educationLevelCode(
+  raw: string | null | undefined,
+): string | null {
+  if (!raw) return null;
+  const asCode = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+  if (RECRUITMENT_EDUCATION_LEVEL_CODES.includes(asCode)) return asCode;
+  const text = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  const rules: Array<[RegExp, string]> = [
+    [/\b(phd|dphil|doctorate|doctoral)\b/, 'DOCTORATE'],
+    [
+      /\b(postgraduate|pgd)\b.*\b(diploma|pgd)\b|\bpgd\b/,
+      'POSTGRADUATE_DIPLOMA',
+    ],
+    [/\b(masters?|msc|mba|mphil|ma)\b/, 'MASTERS'],
+    [/\b(bachelors?|bsc|ba|beng|bed|first degree)\b/, 'BACHELORS'],
+    [/\b(hnd|higher national diploma)\b/, 'HND'],
+    [/\bdiploma\b/, 'DIPLOMA'],
+    [/\b(tvet|technical|vocational)\b/, 'TVET'],
+    [/\bcertificate\b/, 'CERTIFICATE'],
+    [/\b(shs|wassce|ssce|senior high|secondary)\b/, 'SHS'],
+    [/\b(jhs|bece|junior high)\b/, 'JHS'],
+    [/\b(primary|basic)\b/, 'BASIC_EDUCATION'],
+    [/\b(none|no formal)\b/, 'NO_FORMAL_EDUCATION'],
+  ];
+  return rules.find(([pattern]) => pattern.test(text))?.[1] ?? null;
+}
+
 export interface VacancyListRequirement {
   items: string[];
   required: boolean;

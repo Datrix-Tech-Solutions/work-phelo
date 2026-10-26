@@ -34,6 +34,7 @@ import { TenantAdminService } from './tenant-admin.service';
 import { TenantBrandingService } from './tenant-branding.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { QueryTenantsDto } from './dto/query-tenants.dto';
+import { SetTenantVerifiedDto } from './dto/set-tenant-verified.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
 import {
@@ -48,6 +49,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RequestUser } from '@work-phelo/types';
 import { Request } from 'express';
+import { Throttle } from '@nestjs/throttler';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 
 type AuthenticatedRequest = Request & { user: RequestUser };
 
@@ -75,27 +78,36 @@ export class TenantsController {
   ) {}
 
   @Post('register')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN')
-  @ApiBearerAuth('access-token')
+  @UseGuards(OptionalJwtAuthGuard)
+  @Throttle({
+    short: { limit: 2, ttl: 60_000 },
+    medium: { limit: 5, ttl: 3_600_000 },
+  })
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register a new company — SuperAdmin only' })
+  @ApiOperation({
+    summary: 'Public company registration',
+    description:
+      'Creates a pending workspace and emails a tenant-admin invitation. The admin sets a password and verifies email by accepting the invitation. No session is issued at registration.',
+  })
   @ApiResponse({
     status: 201,
-    description: 'Tenant created — OTP sent to admin email for verification',
+    description: 'Registration received; email invitation queued',
     schema: {
       example: {
-        message:
-          'Registration submitted. Check your email for verification code.',
-        tenantId: 'uuid',
-        tenantName: 'Acme Ghana Ltd',
-        tenantSlug: 'acme-ghana',
-        workspaceUrl: 'https://workphelo.com/acme-ghana/login',
-        userId: 'uuid',
+        status: 'PENDING_VERIFICATION',
+        message: 'Registration received. Check your email to continue setup.',
       },
     },
   })
-  @ApiResponse({ status: 409, description: 'Email or slug already exists' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or reserved workspace slug, or invalid request body',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Registration details are unavailable',
+  })
+  @ApiResponse({ status: 429, description: 'Registration rate limit exceeded' })
   @ApiBody({
     description: 'Tenant registration payload',
     schema: {
@@ -103,7 +115,6 @@ export class TenantsController {
         name: 'Acme Ghana Ltd',
         slug: 'acme-ghana',
         email: 'admin@acmeghana.com',
-        password: 'Admin123!',
         firstName: 'Abena',
         lastName: 'Mensah',
         phone: '+233244111001',
@@ -113,8 +124,11 @@ export class TenantsController {
       },
     },
   })
-  register(@Body() dto: CreateTenantDto) {
-    return this.lifecycle.register(dto);
+  register(
+    @Body() dto: CreateTenantDto,
+    @Req() req: Request & { user?: RequestUser },
+  ) {
+    return this.lifecycle.register(dto, req.user?.role === 'SUPER_ADMIN');
   }
 
   @Get()
@@ -128,6 +142,7 @@ export class TenantsController {
     required: false,
     enum: ['PENDING', 'ACTIVE', 'SUSPENDED', 'CANCELLED'],
   })
+  @ApiQuery({ name: 'source', required: false, enum: ['PLATFORM', 'WEBSITE'] })
   @ApiQuery({ name: 'search', required: false })
   @ApiResponse({ status: 200, description: 'Tenants list' })
   findAll(@Req() req: AuthenticatedRequest, @Query() query: QueryTenantsDto) {
@@ -444,6 +459,20 @@ export class TenantsController {
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   suspend(@Param('id') id: string) {
     return this.lifecycle.suspendTenant(id);
+  }
+
+  @Patch(':id/verified')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Set or remove the verified check mark — SuperAdmin only',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Verification updated' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  setVerified(@Param('id') id: string, @Body() dto: SetTenantVerifiedDto) {
+    return this.lifecycle.setVerified(id, dto.isVerified);
   }
 
   @Delete(':id')

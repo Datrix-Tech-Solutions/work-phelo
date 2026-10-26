@@ -58,6 +58,8 @@ export interface RecruitmentVacancy {
   salaryCurrency: string | null;
   status: JobOpeningStatus;
   applicantCount: number;
+  /** Minimum match score; applicants below it are rejected automatically. Null means none. */
+  cutoffScore: number | null;
   questions: RecruitmentVacancyQuestion[];
   createdAt: string;
   updatedAt: string;
@@ -167,9 +169,156 @@ export interface JobOpeningFormValues {
   salaryMax: string;
   salaryCurrency: string;
   /** What applicants are asked to provide. */
-  requireResume: boolean;
   requireCoverLetter: boolean;
   requestPortfolio: boolean;
   requestGithub: boolean;
   questions: JobOpeningQuestionRow[];
+}
+
+export interface RecruitmentStage {
+  id: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  isDefault: boolean;
+}
+
+/** A submitted application as listed on the candidates page. */
+export interface RecruitmentCandidate {
+  id: string;
+  vacancyId: string;
+  currentStageId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  city: string | null;
+  yearsOfExperience: number | null;
+  currentJobTitle: string | null;
+  currentEmployer: string | null;
+  skills: string[];
+  languages: string[];
+  certificates: string[];
+  highestEducationLevel: string | null;
+  /** 0–100, the current score: the application's match, blended with screening once reviewed. */
+  matchScore: number | null;
+  resumeUrl: string | null;
+  appliedAt: string;
+  submittedAt: string | null;
+  vacancy: { id: string; title: string | null };
+  currentStage: RecruitmentStage | null;
+}
+
+export interface RecruitmentCandidatePage {
+  items: RecruitmentCandidate[];
+  meta: { page: number; limit: number; total: number };
+}
+
+export interface CandidateExperience {
+  role: string;
+  company: string | null;
+  /** YYYY-MM, null when unknown. */
+  startDate: string | null;
+  /** YYYY-MM; null means the candidate still works there. */
+  endDate: string | null;
+  description: string | null;
+}
+
+export interface CandidateEducation {
+  school: string;
+  level: string | null;
+  startYear: number | null;
+  /** Null while still studying. */
+  endYear: number | null;
+}
+
+/** A reviewer's call on one screening answer. A question with no entry is still pending. */
+export type ScreeningDecision = 'ACCEPTED' | 'DECLINED';
+export type ScreeningDecisions = Record<string, ScreeningDecision>;
+
+export interface RecruitmentCandidateAnswer {
+  id: string;
+  questionId: string;
+  /** The reviewer's call on this answer; null until it has been reviewed. */
+  screeningDecision: ScreeningDecision | null;
+  question: string;
+  answer: string;
+  selectedOptions: string[];
+}
+
+/** A single candidate with everything the application collected. */
+export interface RecruitmentCandidateDetail extends RecruitmentCandidate {
+  professionalSummary: string | null;
+  skills: string[];
+  languages: string[];
+  /** School entries for the overview; derived from `education` when the API has no structure. */
+  educationHistory: CandidateEducation[];
+  /** Work history, newest first; derived from the current role when the API has no structure. */
+  experienceHistory: CandidateExperience[];
+  education: string | null;
+  expectedSalary: number | null;
+  expectedSalaryCurrency: string | null;
+  noticePeriod: string | null;
+  resumeFileName: string | null;
+  coverLetterUrl: string | null;
+  coverLetterFileName: string | null;
+  portfolioUrl: string | null;
+  githubUrl: string | null;
+  answers: RecruitmentCandidateAnswer[];
+}
+
+export interface RecruitmentStageHistoryEntry {
+  id: string;
+  previousStage: { id: string; name: string } | null;
+  newStage: { id: string; name: string };
+  changedByEmployee: { id: string; firstName: string; lastName: string } | null;
+  note: string | null;
+  changedAt: string;
+}
+
+export type InterviewMode = 'IN_PERSON' | 'VIDEO' | 'PHONE';
+export type InterviewStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+
+export interface CandidateInterview {
+  id: string;
+  title: string;
+  mode: InterviewMode;
+  status: InterviewStatus;
+  /** ISO date-time of the start. */
+  scheduledAt: string;
+  durationMinutes: number;
+  location: string | null;
+  interviewers: string[];
+  feedback: string | null;
+  /** Video: the meeting platform and join link. Phone: the number to call. */
+  platform?: string | null;
+  meetingLink?: string | null;
+  phone?: string | null;
+  /** Instructions or context the recruiter left for the interview. */
+  notes?: string | null;
+}
+
+/** What the schedule interview form collects. */
+export interface ScheduleInterviewInput {
+  candidateId: string;
+  mode: InterviewMode;
+  platform: string | null;
+  meetingLink: string | null;
+  phone: string | null;
+  location: string | null;
+  /** YYYY-MM-DD */
+  date: string;
+  /** HH:mm, 24-hour */
+  startTime: string;
+  durationMinutes: number;
+  notes: string | null;
+}
+
+/** Result of setting a cut-off: how many applicants moved (or would move on a dry run). */
+export interface CutoffResult {
+  cutoffScore: number | null;
+  rejected: number;
+  restored: number;
+  applied: boolean;
 }
