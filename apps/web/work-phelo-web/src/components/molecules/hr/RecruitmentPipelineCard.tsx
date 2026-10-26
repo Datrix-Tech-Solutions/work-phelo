@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
+import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { GaugeOverviewCard } from '@/components/molecules/shared/GaugeOverviewCard';
 import { usePermission } from '@/hooks/hr/usePermission';
@@ -20,6 +22,8 @@ export function RecruitmentPipelineCard({ className }: RecruitmentPipelineCardPr
   const canReadCandidates = usePermission(Permission.READ_RECRUITMENT_CANDIDATES);
   const canReadStages = usePermission(Permission.READ_RECRUITMENT_STAGES);
   const canReadVacancies = usePermission(Permission.READ_RECRUITMENT_VACANCIES);
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const [vacancyId, setVacancyId] = useState('');
 
   const { data: vacancies } = useJobOpenings({ limit: 100 });
@@ -74,17 +78,29 @@ export function RecruitmentPipelineCard({ className }: RecruitmentPipelineCardPr
       subtitle="Candidates in the hiring pipeline"
       className={className}
       headerAction={
-        canReadVacancies && vacancyOptions.length > 0 ? (
-          <SearchSelect
-            size="xs"
-            placeholder="Job opening"
-            allLabel="All job openings"
-            options={vacancyOptions}
-            value={vacancyId}
-            showAllOption
-            onChange={setVacancyId}
-          />
-        ) : undefined
+        <div className="flex items-center gap-2">
+          {canReadVacancies && vacancyOptions.length > 0 && (
+            <SearchSelect
+              size="xs"
+              placeholder="Job opening"
+              allLabel="All job openings"
+              options={vacancyOptions}
+              value={vacancyId}
+              showAllOption
+              onChange={setVacancyId}
+            />
+          )}
+          {(canReadVacancies || canReadCandidates) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-3 py-1 text-xs"
+              onClick={() => router.push(`/${tenantSlug}/hr/recruitment`)}
+            >
+              Manage
+            </Button>
+          )}
+        </div>
       }
       isLoading={isLoading}
       isEmpty={!canReadCandidates || total === 0}
