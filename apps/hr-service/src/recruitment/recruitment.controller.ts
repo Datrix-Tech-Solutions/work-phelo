@@ -38,19 +38,26 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
+  SetRecruitmentScreeningDecisionDto,
   UpdateRecruitmentApplicationAnswersDto,
   UpdateRecruitmentApplicationBasicInfoDto,
   UpdateRecruitmentApplicationProfessionalInfoDto,
   UpdateRecruitmentCandidateStageDto,
 } from './dto/candidate.dto';
 import {
+  CreateRecruitmentInterviewDto,
+  UpdateRecruitmentInterviewDto,
+} from './dto/interview.dto';
+import {
   CreateRecruitmentStageDto,
   UpdateRecruitmentStageDto,
 } from './dto/stage.dto';
 import {
   CreateRecruitmentVacancyDto,
+  QueryPublicRecruitmentBoardDto,
   QueryPublicRecruitmentVacanciesDto,
   QueryRecruitmentVacanciesDto,
+  SetRecruitmentCutoffDto,
   UpdateRecruitmentVacancyDto,
 } from './dto/vacancy.dto';
 import { RecruitmentService } from './recruitment.service';
@@ -88,6 +95,22 @@ export class RecruitmentPublicController {
   @ApiOkResponse({ description: 'Paginated public vacancy list' })
   listPublicVacancies(@Query() query: QueryPublicRecruitmentVacanciesDto) {
     return this.recruitmentService.listPublicVacancies(query);
+  }
+
+  @Get('board')
+  @ApiOperation({
+    summary: 'List open vacancies across all companies',
+    description:
+      'Public job board feed. Every OPEN vacancy that is still accepting applications is listed. Each item carries tenantId and id, which the vacancy detail and application endpoints require.',
+  })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'jobType', required: false })
+  @ApiQuery({ name: 'workMode', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiOkResponse({ description: 'Paginated public job board' })
+  listPublicBoard(@Query() query: QueryPublicRecruitmentBoardDto) {
+    return this.recruitmentService.listPublicBoard(query);
   }
 
   @Get('vacancies/:vacancyId')
@@ -408,6 +431,79 @@ export class RecruitmentController {
     );
   }
 
+  @Post('vacancies/:vacancyId/reopen')
+  @ApiTags('HR Recruitment - Vacancies')
+  @RequirePermissions(Permission.CLOSE_RECRUITMENT_VACANCY)
+  @ApiOperation({
+    summary: 'Reopen a closed recruitment vacancy',
+    description:
+      'Returns a CLOSED vacancy to OPEN so it accepts applications again. Fails if the closing date has passed.',
+  })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  @ApiOkResponse({ description: 'Recruitment vacancy reopened' })
+  reopenVacancy(
+    @Param('vacancyId') vacancyId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.reopenVacancy(
+      req.user.tenantId,
+      req.user,
+      vacancyId,
+    );
+  }
+
+  @Post('vacancies/:vacancyId/cutoff')
+  @ApiTags('HR Recruitment - Vacancies')
+  @RequirePermissions(Permission.UPDATE_RECRUITMENT_VACANCY)
+  @ApiOperation({
+    summary: 'Set or clear the match-score cut-off of a vacancy',
+    description:
+      'Applicants below the cut-off are moved to Rejected, now and as they apply. Applicants the cut-off rejected earlier return to the entry stage once they clear it. Use dryRun to preview the counts.',
+  })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  @ApiBody({ type: SetRecruitmentCutoffDto })
+  @ApiOkResponse({
+    description: 'Cut-off applied, with the number of applicants moved',
+  })
+  @ApiBadRequestResponse({
+    description: 'The vacancy has nothing to score against',
+  })
+  @ApiConflictResponse({ description: 'The tenant has no Rejected stage' })
+  setCutoff(
+    @Param('vacancyId') vacancyId: string,
+    @Body() dto: SetRecruitmentCutoffDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.setVacancyCutoff(
+      req.user.tenantId,
+      req.user,
+      vacancyId,
+      dto,
+    );
+  }
+
+  @Post('vacancies/:vacancyId/move-to-screening')
+  @ApiTags('HR Recruitment - Vacancies')
+  @RequirePermissions(Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE)
+  @ApiOperation({
+    summary: 'Move a vacancy’s applicants from the entry stage to Screening',
+    description:
+      'Moves every submitted applicant still in the entry stage into Screening and records stage history. Applicants a cut-off rejected are left in Rejected.',
+  })
+  @ApiParam({ name: 'vacancyId', description: 'Recruitment vacancy UUID' })
+  @ApiOkResponse({ description: 'How many applicants were moved' })
+  @ApiConflictResponse({ description: 'The tenant has no Screening stage' })
+  moveApplicantsToScreening(
+    @Param('vacancyId') vacancyId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.moveVacancyApplicantsToScreening(
+      req.user.tenantId,
+      req.user,
+      vacancyId,
+    );
+  }
+
   @Post('vacancies/:vacancyId/close')
   @ApiTags('HR Recruitment - Vacancies')
   @RequirePermissions(Permission.CLOSE_RECRUITMENT_VACANCY)
@@ -493,7 +589,7 @@ export class RecruitmentController {
 
   @Get('candidates')
   @ApiTags('HR Recruitment - Candidates')
-  @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
+  @RequirePermissions(Permission.READ_RECRUITMENT_APPLICANTS)
   @ApiOperation({
     summary: 'List recruitment candidates/applications',
     description:
@@ -555,12 +651,13 @@ export class RecruitmentController {
   }
 
   @Get('candidates/:candidateId/documents')
+  @RequireModule('hr')
   @ApiTags('HR Recruitment - Candidates')
   @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
   @ApiOperation({
     summary: 'Get recruitment candidate document references',
     description:
-      'Returns document/link references for submitted candidates only. Binary upload/storage is not part of this phase.',
+      'Returns private managed document metadata and explicitly marked legacy external references for submitted candidates only. Use the document download endpoint for a short-lived managed-file URL. Storage keys are never returned.',
   })
   @ApiParam({
     name: 'candidateId',
@@ -605,6 +702,36 @@ export class RecruitmentController {
     );
   }
 
+  @Patch('candidates/:candidateId/answers/:questionId/decision')
+  @ApiTags('HR Recruitment - Candidates')
+  @RequirePermissions(Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE)
+  @ApiOperation({
+    summary: 'Accept or decline a candidate screening answer',
+    description:
+      "Records the reviewer's call on one screening answer, or clears it with a null decision. It does not change the candidate's stage.",
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiParam({ name: 'questionId', description: 'Vacancy question UUID' })
+  @ApiBody({ type: SetRecruitmentScreeningDecisionDto })
+  @ApiOkResponse({ description: 'The candidate with the decision applied' })
+  setScreeningDecision(
+    @Param('candidateId') candidateId: string,
+    @Param('questionId') questionId: string,
+    @Body() dto: SetRecruitmentScreeningDecisionDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.setScreeningDecision(
+      req.user.tenantId,
+      req.user,
+      candidateId,
+      questionId,
+      dto.decision,
+    );
+  }
+
   @Get('candidates/:candidateId/stage-history')
   @ApiTags('HR Recruitment - Candidates')
   @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
@@ -625,6 +752,86 @@ export class RecruitmentController {
     return this.recruitmentService.getCandidateStageHistory(
       req.user.tenantId,
       candidateId,
+    );
+  }
+
+  @Get('candidates/:candidateId/interviews')
+  @ApiTags('HR Recruitment - Interviews')
+  @RequirePermissions(Permission.READ_RECRUITMENT_CANDIDATES)
+  @ApiOperation({
+    summary: 'List interviews for a recruitment candidate',
+    description:
+      'Returns every interview scheduled for a submitted candidate, soonest first.',
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiOkResponse({ description: 'Candidate interview list' })
+  listCandidateInterviews(
+    @Param('candidateId') candidateId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.listCandidateInterviews(
+      req.user.tenantId,
+      candidateId,
+    );
+  }
+
+  @Post('candidates/:candidateId/interviews')
+  @ApiTags('HR Recruitment - Interviews')
+  @RequirePermissions(Permission.SCHEDULE_RECRUITMENT_INTERVIEW)
+  @ApiOperation({
+    summary: 'Schedule an interview for a recruitment candidate',
+    description:
+      'Video interviews need a platform and an http(s) link, phone interviews a phone number, in-person interviews a location. The start time must be in the future.',
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiBody({ type: CreateRecruitmentInterviewDto })
+  @ApiCreatedResponse({ description: 'Interview scheduled' })
+  scheduleCandidateInterview(
+    @Param('candidateId') candidateId: string,
+    @Body() dto: CreateRecruitmentInterviewDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.scheduleCandidateInterview(
+      req.user.tenantId,
+      req.user,
+      candidateId,
+      dto,
+    );
+  }
+
+  @Patch('candidates/:candidateId/interviews/:interviewId')
+  @ApiTags('HR Recruitment - Interviews')
+  @RequirePermissions(Permission.SCHEDULE_RECRUITMENT_INTERVIEW)
+  @ApiOperation({
+    summary: 'Reschedule, complete or cancel a candidate interview',
+    description:
+      'Scheduled interviews can be rescheduled, edited, completed or cancelled. Completed interviews only accept feedback. Cancelled interviews are final.',
+  })
+  @ApiParam({
+    name: 'candidateId',
+    description: 'Recruitment application UUID',
+  })
+  @ApiParam({ name: 'interviewId', description: 'Interview UUID' })
+  @ApiBody({ type: UpdateRecruitmentInterviewDto })
+  @ApiOkResponse({ description: 'Interview updated' })
+  updateCandidateInterview(
+    @Param('candidateId') candidateId: string,
+    @Param('interviewId') interviewId: string,
+    @Body() dto: UpdateRecruitmentInterviewDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.recruitmentService.updateCandidateInterview(
+      req.user.tenantId,
+      req.user,
+      candidateId,
+      interviewId,
+      dto,
     );
   }
 }

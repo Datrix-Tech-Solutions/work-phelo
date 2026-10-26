@@ -25,6 +25,7 @@ export const EventPatterns = {
   HR_PROVISION_TENANT_WORKSPACE: 'hr.provision_tenant_workspace',
   HR_LINK_EMPLOYEE_IDENTITY: 'hr.link_employee_identity',
   HR_EMPLOYEE_AVATAR_UPDATED: 'hr.employee_avatar_updated',
+  HR_RECRUITMENT_EMPLOYER_UPDATED: 'hr.recruitment_employer_updated',
 
   // HR → Auth
   AUTH_INVITE_EMPLOYEE: 'auth.invite_employee',
@@ -143,6 +144,19 @@ export interface EmployeeAvatarUpdatedResult {
   synced: boolean;
 }
 
+/** What the public job board needs to know about a company that posts jobs. */
+export interface RecruitmentEmployerUpdatedEvent {
+  tenantId: string;
+  /** Shows the check mark next to the company name. */
+  isVerified: boolean;
+  /** Hides the company's jobs from the public board and stops applications. */
+  isBlocked: boolean;
+}
+
+export interface RecruitmentEmployerUpdatedResult {
+  synced: boolean;
+}
+
 // ── HR → Auth Events ───────────────────────────────────────────────────────
 
 export interface InviteEmployeeEvent {
@@ -242,7 +256,7 @@ export interface EmailVerificationEvent {
   tenantName: string;
 }
 
-export type InviteUserKind = 'EMPLOYEE' | 'TENANT_ADMIN';
+export type InviteUserKind = 'EMPLOYEE' | 'TENANT_ADMIN' | 'RECRUITER';
 
 export interface InviteUserEvent {
   userId?: string;

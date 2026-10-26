@@ -15,6 +15,7 @@ import {
   renderPasswordResetLinkTemplate,
   renderPayrollApprovalRequestedTemplate,
   renderPayrollDecisionTemplate,
+  renderRecruiterConfirmationEmailTemplate,
   renderResignationSubmittedTemplate,
   renderSchedulePublishedTemplate,
   renderShiftSwapTemplate,
@@ -30,6 +31,8 @@ export class EmailService {
   private readonly fromEmail: string;
   private readonly appName = 'WorkPhelo ERP';
   private readonly frontendBaseUrl: URL;
+  /** The careers site, where recruiter confirmation links point. */
+  private readonly careersSiteUrl: URL;
 
   constructor() {
     if (!process.env.RESEND_API_KEY)
@@ -41,6 +44,9 @@ export class EmailService {
     this.apiKey = process.env.RESEND_API_KEY;
     this.fromEmail = process.env.RESEND_FROM_EMAIL;
     this.frontendBaseUrl = new URL(process.env.FRONTEND_BASE_URL);
+    this.careersSiteUrl = new URL(
+      process.env.CAREERS_SITE_URL || 'http://localhost:3001',
+    );
   }
 
   private escapeHtml(value: unknown): string {
@@ -63,7 +69,10 @@ export class EmailService {
     return this.escapeHtml(value).replace(/\r?\n/g, '<br />');
   }
 
-  private sanitizeUrl(url?: string): string | undefined {
+  private sanitizeUrl(
+    url?: string,
+    allowedOrigin: URL = this.frontendBaseUrl,
+  ): string | undefined {
     if (!url) {
       return undefined;
     }
@@ -74,7 +83,7 @@ export class EmailService {
         return undefined;
       }
 
-      if (parsed.origin !== this.frontendBaseUrl.origin) {
+      if (parsed.origin !== allowedOrigin.origin) {
         this.logger.warn(`Blocked email URL with unexpected origin: ${url}`);
         return undefined;
       }
@@ -187,6 +196,23 @@ export class EmailService {
         firstName: this.escapeHtml(firstName),
         tenantName: this.escapeHtml(tenantName),
         acceptInviteUrl: this.sanitizeUrl(acceptInviteUrl),
+      }),
+    );
+  }
+
+  async sendRecruiterConfirmationEmail(
+    to: string,
+    firstName: string,
+    companyName: string,
+    confirmUrl: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Confirm your email — ${this.appName}`,
+      renderRecruiterConfirmationEmailTemplate({
+        firstName: this.escapeHtml(firstName),
+        companyName: this.escapeHtml(companyName),
+        confirmUrl: this.sanitizeUrl(confirmUrl, this.careersSiteUrl),
       }),
     );
   }

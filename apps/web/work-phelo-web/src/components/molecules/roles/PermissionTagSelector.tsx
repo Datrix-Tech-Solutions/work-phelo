@@ -72,12 +72,23 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
     ],
   },
   {
+    group: 'Recruitment',
+    tags: [
+      { key: 'view_vacancies', label: 'View Vacancies' },
+      { key: 'manage_vacancies', label: 'Manage Vacancies' },
+      { key: 'view_candidates', label: 'View Candidates' },
+      { key: 'manage_candidates', label: 'Manage Candidates' },
+      { key: 'view_hiring_settings', label: 'View Hiring Settings' },
+      { key: 'manage_hiring_settings', label: 'Manage Hiring Settings' },
+    ],
+  },
+  {
     group: 'Administrator',
     tags: [
       { key: 'operations_module_admin', label: 'Operations Admin', moduleKey: 'operations' },
       { key: 'accounting_module_admin', label: 'Accounting Admin', moduleKey: 'accounting' },
       { key: 'marketing_module_admin', label: 'Marketing Admin', moduleKey: 'marketing' },
-      { key: 'recruitment_module_admin', label: 'Recruitment Admin', moduleKey: 'recruitment' },
+      { key: 'recruitment_module_admin', label: 'Recruitment Admin' },
     ],
   },
 ];
@@ -265,8 +276,39 @@ export const PERMISSION_TAG_MAPPING: Record<
 
   accounting_module_admin: ACCOUNTING_ADMIN_PERMISSIONS,
 
-  // Other modules — UI-only for now, not yet linked to backend permissions
-  recruitment_module_admin: null,
+  // Recruitment — manage pills include the matching view, since an action is no use on a page that cannot open.
+  view_vacancies: [{ resource: 'recruitment.vacancies', action: 'VIEW' }],
+  manage_vacancies: [
+    { resource: 'recruitment.vacancies', action: 'VIEW' },
+    { resource: 'recruitment.vacancies', action: 'CREATE' },
+    { resource: 'recruitment.vacancies', action: 'EDIT' },
+  ],
+  view_candidates: [{ resource: 'recruitment.candidates', action: 'VIEW' }],
+  // Moving stages and scheduling interviews are both EDIT on candidates.
+  manage_candidates: [
+    { resource: 'recruitment.candidates', action: 'VIEW' },
+    { resource: 'recruitment.candidates', action: 'EDIT' },
+  ],
+  view_hiring_settings: [{ resource: 'recruitment.settings', action: 'VIEW' }],
+  manage_hiring_settings: [
+    { resource: 'recruitment.settings', action: 'VIEW' },
+    { resource: 'recruitment.settings', action: 'CREATE' },
+    { resource: 'recruitment.settings', action: 'EDIT' },
+    { resource: 'recruitment.settings', action: 'DELETE' },
+  ],
+
+  // Recruitment Admin — every recruitment permission.
+  recruitment_module_admin: [
+    { resource: 'recruitment.vacancies', action: 'VIEW' },
+    { resource: 'recruitment.vacancies', action: 'CREATE' },
+    { resource: 'recruitment.vacancies', action: 'EDIT' },
+    { resource: 'recruitment.candidates', action: 'VIEW' },
+    { resource: 'recruitment.candidates', action: 'EDIT' },
+    { resource: 'recruitment.settings', action: 'VIEW' },
+    { resource: 'recruitment.settings', action: 'CREATE' },
+    { resource: 'recruitment.settings', action: 'EDIT' },
+    { resource: 'recruitment.settings', action: 'DELETE' },
+  ],
 };
 
 /** Build the resources DTO from selected tags + auto self-service permissions. */

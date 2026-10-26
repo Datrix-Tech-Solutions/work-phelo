@@ -6,10 +6,18 @@ import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { ShareJobOpeningModal } from './ShareJobOpeningModal';
 import { Badge, BadgeProps } from '@/components/atoms/Badge';
+import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/hr/usePermission';
-import { useCloseJobOpening, useJobOpenings } from '@/hooks/hr/useRecruitment';
+import {
+  useCloseJobOpening,
+  useJobOpenings,
+  usePublishJobOpening,
+  useReopenJobOpening,
+} from '@/hooks/hr/useRecruitment';
 import { Permission } from '@/lib/permissionMap';
 import { formatDate } from '@/lib/formatters';
 import { extractError } from '@/lib/extractError';
@@ -17,6 +25,9 @@ import type { EmploymentType } from '@/types/hr';
 import type { JobOpeningStatus, RecruitmentVacancy } from '@/types/recruitment';
 
 const PAGE_SIZE = 8;
+const CAREERS_SITE_URL = (
+  process.env.NEXT_PUBLIC_CAREERS_SITE_URL ?? 'https://workphelodotcom.vercel.app'
+).replace(/\/$/, '');
 
 const TYPE_LABELS: Record<EmploymentType, string> = {
   FULL_TIME: 'Full Time',
@@ -31,9 +42,15 @@ const STATUS_BADGES: Record<JobOpeningStatus, { label: string; variant: BadgePro
   CLOSED: { label: 'Closed', variant: 'danger' },
 };
 
+const STATUS_OPTIONS = (Object.keys(STATUS_BADGES) as JobOpeningStatus[]).map((value) => ({
+  value,
+  label: STATUS_BADGES[value].label,
+}));
+
 export function JobOpeningsTable() {
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
+  const tenantId = useAuthStore((s) => s.user?.tenantId);
   const toast = useToast();
   const canCreate = usePermission(Permission.CREATE_RECRUITMENT_VACANCY);
   const canUpdate = usePermission(Permission.UPDATE_RECRUITMENT_VACANCY);
@@ -41,20 +58,33 @@ export function JobOpeningsTable() {
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [status, setStatus] = useState<JobOpeningStatus | ''>('');
   const [page, setPage] = useState(1);
   const [closeTarget, setCloseTarget] = useState<RecruitmentVacancy | null>(null);
+  const [publishTarget, setPublishTarget] = useState<RecruitmentVacancy | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<RecruitmentVacancy | null>(null);
+  const [shareTarget, setShareTarget] = useState<RecruitmentVacancy | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useJobOpenings({ search: debouncedSearch, page, limit: PAGE_SIZE });
+  const { data, isLoading } = useJobOpenings({
+    search: debouncedSearch,
+    status: status || undefined,
+    page,
+    limit: PAGE_SIZE,
+  });
   const { mutate: closeJobOpening, isPending: isClosing } = useCloseJobOpening();
+  const { mutate: publishJobOpening, isPending: isPublishing } = usePublishJobOpening();
+  const { mutate: reopenJobOpening, isPending: isReopening } = useReopenJobOpening();
 
   const openings = data?.items ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.meta.total ?? 0) / PAGE_SIZE));
   const basePath = `/${params.tenantSlug}/hr/recruitment/job-openings`;
+  const shareLink =
+    shareTarget && tenantId ? `${CAREERS_SITE_URL}/jobs/${tenantId}_${shareTarget.id}/apply` : '';
 
   const columns: Column<RecruitmentVacancy>[] = [
     {
@@ -118,10 +148,52 @@ export function JobOpeningsTable() {
     ...(canUpdate
       ? [{ label: 'Edit', onClick: () => router.push(`${basePath}/${row.id}/edit`) }]
       : []),
+    ...(canUpdate && row.status === 'DRAFT'
+      ? [{ label: 'Publish', onClick: () => setPublishTarget(row) }]
+      : []),
+    ...(row.status === 'OPEN' ? [{ label: 'Share', onClick: () => setShareTarget(row) }] : []),
+    ...(row.status === 'OPEN'
+      ? [
+          {
+            label: 'View on site',
+            onClick: () =>
+              window.open(
+                `${CAREERS_SITE_URL}/dashboard/jobs/${row.id}`,
+                '_blank',
+                'noopener,noreferrer',
+              ),
+          },
+        ]
+      : []),
+    ...(canClose && row.status === 'CLOSED'
+      ? [{ label: 'Reopen', onClick: () => setReopenTarget(row) }]
+      : []),
     ...(canClose && row.status !== 'CLOSED'
       ? [{ label: 'Close', danger: true, onClick: () => setCloseTarget(row) }]
       : []),
   ];
+
+  const confirmPublish = () => {
+    if (!publishTarget) return;
+    publishJobOpening(publishTarget.id, {
+      onSuccess: () => {
+        toast.success('Job opening published');
+        setPublishTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to publish job opening')),
+    });
+  };
+
+  const confirmReopen = () => {
+    if (!reopenTarget) return;
+    reopenJobOpening(reopenTarget.id, {
+      onSuccess: () => {
+        toast.success('Job opening reopened');
+        setReopenTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to reopen job opening')),
+    });
+  };
 
   const confirmClose = () => {
     if (!closeTarget) return;
@@ -146,12 +218,27 @@ export function JobOpeningsTable() {
           setSearch(q);
           setPage(1);
         }}
+        extraFilters={
+          <SearchSelect
+            size="sm"
+            placeholder="Status"
+            allLabel="All statuses"
+            options={STATUS_OPTIONS}
+            value={status}
+            showAllOption
+            onChange={(v) => {
+              setStatus(v as JobOpeningStatus | '');
+              setPage(1);
+            }}
+          />
+        }
         {...(canCreate && {
           actionButton: {
             label: 'New Job Opening',
             onClick: () => router.push(`${basePath}/new`),
           },
         })}
+        onRowClick={(row) => router.push(`${basePath}/${row.id}`)}
         rowActions={rowActions}
         singleActionAsButton={false}
         emptyMessage="No job openings found"
@@ -159,6 +246,46 @@ export function JobOpeningsTable() {
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
+      />
+
+      <ShareJobOpeningModal
+        opening={shareTarget}
+        link={shareLink}
+        onClose={() => setShareTarget(null)}
+      />
+
+      <Modal
+        isOpen={!!publishTarget}
+        onClose={() => setPublishTarget(null)}
+        title="Publish Job Opening"
+        description={`Publish "${publishTarget?.title ?? 'this job opening'}"? It will appear on the public job board and start accepting applications.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setPublishTarget(null)}>
+              Cancel
+            </Button>
+            <Button isLoading={isPublishing} loadingText="Publishing…" onClick={confirmPublish}>
+              Publish
+            </Button>
+          </div>
+        }
+      />
+
+      <Modal
+        isOpen={!!reopenTarget}
+        onClose={() => setReopenTarget(null)}
+        title="Reopen Job Opening"
+        description={`Reopen "${reopenTarget?.title ?? 'this job opening'}"? It will appear on the public job board and accept applications again.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setReopenTarget(null)}>
+              Cancel
+            </Button>
+            <Button isLoading={isReopening} loadingText="Reopening…" onClick={confirmReopen}>
+              Reopen
+            </Button>
+          </div>
+        }
       />
 
       <Modal

@@ -123,6 +123,35 @@ export class DashboardController {
     return this.dashboardService.getUpcomingBirthdays(req.user.tenantId);
   }
 
+  @Get('upcoming-events')
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
+  @ApiOperation({
+    summary:
+      'Birthdays, work anniversaries and probation or contract end dates in the next 30 days',
+  })
+  @ApiResponse({ status: 200, description: 'Upcoming events returned' })
+  getUpcomingEvents(@Req() req: AuthenticatedRequest) {
+    return this.dashboardService.getUpcomingEvents(req.user.tenantId);
+  }
+
+  @Get('out-today')
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
+  @ApiOperation({ summary: 'Employees on approved leave today' })
+  @ApiResponse({ status: 200, description: 'Employees out today returned' })
+  getOutToday(@Req() req: AuthenticatedRequest) {
+    return this.dashboardService.getOutToday(req.user.tenantId);
+  }
+
+  @Get('payroll-status')
+  @RequirePermissions(Permission.READ_PAYROLL)
+  @ApiOperation({
+    summary: 'Status and net total of the payroll runs for the latest period',
+  })
+  @ApiResponse({ status: 200, description: 'Payroll status returned' })
+  getPayrollStatus(@Req() req: AuthenticatedRequest) {
+    return this.dashboardService.getPayrollStatus(req.user.tenantId);
+  }
+
   @Get('recently-added')
   @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({ summary: 'Get last 5 employees added to the company' })

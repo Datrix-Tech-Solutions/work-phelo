@@ -596,6 +596,50 @@ export interface UpcomingBirthday {
   avatarUrl?: string;
 }
 
+export type UpcomingEventType =
+  | 'BIRTHDAY'
+  | 'WORK_ANNIVERSARY'
+  | 'PROBATION_ENDS'
+  | 'CONTRACT_ENDS';
+
+export interface UpcomingEvent {
+  id: string;
+  type: UpcomingEventType;
+  employeeId: string;
+  employeeName: string;
+  department: string | null;
+  avatarUrl: string | null;
+  /** YYYY-MM-DD. */
+  date: string;
+  /** Years of service for an anniversary; null for the other types. */
+  years: number | null;
+}
+
+export interface OutTodayEntry {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string | null;
+  avatarUrl: string | null;
+  leaveType: string;
+  /** Last day of the leave, YYYY-MM-DD. */
+  endDate: string;
+}
+
+export interface PayrollStatusRun {
+  id: string;
+  payslipKey: string;
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+  totalNet: number;
+  employees: number;
+}
+
+export interface PayrollStatus {
+  period: { month: number; year: number } | null;
+  currency: string;
+  runs: PayrollStatusRun[];
+}
+
 export interface DashboardSummary {
   adminFirstName: string;
   companyName: string;

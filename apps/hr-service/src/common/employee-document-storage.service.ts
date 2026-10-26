@@ -35,6 +35,15 @@ export interface StoredEmployeeDocument {
   sizeBytes: number;
 }
 
+interface StorePrivateDocumentInput {
+  tenantId: string;
+  body: Buffer;
+  contentType: string;
+  originalFileName: string;
+  path: string[];
+  metadata: Record<string, string>;
+}
+
 export interface SignedEmployeeDocument {
   readUrl: string;
   expiresAt: string;
@@ -54,6 +63,49 @@ export class EmployeeDocumentStorageService {
 
   async store(
     input: StoreEmployeeDocumentInput,
+  ): Promise<StoredEmployeeDocument> {
+    return this.storePrivate({
+      ...input,
+      path: ['employee-document', 'employees', input.employeeId],
+      metadata: { tenantId: input.tenantId, employeeId: input.employeeId },
+    });
+  }
+
+  async storeRecruitmentDocument(input: {
+    tenantId: string;
+    applicationId: string;
+    documentId: string;
+    body: Buffer;
+    contentType: string;
+    originalFileName: string;
+  }): Promise<StoredEmployeeDocument> {
+    const provider = this.env(
+      'AUTH_TENANT_ASSET_STORAGE_PROVIDER',
+      's3',
+    ).toLowerCase();
+    if (provider !== 's3' && provider !== 'cloudinary') {
+      throw new InternalServerErrorException(
+        'Document storage provider is not configured correctly',
+      );
+    }
+    return this.storePrivate({
+      ...input,
+      path: [
+        'recruitment',
+        'applications',
+        input.applicationId,
+        'documents',
+        input.documentId,
+      ],
+      metadata: {
+        tenantId: input.tenantId,
+        applicationId: input.applicationId,
+      },
+    });
+  }
+
+  private async storePrivate(
+    input: StorePrivateDocumentInput,
   ): Promise<StoredEmployeeDocument> {
     return this.env('AUTH_TENANT_ASSET_STORAGE_PROVIDER', 's3')
       .trim()
@@ -83,7 +135,7 @@ export class EmployeeDocumentStorageService {
   // ── S3 ───────────────────────────────────────────────────────────────────
 
   private async storeS3(
-    input: StoreEmployeeDocumentInput,
+    input: StorePrivateDocumentInput,
   ): Promise<StoredEmployeeDocument> {
     const bucket = this.requireEnv('AUTH_TENANT_ASSET_S3_BUCKET');
     const fileName = this.safeFileName(input.originalFileName);
@@ -93,9 +145,7 @@ export class EmployeeDocumentStorageService {
       ),
       'tenants',
       input.tenantId,
-      'employee-document',
-      'employees',
-      input.employeeId,
+      ...input.path,
       `${randomUUID()}-${fileName}`,
     ]
       .filter(Boolean)
@@ -107,7 +157,7 @@ export class EmployeeDocumentStorageService {
         Key: objectKey,
         Body: input.body,
         ContentType: input.contentType,
-        Metadata: { tenantId: input.tenantId, employeeId: input.employeeId },
+        Metadata: input.metadata,
       }),
     );
 
@@ -173,7 +223,7 @@ export class EmployeeDocumentStorageService {
   // ── Cloudinary ───────────────────────────────────────────────────────────
 
   private async storeCloudinary(
-    input: StoreEmployeeDocumentInput,
+    input: StorePrivateDocumentInput,
   ): Promise<StoredEmployeeDocument> {
     this.configureCloudinary();
     const fileName = this.safeFileName(input.originalFileName);
@@ -192,7 +242,7 @@ export class EmployeeDocumentStorageService {
           {
             resource_type: resourceType,
             type: CLOUDINARY_DELIVERY_TYPE,
-            folder: this.cloudinaryFolder(input.tenantId, input.employeeId),
+            folder: this.cloudinaryFolder(input.tenantId, input.path),
             public_id: randomUUID(),
             overwrite: false,
             unique_filename: false,
@@ -301,15 +351,15 @@ export class EmployeeDocumentStorageService {
   private configureCloudinary(): void {
     if (this.cloudinaryConfigured) return;
     cloudinary.config({
-      cloud_name: this.env('CLOUDINARY_CLOUD_NAME'),
-      api_key: this.env('CLOUDINARY_API_KEY'),
-      api_secret: this.env('CLOUDINARY_API_SECRET'),
+      cloud_name: this.requireEnv('CLOUDINARY_CLOUD_NAME'),
+      api_key: this.requireEnv('CLOUDINARY_API_KEY'),
+      api_secret: this.requireEnv('CLOUDINARY_API_SECRET'),
       secure: true,
     });
     this.cloudinaryConfigured = true;
   }
 
-  private cloudinaryFolder(tenantId: string, employeeId: string): string {
+  private cloudinaryFolder(tenantId: string, path: string[]): string {
     return [
       this.cleanPrefix(
         this.env('AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER', ''),
@@ -319,9 +369,7 @@ export class EmployeeDocumentStorageService {
       ),
       'tenants',
       tenantId,
-      'employee-document',
-      'employees',
-      employeeId,
+      ...path,
     ]
       .filter(Boolean)
       .join('/');

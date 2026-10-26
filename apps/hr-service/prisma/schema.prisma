@@ -372,6 +372,14 @@ enum RecruitmentVacancyStatus {
   @@schema("hr")
 }
 
+/// A reviewer's call on one screening answer. No value means it has not been reviewed yet.
+enum RecruitmentScreeningDecision {
+  ACCEPTED
+  DECLINED
+
+  @@schema("hr")
+}
+
 enum RecruitmentQuestionType {
   SHORT_ANSWER
   PARAGRAPH
@@ -395,6 +403,22 @@ enum RecruitmentSalaryType {
 enum RecruitmentApplicationStatus {
   DRAFT
   SUBMITTED
+
+  @@schema("hr")
+}
+
+enum RecruitmentInterviewMode {
+  VIDEO
+  PHONE
+  IN_PERSON
+
+  @@schema("hr")
+}
+
+enum RecruitmentInterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
 
   @@schema("hr")
 }
@@ -536,6 +560,7 @@ model Employee {
   projectMemberships    ProjectMember[]
   assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
   recruitmentStageMoves RecruitmentStageHistory[]   @relation("RecruitmentStageChangedBy")
+  scheduledInterviews   RecruitmentInterview[]      @relation("RecruitmentInterviewScheduledBy")
   offboarding           OffboardingRecord?
   resignation           ResignationRecord?
 
@@ -640,9 +665,23 @@ model ProjectActivity {
 
 // ── Recruitment ───────────────────────────────────────────────────────────
 
+/// What auth-service tells HR about a company that posts jobs. No row means a normal,
+/// verified, unblocked company; rows exist for website recruiters and blocked companies.
+model RecruitmentEmployer {
+  tenantId   String   @id
+  isVerified Boolean  @default(false)
+  isBlocked  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  @@schema("hr")
+}
+
 model RecruitmentVacancy {
   id               String                   @id @default(uuid())
   tenantId         String
+  /// Snapshot of the tenant's name when the vacancy was saved; shown on the public job board,
+  /// which lists openings across companies.
+  companyName      String?
   title            String?
   departmentId     String?
   branchId         String?
@@ -675,6 +714,9 @@ model RecruitmentVacancy {
   updatedByUserId  String?
   closedAt         DateTime?
   closedByUserId   String?
+  /// Minimum match score (0-100). Applicants scoring below it are moved to the Rejected stage
+  /// automatically. Null means no cut-off.
+  cutoffScore      Int?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
@@ -689,6 +731,7 @@ model RecruitmentVacancy {
   @@index([tenantId, departmentId])
   @@index([tenantId, branchId])
   @@index([tenantId, closingDate])
+  @@index([status, createdAt])
   @@schema("hr")
 }
 
@@ -734,11 +777,49 @@ model RecruitmentStage {
   @@schema("hr")
 }
 
+enum RecruitmentDocumentType {
+  RESUME
+  COVER_LETTER
+  OTHER
+
+  @@schema("hr")
+}
+
+enum RecruitmentDocumentStatus {
+  ACTIVE
+  RETIRED
+
+  @@schema("hr")
+}
+
+model RecruitmentApplicationDocument {
+  id               String                    @id @default(uuid())
+  tenantId         String
+  applicationId    String
+  type             RecruitmentDocumentType
+  originalFileName String
+  storageKey       String
+  mimeType         String
+  sizeBytes        Int
+  status           RecruitmentDocumentStatus @default(ACTIVE)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  application RecruitmentApplication @relation(fields: [tenantId, applicationId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, applicationId, status])
+  @@schema("hr")
+}
+
 model RecruitmentApplication {
   id                     String                       @id @default(uuid())
   tenantId               String
   vacancyId              String
   currentStageId         String?
+  /// Set while the applicant sits in Rejected because of the vacancy's cut-off; cleared as soon
+  /// as a person moves them, so the cut-off never undoes a recruiter's decision.
+  autoRejectedAt         DateTime?
+  autoRejectedScore      Int?
   status                 RecruitmentApplicationStatus @default(DRAFT)
   accessTokenHash        String?                      @unique
   submittedAt            DateTime?
@@ -750,6 +831,13 @@ model RecruitmentApplication {
   city                   String?
   professionalSummary    String?
   skills                 String[]                     @default([])
+  /// Languages and certificates the applicant selected from the vacancy's lists.
+  languages              String[]                     @default([])
+  certificates           String[]                     @default([])
+  /// Structured qualifications: [{ level, qualification, institution }].
+  educationHistory       Json?
+  /// Structured work history: [{ role, company, start, end }] with `YYYY-MM` dates.
+  workHistory            Json?
   education              String?
   yearsOfExperience      Int?
   currentJobTitle        String?
@@ -769,11 +857,14 @@ model RecruitmentApplication {
   createdAt              DateTime                     @default(now())
   updatedAt              DateTime                     @updatedAt
 
-  vacancy      RecruitmentVacancy             @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
-  currentStage RecruitmentStage?              @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
-  stageHistory RecruitmentStageHistory[]
-  answers      RecruitmentApplicationAnswer[]
+  vacancy          RecruitmentVacancy               @relation(fields: [vacancyId], references: [id], onDelete: Restrict)
+  currentStage     RecruitmentStage?                @relation(fields: [currentStageId], references: [id], onDelete: Restrict)
+  stageHistory     RecruitmentStageHistory[]
+  answers          RecruitmentApplicationAnswer[]
+  interviews       RecruitmentInterview[]
+  managedDocuments RecruitmentApplicationDocument[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, vacancyId])
   @@index([tenantId, currentStageId])
   @@index([tenantId, status])
@@ -794,6 +885,11 @@ model RecruitmentApplicationAnswer {
   answerText       String?
   selectedOptions  String[] @default([])
   createdAt        DateTime @default(now())
+
+  /// Set by a reviewer while screening; part of the screening share of the match score.
+  screeningDecision        RecruitmentScreeningDecision?
+  screeningDecidedAt       DateTime?
+  screeningDecidedByUserId String?
 
   application RecruitmentApplication     @relation(fields: [applicationId], references: [id], onDelete: Restrict)
   question    RecruitmentVacancyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
@@ -822,6 +918,33 @@ model RecruitmentStageHistory {
 
   @@index([tenantId, applicationId, changedAt])
   @@index([tenantId, newStageId])
+  @@schema("hr")
+}
+
+model RecruitmentInterview {
+  id                  String                     @id @default(uuid())
+  tenantId            String
+  applicationId       String
+  mode                RecruitmentInterviewMode
+  status              RecruitmentInterviewStatus @default(SCHEDULED)
+  scheduledAt         DateTime
+  durationMinutes     Int
+  platform            String?
+  meetingLink         String?
+  phone               String?
+  location            String?
+  notes               String?
+  feedback            String?
+  createdByUserId     String?
+  createdByEmployeeId String?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  application       RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  createdByEmployee Employee?              @relation("RecruitmentInterviewScheduledBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, applicationId, scheduledAt])
+  @@index([tenantId, status, scheduledAt])
   @@schema("hr")
 }
 

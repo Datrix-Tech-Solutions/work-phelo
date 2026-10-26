@@ -25,7 +25,7 @@ import { ForceResetPasswordDto } from './dto/force-reset-password.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
-import { RequestUser } from '@work-phelo/types';
+import { RequestUser, TokenScope } from '@work-phelo/types';
 import { generateSecureToken } from '../common/otp.helper';
 import { normalizeEmail } from '../common/email.helper';
 
@@ -81,6 +81,7 @@ export class AuthService {
       integrationConfig: unknown;
       labelConfig?: unknown;
     },
+    scope?: TokenScope,
   ) {
     const payload = {
       sub: user.id,
@@ -100,10 +101,17 @@ export class AuthService {
       integrationConfig:
         (tenant.integrationConfig as Record<string, boolean>) ?? {},
       // Permissions omitted — gateway fetches them from /me on each request.
+      ...(scope ? { scope } : {}),
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    // The refresh token carries the scope too, so a refreshed token keeps it.
     const refreshToken = this.jwtService.sign(
-      { sub: user.id, type: 'refresh', jti: randomUUID() },
+      {
+        sub: user.id,
+        type: 'refresh',
+        jti: randomUUID(),
+        ...(scope ? { scope } : {}),
+      },
       { expiresIn: '8h' },
     );
     return { accessToken, refreshToken };
@@ -182,7 +190,12 @@ export class AuthService {
   }
 
   // ── Login ───────────────────────────────────────────────────────────────
-  async login(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+  async login(
+    dto: LoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+    scope?: TokenScope,
+  ) {
     const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
@@ -250,6 +263,7 @@ export class AuthService {
     const { accessToken, refreshToken } = await this.generateTokens(
       user,
       tenant,
+      scope,
     );
     await this.storeRefreshToken(user.id, refreshToken, ipAddress, userAgent);
     await this.prisma.user.update({
@@ -480,9 +494,14 @@ export class AuthService {
       data: { isRevoked: true },
     });
 
+    // A refreshed token keeps the scope the session started with.
+    const decoded = this.jwtService.decode<{ scope?: TokenScope } | null>(
+      dto.refreshToken,
+    );
     const { accessToken, refreshToken } = await this.generateTokens(
       storedToken.user,
       storedToken.user.tenant,
+      decoded?.scope === 'careers' ? 'careers' : undefined,
     );
     await this.storeRefreshToken(storedToken.userId, refreshToken);
 

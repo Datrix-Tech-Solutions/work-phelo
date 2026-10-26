@@ -1,13 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Tenant, RegisterTenantPayload, AuditData } from '@/types/tenant';
+import { Tenant, TenantSource, RegisterTenantPayload, AuditData } from '@/types/tenant';
 
-export function useTenants() {
+/** Pass a source to list only normal companies (PLATFORM) or only careers-site recruiters (WEBSITE). */
+export function useTenants(source?: TenantSource) {
   return useQuery({
-    queryKey: ['tenants'],
+    queryKey: ['tenants', source ?? 'all'],
     queryFn: async () => {
-      const res = await api.get<{ tenants: Tenant[] }>('/auth/tenants');
+      const res = await api.get<{ tenants: Tenant[] }>('/auth/tenants', {
+        params: source ? { source } : undefined,
+      });
       return res.data.tenants;
+    },
+  });
+}
+
+export function useSetTenantVerified() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ tenantId, isVerified }: { tenantId: string; isVerified: boolean }) => {
+      const res = await api.patch(`/auth/tenants/${tenantId}/verified`, { isVerified });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
 }

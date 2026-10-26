@@ -57,6 +57,8 @@ export function inferFileKind(mimeType: string): DocumentFileKind {
 }
 
 export function formatFileSize(bytes: number): string {
+  // Zero means the size isn't known (e.g. a link to a file hosted elsewhere).
+  if (bytes <= 0) return '—';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

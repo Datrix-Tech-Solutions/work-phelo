@@ -92,6 +92,31 @@ export function renderTenantAdminWelcomeEmailTemplate(input: {
   });
 }
 
+export function renderRecruiterConfirmationEmailTemplate(input: {
+  firstName: string;
+  companyName: string;
+  confirmUrl?: string;
+}): string {
+  return renderStandardEmail({
+    title: 'Confirm your email',
+    heading: 'Confirm your email address',
+    bodyHtml: `
+      <p>Hi ${input.firstName},</p>
+      <p>
+        Thanks for registering <strong>${input.companyName}</strong> on WorkPhelo. Confirm your email address to start posting jobs and reviewing applicants.
+      </p>
+      ${
+        input.confirmUrl
+          ? `<p style="margin:30px 0;">${renderPrimaryButton('Confirm Email →', input.confirmUrl)}</p>`
+          : ''
+      }
+      <p style="color:#777;">
+        This link expires in 48 hours. If you did not create this account, you can safely ignore this email.
+      </p>
+    `,
+  });
+}
+
 export function renderPasswordResetLinkTemplate(input: {
   appName: string;
   firstName: string;

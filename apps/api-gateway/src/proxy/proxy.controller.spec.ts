@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import * as jwt from 'jsonwebtoken';
 import { ProxyController } from './proxy.controller';
 
 function mockCreateProxyRequest(
@@ -74,6 +75,21 @@ describe('ProxyController Reinsurance foundation', () => {
     });
   });
 
+  it('allows only the exact tenant registration path without gateway auth', () => {
+    const controller = new ProxyController() as unknown as {
+      isPublicPath(path: string): boolean;
+    };
+
+    expect(controller.isPublicPath('/api/v1/auth/tenants/register')).toBe(true);
+    expect(controller.isPublicPath('/api/v1/auth/tenants')).toBe(false);
+    expect(
+      controller.isPublicPath('/api/v1/auth/tenants/tenant-1/approve'),
+    ).toBe(false);
+    expect(controller.isPublicPath('/api/v1/auth/tenants/register/extra')).toBe(
+      false,
+    );
+  });
+
   it('maps the Accounting route to the Accounting service boundary', () => {
     const controller = new ProxyController() as unknown as {
       resolveDownstream(pathParts: string[]): {
@@ -133,6 +149,41 @@ describe('ProxyController Reinsurance foundation', () => {
     expect(status).toHaveBeenCalledWith(401);
   });
 
+  it('refuses careers-site tokens outside the job-posting routes', async () => {
+    process.env.HR_SERVICE_URL = 'http://hr-service:4002';
+    const token = jwt.sign(
+      {
+        sub: 'user-1',
+        email: 'a@acme.test',
+        role: 'TENANT_ADMIN',
+        tenantId: 'tenant-1',
+        tenantSlug: 'acme',
+        scope: 'careers',
+      },
+      process.env.JWT_SECRET!,
+    );
+    const controller = new ProxyController();
+    const request = {
+      path: '/api/v1/hr/employees',
+      headers: { authorization: `Bearer ${token}` },
+      cookies: {},
+      method: 'GET',
+      url: '/api/v1/hr/employees',
+    };
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const createProxyRequest = jest.spyOn(
+      controller as unknown as { createProxyRequest: () => unknown },
+      'createProxyRequest',
+    );
+
+    await controller.proxy(request as never, { status } as never);
+
+    expect(status).toHaveBeenCalledWith(403);
+    expect(createProxyRequest).not.toHaveBeenCalled();
+    delete process.env.HR_SERVICE_URL;
+  });
+
   it('makes only applicant-facing recruitment routes public', () => {
     const controller = new ProxyController() as unknown as {
       isPublicPath(path: string): boolean;
@@ -148,6 +199,9 @@ describe('ProxyController Reinsurance foundation', () => {
       '/api/v1/hr/recruitment/public/applications/application-1/questions',
       '/api/v1/hr/recruitment/public/applications/application-1/review',
       '/api/v1/hr/recruitment/public/applications/application-1/submit',
+      '/api/v1/hr/recruitment/public/applications/application-1/documents',
+      '/api/v1/hr/recruitment/public/applications/application-1/documents/upload',
+      '/api/v1/hr/recruitment/public/applications/application-1/documents/document-1',
     ]) {
       expect(controller.isPublicPath(path)).toBe(true);
     }
@@ -155,6 +209,11 @@ describe('ProxyController Reinsurance foundation', () => {
     expect(controller.isPublicPath('/api/v1/hr/recruitment/vacancies')).toBe(
       false,
     );
+    expect(
+      controller.isPublicPath(
+        '/api/v1/hr/recruitment/candidates/application-1/documents/document-1/download',
+      ),
+    ).toBe(false);
     expect(
       controller.isPublicPath(
         '/api/v1/hr/recruitment/candidates/application-1',

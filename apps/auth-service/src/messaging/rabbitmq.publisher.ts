@@ -13,6 +13,8 @@ import {
   EmailVerificationEvent,
   InviteUserEvent,
   PasswordResetLinkEvent,
+  RecruitmentEmployerUpdatedEvent,
+  RecruitmentEmployerUpdatedResult,
   PasswordResetOtpEvent,
   SmsOtpEvent,
   EmployeeAvatarUpdatedEvent,
@@ -225,6 +227,18 @@ export class RabbitMQPublisher {
     return this.request(
       this.hrClient,
       EventPatterns.HR_EMPLOYEE_AVATAR_UPDATED,
+      data,
+      correlationId,
+    );
+  }
+
+  hrRecruitmentEmployerUpdated(
+    data: RecruitmentEmployerUpdatedEvent,
+    correlationId?: string,
+  ): Promise<RecruitmentEmployerUpdatedResult> {
+    return this.request(
+      this.hrClient,
+      EventPatterns.HR_RECRUITMENT_EMPLOYER_UPDATED,
       data,
       correlationId,
     );

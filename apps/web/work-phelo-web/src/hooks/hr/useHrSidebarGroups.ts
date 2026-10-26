@@ -15,6 +15,7 @@ export function useHrNavAccess(): Record<string, boolean> {
   const user = useAuthStore((s) => s.user);
   const isTenantAdmin = user?.role === 'TENANT_ADMIN';
 
+  const canViewHrDashboard = usePermission(Permission.VIEW_HR_DASHBOARD);
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   // Operations' landing page (reinsurance dashboard) redirects back to /modules
@@ -56,6 +57,8 @@ export function useHrNavAccess(): Record<string, boolean> {
     // The dashboard is a self-service "my" view (my leave, my payslips, clock in/out) —
     // not relevant for a tenant admin, so it's hidden for that role.
     dashboard: !isTenantAdmin,
+    // The organisation dashboard needs its own permission.
+    'hr-dashboard': canViewHrDashboard,
     profile: canReadOwnProfile,
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,

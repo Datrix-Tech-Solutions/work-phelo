@@ -42,14 +42,36 @@ interface InviteForm {
   compensationType?: EmployeeCompensationType;
 }
 
+/** Values to start the form with, e.g. when onboarding a hired candidate. */
+export type InviteEmployeeDefaults = Partial<
+  Pick<
+    InviteForm,
+    | 'firstName'
+    | 'lastName'
+    | 'email'
+    | 'phone'
+    | 'jobTitle'
+    | 'departmentId'
+    | 'branchId'
+    | 'employmentType'
+  >
+>;
+
 interface InviteEmployeePanelProps {
+  initialValues?: InviteEmployeeDefaults;
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (fullName: string) => void;
   employees: Employee[];
 }
 
-function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmployeePanelProps) {
+function InviteEmployeeForm({
+  isOpen,
+  onClose,
+  onSuccess,
+  employees,
+  initialValues,
+}: InviteEmployeePanelProps) {
   const toast = useToast();
   const { data: departments = [] } = useDepartmentOptions(true);
   const { data: branches = [] } = useBranchOptions(true);
@@ -77,6 +99,17 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
   useEffect(() => {
     register('hireDate', { required: 'Please select the date this employee was hired.' });
   }, [register]);
+
+  useEffect(() => {
+    if (isOpen && initialValues) {
+      reset({
+        employmentType: 'FULL_TIME',
+        phone: '',
+        compensationType: 'SALARY',
+        ...initialValues,
+      });
+    }
+  }, [isOpen, initialValues, reset]);
 
   const phoneValue = useWatch({ control, name: 'phone' });
   const hireDateValue = useWatch({ control, name: 'hireDate' });
