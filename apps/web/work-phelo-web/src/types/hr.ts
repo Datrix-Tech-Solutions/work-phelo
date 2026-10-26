@@ -537,6 +537,18 @@ export interface CreateProjectDto {
   endDate?: string;
   budget?: number;
   managerId?: string;
+  kind: ProjectType;
+  config: ProjectConfig;
+  templateName?: string;
+  clientId?: string;
+  clientName?: string;
+  billable?: boolean;
+  /** Milestones are sent without their local ids. */
+  pricing?:
+    | ProjectPricing
+    | (Omit<Extract<ProjectPricing, { type: 'MILESTONE' }>, 'milestones'> & {
+        milestones: Omit<ProjectMilestone, 'id'>[];
+      });
 }
 
 export type UpdateProjectDto = Partial<CreateProjectDto> & { status?: ProjectStatus };

@@ -43,7 +43,7 @@ interface CreateProjectPanelProps {
   employees: EmployeeOption[];
   /** `projectType` and `config` aren't part of the API payload yet, so they come alongside it. */
   onSubmit: (
-    data: CreateProjectDto,
+    data: Omit<CreateProjectDto, 'kind' | 'config'>,
     projectType: ProjectType,
     config: ProjectConfig,
     /** Only for a client project. */

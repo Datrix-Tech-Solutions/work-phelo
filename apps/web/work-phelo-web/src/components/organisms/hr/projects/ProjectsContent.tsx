@@ -147,7 +147,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const pagedProjects = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const handleCreate = async (
-    data: CreateProjectDto,
+    base: Omit<CreateProjectDto, 'kind' | 'config'>,
     projectType: ProjectType,
     config: ProjectConfig,
     clientInfo?: {
@@ -157,6 +157,32 @@ export function ProjectsContent({ tenantSlug }: Props) {
     },
   ) => {
     try {
+      const pricing = clientInfo?.pricing;
+      const data: CreateProjectDto = {
+        ...base,
+        kind: projectType,
+        config,
+        ...(selectedTemplate ? { templateName: selectedTemplate.name } : {}),
+        ...(clientInfo?.client
+          ? { clientId: clientInfo.client.id, clientName: clientInfo.client.name }
+          : {}),
+        ...(clientInfo ? { billable: clientInfo.billable } : {}),
+        ...(pricing
+          ? {
+              pricing:
+                pricing.type === 'MILESTONE'
+                  ? {
+                      type: 'MILESTONE',
+                      milestones: pricing.milestones.map(({ name, amount, dueDate }) => ({
+                        name,
+                        amount,
+                        ...(dueDate ? { dueDate } : {}),
+                      })),
+                    }
+                  : pricing,
+            }
+          : {}),
+      };
       const project = await createProject.mutateAsync(data);
       setProjectDetails(project.id, {
         projectType,
@@ -166,8 +192,8 @@ export function ProjectsContent({ tenantSlug }: Props) {
         summary: clientInfo?.client
           ? {
               name: project.name,
-              startDate: data.startDate,
-              endDate: data.endDate,
+              startDate: base.startDate,
+              endDate: base.endDate,
               createdAt: project.createdAt,
             }
           : undefined,
