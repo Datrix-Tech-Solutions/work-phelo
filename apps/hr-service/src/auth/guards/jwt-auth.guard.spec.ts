@@ -1,197 +1,197 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { createHmac } from 'crypto';
+import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
+import { createHash } from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { PermissionsGuard } from './permissions.guard';
+import { Permission } from '@work-phelo/config';
 
-describe('JwtAuthGuard gateway permission verification', () => {
-  const secret = 'gateway-permission-test-secret';
+describe('HR trusted current Gateway context', () => {
+  const secret = 'current-context-test-secret';
+  const originalSecret = process.env.JWT_SECRET;
   const guard = new JwtAuthGuard();
-
+  const user = {
+    id: 'user-a',
+    tenantId: 'tenant-a',
+    role: 'EMPLOYEE',
+    email: 'current@example.test',
+    tenantSlug: 'acme',
+    tenantName: 'Acme',
+    firstName: 'Current',
+    moduleConfig: { hr: true },
+    featureConfig: { hr: { payroll: false } },
+    permissions: [],
+  };
+  const token = (extra = {}) =>
+    jwt.sign(
+      {
+        sub: user.id,
+        tenantId: user.tenantId,
+        role: 'TENANT_ADMIN',
+        permissions: ['employees:VIEW'],
+        moduleConfig: { hr: true },
+        featureConfig: { hr: { payroll: true } },
+        ...extra,
+      },
+      secret,
+    );
+  const signed = (access: string, extra = {}, options: jwt.SignOptions = {}) =>
+    jwt.sign(
+      {
+        user,
+        permissionsHash: createHash('sha256').update('[]').digest('hex'),
+        tokenHash: createHash('sha256').update(access).digest('hex'),
+        ...extra,
+      },
+      secret,
+      {
+        issuer: 'workphelo-gateway',
+        audience: 'hr',
+        expiresIn: 30,
+        ...options,
+      },
+    );
+  const context = (access: string, gateway?: string, headers = {}) => {
+    const request: {
+      headers: Record<string, string | undefined>;
+      user?: typeof user;
+    } = {
+      headers: {
+        authorization: `Bearer ${access}`,
+        'x-user-permissions': '[]',
+        ...(gateway ? { 'x-gateway-auth-context': gateway } : {}),
+        ...headers,
+      },
+    };
+    return {
+      request,
+      context: new ExecutionContextHost([request]),
+    };
+  };
   beforeEach(() => {
     process.env.JWT_SECRET = secret;
   });
-
   afterAll(() => {
-    delete process.env.JWT_SECRET;
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
   });
 
-  const tokenFor = (overrides: Record<string, unknown> = {}) =>
-    jwt.sign(
-      {
-        sub: 'user-1',
-        email: 'employee@example.com',
-        role: 'EMPLOYEE',
-        tenantId: 'tenant-1',
-        tenantSlug: 'acme',
-        permissions: ['jwt.permission:VIEW'],
-        moduleConfig: { hr: true },
-        featureConfig: { hr: { payroll: true } },
-        ...overrides,
-      },
-      secret,
+  it('uses current role, permissions and entitlements, not stale token admin claims', () => {
+    const access = token();
+    const req = context(access, signed(access));
+    expect(guard.canActivate(req.context)).toBe(true);
+    expect(req.request.user).toEqual(user);
+    const reflector = {
+      getAllAndOverride: () => [Permission.READ_EMPLOYEES],
+    } as unknown as Reflector;
+    expect(() =>
+      new PermissionsGuard(reflector).canActivate(req.context),
+    ).toThrow(ForbiddenException);
+  });
+  it('rejects a valid legacy JWT without current Gateway context', () => {
+    expect(() => guard.canActivate(context(token()).context)).toThrow(
+      UnauthorizedException,
     );
-
-  const expiredToken = () =>
-    jwt.sign(
-      {
-        sub: 'user-1',
-        email: 'employee@example.com',
-        role: 'EMPLOYEE',
-        tenantId: 'tenant-1',
-        tenantSlug: 'acme',
-        exp: Math.floor(Date.now() / 1000) - 60,
-      },
-      secret,
+  });
+  it('preserves the admin permission bypass only with trusted current admin context', () => {
+    const access = token();
+    const req = context(
+      access,
+      signed(access, { user: { ...user, role: 'TENANT_ADMIN' } }),
     );
-
-  const signPermissions = (
-    rawPermissions: string,
-    userId = 'user-1',
-    tenantId = 'tenant-1',
-  ) =>
-    createHmac('sha256', secret)
-      .update(`${userId}:${tenantId}:${rawPermissions}`)
-      .digest('hex');
-
-  const contextFor = (headers: Record<string, string | string[]>) => {
-    const request = { headers };
-    const context = {
-      switchToHttp: () => ({ getRequest: () => request }),
-    } as ExecutionContext;
-    return { context, request };
-  };
-
-  const expectUnauthorized = (headers: Record<string, string | string[]>) => {
-    const { context } = contextFor(headers);
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
-  };
-
-  it('accepts valid JWT and gateway-signed permissions', () => {
-    const rawPermissions = JSON.stringify(['payroll:APPROVE']);
-    const { context, request } = contextFor({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': rawPermissions,
-      'x-gateway-permissions-signature': signPermissions(rawPermissions),
-    });
-
-    expect(guard.canActivate(context)).toBe(true);
-    expect(
-      (request as { user?: { permissions: string[] } }).user?.permissions,
-    ).toEqual(['payroll:APPROVE']);
+    expect(guard.canActivate(req.context)).toBe(true);
+    const reflector = {
+      getAllAndOverride: () => [Permission.READ_EMPLOYEES],
+    } as unknown as Reflector;
+    expect(new PermissionsGuard(reflector).canActivate(req.context)).toBe(true);
   });
-
-  it('rejects forged permissions with a random signature', () => {
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': JSON.stringify(['payroll:APPROVE']),
-      'x-gateway-permissions-signature': 'random-signature',
-    });
-  });
-
-  it('rejects permissions altered after signing', () => {
-    const signedPermissions = JSON.stringify(['payroll:VIEW']);
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': JSON.stringify(['payroll:APPROVE']),
-      'x-gateway-permissions-signature': signPermissions(signedPermissions),
-    });
-  });
-
-  it('rejects forwarded permissions without a signature', () => {
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': JSON.stringify(['payroll:APPROVE']),
-    });
-  });
-
-  it('rejects a signature without forwarded permissions', () => {
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-gateway-permissions-signature': signPermissions(JSON.stringify([])),
-    });
-  });
-
-  it('rejects malformed or wrong-length signatures without crashing', () => {
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': JSON.stringify(['payroll:APPROVE']),
-      'x-gateway-permissions-signature': 'short',
-    });
-  });
-
-  it('rejects malformed JSON even when the malformed value is signed', () => {
-    const rawPermissions = '{"not-valid-json"';
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': rawPermissions,
-      'x-gateway-permissions-signature': signPermissions(rawPermissions),
-    });
-  });
-
-  it('rejects correctly signed JSON that is not an array', () => {
-    const rawPermissions = JSON.stringify({ permission: 'payroll:APPROVE' });
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': rawPermissions,
-      'x-gateway-permissions-signature': signPermissions(rawPermissions),
-    });
-  });
-
-  it('rejects correctly signed arrays containing non-string values', () => {
-    const rawPermissions = JSON.stringify(['payroll:APPROVE', 42]);
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor()}`,
-      'x-user-permissions': rawPermissions,
-      'x-gateway-permissions-signature': signPermissions(rawPermissions),
-    });
-  });
-
-  it('rejects signatures generated for a different tenant', () => {
-    const rawPermissions = JSON.stringify(['payroll:APPROVE']);
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor({ tenantId: 'tenant-2' })}`,
-      'x-user-permissions': rawPermissions,
-      'x-gateway-permissions-signature': signPermissions(
-        rawPermissions,
-        'user-1',
-        'tenant-1',
+  it('does not accept legacy signed permissions as a substitute for current context', () => {
+    expect(() =>
+      guard.canActivate(
+        context(token(), undefined, {
+          'x-user-permissions': '["employees:VIEW"]',
+          'x-gateway-permissions-signature': 'legacy',
+        }).context,
       ),
-    });
+    ).toThrow(UnauthorizedException);
   });
-
-  it('rejects signatures generated for a different user', () => {
-    const rawPermissions = JSON.stringify(['payroll:APPROVE']);
-    expectUnauthorized({
-      authorization: `Bearer ${tokenFor({ sub: 'user-2' })}`,
-      'x-user-permissions': rawPermissions,
-      'x-gateway-permissions-signature': signPermissions(
-        rawPermissions,
-        'user-1',
-        'tenant-1',
-      ),
-    });
+  it.each(['bad-context', ''])(
+    'rejects invalid signed context %p',
+    (gateway) => {
+      expect(() =>
+        guard.canActivate(context(token(), gateway).context),
+      ).toThrow(UnauthorizedException);
+    },
+  );
+  it.each([
+    ['wrong user', { user: { ...user, id: 'other' } }],
+    ['wrong tenant', { user: { ...user, tenantId: 'other' } }],
+    ['missing user', { user: null }],
+    ['wrong permission digest', { permissionsHash: 'forged-permissions' }],
+    ['missing module context', { user: { ...user, moduleConfig: null } }],
+    [
+      'malformed feature context',
+      { user: { ...user, featureConfig: { hr: { payroll: 'true' } } } },
+    ],
+    ['future assertion', { iat: Math.floor(Date.now() / 1000) + 60 }],
+    ['wrong access token', { tokenHash: 'other-token' }],
+  ])('rejects %s even with a valid signature', (_label, extra) => {
+    const access = token();
+    expect(() =>
+      guard.canActivate(context(access, signed(access, extra)).context),
+    ).toThrow(UnauthorizedException);
   });
-
-  it('preserves JWT permission fallback when no gateway permission headers exist', () => {
-    const { context, request } = contextFor({
-      authorization: `Bearer ${tokenFor()}`,
-    });
-
-    expect(guard.canActivate(context)).toBe(true);
-    expect(
-      (request as { user?: { permissions: string[] } }).user?.permissions,
-    ).toEqual(['jwt.permission:VIEW']);
+  it.each([
+    ['wrong audience', { audience: 'marketing' }],
+    ['wrong issuer', { issuer: 'client' }],
+    ['expired assertion', { expiresIn: -1 }],
+  ] as const)('rejects %s', (_label, options) => {
+    const access = token();
+    expect(() =>
+      guard.canActivate(context(access, signed(access, {}, options)).context),
+    ).toThrow(UnauthorizedException);
   });
-
-  it('rejects invalid JWTs', () => {
-    expectUnauthorized({
-      authorization: 'Bearer not-a-jwt',
-    });
+  it('rejects tampered context and wrong-key signatures', () => {
+    const access = token();
+    const forged = jwt.sign(
+      { user, tokenHash: createHash('sha256').update(access).digest('hex') },
+      'wrong-key',
+      { issuer: 'workphelo-gateway', audience: 'hr', expiresIn: 30 },
+    );
+    expect(() => guard.canActivate(context(access, forged).context)).toThrow(
+      UnauthorizedException,
+    );
   });
-
-  it('rejects expired JWTs', () => {
-    expectUnauthorized({
-      authorization: `Bearer ${expiredToken()}`,
-    });
+  it('still rejects invalid or expired original JWTs', () => {
+    for (const access of [
+      'invalid-token',
+      token({ exp: Math.floor(Date.now() / 1000) - 1 }),
+    ]) {
+      expect(() =>
+        guard.canActivate(context(access, signed(access)).context),
+      ).toThrow(UnauthorizedException);
+    }
   });
+  it('ignores spoofed legacy identity headers when trusted context exists', () => {
+    const access = token();
+    const req = context(access, signed(access), {
+      'x-user-role': 'SUPER_ADMIN',
+    });
+    expect(guard.canActivate(req.context)).toBe(true);
+    expect(req.request.user?.role).toBe('EMPLOYEE');
+    expect(req.request.user?.permissions).toEqual([]);
+  });
+  it.each(['["employees:VIEW"]', '[1]', 'not-json', '{}'])(
+    'rejects altered or malformed permission header %p',
+    (raw) => {
+      const access = token();
+      expect(() =>
+        guard.canActivate(
+          context(access, signed(access), { 'x-user-permissions': raw })
+            .context,
+        ),
+      ).toThrow(UnauthorizedException);
+    },
+  );
 });

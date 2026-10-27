@@ -1,11 +1,20 @@
-import { Controller, All, Req, Res, Logger } from '@nestjs/common';
+import {
+  Controller,
+  All,
+  Req,
+  Res,
+  Logger,
+  HttpException,
+  ServiceUnavailableException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 import * as http from 'http';
 import * as https from 'https';
 import * as jwt from 'jsonwebtoken';
-import { createHmac } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { isSwaggerEnabled } from '@work-phelo/config';
-import { JwtPayload } from '@work-phelo/types';
+import { JwtPayload, RequestUser } from '@work-phelo/types';
 import {
   GatewayServiceName,
   gatewayServiceConfig,
@@ -14,11 +23,7 @@ import {
 } from '../config/runtime-env';
 import { isAllowedForCareersToken } from './careers-scope';
 
-const permissionsCache = new Map<
-  string,
-  { permissions: string[]; expiresAt: number }
->();
-const PERM_CACHE_TTL = 5 * 60 * 1000; // 5 minutes — matches access-token lifetime
+const AUTH_LOOKUP_TIMEOUT_MS = 5_000;
 
 const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/login$/,
@@ -74,6 +79,7 @@ const FORWARDED_AUTH_CONTEXT_HEADERS = [
   'x-company-role-id',
   'x-user-permissions',
   'x-gateway-permissions-signature',
+  'x-gateway-auth-context',
 ] as const;
 
 const DEFAULT_PROXY_TIMEOUT_MS = 30_000;
@@ -100,12 +106,32 @@ export class ProxyController {
     };
   }
 
-  private fetchUserPermissions(
+  private fetchCurrentState(
     authServiceUrl: string,
     token: string,
-  ): Promise<string[]> {
-    return new Promise((resolve) => {
-      const url = new URL(authServiceUrl);
+  ): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer: { deadline?: NodeJS.Timeout } = {};
+      const fail = (
+        error = new ServiceUnavailableException(
+          'Current authorization state is unavailable',
+        ),
+      ) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer.deadline);
+        reject(error);
+      };
+      let url: URL;
+      try {
+        url = new URL(authServiceUrl);
+        if (!['http:', 'https:'].includes(url.protocol))
+          throw new Error('Invalid Auth URL');
+      } catch {
+        fail();
+        return;
+      }
       const isHttps = url.protocol === 'https:';
       const port = url.port ? parseInt(url.port) : isHttps ? 443 : 80;
 
@@ -118,23 +144,114 @@ export class ProxyController {
           headers: { Cookie: `access_token=${token}` },
         },
         (res) => {
+          res.on('error', () => fail());
+          res.on('aborted', () => fail());
+          if (res.statusCode !== 200) {
+            const status =
+              res.statusCode === 401
+                ? 401
+                : res.statusCode === 403 || res.statusCode === 404
+                  ? 403
+                  : 503;
+            fail(
+              new HttpException(
+                status === 503
+                  ? 'Current authorization state is unavailable'
+                  : 'Current session is not authorized',
+                status,
+              ),
+            );
+            res.resume();
+            return;
+          }
           let data = '';
-          res.on('data', (chunk) => {
-            data += chunk;
+          res.on('data', (chunk: Buffer | string) => {
+            data += chunk.toString();
+            if (Buffer.byteLength(data) > 1_048_576) {
+              fail();
+              req.destroy();
+            }
           });
           res.on('end', () => {
+            if (settled) return;
             try {
-              const body = JSON.parse(data);
-              resolve(Array.isArray(body.permissions) ? body.permissions : []);
+              const body: unknown = JSON.parse(data);
+              settled = true;
+              clearTimeout(timer.deadline);
+              resolve(body);
             } catch {
-              resolve([]);
+              fail();
             }
           });
         },
       );
-      req.on('error', () => resolve([]));
+      const timeout = () => {
+        fail();
+        req.destroy();
+      };
+      timer.deadline = setTimeout(timeout, AUTH_LOOKUP_TIMEOUT_MS);
+      req.setTimeout(AUTH_LOOKUP_TIMEOUT_MS, timeout);
+      req.on('error', () => fail());
       req.end();
     });
+  }
+
+  private currentUser(body: unknown, payload: JwtPayload): RequestUser {
+    const record = (value: unknown): value is Record<string, unknown> =>
+      value !== null && typeof value === 'object' && !Array.isArray(value);
+    const booleans = (value: unknown) =>
+      record(value) &&
+      Object.values(value).every((v) => typeof v === 'boolean');
+    if (!record(body) || !record(body.user))
+      throw new ServiceUnavailableException(
+        'Current authorization state is unavailable',
+      );
+    const user = body.user;
+    if (
+      ![
+        'id',
+        'tenantId',
+        'email',
+        'tenantSlug',
+        'tenantName',
+        'firstName',
+      ].every((key) => typeof user[key] === 'string') ||
+      !['SUPER_ADMIN', 'TENANT_ADMIN', 'EMPLOYEE'].includes(
+        user.role as string,
+      ) ||
+      !booleans(user.moduleConfig) ||
+      (user.integrationConfig !== undefined &&
+        !booleans(user.integrationConfig)) ||
+      !record(user.featureConfig) ||
+      !Object.values(user.featureConfig).every(booleans) ||
+      !Array.isArray(body.permissions) ||
+      !body.permissions.every((p) => typeof p === 'string')
+    ) {
+      throw new ServiceUnavailableException(
+        'Current authorization state is unavailable',
+      );
+    }
+    if (user.id !== payload.sub || user.tenantId !== payload.tenantId)
+      throw new ForbiddenException('Current session is not authorized');
+    return {
+      id: user.id,
+      tenantId: user.tenantId,
+      role: user.role as string,
+      email: user.email as string,
+      tenantSlug: user.tenantSlug as string,
+      tenantName: user.tenantName as string,
+      firstName: user.firstName as string,
+      moduleConfig: user.moduleConfig as Record<string, boolean>,
+      integrationConfig: (user.integrationConfig ?? {}) as Record<
+        string,
+        boolean
+      >,
+      featureConfig: user.featureConfig as Record<
+        string,
+        Record<string, boolean>
+      >,
+      permissions: body.permissions,
+    };
   }
 
   private isPublicPath(path: string): boolean {
@@ -215,36 +332,31 @@ export class ProxyController {
           });
         }
 
-        req.headers['x-user-id'] = payload.sub;
-        req.headers['x-user-email'] = payload.email;
-        req.headers['x-user-role'] = payload.role;
-        req.headers['x-tenant-id'] = payload.tenantId;
-        req.headers['x-tenant-slug'] = payload.tenantSlug;
-        req.headers['x-tenant-name'] = payload.tenantName ?? '';
-        req.headers['x-user-first-name'] = payload.firstName ?? '';
-        if (payload.companyRoleId) {
-          req.headers['x-company-role-id'] = payload.companyRoleId;
+        const authUrl = getGatewayServiceUrl('auth');
+        if (!authUrl)
+          throw new ServiceUnavailableException(
+            'Current authorization state is unavailable',
+          );
+        let currentState: unknown;
+        try {
+          currentState = await this.fetchCurrentState(authUrl, token);
+        } catch (error) {
+          if (error instanceof HttpException) throw error;
+          throw new ServiceUnavailableException(
+            'Current authorization state is unavailable',
+          );
         }
-
-        // Resolve and forward permissions for non-auth-service requests.
-        // The JWT no longer embeds permissions (removed to keep Set-Cookie small),
-        // so the gateway fetches them from auth-service and injects as a header.
+        const user = this.currentUser(currentState, payload);
+        req.headers['x-user-id'] = user.id;
+        req.headers['x-user-email'] = user.email;
+        req.headers['x-user-role'] = user.role;
+        req.headers['x-tenant-id'] = user.tenantId;
+        req.headers['x-tenant-slug'] = user.tenantSlug;
+        req.headers['x-tenant-name'] = user.tenantName;
+        req.headers['x-user-first-name'] = user.firstName;
+        // Preserve the permissions contract for other services; HR also requires the full current context.
         if (service !== 'auth') {
-          const userId = payload.sub;
-          const cached = permissionsCache.get(userId);
-          let permissions: string[];
-          if (cached && cached.expiresAt > Date.now()) {
-            permissions = cached.permissions;
-          } else {
-            const authUrl = getGatewayServiceUrl('auth');
-            permissions = authUrl
-              ? await this.fetchUserPermissions(authUrl, token)
-              : [];
-            permissionsCache.set(userId, {
-              permissions,
-              expiresAt: Date.now() + PERM_CACHE_TTL,
-            });
-          }
+          const { permissions, ...identity } = user;
           const serializedPermissions = JSON.stringify(permissions);
           req.headers['x-user-permissions'] = serializedPermissions;
           req.headers['x-gateway-permissions-signature'] = this.signPermissions(
@@ -252,8 +364,24 @@ export class ProxyController {
             payload.tenantId,
             serializedPermissions,
           );
+          req.headers['x-gateway-auth-context'] = jwt.sign(
+            {
+              user: identity,
+              permissionsHash: createHash('sha256')
+                .update(serializedPermissions)
+                .digest('hex'),
+              tokenHash: createHash('sha256').update(token).digest('hex'),
+            },
+            process.env.JWT_SECRET!,
+            { issuer: 'workphelo-gateway', audience: service, expiresIn: 30 },
+          );
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof HttpException) {
+          return res
+            .status(error.getStatus())
+            .json({ message: error.message, statusCode: error.getStatus() });
+        }
         return res
           .status(401)
           .json({ message: 'Invalid or expired token', statusCode: 401 });
