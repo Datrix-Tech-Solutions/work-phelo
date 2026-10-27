@@ -1508,6 +1508,13 @@ export interface CreateSalesTargetPayload {
   amount: number;
 }
 
+export interface UpdateSalesTargetPayload {
+  amount: number;
+  /** Leave both out once the target has ended; its dates can no longer change. */
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface MarketingDashboardStage {
   stageId: string;
   name: string;

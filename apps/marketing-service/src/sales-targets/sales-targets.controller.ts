@@ -98,7 +98,7 @@ export class SalesTargetsController {
 
   @Patch(':id')
   @RequirePermissions(P.TARGETS_EDIT)
-  @ApiOperation({ summary: 'Change a target’s amount' })
+  @ApiOperation({ summary: 'Change a target’s amount and dates' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   update(

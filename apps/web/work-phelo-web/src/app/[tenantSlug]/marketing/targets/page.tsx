@@ -18,7 +18,7 @@ import { apiErrorMessage } from '@/lib/apiError';
 import { formatDateRange } from '@/lib/formatters';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import type { SalesTarget } from '@/types/marketing';
+import type { SalesTarget, UpdateSalesTargetPayload } from '@/types/marketing';
 
 const PAGE_SIZE = 10;
 
@@ -95,9 +95,9 @@ export default function SalesTargetsPage() {
     });
   }
 
-  function handleUpdate(id: string, amount: number) {
+  function handleUpdate(id: string, changes: UpdateSalesTargetPayload) {
     updateTarget.mutate(
-      { id, amount },
+      { id, ...changes },
       {
         onSuccess: () => {
           toast.success('Target updated');

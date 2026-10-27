@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Assignee, CreateSalesTargetPayload, SalesTarget } from '@/types/marketing';
+import type {
+  Assignee,
+  CreateSalesTargetPayload,
+  SalesTarget,
+  UpdateSalesTargetPayload,
+} from '@/types/marketing';
 
 const ENDPOINT = '/marketing/sales-targets';
 const KEY = ['marketing', 'sales-targets'] as const;
@@ -49,8 +54,8 @@ export function useCreateSalesTarget() {
 export function useUpdateSalesTarget() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: async ({ id, amount }: { id: string; amount: number }) => {
-      const res = await api.patch<SalesTarget>(`${ENDPOINT}/${id}`, { amount });
+    mutationFn: async ({ id, ...body }: UpdateSalesTargetPayload & { id: string }) => {
+      const res = await api.patch<SalesTarget>(`${ENDPOINT}/${id}`, body);
       return res.data;
     },
     onSuccess: invalidate,

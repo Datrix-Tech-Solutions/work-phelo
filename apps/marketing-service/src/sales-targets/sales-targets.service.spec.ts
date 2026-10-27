@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   MarketingClientBillingState,
@@ -58,6 +58,7 @@ describe('SalesTargetsService', () => {
       findMany: jest.Mock;
       findFirst: jest.Mock;
       create: jest.Mock;
+      update: jest.Mock;
     };
     $transaction: jest.Mock;
     marketingClientBilling: { findMany: jest.Mock };
@@ -73,6 +74,11 @@ describe('SalesTargetsService', () => {
         findMany: jest.fn().mockResolvedValue([target()]),
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }: { data: object }) =>
+            Promise.resolve(target(data)),
+          ),
       },
       $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
       marketingClientBilling: { findMany: jest.fn().mockResolvedValue([]) },
@@ -273,6 +279,111 @@ describe('SalesTargetsService', () => {
       await expect(
         service.create(manager, { ...dto, productId: 'nope' }),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('update', () => {
+    const future = () => {
+      const start = new Date();
+      start.setUTCDate(start.getUTCDate() + 10);
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + 30);
+      return { startDate: start, endDate: end };
+    };
+
+    const savedData = () =>
+      (
+        prisma.marketingSalesTarget.update.mock.calls[0] as [
+          { data: { startDate?: Date; endDate?: Date } },
+        ]
+      )[0].data;
+
+    beforeEach(() => {
+      prisma.marketingSalesTarget.findFirst.mockResolvedValue(target(future()));
+      prisma.marketingSalesTarget.findMany.mockResolvedValue([]);
+    });
+
+    it('changes only the amount without touching the dates or checking overlap', async () => {
+      await service.update(manager, 't-1', { amount: 2000 });
+
+      const data = savedData();
+      expect(data.startDate).toBeUndefined();
+      expect(data.endDate).toBeUndefined();
+      expect(prisma.marketingSalesTarget.findMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ select: { userId: true } }),
+      );
+    });
+
+    it('changes the dates, excluding the target itself from the overlap check', async () => {
+      await service.update(manager, 't-1', {
+        amount: 2000,
+        startDate: '2099-01-01',
+        endDate: '2099-03-31',
+      });
+
+      expect(prisma.marketingSalesTarget.findMany).toHaveBeenCalledWith({
+        where: {
+          tenantId: 'tenant-1',
+          id: { not: 't-1' },
+          userId: { in: ['rep-1'] },
+          productId: null,
+          startDate: { lte: new Date('2099-03-31T00:00:00.000Z') },
+          endDate: { gte: new Date('2099-01-01T00:00:00.000Z') },
+        },
+        select: { userId: true },
+      });
+      const data = savedData();
+      expect(data.startDate).toEqual(new Date('2099-01-01T00:00:00.000Z'));
+      expect(data.endDate).toEqual(new Date('2099-03-31T00:00:00.000Z'));
+    });
+
+    it('rejects dates that overlap another target of the rep', async () => {
+      prisma.marketingSalesTarget.findMany.mockResolvedValue([
+        { userId: 'rep-1' },
+      ]);
+
+      await expect(
+        service.update(manager, 't-1', {
+          amount: 2000,
+          startDate: '2099-01-01',
+          endDate: '2099-03-31',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.marketingSalesTarget.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an end date before the start date', async () => {
+      await expect(
+        service.update(manager, 't-1', {
+          amount: 2000,
+          startDate: '2099-03-01',
+          endDate: '2099-01-01',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a date change on a target that has ended', async () => {
+      prisma.marketingSalesTarget.findFirst.mockResolvedValue(target());
+
+      await expect(
+        service.update(manager, 't-1', {
+          amount: 2000,
+          endDate: '2026-04-30',
+        }),
+      ).rejects.toThrow('cannot be changed');
+      expect(prisma.marketingSalesTarget.update).not.toHaveBeenCalled();
+    });
+
+    it('still lets the amount of an ended target change', async () => {
+      prisma.marketingSalesTarget.findFirst.mockResolvedValue(target());
+
+      await service.update(manager, 't-1', {
+        amount: 2000,
+        startDate: '2026-01-01',
+        endDate: '2026-03-31',
+      });
+
+      expect(prisma.marketingSalesTarget.update).toHaveBeenCalled();
     });
   });
 });
