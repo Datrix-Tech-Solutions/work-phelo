@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Input } from '@/components/atoms/Input';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
@@ -211,16 +212,14 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
             changed.
           </p>
         )}
-        <Input
+        <CurrencyInput
           label={editing ? 'Target Amount' : 'Target Amount (per rep)'}
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
+          currency={editing?.currency ?? 'GHS'}
+          lockCurrency
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onValueChange={setAmount}
           error={errors.amount}
-        />
+        />{' '}
       </div>
     </Modal>
   );
