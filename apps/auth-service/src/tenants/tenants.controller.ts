@@ -14,6 +14,7 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
   ForbiddenException,
+  NotFoundException,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -386,12 +387,21 @@ export class TenantsController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Get tenant by ID' })
+  @ApiOperation({
+    summary: 'Get own tenant by ID, or any tenant as Super Admin',
+  })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
   @ApiResponse({ status: 200, description: 'Tenant retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  @ApiResponse({ status: 404, description: 'Tenant not found' })
-  findOne(@Param('id') id: string) {
+  @ApiResponse({ status: 404, description: 'Tenant not found or inaccessible' })
+  findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    const user = req.user;
+    if (
+      user.role !== 'SUPER_ADMIN' &&
+      (!user.tenantId || user.tenantId !== id)
+    ) {
+      throw new NotFoundException('Tenant not found');
+    }
     return this.lifecycle.findById(id);
   }
 
