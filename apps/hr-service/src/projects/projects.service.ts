@@ -15,6 +15,7 @@ import {
   ProjectStatus,
   ProjectTask,
   ProjectTaskStatus,
+  ProjectTimeSource,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -581,6 +582,80 @@ export class ProjectsService {
     return projects.map((project) => this.serializeProject(project));
   }
 
+  /** The projects started for a marketing client, among those the caller can see, each with the seconds
+   *  logged on its timed tasks (a running timer counted to now). */
+  async findClientProjects(
+    tenantId: string,
+    clientId: string,
+    user: RequestUser,
+  ) {
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
+    const projects = await this.prisma.project.findMany({
+      where: {
+        tenantId,
+        clientId,
+        isArchived: false,
+        ...(this.canViewAllProjects(user)
+          ? {}
+          : {
+              OR: [
+                { managerId: actorEmployeeId ?? '' },
+                { members: { some: { employeeId: actorEmployeeId ?? '' } } },
+              ],
+            }),
+      },
+      include: PROJECT_INCLUDE,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+    const entries = await this.prisma.projectTimeEntry.findMany({
+      where: {
+        tenantId,
+        projectId: { in: projects.map((p) => p.id) },
+        task: { isTimed: true },
+      },
+      select: {
+        projectId: true,
+        source: true,
+        startedAt: true,
+        endedAt: true,
+        seconds: true,
+      },
+    });
+    const now = Date.now();
+    const logged = new Map<string, number>();
+    for (const e of entries) {
+      const seconds =
+        e.source === ProjectTimeSource.TIMER && !e.endedAt && e.startedAt
+          ? Math.max(0, Math.floor((now - e.startedAt.getTime()) / 1000))
+          : e.seconds;
+      logged.set(e.projectId, (logged.get(e.projectId) ?? 0) + seconds);
+    }
+    return projects.map((project) => ({
+      ...this.serializeProject(project),
+      loggedSeconds: logged.get(project.id) ?? 0,
+    }));
+  }
+
+  /** The timers the caller has running, on any project, so starting another can offer to pause them. */
+  async findMyRunningTimers(tenantId: string, user: RequestUser) {
+    const employeeId = await this.getActorEmployeeId(tenantId, user);
+    if (!employeeId) return [];
+    const entries = await this.prisma.projectTimeEntry.findMany({
+      where: {
+        tenantId,
+        employeeId,
+        source: ProjectTimeSource.TIMER,
+        endedAt: null,
+      },
+      include: { task: { select: { id: true, name: true } } },
+    });
+    return entries.map((e) => ({
+      taskId: e.taskId,
+      taskName: e.task.name,
+      projectId: e.projectId,
+    }));
+  }
+
   async findOne(tenantId: string, projectId: string, user: RequestUser) {
     this.assertAccess(await this.canAccessProject(tenantId, projectId, user));
     return this.serializeProject(
@@ -711,6 +786,19 @@ export class ProjectsService {
       await this.ensureEmployee(tenantId, dto.managerId);
     }
 
+    // Once a project is created only the price of a flat-rate one can change.
+    if (dto.pricing) {
+      if (
+        project.billingType !== ProjectBillingType.FLAT_RATE ||
+        dto.pricing.type !== ProjectBillingType.FLAT_RATE ||
+        !dto.pricing.price
+      ) {
+        throw new BadRequestException(
+          'Only the price of a flat-rate project can be changed',
+        );
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.project.update({
         where: { id: projectId },
@@ -726,6 +814,10 @@ export class ProjectsService {
           ...(dto.managerId !== undefined
             ? { managerId: dto.managerId || null }
             : {}),
+          ...(dto.config !== undefined
+            ? { config: dto.config as unknown as Prisma.InputJsonValue }
+            : {}),
+          ...(dto.pricing ? { flatPrice: dto.pricing.price } : {}),
         },
         include: PROJECT_INCLUDE,
       });

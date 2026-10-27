@@ -15,7 +15,6 @@ interface BuildArgs {
   tasks: ProjectTask[];
   objectives: ProjectObjective[];
   objectiveByTaskId: Record<string, string>;
-  assigneesByTaskId: Record<string, TaskAssignee[]>;
   search: string;
   /** A task status; empty means no filter. */
   status: string;
@@ -26,7 +25,6 @@ export function buildBacklogRows({
   tasks,
   objectives,
   objectiveByTaskId,
-  assigneesByTaskId,
   search,
   status,
 }: BuildArgs): WorkRow[] {
@@ -40,7 +38,7 @@ export function buildBacklogRows({
         name: t.name,
         task: t,
         objectiveName: objectiveName(objectiveByTaskId[t.id]),
-        assignees: taskAssignees(t, assigneesByTaskId),
+        assignees: taskAssignees(t),
       }),
     )
     .filter((row) => {

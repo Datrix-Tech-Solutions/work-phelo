@@ -2,14 +2,22 @@
 
 import type { ReactNode } from 'react';
 import { Clock } from 'lucide-react';
-import { useTaskTimeStore } from '@/store/taskTime.store';
+import { useProjectTimers } from '@/hooks/hr/useProjectTime';
 import { formatHoursMinutes, totalElapsedMs, useNow } from '@/lib/taskTime';
 import { cn } from '@/lib/utils';
 
+interface Props {
+  taskId: string;
+  projectId: string;
+  /** Whether time is tracked on the task; nothing shows for one that isn't. */
+  timed: boolean;
+  empty?: ReactNode;
+}
+
 /** The time spent on a timed task by everyone, ticking while anyone's timer runs. Nothing for an untimed task. */
-export function TaskTimeBadge({ taskId, empty = null }: { taskId: string; empty?: ReactNode }) {
-  const timed = useTaskTimeStore((s) => s.timedByTaskId[taskId]);
-  const timersById = useTaskTimeStore((s) => s.timersByTaskId[taskId]);
+export function TaskTimeBadge({ taskId, projectId, timed, empty = null }: Props) {
+  const { timersByTaskId } = useProjectTimers(projectId);
+  const timersById = timersByTaskId[taskId];
   const timers = timersById ? Object.values(timersById) : [];
   const running = timers.some((t) => t.runningSince);
   const now = useNow(running);

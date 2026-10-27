@@ -10,15 +10,18 @@ import {
   useCreateProjectTask,
   useUpdateProjectTask,
   useProject,
+  useProjectSetup,
   useMyProfile,
   usePermission,
 } from '@/hooks';
+import {
+  useProjectObjectives,
+  useProjectSprints,
+  useUpdateSprint,
+} from '@/hooks/hr/useProjectWork';
 import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { useProjectWorkStore } from '@/store/projectWork.store';
-import { useTaskTimeStore } from '@/store/taskTime.store';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { projectTaskOptions } from '@/lib/projectTaskOptions';
 import { taskAssignees } from '@/lib/taskAssignees';
 import { objectiveChipOptions } from '@/lib/objectiveChipOptions';
@@ -45,26 +48,17 @@ export function useTaskDialogs(projectId: string) {
   const canModify = canManageProjects || isProjectManager;
 
   const { data: tasks = [] } = useProjectTasks(projectId);
-  const allObjectives = useProjectWorkStore((s) => s.objectives);
-  const objectiveByTaskId = useProjectWorkStore((s) => s.objectiveByTaskId);
-  const setTaskObjective = useProjectWorkStore((s) => s.setTaskObjective);
-  const taskMeta = useProjectWorkStore((s) => s.taskMeta);
-  const setTaskMeta = useProjectWorkStore((s) => s.setTaskMeta);
-  const assigneesByTaskId = useProjectWorkStore((s) => s.assigneesByTaskId);
-  const setTaskAssignees = useProjectWorkStore((s) => s.setTaskAssignees);
-  const timedByTaskId = useTaskTimeStore((s) => s.timedByTaskId);
-  const setTimed = useTaskTimeStore((s) => s.setTimed);
-  const pricing = useProjectLocalStore((s) => s.byProjectId[projectId]?.pricing);
-  const config = useProjectLocalStore((s) => s.byProjectId[projectId]?.config);
+  const { data: objectives = [] } = useProjectObjectives(projectId);
+  const { data: sprints = [] } = useProjectSprints(projectId);
+  const updateSprint = useUpdateSprint(projectId);
+  const setup = useProjectSetup(projectId);
+  const config = setup?.config;
+  const pricing = setup?.pricing;
   const { workTypeOptions, priorityOptions, defaultWorkType, defaultPriority } = useMemo(
     () => projectTaskOptions(config),
     [config],
   );
 
-  const objectives = useMemo(
-    () => allObjectives.filter((o) => o.projectId === projectId),
-    [allObjectives, projectId],
-  );
   const objectiveOptions = useMemo(
     () => objectives.map((o) => ({ value: o.id, label: o.name })),
     [objectives],
@@ -87,23 +81,64 @@ export function useTaskDialogs(projectId: string) {
     timed?: boolean;
   }) => {
     try {
+      await createTask.mutateAsync({
+        projectId,
+        data: {
+          name: values.name,
+          dueDate: values.dueDate || undefined,
+          assignedEmployeeId: values.assignees[0]?.id,
+          assigneeIds: values.assignees.map((a) => a.id),
+          objectiveId: values.objectiveId || undefined,
+          workType: values.workType || undefined,
+          priorityName: values.priority || undefined,
+          isTimed: values.timed || undefined,
+        },
+      });
+      setCreateOpen(false);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
+  /** Creates a task straight from a list's inline row, with the project's default type and priority. */
+  const quickCreate = async (values: {
+    name: string;
+    dueDate?: string;
+    assignees: TaskAssignee[];
+    objectiveId?: string;
+    timed?: boolean;
+    sprintId?: string;
+  }) => {
+    try {
       const task = await createTask.mutateAsync({
         projectId,
         data: {
           name: values.name,
           dueDate: values.dueDate || undefined,
-          // The backend holds one assignee, so it gets the first; the full list is kept locally.
           assignedEmployeeId: values.assignees[0]?.id,
+          assigneeIds: values.assignees.map((a) => a.id),
+          objectiveId: values.objectiveId || undefined,
+          workType: defaultWorkType || undefined,
+          priorityName: defaultPriority || undefined,
+          isTimed: values.timed || undefined,
         },
       });
-      setTaskAssignees(task.id, values.assignees);
-      if (values.timed) setTimed(task.id, true);
-      if (values.objectiveId) setTaskObjective(task.id, values.objectiveId);
-      if (values.workType || values.priority)
-        setTaskMeta(task.id, { workType: values.workType ?? '', priority: values.priority ?? '' });
-      setCreateOpen(false);
+      const sprint = sprints.find((sp) => sp.id === values.sprintId);
+      if (sprint) {
+        await updateSprint.mutateAsync({
+          id: sprint.id,
+          dto: {
+            name: sprint.name,
+            startDate: sprint.startDate,
+            endDate: sprint.endDate,
+            taskIds: [...sprint.taskIds, task.id],
+          },
+        });
+      }
+      return true;
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
+      return false;
     }
   };
 
@@ -129,15 +164,26 @@ export function useTaskDialogs(projectId: string) {
           dueDate: values.dueDate || undefined,
           status: values.status,
           assignedEmployeeId: values.assignees[0]?.id,
+          assigneeIds: values.assignees.map((a) => a.id),
+          objectiveId: values.objectiveId || null,
+          workType: values.workType || undefined,
+          priorityName: values.priority || undefined,
+          isTimed: !!values.timed,
         },
       });
-      setTaskAssignees(taskId, values.assignees);
-      setTimed(taskId, !!values.timed);
-      if (values.status === 'DONE') useTaskTimeStore.getState().pauseAll(taskId);
-      setTaskObjective(taskId, values.objectiveId ?? null);
-      if (values.workType || values.priority)
-        setTaskMeta(taskId, { workType: values.workType ?? '', priority: values.priority ?? '' });
       setEditTaskId(null);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
+  const changeObjective = async (taskId: string, objectiveId: string) => {
+    try {
+      await updateTask.mutateAsync({
+        projectId,
+        taskId,
+        data: { objectiveId: objectiveId || null },
+      });
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
     }
@@ -175,21 +221,17 @@ export function useTaskDialogs(projectId: string) {
               }
             : undefined
         }
-        workType={detailsTask ? taskMeta[detailsTask.id]?.workType : undefined}
-        priority={detailsTask ? taskMeta[detailsTask.id]?.priority : undefined}
+        workType={detailsTask?.workType ?? undefined}
+        priority={detailsTask?.priorityName ?? undefined}
         priorities={config?.priorities}
-        assignees={detailsTask ? taskAssignees(detailsTask, assigneesByTaskId) : []}
-        objectiveId={detailsTask ? objectiveByTaskId[detailsTask.id] : undefined}
+        assignees={detailsTask ? taskAssignees(detailsTask) : []}
+        objectiveId={detailsTask?.objectiveId ?? undefined}
         objectiveOptions={objectiveChipOptions(objectives)}
         onObjectiveChange={
-          canModify && detailsTask
-            ? (id) => setTaskObjective(detailsTask.id, id || null)
-            : undefined
+          canModify && detailsTask ? (id) => changeObjective(detailsTask.id, id) : undefined
         }
         objectiveName={
-          detailsTask
-            ? objectives.find((o) => o.id === objectiveByTaskId[detailsTask.id])?.name
-            : undefined
+          detailsTask ? objectives.find((o) => o.id === detailsTask.objectiveId)?.name : undefined
         }
       />
 
@@ -200,13 +242,13 @@ export function useTaskDialogs(projectId: string) {
         onSave={handleSave}
         isSaving={updateTask.isPending}
         objectiveOptions={objectiveOptions}
-        currentObjectiveId={editTask ? objectiveByTaskId[editTask.id] : undefined}
+        currentObjectiveId={editTask?.objectiveId ?? undefined}
         workTypeOptions={workTypeOptions}
         priorityOptions={priorityOptions}
-        currentWorkType={editTask ? taskMeta[editTask.id]?.workType : undefined}
-        currentPriority={editTask ? taskMeta[editTask.id]?.priority : undefined}
-        currentTimed={editTask ? !!timedByTaskId[editTask.id] : false}
-        currentAssignees={editTask ? taskAssignees(editTask, assigneesByTaskId) : []}
+        currentWorkType={editTask?.workType ?? undefined}
+        currentPriority={editTask?.priorityName ?? undefined}
+        currentTimed={!!editTask?.isTimed}
+        currentAssignees={editTask ? taskAssignees(editTask) : []}
       />
     </>
   );
@@ -214,6 +256,9 @@ export function useTaskDialogs(projectId: string) {
   return {
     canModify,
     openCreate: () => setCreateOpen(true),
+    quickCreate,
+    isQuickCreating: createTask.isPending || updateSprint.isPending,
+    defaultTimed: pricing?.type === 'TIMED',
     openDetails: (taskId: string) => setDetailsTaskId(taskId),
     dialogs,
   };

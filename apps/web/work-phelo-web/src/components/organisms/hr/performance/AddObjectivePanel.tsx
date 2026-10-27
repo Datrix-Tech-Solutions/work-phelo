@@ -9,7 +9,9 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Icons } from '@/components/atoms/icons';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useGoals } from '@/hooks/hr/useGoalAppraisals';
-import { useProjectWorkStore } from '@/store/projectWork.store';
+import { useQueries } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import type { ProjectObjective } from '@/types/hr';
 
 export interface ObjectiveInput {
   /** Empty when the objective is left without a goal, to be linked later. */
@@ -46,16 +48,26 @@ export function AddObjectivePanel({ isOpen, onClose, projects, onSave }: Props) 
   const { goals } = useGoals();
   const name = useWatch({ control: form.control, name: 'name' });
 
-  const allProjectObjectives = useProjectWorkStore((s) => s.objectives);
+  // The objectives of each of the person's projects.
+  const projectObjectives = useQueries({
+    queries: projects.map((p) => ({
+      queryKey: ['projects', p.id, 'objectives'],
+      queryFn: async () =>
+        (await api.get<ProjectObjective[]>(`/hr/projects/${p.id}/objectives`)).data,
+    })),
+  });
+  const allProjectObjectives = useMemo(
+    () => projectObjectives.flatMap((q) => q.data ?? []),
+    [projectObjectives],
+  );
   const objectiveOptions = useMemo(() => {
-    const ids = new Set(projects.map((p) => p.id));
     const names = new Set([
-      ...allProjectObjectives.filter((o) => ids.has(o.projectId)).map((o) => o.name),
+      ...allProjectObjectives.map((o) => o.name),
       // A name created because no objective matched stays selectable until another is picked.
       ...(name ? [name] : []),
     ]);
     return [...names].map((name) => ({ value: name, label: name }));
-  }, [allProjectObjectives, projects, name]);
+  }, [allProjectObjectives, name]);
 
   useEffect(() => {
     if (isOpen) form.reset(EMPTY);

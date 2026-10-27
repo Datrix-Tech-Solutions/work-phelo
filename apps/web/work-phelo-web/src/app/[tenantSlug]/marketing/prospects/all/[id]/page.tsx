@@ -160,7 +160,14 @@ export default function ProspectDetailPage() {
           <DetailField label="Type of Business" value={prospect.businessType?.name} />
           <DetailField label="Source Type" value={prospect.sourceType?.name} />
           <DetailField label="Assigned To" value={prospect.assignedUserName} />
-          <DetailField label="Location" value={prospect.location?.label} />
+          <DetailField
+            label="Location"
+            value={
+              prospect.location
+                ? `${prospect.location.label}${prospect.location.latitude == null ? ' (not pinned on the map)' : ''}`
+                : undefined
+            }
+          />
           {/* <DetailField label="Decision Maker" value={primaryContact?.name} /> */}
           <DetailField label="Contact Person Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />

@@ -3,22 +3,27 @@
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Input } from '@/components/atoms/Input';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useProspectingSettings } from '@/hooks/marketing/useProspectingSettings';
 import { useTargetReps } from '@/hooks/marketing/useSalesTargets';
-import { formatDateRange } from '@/lib/formatters';
-import type { CreateSalesTargetPayload, SalesTarget } from '@/types/marketing';
+import { formatDate, formatDateRange } from '@/lib/formatters';
+import type {
+  CreateSalesTargetPayload,
+  SalesTarget,
+  UpdateSalesTargetPayload,
+} from '@/types/marketing';
 
 interface Props {
-  /** The target being edited; only its amount can change. Omit to create one. */
+  /** The target being edited; its amount and, until it ends, its dates can change. */
   editing: SalesTarget | null;
   isSubmitting: boolean;
   onClose: () => void;
   onCreate: (payload: CreateSalesTargetPayload) => void;
-  onUpdate: (id: string, amount: number) => void;
+  onUpdate: (id: string, changes: UpdateSalesTargetPayload) => void;
 }
 
 type Errors = Partial<Record<'name' | 'userIds' | 'startDate' | 'endDate' | 'amount', string>>;
@@ -56,10 +61,13 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
   const [name, setName] = useState('');
   const [userIds, setUserIds] = useState<string[]>([]);
   const [productId, setProductId] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(editing?.startDate ?? '');
+  const [endDate, setEndDate] = useState(editing?.endDate ?? '');
   const [amount, setAmount] = useState(editing ? String(Number(editing.amount)) : '');
   const [errors, setErrors] = useState<Errors>({});
+
+  /** Dates of a target that has ended are locked; the server refuses to change them. */
+  const datesLocked = !!editing && editing.endDate < iso(new Date());
 
   const repOptions = useMemo(
     () => reps.map((rep) => ({ value: rep.userId, label: rep.name, sublabel: rep.email })),
@@ -79,6 +87,8 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
     if (!editing) {
       if (!name.trim()) next.name = 'Enter a name for the target';
       if (userIds.length === 0) next.userIds = 'Choose at least one sales rep';
+    }
+    if (!datesLocked) {
       if (!startDate) next.startDate = 'Choose a start date';
       if (!endDate) next.endDate = 'Choose an end date';
       else if (startDate && endDate < startDate)
@@ -88,8 +98,12 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
     if (Object.keys(next).length > 0) return;
 
     const rounded = Math.round(value * 100) / 100;
-    if (editing) onUpdate(editing.id, rounded);
-    else {
+    if (editing) {
+      onUpdate(
+        editing.id,
+        datesLocked ? { amount: rounded } : { amount: rounded, startDate, endDate },
+      );
+    } else {
       onCreate({
         name: name.trim(),
         userIds,
@@ -156,6 +170,10 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
               disabled={loadingProducts}
               clearable
             />
+          </>
+        )}
+        {!datesLocked && (
+          <>
             <div className="flex flex-wrap gap-2">
               {PERIOD_SHORTCUTS.map(({ kind, label }) => (
                 <Button
@@ -188,16 +206,20 @@ export function SalesTargetModal({ editing, isSubmitting, onClose, onCreate, onU
             </div>
           </>
         )}
-        <Input
+        {datesLocked && editing && (
+          <p className="text-sm text-gray-500">
+            This target ended on {formatDate(editing.endDate)}, so its dates can no longer be
+            changed.
+          </p>
+        )}
+        <CurrencyInput
           label={editing ? 'Target Amount' : 'Target Amount (per rep)'}
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
+          currency={editing?.currency ?? 'GHS'}
+          lockCurrency
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onValueChange={setAmount}
           error={errors.amount}
-        />
+        />{' '}
       </div>
     </Modal>
   );

@@ -1,19 +1,82 @@
 import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { DEFAULT_PROJECT_TEMPLATES } from '@/lib/defaultProjectTemplates';
-import { useProjectTemplatesStore } from '@/store/projectTemplates.store';
+import type { CreateProjectTemplateDto, ProjectTemplate } from '@/types/hr';
 
-/** Every template a project can start from: the built-in ones with any edits applied, then the custom ones. */
+const KEY = ['project-templates'];
+
+/** A template row as the backend sends it: the template's set-up is spread into the row. */
+type TemplateRow = ProjectTemplate & { defaultKey: string | null };
+
+/** The backend wants the set-up under `config`. */
+function toPayload({ name, description, ...config }: CreateProjectTemplateDto) {
+  return { name, description, config };
+}
+
+/**
+ * Every template a project can start from: the built-in ones, with any edit the company made to them
+ * applied, then the ones the company created.
+ */
 export function useProjectTemplates() {
-  const custom = useProjectTemplatesStore((s) => s.templates);
-  const defaultOverrides = useProjectTemplatesStore((s) => s.defaultOverrides);
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: KEY,
+    queryFn: async () => {
+      const res = await api.get<TemplateRow[]>('/hr/project-templates');
+      return res.data;
+    },
+  });
 
-  const templates = useMemo(
-    () => [
-      ...DEFAULT_PROJECT_TEMPLATES.map((t) => ({ ...t, ...defaultOverrides[t.id] })),
-      ...custom,
-    ],
-    [custom, defaultOverrides],
-  );
+  return useMemo(() => {
+    const custom = rows.filter((r) => !r.defaultKey);
+    const edits = new Map(rows.filter((r) => r.defaultKey).map((r) => [r.defaultKey, r]));
+    const defaults = DEFAULT_PROJECT_TEMPLATES.map((t) => {
+      const edit = edits.get(t.id);
+      return edit
+        ? {
+            ...t,
+            name: edit.name,
+            description: edit.description,
+            workflow: edit.workflow,
+            workTypes: edit.workTypes,
+            features: edit.features,
+            priorities: edit.priorities,
+          }
+        : t;
+    });
+    return {
+      templates: [...defaults, ...custom] as ProjectTemplate[],
+      /** Only the templates the company created. */
+      custom: custom as ProjectTemplate[],
+      isLoading,
+    };
+  }, [rows, isLoading]);
+}
 
-  return { templates, defaultOverrides };
+export function useAddProjectTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (dto: CreateProjectTemplateDto) =>
+      (await api.post<TemplateRow>('/hr/project-templates', toPayload(dto))).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useUpdateProjectTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, dto }: { id: string; dto: CreateProjectTemplateDto }) =>
+      (await api.patch<TemplateRow>(`/hr/project-templates/${id}`, toPayload(dto))).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useRemoveProjectTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/hr/project-templates/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  });
 }

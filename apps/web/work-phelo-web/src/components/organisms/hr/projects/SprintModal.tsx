@@ -6,7 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { MultiSelect, MultiSelectOption } from '@/components/atoms/MultiSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
-import type { SprintInput } from '@/store/projectWork.store';
+import type { SprintInput } from '@/hooks/hr/useProjectWork';
 import type { ProjectSprint } from '@/types/hr';
 
 interface Props {

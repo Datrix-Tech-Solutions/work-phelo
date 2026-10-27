@@ -6,7 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { sprintState } from '@/lib/projectSprints';
 import { cardClass, cn, todayLocal } from '@/lib/utils';
-import { useProjectWorkStore } from '@/store/projectWork.store';
+import { useProjectSprints } from '@/hooks/hr/useProjectWork';
 import type { ProjectSprint } from '@/types/hr';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -104,13 +104,10 @@ export function ProjectCalendar({ projectId }: Props) {
     return { year: now.getFullYear(), month: now.getMonth() };
   });
 
-  const allSprints = useProjectWorkStore((s) => s.sprints);
+  const { data: allSprints = [] } = useProjectSprints(projectId);
   const sprints = useMemo(
-    () =>
-      allSprints
-        .filter((sp) => sp.projectId === projectId)
-        .sort((a, b) => a.startDate.localeCompare(b.startDate)),
-    [allSprints, projectId],
+    () => [...allSprints].sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    [allSprints],
   );
 
   const weeks = useMemo(() => monthWeeks(cursor.year, cursor.month), [cursor]);
