@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -85,6 +86,10 @@ export class DepartmentsController {
     return this.departmentsService.findAll(req.user.tenantId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'DepartmentsController.findOptions delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('options')
   @ApiOperation({
     summary:

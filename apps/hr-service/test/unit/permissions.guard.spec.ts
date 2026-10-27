@@ -38,10 +38,12 @@ describe('PermissionsGuard (HR service — user.permissions array)', () => {
     jest.clearAllMocks();
   });
 
-  it('allows when no permission metadata is set on the handler', () => {
+  it('denies when no permission metadata is set on the handler', () => {
     reflector.getAllAndOverride = jest.fn().mockReturnValue(undefined);
 
-    expect(guard.canActivate(makeContext({ id: 'u1' }))).toBe(true);
+    expect(() => guard.canActivate(makeContext({ id: 'u1' }))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('allows SUPER_ADMIN regardless of user.permissions', () => {

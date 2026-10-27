@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -74,6 +75,10 @@ export class AppraisalsController {
     return this.goalCycles.createCycle(req.user.tenantId, req.user.id, dto);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal cycle catalog for self and manager workflows.',
+  )
   @Get('cycles')
   @ApiOperation({ summary: 'List all appraisal cycles for the tenant' })
   @ApiResponse({ status: 200, description: 'Appraisal cycles retrieved' })
@@ -81,6 +86,10 @@ export class AppraisalsController {
     return this.goalCycles.listCycles(req.user.tenantId);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal cycle configuration for self and manager workflows.',
+  )
   @Get('cycles/:cycleId')
   @ApiOperation({ summary: 'Get a single appraisal cycle' })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
@@ -163,6 +172,10 @@ export class AppraisalsController {
     return this.goalCycles.closeCycle(req.user.tenantId, cycleId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalGoalCyclesService.listAssessments requires HR appraisal access.',
+  )
   @Get('cycles/:cycleId/assessments')
   @ApiOperation({ summary: "Every employee's assessment in a cycle (HR)" })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
@@ -191,6 +204,10 @@ export class AppraisalsController {
     return this.goalCycles.teamAssessments(req.user.tenantId, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalGoalCyclesService.employeeAssessments enforces self or HR access.',
+  )
   @Get('assessments/employee/:employeeId')
   @ApiOperation({
     summary: "An employee's assessments across cycles (HR or themselves)",
@@ -207,6 +224,10 @@ export class AppraisalsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalGoalCyclesService.getAssessment checks self, manager or HR access.',
+  )
   @Get('assessments/:id')
   @ApiOperation({
     summary: 'One assessment with its goals, objectives and ratings',
@@ -216,6 +237,10 @@ export class AppraisalsController {
     return this.goalCycles.getAssessment(req.user.tenantId, req.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.getAppraisals enforces tenant-wide appraisal read policy.',
+  )
   @Get('cycles/:cycleId/appraisals')
   @ApiOperation({ summary: 'Get all appraisal records for a cycle' })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
@@ -231,6 +256,7 @@ export class AppraisalsController {
     );
   }
 
+  @RequirePermissions(Permission.READ_APPRAISALS)
   @Get('cycles/:cycleId/results')
   @ApiOperation({
     summary: 'Get cycle results summary with rating distribution',
@@ -246,6 +272,10 @@ export class AppraisalsController {
 
   // ── Templates ───────────────────────────────────────────────────────────────
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal template catalog; mutations require configuration permission.',
+  )
   @Get('templates')
   @ApiOperation({ summary: 'List appraisal templates' })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -330,6 +360,10 @@ export class AppraisalsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.getAppraisal checks self, direct manager or HR permissions.',
+  )
   @Get(':id')
   @ApiOperation({ summary: 'Get a single appraisal record' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
@@ -391,6 +425,10 @@ export class AppraisalsController {
     return this.goalCycles.finalize(req.user.tenantId, req.user, id, dto.note);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.reopenAppraisal checks finalizer or direct-manager redo authority.',
+  )
   @Patch(':id/reopen')
   @ApiOperation({ summary: 'Reopen an appraisal for redo' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })

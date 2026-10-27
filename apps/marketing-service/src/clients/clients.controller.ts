@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -79,6 +80,10 @@ const { CLIENTS_CREATE, CLIENTS_DELETE, CLIENTS_DELETE_ALL } =
 export class ClientsController {
   constructor(private readonly service: ClientsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientsController.list delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   // Visible to its assignee without a permission: the service scopes the result to the caller's
   // own records unless they hold the tenant-wide one.
@@ -111,6 +116,10 @@ export class ClientsController {
     return this.service.create(request.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientsController.addProduct delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/products')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -132,6 +141,10 @@ export class ClientsController {
     return this.service.addProduct(request.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientsController.createInteraction delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/interactions')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -152,6 +165,10 @@ export class ClientsController {
     return this.service.createInteraction(request.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientsController.findOne delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id')
   // Visible to its assignee without a permission: the service scopes the result to the caller's
   // own records unless they hold the tenant-wide one.
@@ -170,6 +187,10 @@ export class ClientsController {
     return this.service.findOne(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientsController.update delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -228,6 +249,10 @@ export class ClientsController {
 export class ProspectConversionController {
   constructor(private readonly service: ClientsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectConversionController.convert delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':prospectId/convert')
   // Open to the prospect's assignee: converting is managing their own prospect.
   @ApiOperation({

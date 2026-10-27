@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -46,12 +47,20 @@ export class ProjectWorkController {
   ) {}
 
   // Invoices
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.listInvoices delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('invoices')
   @ApiOperation({ summary: 'List the invoices raised from a project' })
   listInvoices(@Param('id') id: string, @Req() req: Req_) {
     return this.invoices.list(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.recordInvoice delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('invoices')
   @ApiOperation({ summary: 'Record an invoice raised in Accounting' })
   recordInvoice(
@@ -63,12 +72,20 @@ export class ProjectWorkController {
   }
 
   // Objectives
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.listObjectives delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('objectives')
   @ApiOperation({ summary: 'List the objectives of a project' })
   listObjectives(@Param('id') id: string, @Req() req: Req_) {
     return this.work.listObjectives(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.createObjective delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('objectives')
   @ApiOperation({ summary: 'Create an objective' })
   createObjective(
@@ -79,6 +96,10 @@ export class ProjectWorkController {
     return this.work.createObjective(req.user.tenantId, id, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.updateObjective delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch('objectives/:objectiveId')
   @ApiOperation({ summary: 'Update an objective' })
   updateObjective(
@@ -96,6 +117,10 @@ export class ProjectWorkController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.removeObjective delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete('objectives/:objectiveId')
   @ApiOperation({
     summary: 'Delete an objective; its tasks stay in the project',
@@ -114,12 +139,20 @@ export class ProjectWorkController {
   }
 
   // Subtasks
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.listSubtasks delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('subtasks')
   @ApiOperation({ summary: 'List the subtasks of a project' })
   listSubtasks(@Param('id') id: string, @Req() req: Req_) {
     return this.work.listSubtasks(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.createSubtask delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('subtasks')
   @ApiOperation({ summary: 'Create a subtask' })
   createSubtask(
@@ -130,6 +163,10 @@ export class ProjectWorkController {
     return this.work.createSubtask(req.user.tenantId, id, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.updateSubtask delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch('subtasks/:subtaskId')
   @ApiOperation({ summary: 'Rename a subtask or mark it done' })
   updateSubtask(
@@ -147,6 +184,10 @@ export class ProjectWorkController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.removeSubtask delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete('subtasks/:subtaskId')
   @ApiOperation({ summary: 'Delete a subtask' })
   removeSubtask(
@@ -158,12 +199,20 @@ export class ProjectWorkController {
   }
 
   // Sprints
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.listSprints delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('sprints')
   @ApiOperation({ summary: 'List the sprints of a project' })
   listSprints(@Param('id') id: string, @Req() req: Req_) {
     return this.work.listSprints(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.createSprint delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('sprints')
   @ApiOperation({ summary: 'Create a sprint' })
   createSprint(
@@ -174,6 +223,10 @@ export class ProjectWorkController {
     return this.work.createSprint(req.user.tenantId, id, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.updateSprint delegates caller and tenant scope to its existing policy checks.',
+  )
   @Put('sprints/:sprintId')
   @ApiOperation({ summary: 'Update a sprint and the tasks in it' })
   updateSprint(
@@ -191,6 +244,10 @@ export class ProjectWorkController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.completeSprint delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('sprints/:sprintId/complete')
   @ApiOperation({
     summary: 'Complete a sprint; unfinished tasks go back to the backlog',
@@ -210,6 +267,10 @@ export class ProjectWorkController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.removeSprint delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete('sprints/:sprintId')
   @ApiOperation({ summary: 'Delete a sprint' })
   removeSprint(
@@ -221,12 +282,20 @@ export class ProjectWorkController {
   }
 
   // Time
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.timeSummary delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('time')
   @ApiOperation({ summary: "Everyone's time on the project's timed tasks" })
   timeSummary(@Param('id') id: string, @Req() req: Req_) {
     return this.time.summary(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.startTimer delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('tasks/:taskId/time/start')
   @ApiOperation({ summary: 'Start your timer on a task' })
   startTimer(
@@ -238,6 +307,10 @@ export class ProjectWorkController {
     return this.time.start(req.user.tenantId, id, taskId, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.pauseTimer delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('tasks/:taskId/time/pause')
   @ApiOperation({ summary: 'Pause your timer on a task' })
   pauseTimer(
@@ -248,6 +321,10 @@ export class ProjectWorkController {
     return this.time.pause(req.user.tenantId, id, taskId, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.addTime delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('tasks/:taskId/time/entries')
   @ApiOperation({ summary: 'Add time you worked without the timer' })
   addTime(
@@ -259,6 +336,10 @@ export class ProjectWorkController {
     return this.time.add(req.user.tenantId, id, taskId, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.setMyTime delegates caller and tenant scope to its existing policy checks.',
+  )
   @Put('tasks/:taskId/time/mine')
   @ApiOperation({ summary: 'Set your total time on a task' })
   setMyTime(
