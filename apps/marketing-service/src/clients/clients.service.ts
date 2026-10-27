@@ -76,6 +76,23 @@ export class ClientsService {
             },
           }
         : {}),
+      ...(query.businessTypeId ? { businessTypeId: query.businessTypeId } : {}),
+      ...(query.sourceTypeId ? { sourceTypeId: query.sourceTypeId } : {}),
+      ...(query.productId
+        ? { products: { some: { productId: query.productId } } }
+        : {}),
+      ...(query.createdFrom || query.createdTo
+        ? {
+            createdAt: {
+              ...(query.createdFrom
+                ? { gte: this.parseDateBound(query.createdFrom, 'from') }
+                : {}),
+              ...(query.createdTo
+                ? { lte: this.parseDateBound(query.createdTo, 'to') }
+                : {}),
+            },
+          }
+        : {}),
     };
 
     const [total, clients] = await this.prisma.$transaction([
@@ -96,13 +113,27 @@ export class ClientsService {
       }),
     ]);
 
-    const achieved = await this.billing.totalsForClients(
-      user.tenantId,
-      clients.map((client) => client.id),
+    const [achieved, latestInteractions] = await Promise.all([
+      this.billing.totalsForClients(
+        user.tenantId,
+        clients.map((client) => client.id),
+      ),
+      this.prisma.marketingProspectInteraction.groupBy({
+        by: ['clientId'],
+        where: {
+          tenantId: user.tenantId,
+          clientId: { in: clients.map((client) => client.id) },
+        },
+        _max: { occurredAt: true },
+      }),
+    ]);
+    const lastInteraction = new Map(
+      latestInteractions.map((row) => [row.clientId, row._max.occurredAt]),
     );
 
     const settings = await this.findSettingsByIds(user.tenantId, [
       ...clients.map((client) => client.businessTypeId),
+      ...clients.map((client) => client.sourceTypeId),
       ...clients.flatMap((client) =>
         client.contacts.map((contact) => contact.decisionMakerTypeId),
       ),
@@ -129,10 +160,25 @@ export class ClientsService {
                 'Unknown business type',
               )
             : null,
+          sourceType: client.sourceTypeId
+            ? this.namedReference(
+                client.sourceTypeId,
+                settings,
+                'Unknown source type',
+              )
+            : null,
           locationLabel: client.locationLabel,
           isBillable: client.isBillable,
           hasAccountingEntity: Boolean(client.accountingEntityId),
           achievedRevenue: achieved.get(client.id) ?? null,
+          expectedValue: client.products
+            .reduce(
+              (sum, product) =>
+                product.expectedValue ? sum.plus(product.expectedValue) : sum,
+              new Prisma.Decimal(0),
+            )
+            .toFixed(2),
+          lastInteractionDate: lastInteraction.get(client.id) ?? null,
           primaryContact: primary
             ? {
                 name: primary.name,
@@ -164,6 +210,15 @@ export class ClientsService {
       }),
       meta: this.pageMeta(page, limit, total),
     };
+  }
+
+  private parseDateBound(value: string, bound: 'from' | 'to'): Date {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(
+        bound === 'from' ? `${value}T00:00:00.000Z` : `${value}T23:59:59.999Z`,
+      );
+    }
+    return new Date(value);
   }
 
   async findOne(user: RequestUser, id: string) {
@@ -243,9 +298,11 @@ export class ClientsService {
         businessTypeId: dto.businessTypeId ?? null,
         sourceTypeId: dto.sourceTypeId ?? null,
         assignedUserId,
-        locationLabel: this.formatText(dto.location.label),
-        latitude: dto.location.latitude,
-        longitude: dto.location.longitude,
+        locationLabel: dto.location
+          ? this.formatText(dto.location.label)
+          : null,
+        latitude: dto.location?.latitude ?? null,
+        longitude: dto.location?.longitude ?? null,
         isBillable: Boolean(firstBilling),
         accountingEntityId: firstBilling?.created.entityId ?? null,
         accountingEntityTypeId: firstBilling?.created.entityTypeId ?? null,
@@ -854,11 +911,14 @@ export class ClientsService {
       isBillable: client.isBillable,
       hasAccountingEntity: Boolean(client.accountingEntityId),
       accountingEntityTypeId: client.accountingEntityTypeId,
-      location: {
-        label: client.locationLabel,
-        latitude: client.latitude.toString(),
-        longitude: client.longitude.toString(),
-      },
+      location:
+        client.locationLabel !== null
+          ? {
+              label: client.locationLabel,
+              latitude: client.latitude?.toString() ?? null,
+              longitude: client.longitude?.toString() ?? null,
+            }
+          : null,
       contacts: client.contacts.map((contact) => ({
         id: contact.id,
         name: contact.name,

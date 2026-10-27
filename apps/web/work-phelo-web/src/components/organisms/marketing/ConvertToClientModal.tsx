@@ -102,7 +102,7 @@ export function ConvertToClientModal({ prospect, isOpen, onClose }: ConvertToCli
         <div className="grid grid-cols-2 gap-x-6 gap-y-5">
           <DetailField label="Company Name" value={prospect.companyName} />
           <DetailField label="Type of Business" value={prospect.businessType?.name} />
-          <DetailField label="Location" value={prospect.location.label} />
+          <DetailField label="Location" value={prospect.location?.label} />
           <DetailField label="Source Type" value={prospect.sourceType?.name} />
           <DetailField label="Contact Person" value={contact?.name} />
           <DetailField label="Role / Job Title" value={contact?.decisionMaker?.name} />

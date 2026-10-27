@@ -16,6 +16,13 @@ export interface CompanyLocationFields {
   lng?: number;
 }
 
+/** What is sent to the API; a location is optional, so nothing is sent until one is picked. */
+export function toLocationPayload(fields: CompanyLocationFields) {
+  return fields.lat != null && fields.lng != null
+    ? { label: fields.location, latitude: fields.lat, longitude: fields.lng }
+    : undefined;
+}
+
 interface Props {
   values: CompanyLocationFields;
   onChange: (values: CompanyLocationFields) => void;

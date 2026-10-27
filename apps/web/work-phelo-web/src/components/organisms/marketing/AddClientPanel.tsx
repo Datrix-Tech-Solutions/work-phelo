@@ -27,6 +27,7 @@ import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/Cr
 import {
   CompanyLocationFields,
   CompanyLocationForm,
+  toLocationPayload,
 } from '@/components/molecules/marketing/CompanyLocationForm';
 import {
   useCreateProspectingSetting,
@@ -154,8 +155,6 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
     if (!values.contactName.trim()) next.contactName = 'Contact name is required.';
     if (values.email.trim() && !isValidEmail(values.email))
       next.email = 'Enter a valid email address.';
-    if (values.location.lat == null || values.location.lng == null)
-      next.location = 'Select a location on the map or from search.';
     setErrors(next);
 
     let billingValid = true;
@@ -195,11 +194,9 @@ export function AddClientPanel({ isOpen, onClose }: Props) {
           ...(detail.expectedCloseDate ? { expectedCloseDate: detail.expectedCloseDate } : {}),
         };
       }),
-      location: {
-        label: values.location.location,
-        latitude: values.location.lat as number,
-        longitude: values.location.lng as number,
-      },
+      ...(toLocationPayload(values.location)
+        ? { location: toLocationPayload(values.location) }
+        : {}),
       ...(values.dateContacted ? { initialInteraction: { occurredAt: values.dateContacted } } : {}),
     };
   }

@@ -46,7 +46,8 @@ export function EditCurrencyPanel({ currency, baseCurrency, onClose }: EditCurre
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
 
   useEffect(() => {
-    if (currency) reset({ name: currency.name, symbol: currency.symbol ?? '', isBaseCurrency: isCurrentBase });
+    if (currency)
+      reset({ name: currency.name, symbol: currency.symbol ?? '', isBaseCurrency: isCurrentBase });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency]);
 

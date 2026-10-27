@@ -76,8 +76,8 @@ export class ClientDetailResponseDto {
   })
   accountingEntityTypeId!: string | null;
 
-  @ApiProperty({ type: ProspectLocationDto })
-  location!: ProspectLocationDto;
+  @ApiPropertyOptional({ nullable: true, type: ProspectLocationDto })
+  location!: ProspectLocationDto | null;
 
   @ApiProperty({ type: [ProspectDetailContactDto] })
   contacts!: ProspectDetailContactDto[];

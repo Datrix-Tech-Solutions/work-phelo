@@ -105,6 +105,7 @@ interface Props {
   /** Omit to hide the action, e.g. when the user can't create clients. */
   onConvertToClient?: (row: Prospect) => void;
   onAdd: () => void;
+  onImport?: () => void;
   stageOptions: { value: string; label: string }[];
   stageFilter: string;
   onStageFilter: (stageId: string) => void;
@@ -124,6 +125,7 @@ export function AllProspectsTable({
   onDelete,
   onConvertToClient,
   onAdd,
+  onImport,
   stageOptions,
   stageFilter,
   onStageFilter,
@@ -165,6 +167,7 @@ export function AllProspectsTable({
         onSearch={onSearch}
         extraFilters={stageFilterSelect}
         toolbarTrailing={viewToggle}
+        secondaryButton={onImport ? { label: 'Import', onClick: onImport } : undefined}
         actionButton={{ label: 'Add Prospect', onClick: onAdd }}
         currentPage={currentPage}
         totalPages={totalPages}
@@ -195,6 +198,7 @@ export function AllProspectsTable({
         { label: 'Update Stage', onClick: () => onUpdateStage(row) },
         { label: 'Delete', onClick: () => onDelete(row), danger: true },
       ]}
+      secondaryButton={onImport ? { label: 'Import', onClick: onImport } : undefined}
       actionButton={{ label: 'Add Prospect', onClick: onAdd }}
       noInternalScroll
       isLoading={isLoading}

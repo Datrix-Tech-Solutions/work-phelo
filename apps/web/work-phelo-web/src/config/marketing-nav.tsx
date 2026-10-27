@@ -13,6 +13,7 @@ import {
   SquareUser,
   UserKey,
   LayoutPanelTop,
+  FileBarChart,
 } from 'lucide-react';
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
@@ -28,6 +29,7 @@ const CampaignManagementIcon = () => <SlidersHorizontal className="w-5 h-5" />;
 const TargetsIcon = () => <Target className="w-5 h-5" />;
 const CampaignsIcon = () => <Megaphone className="w-5 h-5" />;
 
+const ReportsIcon = () => <FileBarChart className="w-5 h-5" />;
 const UserManagementIcon = () => <UserKey className="w-5 h-5" />;
 
 const ProspectingIcon = () => <BookSearch className="w-5 h-5" />;
@@ -150,8 +152,17 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Targets and Reports',
-    items: [],
+    label: 'Reports',
+    items: [
+      {
+        key: 'reports',
+        label: 'Reports',
+        icon: <ReportsIcon />,
+        href: 'reports',
+        enabled: true,
+        active: true,
+      },
+    ],
   },
   {
     label: 'Administration',

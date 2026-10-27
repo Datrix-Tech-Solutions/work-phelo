@@ -16,6 +16,7 @@ import { AddClientProductModal } from '@/components/organisms/marketing/AddClien
 import { EditPrimaryContactModal } from '@/components/organisms/marketing/EditPrimaryContactModal';
 import { ChangeClientLocationModal } from '@/components/organisms/marketing/ChangeClientLocationModal';
 import { ClientBillingModal } from '@/components/organisms/marketing/ClientBillingModal';
+import { ProspectAppointmentsTab } from '@/components/organisms/marketing/ProspectAppointmentsTab';
 import { ClientTransactionsTab } from '@/components/organisms/marketing/ClientTransactionsTab';
 import { EditClientCompanyModal } from '@/components/organisms/marketing/EditClientCompanyModal';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
@@ -47,7 +48,7 @@ function formatDate(value: string | null): string {
   });
 }
 
-type ClientTab = 'products' | 'interactions' | 'transactions';
+type ClientTab = 'products' | 'interactions' | 'appointments' | 'transactions';
 
 export default function ClientDetailPage() {
   const { tenantSlug, id } = useParams<{ tenantSlug: string; id: string }>();
@@ -183,7 +184,7 @@ export default function ClientDetailPage() {
           <DetailField label="Type of Business" value={client.businessType?.name} />
           <DetailField label="Source Type" value={client.sourceType?.name} />
           <DetailField label="Assigned To" value={client.assignedUserName} />
-          <DetailField label="Location" value={client.location.label} />
+          <DetailField label="Location" value={client.location?.label} />
           <DetailField label="Contact Person Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
           <DetailField label="Primary Contact Phone" value={primaryContact?.phone} />
@@ -224,6 +225,10 @@ export default function ClientDetailPage() {
         tabs={[
           { key: 'products', label: 'Products/Services' },
           { key: 'interactions', label: 'Follow-ups' },
+          // Appointments are booked against the prospect the client was converted from.
+          ...(client.convertedFromProspectId
+            ? [{ key: 'appointments', label: 'Appointments' }]
+            : []),
           ...(canViewBilling ? [{ key: 'transactions', label: 'Transaction History' }] : []),
         ]}
         activeTab={activeTab}
@@ -258,6 +263,14 @@ export default function ClientDetailPage() {
           interactions={client.interactions}
           addLabel="Add Follow-up"
           onAdd={canAddFollowUp ? () => setAddingFollowUp(true) : undefined}
+        />
+      )}
+
+      {activeTab === 'appointments' && client.convertedFromProspectId && (
+        <ProspectAppointmentsTab
+          prospectId={client.convertedFromProspectId}
+          companyName={client.companyName}
+          assignedUserId={client.assignedUserId}
         />
       )}
 

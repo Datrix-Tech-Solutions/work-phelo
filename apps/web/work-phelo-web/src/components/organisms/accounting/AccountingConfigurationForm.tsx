@@ -5,7 +5,11 @@ import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useAccountingConfig, useAccountingCurrencyOptions, useUpdateAccountingConfig } from '@/hooks';
+import {
+  useAccountingConfig,
+  useAccountingCurrencyOptions,
+  useUpdateAccountingConfig,
+} from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
 
@@ -62,9 +66,8 @@ export function AccountingConfigurationForm() {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Accounting Configuration</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Set the tenant defaults used for fiscal periods and currency precision. Which accounts
-          get affected by a transaction is decided by its Transaction Type&apos;s Rule, not fixed
-          here.
+          Set the tenant defaults used for fiscal periods and currency precision. Which accounts get
+          affected by a transaction is decided by its Transaction Type&apos;s Rule, not fixed here.
         </p>
       </div>
 
