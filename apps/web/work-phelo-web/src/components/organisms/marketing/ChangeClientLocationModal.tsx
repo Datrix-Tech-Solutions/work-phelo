@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import {
   CompanyLocationForm,
   CompanyLocationFields,
+  toLocationPayload,
 } from '@/components/molecules/marketing/CompanyLocationForm';
 import { useUpdateClient } from '@/hooks/marketing/useClients';
 import { useToast } from '@/hooks/useToast';
@@ -47,9 +48,10 @@ export function ChangeClientLocationModal({
     location.location !== (currentLocation?.label ?? '');
 
   function handleSave() {
-    if (location.lat == null || location.lng == null) return;
+    const payload = toLocationPayload(location);
+    if (!payload) return;
     updateClient.mutate(
-      { location: { label: location.location, latitude: location.lat, longitude: location.lng } },
+      { location: payload },
       {
         onSuccess: () => {
           toast.success('Location updated');
@@ -75,7 +77,7 @@ export function ChangeClientLocationModal({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!changed || location.lat == null || location.lng == null}
+            disabled={!changed || !location.location.trim()}
             isLoading={updateClient.isPending}
             loadingText="Saving…"
           >

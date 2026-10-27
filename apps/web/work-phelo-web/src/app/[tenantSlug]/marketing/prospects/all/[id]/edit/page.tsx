@@ -7,6 +7,7 @@ import {
   ProspectWizardValues,
 } from '@/components/organisms/marketing/ProspectWizard';
 import { ProspectBreadcrumb } from '@/components/molecules/marketing/ProspectBreadcrumb';
+import { toLocationPayload } from '@/components/molecules/marketing/CompanyLocationForm';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { useProspect, useUpdateProspect } from '@/hooks/marketing/useProspects';
 import { useToast } from '@/hooks/useToast';
@@ -82,11 +83,7 @@ function buildPayload(
       achievedValue: row.achievedRevenue.trim() !== '' ? Number(row.achievedRevenue) : null,
       expectedCloseDate: row.expectedCloseDate || null,
     })),
-    location: {
-      label: location.location,
-      latitude: location.lat as number,
-      longitude: location.lng as number,
-    },
+    ...(toLocationPayload(location) ? { location: toLocationPayload(location) } : {}),
   };
 }
 
