@@ -90,6 +90,40 @@ export class ProjectsController {
 
   @PermissionExempt(
     'service-policy',
+    'ProjectsController.findClientProjects delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('by-client/:clientId')
+  @ApiOperation({
+    summary:
+      'The projects started for a marketing client, with the time logged on them',
+  })
+  @ApiParam({ name: 'clientId', description: 'Marketing client ID' })
+  findClientProjects(
+    @Param('clientId') clientId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.projectsService.findClientProjects(
+      req.user.tenantId,
+      clientId,
+      req.user,
+    );
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.findMyRunningTimers only reads the caller own timers.',
+  )
+  @Get('my-running-timers')
+  @ApiOperation({ summary: "The current employee's running task timers" })
+  findMyRunningTimers(@Req() req: Request & { user: RequestUser }) {
+    return this.projectsService.findMyRunningTimers(
+      req.user.tenantId,
+      req.user,
+    );
+  }
+
+  @PermissionExempt(
+    'service-policy',
     'ProjectsController.updateTaskStatus delegates caller and tenant scope to its existing policy checks.',
   )
   @Patch('tasks/:taskId/status')

@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -8,8 +9,10 @@ import {
   IsUUID,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import { ProjectStatus } from '../../../prisma/generated/client';
+import { ProjectConfigDto, ProjectPricingDto } from './project-config.dto';
 
 export class UpdateProjectDto {
   @ApiPropertyOptional({ example: 'Payroll self-service rollout' })
@@ -54,4 +57,22 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsUUID()
   managerId?: string;
+
+  @ApiPropertyOptional({
+    type: ProjectConfigDto,
+    description: "Replaces the project's own set-up, e.g. to turn on a tab",
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProjectConfigDto)
+  config?: ProjectConfigDto;
+
+  @ApiPropertyOptional({
+    type: ProjectPricingDto,
+    description: 'Changes the price of a flat-rate project',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProjectPricingDto)
+  pricing?: ProjectPricingDto;
 }

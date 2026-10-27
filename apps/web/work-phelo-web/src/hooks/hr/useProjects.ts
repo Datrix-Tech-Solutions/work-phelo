@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { useTaskTimeStore } from '@/store/taskTime.store';
+import { projectSetup } from '@/lib/projectSetup';
 import {
   ProjectDetail,
   ProjectTask,
@@ -67,6 +68,12 @@ export function useProject(id: string) {
     },
     enabled: !!id,
   });
+}
+
+/** What a project was set up with: its workflow, work types, tabs, priorities, billing and client. */
+export function useProjectSetup(projectId: string) {
+  const { data: project } = useProject(projectId);
+  return useMemo(() => projectSetup(project), [project]);
 }
 
 export function useCreateProject() {
@@ -197,30 +204,45 @@ export function useUpdateProjectTask() {
       const res = await api.patch<ProjectTask>(`/hr/projects/${projectId}/tasks/${taskId}`, data);
       return res.data;
     },
-    onSuccess: (_, { projectId, taskId, data }) => {
-      if (data.status === 'DONE') useTaskTimeStore.getState().pauseAll(taskId);
+    onSuccess: (_, { projectId }) => {
       queryClient.invalidateQueries({ queryKey: [KEY, projectId] });
       queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'tasks'] });
+      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'sprints'] });
+      // A finished task stops its timers on the server.
+      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'time'] });
     },
   });
 }
 
+/** Moves a task: to a workflow stage (the status follows it) or, with no stage, straight to a status. */
 export function useUpdateTaskStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ taskId, status }: { taskId: string; status: TaskStatus }) => {
-      const res = await api.patch<ProjectTask>(`/hr/projects/tasks/${taskId}/status`, { status });
+    mutationFn: async ({
+      taskId,
+      status,
+      stage,
+    }: {
+      taskId: string;
+      status?: TaskStatus;
+      stage?: string;
+    }) => {
+      const res = await api.patch<ProjectTask>(
+        `/hr/projects/tasks/${taskId}/status`,
+        stage ? { stage } : { status },
+      );
       return res.data;
     },
-    onSuccess: (_, { taskId, status }) => {
-      // Finished means the last stage of the workflow, whatever it is called: stop the clocks.
-      if (status === 'DONE') useTaskTimeStore.getState().pauseAll(taskId);
-      // Put the new status straight into the cached task lists, so the board doesn't show the
-      // old one until the refetch below lands.
+    onSuccess: (updated, { taskId }) => {
+      // Put the new status and stage straight into the cached task lists, so the board doesn't show
+      // the old ones until the refetch below lands.
       queryClient.setQueriesData<ProjectTask[]>(
         { queryKey: [KEY], predicate: (q) => q.queryKey[2] === 'tasks' },
-        (old) => old?.map((t) => (t.id === taskId ? { ...t, status } : t)),
+        (old) =>
+          old?.map((t) =>
+            t.id === taskId ? { ...t, status: updated.status, stage: updated.stage } : t,
+          ),
       );
       queryClient.invalidateQueries({ queryKey: [KEY] });
     },

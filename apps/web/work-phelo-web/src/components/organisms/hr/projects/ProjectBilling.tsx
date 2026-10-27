@@ -6,14 +6,14 @@ import { Button } from '@/components/atoms/Button';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { UpdatePriceModal } from '@/components/organisms/hr/projects/UpdatePriceModal';
 import { ProjectInvoiceModal } from '@/components/organisms/hr/projects/ProjectInvoiceModal';
-import { useProject, useProjectTasks } from '@/hooks';
+import { useProject, useProjectSetup, useProjectTasks, useUpdateProject } from '@/hooks';
 import { billingLines } from '@/lib/projectBilling';
 import { formatMoney, pricingExpectedValue } from '@/lib/projectPricing';
 import { formatHoursMinutes, timerElapsedMs, useNow } from '@/lib/taskTime';
+import { useProjectTimers } from '@/hooks/hr/useProjectTime';
+import { useSaveWithToast } from '@/hooks/hr/useProjectWork';
 import { cardClass, cn } from '@/lib/utils';
 import { useProjectInvoices } from '@/hooks/hr/useProjectInvoices';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
-import { useTaskTimeStore } from '@/store/taskTime.store';
 
 type BillingTab = 'bill' | 'history';
 
@@ -36,35 +36,31 @@ function Stat({ label, value }: { label: string; value: string }) {
 export function ProjectBilling({ projectId }: { projectId: string }) {
   const { data: project } = useProject(projectId);
   const { data: tasks = [] } = useProjectTasks(projectId);
-  const details = useProjectLocalStore((s) => s.byProjectId[projectId]);
-  const timersByTaskId = useTaskTimeStore((s) => s.timersByTaskId);
-  const timedByTaskId = useTaskTimeStore((s) => s.timedByTaskId);
+  const details = useProjectSetup(projectId);
+  const { timersByTaskId, timedByTaskId, anyRunning } = useProjectTimers(projectId);
+  const updateProject = useUpdateProject();
+  const save = useSaveWithToast();
+  // The dates a retainer or milestone project is priced over.
+  const startDate = project?.startDate?.slice(0, 10);
+  const endDate = project?.endDate?.slice(0, 10);
 
   const [tab, setTab] = useState<BillingTab>('bill');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [priceOpen, setPriceOpen] = useState(false);
-  const setPricing = useProjectLocalStore((s) => s.setPricing);
 
   const client = details?.client;
   const pricing = details?.pricing;
   const { invoices, active, transactions } = useProjectInvoices(projectId);
 
-  const anyRunning = useMemo(
-    () =>
-      Object.values(timersByTaskId).some((byPerson) =>
-        Object.values(byPerson).some((t) => t.runningSince),
-      ),
-    [timersByTaskId],
-  );
   const now = useNow(anyRunning);
 
   const lines = useMemo(() => {
     if (!pricing) return [];
     return billingLines({
       pricing,
-      startDate: details?.summary?.startDate,
-      endDate: details?.summary?.endDate,
+      startDate,
+      endDate,
       tasks: tasks
         .filter((t) => timedByTaskId[t.id])
         .map((t) => ({
@@ -77,7 +73,7 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
         })),
       invoices: active,
     });
-  }, [pricing, details?.summary, tasks, timedByTaskId, timersByTaskId, now, active]);
+  }, [pricing, startDate, endDate, tasks, timedByTaskId, timersByTaskId, now, active]);
 
   const stateOf = (transactionId: string) =>
     transactions?.items.find((t) => t.id === transactionId);
@@ -98,8 +94,7 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
   const full =
     pricing.type === 'TIMED'
       ? invoiced + left
-      : (pricingExpectedValue(pricing, details?.summary?.startDate, details?.summary?.endDate) ??
-        0);
+      : (pricingExpectedValue(pricing, startDate, endDate) ?? 0);
 
   // Once the price is on an invoice, changing it would no longer match what the client was billed.
   const priceInvoiced = active.some((i) => i.lines.some((l) => l.key === 'price'));
@@ -284,7 +279,12 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
           isOpen
           onClose={() => setPriceOpen(false)}
           onSave={(price) => {
-            setPricing(projectId, { type: 'FLAT_RATE', price });
+            save(
+              updateProject.mutateAsync({
+                id: projectId,
+                data: { pricing: { type: 'FLAT_RATE', price } },
+              }),
+            );
             setPriceOpen(false);
           }}
         />

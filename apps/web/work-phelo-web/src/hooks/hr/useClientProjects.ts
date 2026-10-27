@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
-import { useTaskTimeStore } from '@/store/taskTime.store';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { pricingExpectedValue } from '@/lib/projectPricing';
-import { accruedAmount, projectBillableTime, useNow } from '@/lib/taskTime';
-import type { ProjectPricing } from '@/types/hr';
+import { accruedAmount } from '@/lib/taskTime';
+import type { Project, ProjectPricing } from '@/types/hr';
 
 export interface ClientProject {
   id: string;
@@ -17,44 +17,34 @@ export interface ClientProject {
   createdAt: string;
 }
 
-/** The projects started for a marketing client. From local storage until the project backend is rebuilt. */
+/** The projects started for a marketing client, among those the person can see, with the time logged on them. */
 export function useClientProjects(clientId: string): ClientProject[] {
-  const byProjectId = useProjectLocalStore((s) => s.byProjectId);
-  const timersByTaskId = useTaskTimeStore((s) => s.timersByTaskId);
-  const timedByTaskId = useTaskTimeStore((s) => s.timedByTaskId);
-  const anyRunning = useMemo(
-    () =>
-      Object.values(timersByTaskId).some((byPerson) =>
-        Object.values(byPerson).some((t) => t.runningSince),
-      ),
-    [timersByTaskId],
-  );
-  const now = useNow(anyRunning);
+  const { data = [] } = useQuery({
+    queryKey: ['projects', 'by-client', clientId],
+    queryFn: async () => {
+      const res = await api.get<(Project & { loggedSeconds: number })[]>(
+        `/hr/projects/by-client/${clientId}`,
+      );
+      return res.data;
+    },
+    enabled: !!clientId,
+  });
   return useMemo(
     () =>
-      Object.entries(byProjectId).flatMap(([id, d]) =>
-        d.client?.id === clientId && d.summary
-          ? [
-              {
-                id,
-                name: d.summary.name,
-                billable: !!d.billable,
-                pricing: d.pricing,
-                expectedValue: d.pricing
-                  ? pricingExpectedValue(d.pricing, d.summary.startDate, d.summary.endDate)
-                  : null,
-                accrued:
-                  d.pricing?.type === 'TIMED'
-                    ? accruedAmount(
-                        projectBillableTime(timersByTaskId, timedByTaskId, id, now).totalMs,
-                        d.pricing.hourlyRate,
-                      )
-                    : null,
-                createdAt: d.summary.createdAt,
-              },
-            ]
-          : [],
-      ),
-    [byProjectId, clientId, timersByTaskId, timedByTaskId, now],
+      data.map((p) => ({
+        id: p.id,
+        name: p.name,
+        billable: !!p.billable,
+        pricing: p.pricing,
+        expectedValue: p.pricing
+          ? pricingExpectedValue(p.pricing, p.startDate.slice(0, 10), p.endDate?.slice(0, 10))
+          : null,
+        accrued:
+          p.pricing?.type === 'TIMED'
+            ? accruedAmount(p.loggedSeconds * 1000, p.pricing.hourlyRate)
+            : null,
+        createdAt: p.createdAt,
+      })),
+    [data],
   );
 }

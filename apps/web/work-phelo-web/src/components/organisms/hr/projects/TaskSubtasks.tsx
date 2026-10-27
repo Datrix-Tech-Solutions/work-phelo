@@ -5,7 +5,13 @@ import { X } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { inputClass, cn } from '@/lib/utils';
-import { useProjectWorkStore } from '@/store/projectWork.store';
+import {
+  useAddSubtask,
+  useProjectSubtasks,
+  useRemoveSubtask,
+  useSaveWithToast,
+  useUpdateSubtask,
+} from '@/hooks/hr/useProjectWork';
 
 interface Props {
   projectId: string;
@@ -16,10 +22,11 @@ interface Props {
 
 /** A task's subtasks, as the steps to follow to finish it: tick them off, add more, remove them. */
 export function TaskSubtasks({ projectId, taskId, canModify }: Props) {
-  const allSubtasks = useProjectWorkStore((s) => s.subtasks);
-  const addSubtask = useProjectWorkStore((s) => s.addSubtask);
-  const updateSubtask = useProjectWorkStore((s) => s.updateSubtask);
-  const removeSubtask = useProjectWorkStore((s) => s.removeSubtask);
+  const { data: allSubtasks = [] } = useProjectSubtasks(projectId);
+  const addSubtask = useAddSubtask(projectId);
+  const updateSubtask = useUpdateSubtask(projectId);
+  const removeSubtask = useRemoveSubtask(projectId);
+  const save = useSaveWithToast();
   const [draft, setDraft] = useState('');
 
   const subtasks = allSubtasks.filter((st) => st.taskId === taskId);
@@ -30,7 +37,7 @@ export function TaskSubtasks({ projectId, taskId, canModify }: Props) {
   const add = () => {
     const name = draft.trim();
     if (!name) return;
-    addSubtask(projectId, { name, taskId });
+    save(addSubtask.mutateAsync({ name, taskId }));
     setDraft('');
   };
 
@@ -56,7 +63,9 @@ export function TaskSubtasks({ projectId, taskId, canModify }: Props) {
                 type="checkbox"
                 checked={st.done}
                 disabled={!canModify}
-                onChange={() => updateSubtask(st.id, { done: !st.done })}
+                onChange={() =>
+                  save(updateSubtask.mutateAsync({ id: st.id, patch: { done: !st.done } }))
+                }
                 aria-label={`Mark ${st.name} ${st.done ? 'not done' : 'done'}`}
                 className="w-4 h-4 accent-(--module-btn-bg,var(--color-brand))"
               />
@@ -72,7 +81,7 @@ export function TaskSubtasks({ projectId, taskId, canModify }: Props) {
                 <button
                   type="button"
                   aria-label={`Remove ${st.name}`}
-                  onClick={() => removeSubtask(st.id)}
+                  onClick={() => save(removeSubtask.mutateAsync(st.id))}
                   className="p-0.5 text-gray-400 hover:text-red-600 transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />

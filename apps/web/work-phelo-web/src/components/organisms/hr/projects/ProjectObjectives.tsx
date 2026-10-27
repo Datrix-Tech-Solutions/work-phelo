@@ -7,11 +7,18 @@ import { DataCard, DataCardAction } from '@/components/organisms/shared/DataCard
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { projectProgress } from '@/lib/projectProgress';
 import { ObjectiveTreePanel } from '@/components/organisms/hr/projects/ObjectiveTreePanel';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { ObjectiveModal } from '@/components/organisms/hr/projects/ObjectiveModal';
-import { useProjectTasks, useProject, useMyProfile, usePermission } from '@/hooks';
+import { useProjectTasks, useProject, useProjectSetup, useMyProfile, usePermission } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
-import { useProjectWorkStore } from '@/store/projectWork.store';
+import {
+  useAddObjective,
+  useProjectObjectives,
+  useProjectSubtasks,
+  useRemoveObjective,
+  useSaveWithToast,
+  useUpdateObjective,
+} from '@/hooks/hr/useProjectWork';
+import { objectiveByTaskId as objectiveMap, taskMetaById } from '@/lib/taskMaps';
 import { ProjectObjective } from '@/types/hr';
 
 interface Props {
@@ -24,14 +31,13 @@ export function ProjectObjectives({ projectId }: Props) {
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProjectObjective | undefined>();
 
-  const allObjectives = useProjectWorkStore((s) => s.objectives);
-  const objectiveByTaskId = useProjectWorkStore((s) => s.objectiveByTaskId);
-  const subtasks = useProjectWorkStore((s) => s.subtasks);
-  const taskMeta = useProjectWorkStore((s) => s.taskMeta);
-  const config = useProjectLocalStore((s) => s.byProjectId[projectId]?.config);
-  const addObjective = useProjectWorkStore((s) => s.addObjective);
-  const updateObjective = useProjectWorkStore((s) => s.updateObjective);
-  const removeObjective = useProjectWorkStore((s) => s.removeObjective);
+  const { data: allObjectives = [] } = useProjectObjectives(projectId);
+  const { data: subtasks = [] } = useProjectSubtasks(projectId);
+  const config = useProjectSetup(projectId)?.config;
+  const addObjective = useAddObjective(projectId);
+  const updateObjective = useUpdateObjective(projectId);
+  const removeObjective = useRemoveObjective(projectId);
+  const save = useSaveWithToast();
 
   const canManageProjects = usePermission(Permission.CREATE_PROJECT_TASK);
   const { data: myProfile } = useMyProfile();
@@ -40,22 +46,17 @@ export function ProjectObjectives({ projectId }: Props) {
     canManageProjects || !!(project?.managerId && project.managerId === myProfile?.id);
 
   const { data: tasks = [], isLoading } = useProjectTasks(projectId);
+  const objectiveByTaskId = useMemo(() => objectiveMap(tasks), [tasks]);
+  const taskMeta = useMemo(() => taskMetaById(tasks), [tasks]);
 
   const objectives = useMemo(() => {
     const q = search.toLowerCase();
-    return allObjectives.filter(
-      (o) => o.projectId === projectId && o.name.toLowerCase().includes(q),
-    );
-  }, [allObjectives, projectId, search]);
+    return allObjectives.filter((o) => o.name.toLowerCase().includes(q));
+  }, [allObjectives, search]);
 
   const progress = useMemo(
-    () =>
-      projectProgress({
-        tasks,
-        objectives: allObjectives.filter((o) => o.projectId === projectId),
-        objectiveByTaskId,
-      }),
-    [tasks, allObjectives, projectId, objectiveByTaskId],
+    () => projectProgress({ tasks, objectives: allObjectives, objectiveByTaskId }),
+    [tasks, allObjectives, objectiveByTaskId],
   );
 
   const openPanel = (objective?: ProjectObjective) => {
@@ -93,7 +94,7 @@ export function ProjectObjectives({ projectId }: Props) {
                 },
                 {
                   label: 'Delete',
-                  onClick: () => removeObjective(objective.id),
+                  onClick: () => save(removeObjective.mutateAsync(objective.id)),
                   className: 'bg-red-50 text-red-600 hover:bg-red-100',
                 },
               ]
@@ -140,7 +141,11 @@ export function ProjectObjectives({ projectId }: Props) {
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
         onSubmit={(dto) =>
-          editing ? updateObjective(editing.id, dto) : addObjective(projectId, dto)
+          save(
+            editing
+              ? updateObjective.mutateAsync({ id: editing.id, dto })
+              : addObjective.mutateAsync(dto),
+          )
         }
         objective={editing}
       />

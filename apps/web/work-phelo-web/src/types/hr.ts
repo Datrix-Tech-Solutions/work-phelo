@@ -528,6 +528,18 @@ export interface Project {
   assignedCount: number;
   progress?: number;
   createdAt: string;
+  /** What kind of project it is. Missing for one made before types existed. */
+  kind?: ProjectType | null;
+  /** Name of the template it started from; null for a blank slate. */
+  templateName?: string | null;
+  /** The project's own workflow, work types, tabs and priority levels. `{}` for one made before set-ups existed. */
+  config?: Partial<ProjectConfig>;
+  /** The marketing client a client project is for, with its name as it was last read. */
+  clientId?: string | null;
+  clientName?: string | null;
+  billable?: boolean;
+  /** How a billable client project is charged. */
+  pricing?: ProjectPricing;
 }
 
 export interface CreateProjectDto {
@@ -572,6 +584,17 @@ export interface ProjectTask {
   createdByUserId?: string;
   createdAt: string;
   updatedAt?: string;
+  /** The workflow stage the task sits in; `status` follows it. */
+  stage?: string | null;
+  /** Names from the project's own set-up. */
+  workType?: string | null;
+  priorityName?: string | null;
+  /** Whether time is tracked on the task. */
+  isTimed?: boolean;
+  objectiveId?: string | null;
+  sprintId?: string | null;
+  /** Everyone the task is assigned to. */
+  assignees?: TaskAssignee[];
 }
 
 /** One person a task is assigned to. */
@@ -621,9 +644,20 @@ export interface CreateProjectTaskDto {
   dueDate?: string;
   priority?: TaskPriority;
   assignedEmployeeId?: string;
+  stage?: string;
+  workType?: string;
+  priorityName?: string;
+  isTimed?: boolean;
+  objectiveId?: string;
+  /** Everyone the task is assigned to. */
+  assigneeIds?: string[];
 }
 
-export type UpdateProjectTaskDto = Partial<CreateProjectTaskDto> & { status?: TaskStatus };
+export type UpdateProjectTaskDto = Omit<Partial<CreateProjectTaskDto>, 'objectiveId'> & {
+  status?: TaskStatus;
+  /** null takes the task out of its objective. */
+  objectiveId?: string | null;
+};
 
 export interface AddProjectMemberDto {
   employeeId: string;

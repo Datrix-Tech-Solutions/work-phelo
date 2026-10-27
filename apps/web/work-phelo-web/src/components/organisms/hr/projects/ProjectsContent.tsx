@@ -28,7 +28,6 @@ import {
 } from '@/types/hr';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 const PAGE_SIZE = 12;
@@ -112,7 +111,6 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const { data: employees = [] } = useEmployeeOptions();
   const createProject = useCreateProject();
   const archiveProject = useArchiveProject();
-  const setProjectDetails = useProjectLocalStore((s) => s.setProjectDetails);
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -183,21 +181,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
             }
           : {}),
       };
-      const project = await createProject.mutateAsync(data);
-      setProjectDetails(project.id, {
-        projectType,
-        config,
-        templateName: selectedTemplate?.name ?? null,
-        ...clientInfo,
-        summary: clientInfo?.client
-          ? {
-              name: project.name,
-              startDate: base.startDate,
-              endDate: base.endDate,
-              createdAt: project.createdAt,
-            }
-          : undefined,
-      });
+      await createProject.mutateAsync(data);
       setPanelOpen(false);
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });

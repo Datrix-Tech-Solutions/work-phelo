@@ -25,7 +25,8 @@ export class ProjectTimeService {
     private readonly projects: ProjectsService,
   ) {}
 
-  /** The seconds each person has on each task of the project. A running timer counts up to now. */
+  /** The seconds each person has settled on each task of the project. A running timer is not counted in
+   *  `seconds`: its `runningSince` is sent so the stretch since then can be counted live. */
   async summary(tenantId: string, projectId: string, user: RequestUser) {
     await this.projects.assertCanView(tenantId, projectId, user);
     const entries = await this.prisma.projectTimeEntry.findMany({
@@ -34,7 +35,6 @@ export class ProjectTimeService {
         employee: { select: { id: true, firstName: true, lastName: true } },
       },
     });
-    const now = Date.now();
     const byKey = new Map<
       string,
       {
@@ -55,10 +55,6 @@ export class ProjectTimeService {
         runningSince: null,
       };
       if (e.source === ProjectTimeSource.TIMER && !e.endedAt && e.startedAt) {
-        row.seconds += Math.max(
-          0,
-          Math.floor((now - e.startedAt.getTime()) / 1000),
-        );
         row.runningSince = e.startedAt.toISOString();
       } else {
         row.seconds += e.seconds;

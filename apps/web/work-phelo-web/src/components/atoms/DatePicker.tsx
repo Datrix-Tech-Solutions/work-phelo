@@ -30,6 +30,8 @@ interface DatePickerProps {
    *  toggle). The trigger itself is a <button>, so pass non-<button> interactive content
    *  here (e.g. a role="button" span) and stopPropagation on its click/keydown. */
   rightSlot?: React.ReactNode;
+  /** Renders just a calendar icon button (with the date as its tooltip) instead of the field. */
+  iconOnly?: boolean;
 }
 
 export function DatePicker({
@@ -44,6 +46,7 @@ export function DatePicker({
   maxDate,
   size = 'sm',
   rightSlot,
+  iconOnly = false,
 }: DatePickerProps) {
   const today = new Date();
   const parsed = value ? new Date(value) : null;
@@ -164,7 +167,13 @@ export function DatePicker({
   const yearGrid = Array.from({ length: 9 }, (_, i) => yearPageStart + i);
 
   return (
-    <div className="flex flex-col gap-(--field-label-gap,0.125rem) relative" ref={containerRef}>
+    <div
+      className={cn(
+        'flex flex-col gap-(--field-label-gap,0.125rem) relative',
+        iconOnly && 'w-auto',
+      )}
+      ref={containerRef}
+    >
       {label && (
         <label className="block truncate text-sm font-bold text-gray-900" title={label}>
           {label}
@@ -173,23 +182,39 @@ export function DatePicker({
 
       <button
         type="button"
+        title={iconOnly ? displayValue || 'Set due date' : undefined}
+        aria-label={iconOnly ? 'Due date' : undefined}
         onClick={() => (open ? closeDropdown() : openDropdown())}
         className={cn(
-          'w-full flex items-center justify-between border rounded-input text-sm transition-colors',
-          size === 'sm' ? 'px-2 py-2' : 'px-4 py-3',
-          open
-            ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
-            : error
-              ? 'bg-transparent border-red-500'
-              : 'bg-transparent border-(--input-border,var(--color-gray-400))',
-          displayValue ? 'text-gray-900' : 'text-gray-400',
+          iconOnly
+            ? 'inline-flex items-center justify-center gap-1.5 h-9 px-2 rounded-input text-xs hover:bg-gray-100 transition-colors'
+            : 'w-full flex items-center justify-between border rounded-input text-sm transition-colors',
+          !iconOnly && (size === 'sm' ? 'px-2 py-2' : 'px-4 py-3'),
+          !iconOnly &&
+            (open
+              ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+              : error
+                ? 'bg-transparent border-red-500'
+                : 'bg-transparent border-(--input-border,var(--color-gray-400))'),
+          displayValue ? 'text-gray-900' : iconOnly ? 'text-gray-600' : 'text-gray-400',
         )}
       >
-        <span>{displayValue || placeholder}</span>
-        <span className="flex items-center gap-1.5">
-          {rightSlot}
-          <CalendarIcon className={cn('text-gray-400', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5')} />
-        </span>
+        {iconOnly ? (
+          <>
+            <CalendarIcon className="w-6 h-6" strokeWidth={2.25} />
+            {displayValue && <span>{displayValue}</span>}
+          </>
+        ) : (
+          <>
+            <span>{displayValue || placeholder}</span>
+            <span className="flex items-center gap-1.5">
+              {rightSlot}
+              <CalendarIcon
+                className={cn('text-gray-400', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5')}
+              />
+            </span>
+          </>
+        )}
       </button>
 
       {error && <p className="text-xs text-red-500">{error}</p>}

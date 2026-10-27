@@ -24,6 +24,8 @@ import { currentSprint, sprintState } from '@/lib/projectSprints';
 import { taskAssignees } from '@/lib/taskAssignees';
 import {
   useProjectTasks,
+  useProjectSetup,
+  useUpdateProjectTask,
   useUpdateTaskStatus,
   useProject,
   useMyProfile,
@@ -33,8 +35,11 @@ import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { glassStrongClass, cn, todayLocal } from '@/lib/utils';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
-import { useProjectWorkStore } from '@/store/projectWork.store';
+import {
+  useProjectObjectives,
+  useProjectSprints,
+  useProjectSubtasks,
+} from '@/hooks/hr/useProjectWork';
 import { WorkTypeIconBadge } from '@/lib/workTypeIcons';
 import { TaskTimeBadge } from '@/components/molecules/hr/projects/TaskTimeBadge';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
@@ -72,13 +77,6 @@ function stageFromStatus(workflow: string[], status: TaskStatus): string {
   if (status === 'DONE') return workflow[workflow.length - 1];
   if (status === 'TODO') return workflow[0];
   return workflow[workflow.length > 2 ? 1 : 0];
-}
-
-/** The backend only knows four statuses, so a stage maps to the nearest one: first is to do, last is done. */
-function statusFromStage(workflow: string[], stage: string): TaskStatus {
-  const i = workflow.indexOf(stage);
-  if (i === workflow.length - 1) return 'DONE';
-  return i <= 0 ? 'TODO' : 'IN_PROGRESS';
 }
 
 function formatDate(dateStr: string) {
@@ -150,7 +148,7 @@ function CardBody({ item, objectiveEdit }: { item: BoardItem; objectiveEdit?: Ob
           </div>
         )}
       </div>
-      <TaskTimeBadge taskId={item.id} />
+      <TaskTimeBadge taskId={item.id} projectId={task.projectId} timed={!!task.isTimed} />
       {item.subtaskProgress && (
         <div className="flex flex-col gap-1">
           <p className="text-xs text-gray-500">
@@ -303,9 +301,10 @@ export function ProjectBoard({ projectId }: Props) {
   const { data: tasks = [], isLoading } = useProjectTasks(projectId);
   const updateStatus = useUpdateTaskStatus();
 
-  const workflow = useProjectLocalStore((s) => s.byProjectId[projectId]?.config.workflow);
-  const stageByTaskId = useProjectLocalStore((s) => s.stageByTaskId);
-  const setTaskStage = useProjectLocalStore((s) => s.setTaskStage);
+  const updateTask = useUpdateProjectTask();
+  const config = useProjectSetup(projectId)?.config;
+  const workflow = config?.workflow;
+  const workTypes = config?.workTypes;
 
   // A project with a saved workflow gets a column per stage; older ones keep the four statuses.
   const columns = useMemo(
@@ -313,24 +312,15 @@ export function ProjectBoard({ projectId }: Props) {
     [workflow],
   );
 
-  const allSubtasks = useProjectWorkStore((s) => s.subtasks);
-  const allObjectives = useProjectWorkStore((s) => s.objectives);
-  const objectiveByTaskId = useProjectWorkStore((s) => s.objectiveByTaskId);
-  const taskMeta = useProjectWorkStore((s) => s.taskMeta);
-  const assigneesByTaskId = useProjectWorkStore((s) => s.assigneesByTaskId);
-  const workTypes = useProjectLocalStore((s) => s.byProjectId[projectId]?.config.workTypes);
-
-  const config = useProjectLocalStore((s) => s.byProjectId[projectId]?.config);
+  const { data: allSubtasks = [] } = useProjectSubtasks(projectId);
+  const { data: allObjectives = [] } = useProjectObjectives(projectId);
 
   // With sprints, the board is just the current sprint's tasks, nothing else.
-  const allSprints = useProjectWorkStore((s) => s.sprints);
+  const { data: allSprints = [] } = useProjectSprints(projectId);
   const today = todayLocal();
   const projectSprints = useMemo(
-    () =>
-      allSprints
-        .filter((sp) => sp.projectId === projectId)
-        .sort((a, b) => a.startDate.localeCompare(b.startDate)),
-    [allSprints, projectId],
+    () => [...allSprints].sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    [allSprints],
   );
   // Which sprint the board follows: the one picked in the dropdown, else the current one.
   const [pickedSprintId, setPickedSprintId] = useState('');
@@ -348,30 +338,22 @@ export function ProjectBoard({ projectId }: Props) {
     () =>
       boardTasks.map((t) => {
         const own = allSubtasks.filter((st) => st.taskId === t.id);
-        const typeName = taskMeta[t.id]?.workType || 'Task';
+        const typeName = t.workType || 'Task';
         return {
           id: t.id,
           name: t.name,
           task: t,
           typeName,
           typeIcon: workTypes?.find((w) => w.name === typeName)?.icon ?? 'TASK',
-          objectiveId: objectiveByTaskId[t.id],
-          objectiveName: allObjectives.find((o) => o.id === objectiveByTaskId[t.id])?.name,
-          assignees: taskAssignees(t, assigneesByTaskId),
+          objectiveId: t.objectiveId ?? undefined,
+          objectiveName: allObjectives.find((o) => o.id === t.objectiveId)?.name,
+          assignees: taskAssignees(t),
           subtaskProgress: own.length
             ? { done: own.filter((st) => st.done).length, total: own.length }
             : undefined,
         };
       }),
-    [
-      boardTasks,
-      allSubtasks,
-      allObjectives,
-      objectiveByTaskId,
-      taskMeta,
-      assigneesByTaskId,
-      workTypes,
-    ],
+    [boardTasks, allSubtasks, allObjectives, workTypes],
   );
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
@@ -385,11 +367,14 @@ export function ProjectBoard({ projectId }: Props) {
   const canMoveItem = (item: BoardItem) =>
     canManageProjects || isProjectManager || item.assignees.some((a) => a.id === myProfile?.id);
 
-  const setTaskObjective = useProjectWorkStore((s) => s.setTaskObjective);
-  const projectObjectives = useMemo(
-    () => allObjectives.filter((o) => o.projectId === projectId),
-    [allObjectives, projectId],
-  );
+  const projectObjectives = allObjectives;
+  const setTaskObjective = async (taskId: string, objectiveId: string | null) => {
+    try {
+      await updateTask.mutateAsync({ projectId, taskId, data: { objectiveId } });
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
   const canEditTasks = canManageProjects || isProjectManager;
   // Only offered to people who can edit, and when the project has objectives to pick from.
   const objectiveEdit: ObjectiveEdit | undefined =
@@ -402,7 +387,7 @@ export function ProjectBoard({ projectId }: Props) {
 
   const savedStageOf = (item: BoardItem): string => {
     if (!workflow) return item.task.status;
-    const saved = stageByTaskId[item.id];
+    const saved = item.task.stage;
     return saved && workflow.includes(saved) ? saved : stageFromStatus(workflow, item.task.status);
   };
   const stageOf = (item: BoardItem) => optimistic[item.id] ?? savedStageOf(item);
@@ -414,7 +399,7 @@ export function ProjectBoard({ projectId }: Props) {
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, optimistic, columns, workflow, stageByTaskId]);
+  }, [items, optimistic, columns, workflow]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const item = items.find((i) => i.id === event.active.id);
@@ -459,9 +444,12 @@ export function ProjectBoard({ projectId }: Props) {
 
     try {
       const task = item.task;
-      const status = workflow ? statusFromStage(workflow, newStage) : (newStage as TaskStatus);
-      if (status !== task.status) await updateStatus.mutateAsync({ taskId: task.id, status });
-      if (workflow) setTaskStage(task.id, newStage);
+      // With a workflow the stage is what moves and the status follows it; older projects move by status.
+      await updateStatus.mutateAsync(
+        workflow
+          ? { taskId: task.id, stage: newStage }
+          : { taskId: task.id, status: newStage as TaskStatus },
+      );
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
     } finally {
@@ -541,20 +529,16 @@ export function ProjectBoard({ projectId }: Props) {
         onClose={() => setOpenTaskId(null)}
         projectId={projectId}
         canManageSubtasks={canManageProjects || isProjectManager}
-        workType={openTaskId ? taskMeta[openTaskId]?.workType : undefined}
-        priority={openTaskId ? taskMeta[openTaskId]?.priority : undefined}
+        workType={openTask?.workType ?? undefined}
+        priority={openTask?.priorityName ?? undefined}
         priorities={config?.priorities}
-        assignees={openTask ? taskAssignees(openTask, assigneesByTaskId) : []}
-        objectiveId={openTaskId ? objectiveByTaskId[openTaskId] : undefined}
+        assignees={openTask ? taskAssignees(openTask) : []}
+        objectiveId={openTask?.objectiveId ?? undefined}
         objectiveOptions={objectiveChipOptions(projectObjectives)}
         onObjectiveChange={
           canEditTasks && openTaskId ? (id) => setTaskObjective(openTaskId, id || null) : undefined
         }
-        objectiveName={
-          openTaskId
-            ? allObjectives.find((o) => o.id === objectiveByTaskId[openTaskId])?.name
-            : undefined
-        }
+        objectiveName={allObjectives.find((o) => o.id === openTask?.objectiveId)?.name}
       />
 
       <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>

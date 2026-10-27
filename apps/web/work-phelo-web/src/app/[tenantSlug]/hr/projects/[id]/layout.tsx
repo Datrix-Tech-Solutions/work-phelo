@@ -7,7 +7,14 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { pageBreadcrumb, pagePx } from '@/lib/layout';
 import { ProjectBanner } from '@/components/molecules/hr/projects/ProjectBanner';
-import { useProject, useMyProfile, usePermission } from '@/hooks';
+import {
+  useProject,
+  useProjectSetup,
+  useUpdateProject,
+  useMyProfile,
+  usePermission,
+} from '@/hooks';
+import { useSaveWithToast } from '@/hooks/hr/useProjectWork';
 import { Permission } from '@/lib/permissionMap';
 import { AddProjectTabMenu } from '@/components/molecules/hr/projects/AddProjectTabMenu';
 import {
@@ -16,7 +23,7 @@ import {
   PROJECT_FEATURE_TAB_SEGMENTS,
 } from '@/lib/projectFeatures';
 import type { ProjectFeature } from '@/types/hr';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
+import { BLANK_PROJECT_CONFIG } from '@/lib/defaultProjectTemplates';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 
 const TAB_ACTIVE =
@@ -38,11 +45,27 @@ export default function ProjectDetailLayout({
 
   const { data: project, isLoading } = useProject(id);
   // The project's own features (from its template or blank-slate setup) decide its tabs.
-  const features = useProjectLocalStore((s) => s.byProjectId[id]?.config.features);
-  const addFeature = useProjectLocalStore((s) => s.addFeature);
-  const isBillable = useProjectLocalStore(
-    (s) => !!s.byProjectId[id]?.billable && !!s.byProjectId[id]?.pricing,
-  );
+  const setup = useProjectSetup(id);
+  const features = setup?.config?.features;
+  const isBillable = !!setup?.billable && !!setup.pricing;
+  const updateProject = useUpdateProject();
+  const save = useSaveWithToast();
+  // Turns a tab on for this project only, leaving its template alone. A project made before set-ups
+  // existed starts from the Tasks and Board tabs it was already showing.
+  const addFeature = (feature: ProjectFeature) =>
+    save(
+      updateProject.mutateAsync({
+        id,
+        data: {
+          config: {
+            ...BLANK_PROJECT_CONFIG,
+            ...setup?.config,
+            ...(setup?.config ? {} : { workflow: ['To Do', 'In Progress', 'On Hold', 'Done'] }),
+            features: [...(features ?? ['LIST', 'BOARD']), feature],
+          },
+        },
+      }),
+    );
   const router = useRouter();
   const { data: myProfile } = useMyProfile();
   const canManageProjects = usePermission(Permission.CREATE_PROJECT);
@@ -136,7 +159,7 @@ export default function ProjectDetailLayout({
                     label: o.value === 'LIST' ? 'Tasks' : o.label,
                   }))}
                   onPick={(value) => {
-                    addFeature(id, value as ProjectFeature);
+                    addFeature(value as ProjectFeature);
                     router.push(`${root}/${PROJECT_FEATURE_TAB_SEGMENTS[value as ProjectFeature]}`);
                   }}
                 />

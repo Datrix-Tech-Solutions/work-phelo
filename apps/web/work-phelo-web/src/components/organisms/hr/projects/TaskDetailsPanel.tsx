@@ -5,7 +5,6 @@ import { Button } from '@/components/atoms/Button';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { TypeChipSelect, TypeChipOption } from '@/components/atoms/TypeChipSelect';
 import { TaskTimer } from '@/components/organisms/hr/projects/TaskTimer';
-import { useTaskTimeStore } from '@/store/taskTime.store';
 import { useMyProfile } from '@/hooks';
 import { TaskSubtasks } from '@/components/organisms/hr/projects/TaskSubtasks';
 import { PRIORITY_TYPE_CHIP_COLORS } from '@/lib/priorityColors';
@@ -75,7 +74,7 @@ export function TaskDetailsPanel({
   const chipLabel = [workType, priority].filter(Boolean).join(' · ');
   const meta = task ? STATUS_META[task.status] : null;
   const { data: me } = useMyProfile();
-  const timed = useTaskTimeStore((s) => (task ? s.timedByTaskId[task.id] : false));
+  const timed = !!task?.isTimed;
 
   return (
     <SidePanel
@@ -132,7 +131,6 @@ export function TaskDetailsPanel({
               <div className="h-px bg-gray-100" />
               <TaskTimer
                 taskId={task.id}
-                taskName={task.name}
                 projectId={projectId}
                 canTrack={canManageSubtasks || assignees.some((a) => a.id === me?.id)}
                 finished={task.status === 'DONE'}

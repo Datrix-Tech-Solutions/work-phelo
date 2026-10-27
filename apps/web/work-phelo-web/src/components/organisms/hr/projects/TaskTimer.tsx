@@ -7,12 +7,16 @@ import { Button } from '@/components/atoms/Button';
 import { useMyProfile } from '@/hooks';
 import { TimeEntryModal } from '@/components/organisms/hr/projects/TimeEntryModal';
 import { useProjectInvoices } from '@/hooks/hr/useProjectInvoices';
-import { useTaskTimeStore, type PersonTimer } from '@/store/taskTime.store';
+import {
+  useMyRunningTimers,
+  useProjectTimers,
+  useTaskTimeActions,
+} from '@/hooks/hr/useProjectTime';
+import { useSaveWithToast } from '@/hooks/hr/useProjectWork';
 import { formatElapsed, timerElapsedMs, totalElapsedMs, useNow } from '@/lib/taskTime';
 
 interface Props {
   taskId: string;
-  taskName: string;
   projectId: string;
   /** Whether the person can start their own timer on this task. */
   canTrack: boolean;
@@ -21,46 +25,33 @@ interface Props {
 }
 
 /** The timer in a task's details: your Start/Pause, your time, and everyone's. */
-export function TaskTimer({ taskId, taskName, projectId, canTrack, finished }: Props) {
+export function TaskTimer({ taskId, projectId, canTrack, finished }: Props) {
   const { data: me } = useMyProfile();
-  const timersById = useTaskTimeStore((s) => s.timersByTaskId[taskId]);
-  const allTimers = useTaskTimeStore((s) => s.timersByTaskId);
-  const start = useTaskTimeStore((s) => s.start);
-  const pause = useTaskTimeStore((s) => s.pause);
-  const addTime = useTaskTimeStore((s) => s.addTime);
-  const setTime = useTaskTimeStore((s) => s.setTime);
+  const { timersByTaskId } = useProjectTimers(projectId);
+  const timersById = timersByTaskId[taskId];
+  const { data: myRunning = [] } = useMyRunningTimers();
+  const { start, pause, add, setMine } = useTaskTimeActions(projectId);
+  const save = useSaveWithToast();
   const { active: invoices } = useProjectInvoices(projectId);
   const [entry, setEntry] = useState<'add' | 'set' | null>(null);
-  const [asking, setAsking] = useState<PersonTimer[] | null>(null);
+  const [asking, setAsking] = useState<{ taskId: string; taskName: string }[] | null>(null);
 
   const timers = timersById ? Object.values(timersById) : [];
   const now = useNow(timers.some((t) => t.runningSince));
   const mine = me ? timersById?.[me.id] : undefined;
-  const person = me ? { id: me.id, name: `${me.firstName} ${me.lastName}` } : null;
 
-  // The person's other running timers, on any task.
-  const othersRunning = (): PersonTimer[] =>
-    me
-      ? Object.entries(allTimers).flatMap(([id, byPerson]) =>
-          id !== taskId && byPerson[me.id]?.runningSince ? [byPerson[me.id]] : [],
-        )
-      : [];
-  const pauseOthers = () => {
-    if (!me) return;
-    for (const [id, byPerson] of Object.entries(allTimers)) {
-      if (id !== taskId && byPerson[me.id]?.runningSince) pause(id, me.id);
-    }
-  };
+  // The person's other running timers, on any task or project.
+  const othersRunning = () => myRunning.filter((t) => t.taskId !== taskId);
+  const startTimer = (pauseOthers: boolean) => save(start.mutateAsync({ taskId, pauseOthers }));
 
   // Once the task's time is on an invoice that still stands, the time is locked.
   const locked = invoices.some((i) => i.lines.some((l) => l.key === taskId));
   const myMs = mine ? timerElapsedMs(mine, now) : 0;
 
   const handleStart = () => {
-    if (!person) return;
     const others = othersRunning();
     if (others.length > 0) setAsking(others);
-    else start(taskId, taskName, person, projectId);
+    else startTimer(false);
   };
 
   return (
@@ -76,11 +67,11 @@ export function TaskTimer({ taskId, taskName, projectId, canTrack, finished }: P
         </div>
         {canTrack &&
           (mine?.runningSince ? (
-            <Button variant="outline" onClick={() => me && pause(taskId, me.id)}>
+            <Button variant="outline" onClick={() => save(pause.mutateAsync(taskId))}>
               <Pause className="w-4 h-4 mr-1.5" /> Pause
             </Button>
           ) : (
-            <Button onClick={handleStart} disabled={finished || !person || locked}>
+            <Button onClick={handleStart} disabled={finished || !me || locked || start.isPending}>
               <Play className="w-4 h-4 mr-1.5" /> {mine ? 'Resume' : 'Start'}
             </Button>
           ))}
@@ -94,7 +85,7 @@ export function TaskTimer({ taskId, taskName, projectId, canTrack, finished }: P
 
       {canTrack && !locked && (
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setEntry('add')} disabled={!person}>
+          <Button variant="outline" onClick={() => setEntry('add')} disabled={!me}>
             <Plus className="w-4 h-4 mr-1.5" /> Add Time
           </Button>
           {mine && (
@@ -130,8 +121,8 @@ export function TaskTimer({ taskId, taskName, projectId, canTrack, finished }: P
           isOpen
           onClose={() => setEntry(null)}
           onSubmit={(ms) => {
-            if (entry === 'add' && person) addTime(taskId, taskName, person, projectId, ms);
-            if (entry === 'set' && me) setTime(taskId, me.id, ms);
+            if (entry === 'add') save(add.mutateAsync({ taskId, ms }));
+            if (entry === 'set') save(setMine.mutateAsync({ taskId, ms }));
             setEntry(null);
           }}
         />
@@ -150,7 +141,7 @@ export function TaskTimer({ taskId, taskName, projectId, canTrack, finished }: P
             <Button
               variant="outline"
               onClick={() => {
-                if (person) start(taskId, taskName, person, projectId);
+                startTimer(false);
                 setAsking(null);
               }}
             >
@@ -158,8 +149,7 @@ export function TaskTimer({ taskId, taskName, projectId, canTrack, finished }: P
             </Button>
             <Button
               onClick={() => {
-                pauseOthers();
-                if (person) start(taskId, taskName, person, projectId);
+                startTimer(true);
                 setAsking(null);
               }}
             >
@@ -170,7 +160,7 @@ export function TaskTimer({ taskId, taskName, projectId, canTrack, finished }: P
       >
         <ul className="mt-4 flex flex-col gap-1 text-sm text-gray-800 list-disc pl-5">
           {asking?.map((t) => (
-            <li key={t.taskName + t.personId}>{t.taskName}</li>
+            <li key={t.taskId}>{t.taskName}</li>
           ))}
         </ul>
       </Modal>

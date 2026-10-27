@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react';
-import type { PersonTimer } from '@/store/taskTime.store';
+/** One person's time on one task. While `runningSince` is set the timer is running. */
+export interface PersonTimer {
+  personId: string;
+  personName: string;
+  taskName: string;
+  /** The project the task belongs to, so a project's time can be added up. */
+  projectId?: string;
+  accumulatedMs: number;
+  /** ISO time the timer was last started; unset while paused. */
+  runningSince?: string;
+}
 
 /** Milliseconds a timer has logged so far, counting the stretch it is running now. */
 export function timerElapsedMs(timer: PersonTimer, now: number): number {

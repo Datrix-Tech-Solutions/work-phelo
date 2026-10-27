@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { ChevronRight, Search, Timer } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { QuickAddTaskRow } from '@/components/molecules/hr/projects/QuickAddTaskRow';
 import { TaskTimeBadge } from '@/components/molecules/hr/projects/TaskTimeBadge';
 import { AvatarStack } from '@/components/atoms/AvatarStack';
 import { TableButton } from '@/components/atoms/TableButton';
@@ -11,7 +12,12 @@ import { ThreeDotMenu } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { TypeChipSelect, TypeChipOption } from '@/components/atoms/TypeChipSelect';
-import { useProjectTasks, useUpdateTaskStatus } from '@/hooks';
+import {
+  useProjectTasks,
+  useProjectSetup,
+  useUpdateProjectTask,
+  useUpdateTaskStatus,
+} from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { useTaskDialogs } from '@/hooks/hr/useTaskDialogs';
@@ -23,8 +29,14 @@ import { buildBacklogRows, WorkRow } from '@/lib/projectWorkTree';
 import { TASK_STATUS_META, TASK_STATUS_FILTER_OPTIONS } from '@/lib/taskStatus';
 import { WorkTypeIconBadge } from '@/lib/workTypeIcons';
 import { cardClass, cn, inputClass, todayLocal } from '@/lib/utils';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
-import { useProjectWorkStore } from '@/store/projectWork.store';
+import {
+  useCompleteSprint,
+  useProjectObjectives,
+  useProjectSprints,
+  useRemoveSprint,
+  useSaveWithToast,
+} from '@/hooks/hr/useProjectWork';
+import { objectiveByTaskId as objectiveMap } from '@/lib/taskMaps';
 import type { ProjectSprint, TaskStatus } from '@/types/hr';
 
 // One grid for every row, so the columns line up from section to section.
@@ -121,9 +133,11 @@ interface Props {
    * `list` is every task in one flat list with created, updated and due dates, and no sprints.
    */
   layout?: 'backlog' | 'list';
+  /** Shown at the end of the toolbar, e.g. a switch to another view of the same tasks. */
+  viewToggle?: React.ReactNode;
 }
 
-export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
+export function ProjectBacklog({ projectId, layout = 'backlog', viewToggle }: Props) {
   const isList = layout === 'list';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -131,35 +145,29 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
   // The sprint waiting on a "complete it?" confirmation.
   const [completing, setCompleting] = useState<ProjectSprint | null>(null);
 
-  const { canModify, openCreate, openDetails, dialogs } = useTaskDialogs(projectId);
+  const {
+    canModify,
+    openCreate,
+    openDetails,
+    quickCreate,
+    isQuickCreating,
+    defaultTimed,
+    dialogs,
+  } = useTaskDialogs(projectId);
   const { data: tasks = [], isLoading } = useProjectTasks(projectId);
   const { openSprint, dialog: sprintDialog } = useSprintDialog(projectId, tasks);
 
-  const allObjectives = useProjectWorkStore((s) => s.objectives);
-  const objectiveByTaskId = useProjectWorkStore((s) => s.objectiveByTaskId);
-  const taskMeta = useProjectWorkStore((s) => s.taskMeta);
-  const assigneesByTaskId = useProjectWorkStore((s) => s.assigneesByTaskId);
-  const allSprints = useProjectWorkStore((s) => s.sprints);
-  const removeSprint = useProjectWorkStore((s) => s.removeSprint);
-  const completeSprint = useProjectWorkStore((s) => s.completeSprint);
-  const setTaskObjective = useProjectWorkStore((s) => s.setTaskObjective);
-  const setTaskMeta = useProjectWorkStore((s) => s.setTaskMeta);
+  const { data: objectives = [] } = useProjectObjectives(projectId);
+  const { data: sprints = [] } = useProjectSprints(projectId);
+  const removeSprint = useRemoveSprint(projectId);
+  const completeSprint = useCompleteSprint(projectId);
+  const updateTask = useUpdateProjectTask();
   const updateStatus = useUpdateTaskStatus();
+  const save = useSaveWithToast();
   const toast = useToastStore((s) => s.addToast);
-  const config = useProjectLocalStore((s) => s.byProjectId[projectId]?.config);
+  const config = useProjectSetup(projectId)?.config;
+  const objectiveByTaskId = useMemo(() => objectiveMap(tasks), [tasks]);
   const today = todayLocal();
-
-  const objectives = useMemo(
-    () => allObjectives.filter((o) => o.projectId === projectId),
-    [allObjectives, projectId],
-  );
-  const sprints = useMemo(
-    () =>
-      allSprints
-        .filter((sp) => sp.projectId === projectId)
-        .sort((a, b) => a.startDate.localeCompare(b.startDate)),
-    [allSprints, projectId],
-  );
 
   // The choices each chip offers when you click it.
   const statusOptions: TypeChipOption[] = (
@@ -176,6 +184,17 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
   }));
   const objectiveChipChoices = objectiveChipOptions(objectives);
 
+  const changeTask = async (
+    taskId: string,
+    data: { objectiveId?: string | null; priorityName?: string },
+  ) => {
+    try {
+      await updateTask.mutateAsync({ projectId, taskId, data });
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
   const changeStatus = async (taskId: string, status: string) => {
     try {
       await updateStatus.mutateAsync({ taskId, status: status as TaskStatus });
@@ -190,11 +209,10 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
         tasks,
         objectives,
         objectiveByTaskId,
-        assigneesByTaskId,
         search,
         status: statusFilter,
       }),
-    [tasks, objectives, objectiveByTaskId, assigneesByTaskId, search, statusFilter],
+    [tasks, objectives, objectiveByTaskId, search, statusFilter],
   );
 
   const inSprint = useMemo(() => new Set(sprints.flatMap((sp) => sp.taskIds)), [sprints]);
@@ -210,8 +228,7 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
     });
 
   const renderRow = (row: WorkRow) => {
-    const icon =
-      config?.workTypes.find((w) => w.name === taskMeta[row.id]?.workType)?.icon ?? 'TASK';
+    const icon = config?.workTypes.find((w) => w.name === row.task.workType)?.icon ?? 'TASK';
     const done = row.task.status === 'DONE';
     return (
       <div
@@ -248,15 +265,13 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
           options={objectiveChipChoices}
           emptyLabel="—"
           readOnly={!canModify || objectives.length === 0}
-          onChange={(id) => setTaskObjective(row.id, id || null)}
+          onChange={(id) => changeTask(row.id, { objectiveId: id || null })}
         />
         <TypeChipSelect
-          value={taskMeta[row.id]?.priority ?? ''}
+          value={row.task.priorityName ?? ''}
           options={priorityOptions}
           readOnly={!canModify || priorityOptions.length === 0}
-          onChange={(name) =>
-            setTaskMeta(row.id, { workType: taskMeta[row.id]?.workType ?? '', priority: name })
-          }
+          onChange={(name) => changeTask(row.id, { priorityName: name })}
         />
         <TypeChipSelect
           value={row.task.status}
@@ -269,7 +284,12 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
         ) : (
           <span className="text-gray-400">—</span>
         )}
-        <TaskTimeBadge taskId={row.id} empty={<span className="text-gray-400">—</span>} />
+        <TaskTimeBadge
+          taskId={row.id}
+          projectId={projectId}
+          timed={!!row.task.isTimed}
+          empty={<span className="text-gray-400">—</span>}
+        />
         {isList && (
           <>
             <DateCell label="Created" value={row.task.createdAt} />
@@ -284,6 +304,18 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
       </div>
     );
   };
+
+  // The inline row that ends each list; a sprint's adds the new task to that sprint.
+  const createFooter = (sprintId?: string) =>
+    canModify ? (
+      <QuickAddTaskRow
+        projectId={projectId}
+        isCreating={isQuickCreating}
+        objectiveOptions={objectiveChipChoices}
+        defaultTimed={defaultTimed}
+        onCreate={(values) => quickCreate({ ...values, sprintId })}
+      />
+    ) : null;
 
   const empty = (message: string) => (
     <p className="px-4 py-4 border-t border-gray-100 text-sm text-gray-400">{message}</p>
@@ -313,7 +345,11 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
         <ThreeDotMenu
           actions={[
             { label: 'Edit', onClick: () => openSprint(sprint) },
-            { label: 'Delete', danger: true, onClick: () => removeSprint(sprint.id) },
+            {
+              label: 'Delete',
+              danger: true,
+              onClick: () => save(removeSprint.mutateAsync(sprint.id)),
+            },
           ]}
         />
       </>
@@ -354,16 +390,19 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
             onChange={setStatusFilter}
           />
         </div>
-        {canModify && (
-          <div className="ml-auto flex items-center gap-2">
-            {!isList && (
-              <Button variant="outline" onClick={() => openSprint()}>
-                Create Sprint
-              </Button>
-            )}
-            <Button onClick={openCreate}>Create Task</Button>
-          </div>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {canModify && (
+            <>
+              {!isList && (
+                <Button variant="outline" onClick={() => openSprint()}>
+                  Create Sprint
+                </Button>
+              )}
+              <Button onClick={openCreate}>Create Task</Button>
+            </>
+          )}
+          {viewToggle}
+        </div>
       </div>
 
       {isList ? (
@@ -404,6 +443,7 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
                 {sprintRows.length > 0
                   ? sprintRows.map(renderRow)
                   : empty('No tasks in this sprint yet. Use Edit to add some.')}
+                {!sprint.completedAt && createFooter(sprint.id)}
               </Section>
             );
           })}
@@ -418,6 +458,7 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
               {backlogRows.length > 0
                 ? backlogRows.map(renderRow)
                 : empty(tasks.length === 0 ? 'No tasks yet.' : 'Every task is in a sprint.')}
+              {createFooter()}
             </Section>
           )}
         </>
@@ -440,7 +481,12 @@ export function ProjectBacklog({ projectId, layout = 'backlog' }: Props) {
             <Button
               onClick={() => {
                 if (!completing) return;
-                completeSprint(completing.id, completing.taskIds, today);
+                save(
+                  completeSprint.mutateAsync({
+                    id: completing.id,
+                    keepTaskIds: completing.taskIds,
+                  }),
+                );
                 setCompleting(null);
               }}
             >

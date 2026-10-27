@@ -4,17 +4,24 @@ import { useMemo, useState } from 'react';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { ProjectTemplateCard } from '@/components/molecules/hr/projects/ProjectTemplateCard';
 import { ProjectTemplatePanel } from '@/components/organisms/hr/projects/ProjectTemplatePanel';
-import { useProjectTemplatesStore } from '@/store/projectTemplates.store';
+import {
+  useAddProjectTemplate,
+  useProjectTemplates,
+  useRemoveProjectTemplate,
+  useUpdateProjectTemplate,
+} from '@/hooks/hr/useProjectTemplates';
+import { useSaveWithToast } from '@/hooks/hr/useProjectWork';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 import { CreateProjectTemplateDto, ProjectTemplate } from '@/types/hr';
 
 export default function ProjectTemplatesPage() {
   const labels = useProjectLabels();
   // Only the templates people have created. Scrum and Kanban are offered when starting a project.
-  const templates = useProjectTemplatesStore((s) => s.templates);
-  const addTemplate = useProjectTemplatesStore((s) => s.addTemplate);
-  const updateTemplate = useProjectTemplatesStore((s) => s.updateTemplate);
-  const removeTemplate = useProjectTemplatesStore((s) => s.removeTemplate);
+  const { custom: templates } = useProjectTemplates();
+  const addTemplate = useAddProjectTemplate();
+  const updateTemplate = useUpdateProjectTemplate();
+  const removeTemplate = useRemoveProjectTemplate();
+  const save = useSaveWithToast();
 
   const [search, setSearch] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
@@ -31,8 +38,9 @@ export default function ProjectTemplatesPage() {
   };
 
   const handleSubmit = (dto: CreateProjectTemplateDto) => {
-    if (editing) updateTemplate(editing.id, dto);
-    else addTemplate(dto);
+    save(
+      editing ? updateTemplate.mutateAsync({ id: editing.id, dto }) : addTemplate.mutateAsync(dto),
+    );
   };
 
   return (
@@ -56,7 +64,7 @@ export default function ProjectTemplatesPage() {
           <ProjectTemplateCard
             template={template}
             onEdit={() => openPanel(template)}
-            onDelete={() => removeTemplate(template.id)}
+            onDelete={() => save(removeTemplate.mutateAsync(template.id))}
           />
         )}
       />

@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { Avatar } from '@/components/atoms/Avatar';
 import { ProgressRow } from '@/components/molecules/hr/projects/ProgressRow';
 import { PieBreakdown } from '@/components/molecules/hr/projects/PieBreakdown';
-import { useProjectMembers, useProjectTasks } from '@/hooks';
+import { useProjectMembers, useProjectSetup, useProjectTasks } from '@/hooks';
 import { projectProgress } from '@/lib/projectProgress';
 import { PRIORITY_COLORS } from '@/lib/priorityColors';
 import { TASK_STATUS_META } from '@/lib/taskStatus';
@@ -18,8 +18,8 @@ import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { useProjectTime } from '@/hooks/hr/useProjectTime';
 import { accruedAmount, formatHoursMinutes } from '@/lib/taskTime';
 import { formatMoney } from '@/lib/projectPricing';
-import { useProjectLocalStore } from '@/store/projectLocal.store';
-import { useProjectWorkStore } from '@/store/projectWork.store';
+import { useProjectObjectives } from '@/hooks/hr/useProjectWork';
+import { objectiveByTaskId as objectiveMap } from '@/lib/taskMaps';
 import type { ProjectTask, TaskStatus } from '@/types/hr';
 
 function SummaryCard({
@@ -124,20 +124,19 @@ function StatusOverview({ tasks }: { tasks: ProjectTask[] }) {
 
 /** Tasks split by work type. */
 function WorkTypeBreakdown({ projectId, tasks }: { projectId: string; tasks: ProjectTask[] }) {
-  const config = useProjectLocalStore((s) => s.byProjectId[projectId]?.config);
-  const taskMeta = useProjectWorkStore((s) => s.taskMeta);
+  const config = useProjectSetup(projectId)?.config;
 
   const groups = useMemo(() => {
     const byName = new Map<string, Group>();
     for (const task of tasks) {
-      const name = taskMeta[task.id]?.workType || 'Task';
+      const name = task.workType || 'Task';
       const icon = config?.workTypes.find((w) => w.name === name)?.icon ?? 'TASK';
       const entry = byName.get(name) ?? { name, color: WORK_TYPE_ICONS[icon].chartColor, count: 0 };
       entry.count += 1;
       byName.set(name, entry);
     }
     return [...byName.values()].sort((a, b) => b.count - a.count);
-  }, [tasks, taskMeta, config]);
+  }, [tasks, config]);
 
   if (tasks.length === 0) return EMPTY;
   return <BreakdownBar groups={groups} total={tasks.length} />;
@@ -151,9 +150,7 @@ const NO_PRIORITY = { name: 'No priority', color: '#9ca3af' };
  */
 function MemberWorkload({ projectId, tasks }: { projectId: string; tasks: ProjectTask[] }) {
   const { data: members = [] } = useProjectMembers(projectId);
-  const assigneesByTaskId = useProjectWorkStore((s) => s.assigneesByTaskId);
-  const taskMeta = useProjectWorkStore((s) => s.taskMeta);
-  const priorities = useProjectLocalStore((s) => s.byProjectId[projectId]?.config.priorities);
+  const priorities = useProjectSetup(projectId)?.config?.priorities;
 
   // The legend and the segment order: the project's priorities, lowest to highest, then "no priority".
   const levels = useMemo(
@@ -166,13 +163,13 @@ function MemberWorkload({ projectId, tasks }: { projectId: string; tasks: Projec
 
   const rows = useMemo(() => {
     const count = (match: (ids: string[]) => boolean) => {
-      const own = tasks.filter((t) => match(taskAssignees(t, assigneesByTaskId).map((a) => a.id)));
+      const own = tasks.filter((t) => match(taskAssignees(t).map((a) => a.id)));
       const open = own.filter((t) => t.status !== 'DONE');
       const segments = levels
         .map((level) => ({
           ...level,
           count: open.filter((t) => {
-            const name = taskMeta[t.id]?.priority;
+            const name = t.priorityName;
             return level === NO_PRIORITY
               ? !name || !levels.some((l) => l.name === name)
               : name === level.name;
@@ -191,7 +188,7 @@ function MemberWorkload({ projectId, tasks }: { projectId: string; tasks: Projec
       people: people.sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
       unassigned: count((ids) => ids.length === 0),
     };
-  }, [members, tasks, assigneesByTaskId, taskMeta, levels]);
+  }, [members, tasks, levels]);
 
   const max = Math.max(1, ...rows.people.map((p) => p.open), rows.unassigned.open);
   const title = 'Member workload by priority';
@@ -267,12 +264,8 @@ function MemberWorkload({ projectId, tasks }: { projectId: string; tasks: Projec
 }
 
 function ObjectiveProgress({ projectId, tasks }: { projectId: string; tasks: ProjectTask[] }) {
-  const allObjectives = useProjectWorkStore((s) => s.objectives);
-  const objectiveByTaskId = useProjectWorkStore((s) => s.objectiveByTaskId);
-  const objectives = useMemo(
-    () => allObjectives.filter((o) => o.projectId === projectId),
-    [allObjectives, projectId],
-  );
+  const { data: objectives = [] } = useProjectObjectives(projectId);
+  const objectiveByTaskId = useMemo(() => objectiveMap(tasks), [tasks]);
   const progress = useMemo(
     () => projectProgress({ tasks, objectives, objectiveByTaskId }),
     [tasks, objectives, objectiveByTaskId],
@@ -386,7 +379,7 @@ function TimeAndBilling({
  */
 export function ProjectSummary({ projectId }: { projectId: string }) {
   const { data: tasks = [], isLoading } = useProjectTasks(projectId);
-  const pricing = useProjectLocalStore((s) => s.byProjectId[projectId]?.pricing);
+  const pricing = useProjectSetup(projectId)?.pricing;
 
   if (isLoading) {
     return <div className="h-48 rounded-card bg-gray-100 animate-pulse" />;
