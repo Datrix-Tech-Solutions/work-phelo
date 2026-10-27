@@ -10,7 +10,8 @@ const ama = {
   lastName: 'Mensah',
   email: 'ama@example.com',
   jobTitle: 'Driver',
-  department: { name: 'Operations' },
+  department: { id: 'd1', name: 'Operations' },
+  branch: { id: 'b1', name: 'Accra' },
 };
 const kofiRow = {
   id: 'e2',
@@ -20,6 +21,7 @@ const kofiRow = {
   email: 'kofi@example.com',
   jobTitle: null,
   department: null,
+  branch: null,
 };
 
 describe('DirectoryService', () => {
@@ -34,7 +36,10 @@ describe('DirectoryService', () => {
     const [person] = await service.list(TENANT);
 
     expect(Object.keys(person).sort()).toEqual([
+      'branch',
+      'branchId',
       'department',
+      'departmentId',
       'email',
       'employeeId',
       'jobTitle',
@@ -54,6 +59,9 @@ describe('DirectoryService', () => {
         userId: 'user-1',
         name: 'Ama Mensah',
         department: 'Operations',
+        departmentId: 'd1',
+        branch: 'Accra',
+        branchId: 'b1',
         jobTitle: 'Driver',
         email: 'ama@example.com',
       },
@@ -62,6 +70,9 @@ describe('DirectoryService', () => {
         userId: null,
         name: 'Kofi Boateng',
         department: null,
+        departmentId: null,
+        branch: null,
+        branchId: null,
         jobTitle: null,
         email: 'kofi@example.com',
       },

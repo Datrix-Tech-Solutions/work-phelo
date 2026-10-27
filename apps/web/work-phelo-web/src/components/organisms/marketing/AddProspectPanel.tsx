@@ -19,6 +19,7 @@ import { buildCreateOptionEmptyState } from '@/components/molecules/marketing/Cr
 import {
   CompanyLocationFields,
   CompanyLocationForm,
+  toLocationPayload,
 } from '@/components/molecules/marketing/CompanyLocationForm';
 import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
 import {
@@ -158,8 +159,6 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
     );
     if (!hasRevenue) next.products = 'Add at least one product/service with an expected revenue.';
     if (!values.pipelineStageId) next.stage = 'Pipeline stage is required.';
-    if (values.location.lat == null || values.location.lng == null)
-      next.location = 'Select a location on the map or from search.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -191,11 +190,9 @@ export function AddProspectPanel({ isOpen, onClose }: Props) {
           },
         ];
       }),
-      location: {
-        label: values.location.location,
-        latitude: values.location.lat as number,
-        longitude: values.location.lng as number,
-      },
+      ...(toLocationPayload(values.location)
+        ? { location: toLocationPayload(values.location) }
+        : {}),
       ...(values.dateContacted
         ? {
             initialInteraction: {

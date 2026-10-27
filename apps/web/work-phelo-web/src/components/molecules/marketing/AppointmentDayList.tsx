@@ -17,6 +17,8 @@ interface Props {
   /** Replaces the default heading. */
   title?: string;
   emptyMessage?: string;
+  /** Leaves out the heading above the list, for callers that already label it. */
+  hideHeading?: boolean;
   appointments: Appointment[];
   isLoading?: boolean;
   onSelect?: (appointment: Appointment) => void;
@@ -27,6 +29,7 @@ export function AppointmentDayList({
   periodLabel,
   title,
   emptyMessage,
+  hideHeading = false,
   appointments,
   isLoading,
   onSelect,
@@ -105,11 +108,13 @@ export function AppointmentDayList({
 
   return (
     <div className="flex flex-col gap-3 min-w-0">
-      <h3 className="text-sm font-bold text-gray-900">
-        {date
-          ? formatDate(date)
-          : (title ?? `All appointments${periodLabel ? ` · ${periodLabel}` : ''}`)}
-      </h3>
+      {!hideHeading && (
+        <h3 className="text-sm font-bold text-gray-900">
+          {date
+            ? formatDate(date)
+            : (title ?? `All appointments${periodLabel ? ` · ${periodLabel}` : ''}`)}
+        </h3>
+      )}
 
       <DataList
         columns={columns}

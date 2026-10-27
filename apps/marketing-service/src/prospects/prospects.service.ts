@@ -182,11 +182,14 @@ export class ProspectsService {
       assignedUserId: prospect.assignedUserId,
       assignedUserName,
       clientId: prospect.client?.id ?? null,
-      location: {
-        label: prospect.locationLabel,
-        latitude: prospect.latitude.toString(),
-        longitude: prospect.longitude.toString(),
-      },
+      location:
+        prospect.locationLabel !== null
+          ? {
+              label: prospect.locationLabel,
+              latitude: prospect.latitude?.toString() ?? null,
+              longitude: prospect.longitude?.toString() ?? null,
+            }
+          : null,
       salesStage: {
         id: prospect.pipelineStageId,
         name: stage?.name ?? 'Unknown stage',
@@ -717,6 +720,7 @@ export class ProspectsService {
           id: true,
           companyName: true,
           businessTypeId: true,
+          sourceTypeId: true,
           pipelineStageId: true,
           assignedUserId: true,
           createdAt: true,
@@ -771,6 +775,9 @@ export class ProspectsService {
     const settingIds = [
       ...prospects
         .map((prospect) => prospect.businessTypeId)
+        .filter((id): id is string => Boolean(id)),
+      ...prospects
+        .map((prospect) => prospect.sourceTypeId)
         .filter((id): id is string => Boolean(id)),
       ...products.map((product) => product.productId),
       ...primaryContacts
@@ -828,6 +835,13 @@ export class ProspectsService {
               prospect.businessTypeId,
               settingsById,
               'Unknown business type',
+            )
+          : null,
+        sourceType: prospect.sourceTypeId
+          ? this.namedReference(
+              prospect.sourceTypeId,
+              settingsById,
+              'Unknown source type',
             )
           : null,
         expectedValue: this.sumDecimal(
@@ -895,9 +909,11 @@ export class ProspectsService {
           sourceTypeId: dto.sourceTypeId ?? null,
           pipelineStageId: dto.pipelineStageId,
           assignedUserId,
-          locationLabel: this.formatText(dto.location.label),
-          latitude: dto.location.latitude,
-          longitude: dto.location.longitude,
+          locationLabel: dto.location
+            ? this.formatText(dto.location.label)
+            : null,
+          latitude: dto.location?.latitude ?? null,
+          longitude: dto.location?.longitude ?? null,
           createdByUserId: user.id,
           updatedByUserId: user.id,
           contacts: {
@@ -1738,6 +1754,11 @@ export class ProspectsService {
         : {}),
       ...(query.pipelineStageId
         ? { pipelineStageId: query.pipelineStageId }
+        : {}),
+      ...(query.businessTypeId ? { businessTypeId: query.businessTypeId } : {}),
+      ...(query.sourceTypeId ? { sourceTypeId: query.sourceTypeId } : {}),
+      ...(query.productId
+        ? { products: { some: { productId: query.productId } } }
         : {}),
       ...(query.createdFrom || query.createdTo
         ? {

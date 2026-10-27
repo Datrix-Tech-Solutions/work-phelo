@@ -102,9 +102,7 @@ export interface ReinsuranceAccountingPostingReadiness {
   message?: string;
 }
 
-export type ReinsuranceAccountingReadinessGroupKey =
-  | 'premiumAccounting'
-  | 'cashConfirmation';
+export type ReinsuranceAccountingReadinessGroupKey = 'premiumAccounting' | 'cashConfirmation';
 
 export interface ReinsuranceAccountingReadinessGroup {
   ready: boolean;

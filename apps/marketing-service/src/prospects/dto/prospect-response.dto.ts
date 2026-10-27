@@ -108,13 +108,13 @@ export class ProspectResponseDto {
   @ApiPropertyOptional({ nullable: true })
   assignedUserName!: string | null;
 
-  @ApiProperty()
-  locationLabel!: string;
+  @ApiPropertyOptional({ nullable: true })
+  locationLabel!: string | null;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ nullable: true })
   latitude!: unknown;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ nullable: true })
   longitude!: unknown;
 
   @ApiProperty({ type: [ProspectContactResponseDto] })
@@ -188,11 +188,11 @@ export class ProspectLocationDto {
   @ApiProperty()
   label!: string;
 
-  @ApiProperty({ example: '5.603700' })
-  latitude!: string;
+  @ApiPropertyOptional({ example: '5.603700', nullable: true })
+  latitude!: string | null;
 
-  @ApiProperty({ example: '-0.187000' })
-  longitude!: string;
+  @ApiPropertyOptional({ example: '-0.187000', nullable: true })
+  longitude!: string | null;
 }
 
 export class ProspectDetailSalesStageDto {
@@ -268,8 +268,8 @@ export class ProspectDetailResponseDto {
   })
   clientId!: string | null;
 
-  @ApiProperty({ type: ProspectLocationDto })
-  location!: ProspectLocationDto;
+  @ApiPropertyOptional({ nullable: true, type: ProspectLocationDto })
+  location!: ProspectLocationDto | null;
 
   @ApiProperty({ type: ProspectDetailSalesStageDto })
   salesStage!: ProspectDetailSalesStageDto;

@@ -1599,6 +1599,25 @@ describe('ProspectsService', () => {
       });
     });
 
+    it('narrows the list by business type, source type and product', async () => {
+      prisma.marketingProspect.count.mockResolvedValueOnce(0);
+      prisma.marketingProspect.findMany.mockResolvedValueOnce([]);
+
+      await service.list(user, {
+        businessTypeId: 'business-1',
+        sourceTypeId: 'source-1',
+        productId: 'product-1',
+      });
+
+      expect(prisma.marketingProspect.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          businessTypeId: 'business-1',
+          sourceTypeId: 'source-1',
+          products: { some: { productId: 'product-1' } },
+        }),
+      });
+    });
+
     it('refuses to delete a prospect that has been converted to a client', async () => {
       prisma.marketingProspect.findFirst.mockResolvedValueOnce({
         id: 'prospect-a',
@@ -2577,6 +2596,7 @@ describe('ProspectsService', () => {
             id: 'prospect-a',
             companyName: 'Acme Manufacturing',
             businessType: { id: 'business-type-1', name: 'Manufacturing' },
+            sourceType: null,
             expectedValue: '15000.25',
             achievedValue: '2500.00',
             products: [
@@ -2685,7 +2705,7 @@ describe('ProspectsService', () => {
       return validate(plainToInstance(CreateProspectDto, payload));
     }
 
-    it('requires company name, primary contact, products, location and stage', async () => {
+    it('requires company name, primary contact, products and stage, but not a location', async () => {
       const errors = await validateDto({});
 
       expect(errors.map((error) => error.property)).toEqual(
@@ -2694,9 +2714,9 @@ describe('ProspectsService', () => {
           'pipelineStageId',
           'primaryContact',
           'products',
-          'location',
         ]),
       );
+      expect(errors.some((error) => error.property === 'location')).toBe(false);
     });
 
     it('rejects empty product arrays', async () => {

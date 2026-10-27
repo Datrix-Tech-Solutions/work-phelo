@@ -30,6 +30,8 @@ interface Props {
   emptyText: string;
   errorText?: string;
   action?: { href: string; label: string };
+  /** Makes each row clickable; called with the row's id. */
+  onSelect?: (id: string) => void;
   className?: string;
 }
 
@@ -44,6 +46,7 @@ export function TransportListCard({
   emptyText,
   errorText = 'Could not be loaded.',
   action,
+  onSelect,
   className,
 }: Props) {
   return (
@@ -88,30 +91,53 @@ export function TransportListCard({
         ) : (
           <ul className="flex flex-col gap-3">
             {items.map(({ id, icon: Icon, color, title: text, detail, trailing, trailingTone }) => (
-              <li key={id} className="flex items-start gap-2.5">
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                  style={waterIconStyle(color)}
-                >
-                  <Icon
-                    className="w-3.5 h-3.5"
-                    style={{ color: `color-mix(in oklab, ${color} 65%, black)` }}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                  <span className="truncate text-xs font-semibold text-gray-900">{text}</span>
-                  {detail && <span className="truncate text-[10px] text-gray-400">{detail}</span>}
-                </div>
-                {trailing && (
-                  <span
-                    className={cn(
-                      'shrink-0 text-[10px]',
-                      trailingTone === 'red' ? 'text-red-600' : 'text-gray-400',
-                    )}
-                  >
-                    {trailing}
-                  </span>
-                )}
+              <li key={id}>
+                {(() => {
+                  const content = (
+                    <>
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                        style={waterIconStyle(color)}
+                      >
+                        <Icon
+                          className="w-3.5 h-3.5"
+                          style={{ color: `color-mix(in oklab, ${color} 65%, black)` }}
+                        />
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col leading-tight">
+                        <span className="truncate text-xs font-semibold text-gray-900">{text}</span>
+                        {detail && (
+                          <span className="truncate text-[10px] text-gray-400">{detail}</span>
+                        )}
+                      </div>
+                      {trailing && (
+                        <span
+                          className={cn(
+                            'shrink-0 text-[10px]',
+                            trailingTone === 'red' ? 'text-red-600' : 'text-gray-400',
+                          )}
+                        >
+                          {trailing}
+                        </span>
+                      )}
+                    </>
+                  );
+                  const rowClass = 'flex w-full items-start gap-2.5 text-left';
+                  return onSelect ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelect(id)}
+                      className={cn(
+                        rowClass,
+                        '-mx-1.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-gray-100/70',
+                      )}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    <div className={rowClass}>{content}</div>
+                  );
+                })()}
               </li>
             ))}
           </ul>

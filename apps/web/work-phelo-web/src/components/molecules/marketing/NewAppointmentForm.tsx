@@ -24,6 +24,8 @@ interface Props {
   marketerOptions?: SearchSelectOption[];
   /** False when the user can only book for themselves: the marketer is shown but locked. */
   canChooseMarketer?: boolean;
+  /** True when the appointment is being booked from a prospect's own page. */
+  prospectLocked?: boolean;
 }
 
 export function NewAppointmentForm({
@@ -34,6 +36,7 @@ export function NewAppointmentForm({
   onProspectSearch,
   marketerOptions = [],
   canChooseMarketer = false,
+  prospectLocked = false,
 }: Props) {
   function set<K extends keyof NewAppointmentFields>(key: K, val: string) {
     onChange({ ...values, [key]: val });
@@ -47,7 +50,13 @@ export function NewAppointmentForm({
         options={marketerOptions}
         value={values.marketerId}
         // Prospects belong to a marketer, so a different marketer means a different list.
-        onChange={(v) => onChange({ ...values, marketerId: v, prospectId: '' })}
+        onChange={(v) =>
+          onChange({
+            ...values,
+            marketerId: v,
+            prospectId: prospectLocked ? values.prospectId : '',
+          })
+        }
         error={errors?.marketerId}
         disabled={!canChooseMarketer}
         clearable={false}
@@ -61,6 +70,8 @@ export function NewAppointmentForm({
         onChange={(v) => set('prospectId', v)}
         onQueryChange={onProspectSearch}
         error={errors?.prospectId}
+        disabled={prospectLocked}
+        clearable={!prospectLocked}
       />
 
       <DatePicker

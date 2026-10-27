@@ -31,7 +31,7 @@ export function ClientCard({ client, onClick }: { client: ClientListItem; onClic
       contactPerson={contact?.name}
       email={contact?.email ?? '—'}
       phone={contact?.phone ?? '—'}
-      address={client.locationLabel}
+      address={client.locationLabel ?? undefined}
       onClick={onClick}
     />
   );

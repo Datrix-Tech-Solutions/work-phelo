@@ -7,6 +7,7 @@ import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
 import { useDeleteProspect, useProspect, useProspects } from '@/hooks/marketing/useProspects';
 import { AllProspectsTable, Prospect } from '@/components/molecules/marketing/AllProspectsTable';
 import { UpdateProspectStageModal } from '@/components/organisms/marketing/UpdateProspectStageModal';
+import { ImportProspectsDialog } from '@/components/organisms/marketing/ImportProspectsDialog';
 import { AddProspectPanel } from '@/components/organisms/marketing/AddProspectPanel';
 import { ConvertToClientModal } from '@/components/organisms/marketing/ConvertToClientModal';
 import { ConfirmDeleteProspectModal } from '@/components/molecules/marketing/ConfirmDeleteProspectModal';
@@ -48,6 +49,7 @@ export default function AllProspectsPage() {
   const [stageProspect, setStageProspect] = useState<Prospect | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const toast = useToast();
   const deleteProspect = useDeleteProspect();
 
@@ -113,6 +115,7 @@ export default function AllProspectsPage() {
         onDelete={setPendingDelete}
         onConvertToClient={(row) => setConvertingId(row.id)}
         onAdd={() => setPanelOpen(true)}
+        onImport={() => setImporting(true)}
         stageOptions={stageOptions}
         stageFilter={stageFilter}
         onStageFilter={(id) => {
@@ -122,6 +125,7 @@ export default function AllProspectsPage() {
         isLoading={isLoading}
       />
       <AddProspectPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+      <ImportProspectsDialog isOpen={importing} onClose={() => setImporting(false)} />
       {convertingId && convertingProspect && (
         <ConvertToClientModal
           prospect={convertingProspect}

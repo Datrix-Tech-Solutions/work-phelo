@@ -45,11 +45,14 @@ function toInitialValues(prospect: ProspectDetail): ProspectWizardValues {
       achievedRevenue: p.achievedValue ?? '',
       expectedCloseDate: toDateInput(p.expectedCloseDate),
     })),
-    location: {
-      location: prospect.location.label,
-      lat: Number(prospect.location.latitude),
-      lng: Number(prospect.location.longitude),
-    },
+    location: prospect.location
+      ? {
+          location: prospect.location.label,
+          lat: prospect.location.latitude != null ? Number(prospect.location.latitude) : undefined,
+          lng:
+            prospect.location.longitude != null ? Number(prospect.location.longitude) : undefined,
+        }
+      : { location: '' },
     saleStage: { pipelineStageId: prospect.salesStage.id },
   };
 }

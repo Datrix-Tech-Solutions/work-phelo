@@ -111,7 +111,10 @@ describe('ClientsService', () => {
         findMany: jest.fn(),
       },
       marketingClientProduct: { create: jest.fn() },
-      marketingProspectInteraction: { create: jest.fn() },
+      marketingProspectInteraction: {
+        create: jest.fn(),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
       marketingProspect: { findFirst: jest.fn() },
       marketingPipelineStage: { findFirst: jest.fn() },
       marketingCrmSettingOption: { findFirst: jest.fn(), findMany: jest.fn() },
@@ -203,6 +206,72 @@ describe('ClientsService', () => {
 
       expect(prisma.marketingClient.count).toHaveBeenCalledWith({
         where: { tenantId: 'tenant-1', assignedUserId: 'user-2' },
+      });
+    });
+
+    it('narrows the list by business type, source type, product and created date', async () => {
+      await service.list(user, {
+        businessTypeId: 'bt-1',
+        sourceTypeId: 'src-1',
+        productId: 'p-1',
+        createdFrom: '2026-01-01',
+        createdTo: '2026-01-31',
+      });
+
+      expect(prisma.marketingClient.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          businessTypeId: 'bt-1',
+          sourceTypeId: 'src-1',
+          products: { some: { productId: 'p-1' } },
+          createdAt: {
+            gte: new Date('2026-01-01T00:00:00.000Z'),
+            lte: new Date('2026-01-31T23:59:59.999Z'),
+          },
+        }),
+      });
+    });
+
+    it('sums expected value and reports the latest follow-up for each client', async () => {
+      prisma.marketingClient.count.mockResolvedValue(1);
+      prisma.marketingClient.findMany.mockResolvedValue([
+        {
+          ...clientRecord,
+          sourceTypeId: 'src-1',
+          products: [
+            {
+              productId: 'p-1',
+              status: MarketingClientProductStatus.PENDING,
+              expectedValue: new Prisma.Decimal('1000.50'),
+            },
+            {
+              productId: 'p-2',
+              status: MarketingClientProductStatus.PURCHASED,
+              expectedValue: null,
+            },
+            {
+              productId: 'p-3',
+              status: MarketingClientProductStatus.PENDING,
+              expectedValue: new Prisma.Decimal('250'),
+            },
+          ],
+        },
+      ]);
+      prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+        { id: 'src-1', name: 'Referral' },
+      ]);
+      prisma.marketingProspectInteraction.groupBy.mockResolvedValue([
+        {
+          clientId: clientRecord.id,
+          _max: { occurredAt: new Date('2026-02-03T10:00:00.000Z') },
+        },
+      ]);
+
+      const result = await service.list(user);
+
+      expect(result.data[0]).toMatchObject({
+        sourceType: { id: 'src-1', name: 'Referral' },
+        expectedValue: '1250.50',
+        lastInteractionDate: new Date('2026-02-03T10:00:00.000Z'),
       });
     });
 
