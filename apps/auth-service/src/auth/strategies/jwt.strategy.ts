@@ -26,12 +26,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<RequestUser> {
+    if (!payload.sub || !payload.tenantId)
+      throw new UnauthorizedException('Invalid tenant session');
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: { tenant: true },
     });
 
-    if (!user || user.status !== 'ACTIVE' || user.tenant.status !== 'ACTIVE') {
+    if (
+      !user ||
+      user.tenantId !== payload.tenantId ||
+      !user.tenant ||
+      user.status !== 'ACTIVE' ||
+      user.tenant.status !== 'ACTIVE'
+    ) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
@@ -46,7 +54,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           include: { resource: true },
         }),
         this.prisma.userPermissionSet.findMany({
-          where: { userId: user.id, permissionSet: { isActive: true } },
+          where: {
+            userId: user.id,
+            permissionSet: { tenantId: user.tenantId, isActive: true },
+          },
           include: {
             permissionSet: {
               include: { resources: { include: { resource: true } } },

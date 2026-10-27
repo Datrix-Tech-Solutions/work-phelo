@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -39,6 +40,10 @@ import { ProjectsService } from './projects.service';
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.findAll delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   @ApiOperation({ summary: 'List projects visible to the current user' })
   @ApiResponse({ status: 200, description: 'Projects retrieved successfully' })
@@ -46,12 +51,20 @@ export class ProjectsController {
     return this.projectsService.findAll(req.user.tenantId, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.findMyProjects delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('my-projects')
   @ApiOperation({ summary: 'List projects the current employee belongs to' })
   findMyProjects(@Req() req: Request & { user: RequestUser }) {
     return this.projectsService.findMyProjects(req.user.tenantId, req.user);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Existing employee-page tenant project summaries; opening a project still enforces canAccessProject.',
+  )
   @Get('employee/:employeeId')
   @ApiOperation({ summary: 'List projects a given employee belongs to' })
   @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
@@ -65,12 +78,20 @@ export class ProjectsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.findMyTasks delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('my-tasks')
   @ApiOperation({ summary: 'List tasks assigned to the current employee' })
   findMyTasks(@Req() req: Request & { user: RequestUser }) {
     return this.projectsService.findMyTasks(req.user.tenantId, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.updateTaskStatus delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch('tasks/:taskId/status')
   @ApiOperation({ summary: 'Update status for an assigned project task' })
   @ApiParam({ name: 'taskId', description: 'Task UUID' })
@@ -88,6 +109,10 @@ export class ProjectsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.create delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post()
   @ApiOperation({ summary: 'Create a project' })
   @ApiBody({ type: CreateProjectDto })
@@ -99,6 +124,10 @@ export class ProjectsController {
     return this.projectsService.create(req.user.tenantId, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.findOne delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id')
   @ApiOperation({ summary: 'Get a single project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -109,6 +138,10 @@ export class ProjectsController {
     return this.projectsService.findOne(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.update delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id')
   @ApiOperation({ summary: 'Update a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -121,6 +154,10 @@ export class ProjectsController {
     return this.projectsService.update(req.user.tenantId, id, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.remove delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete(':id')
   @ApiOperation({ summary: 'Archive a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -128,6 +165,10 @@ export class ProjectsController {
     return this.projectsService.remove(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.listMembers delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id/members')
   @ApiOperation({ summary: 'List project members' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -138,6 +179,10 @@ export class ProjectsController {
     return this.projectsService.listMembers(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.addMember delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/members')
   @ApiOperation({ summary: 'Add or update a project member' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -150,6 +195,10 @@ export class ProjectsController {
     return this.projectsService.addMember(req.user.tenantId, id, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.removeMember delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete(':id/members/:employeeId')
   @ApiOperation({ summary: 'Remove a project member' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -167,6 +216,10 @@ export class ProjectsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.listTasks delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id/tasks')
   @ApiOperation({ summary: 'List project tasks' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -177,6 +230,10 @@ export class ProjectsController {
     return this.projectsService.listTasks(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.createTask delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/tasks')
   @ApiOperation({ summary: 'Create a project task' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -194,6 +251,10 @@ export class ProjectsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.updateTask delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id/tasks/:taskId')
   @ApiOperation({ summary: 'Update a project task' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -214,6 +275,10 @@ export class ProjectsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.removeTask delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete(':id/tasks/:taskId')
   @ApiOperation({ summary: 'Delete a project task' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
@@ -231,6 +296,10 @@ export class ProjectsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.listActivities delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id/activities')
   @ApiOperation({ summary: 'List recent project activity' })
   @ApiParam({ name: 'id', description: 'Project UUID' })

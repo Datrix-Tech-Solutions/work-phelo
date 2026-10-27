@@ -204,6 +204,7 @@ export class ProjectWorkService {
     user: RequestUser,
     dto: UpdateSubtaskDto,
   ) {
+    await this.projects.assertProjectExists(tenantId, projectId);
     const subtask = await this.findSubtask(tenantId, projectId, subtaskId);
     await this.requireTaskWork(tenantId, projectId, subtask.taskId, user);
     return this.prisma.projectSubtask.update({
@@ -221,6 +222,7 @@ export class ProjectWorkService {
     subtaskId: string,
     user: RequestUser,
   ) {
+    await this.projects.assertProjectExists(tenantId, projectId);
     const subtask = await this.findSubtask(tenantId, projectId, subtaskId);
     await this.requireTaskWork(tenantId, projectId, subtask.taskId, user);
     await this.prisma.projectSubtask.delete({ where: { id: subtaskId } });

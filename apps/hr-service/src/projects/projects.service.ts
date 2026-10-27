@@ -360,6 +360,15 @@ export class ProjectsService {
     };
   }
 
+  /** Tenant ownership and lifecycle must be established before any access shortcut. */
+  async assertProjectExists(tenantId: string, projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, tenantId, isArchived: false },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+  }
+
   private async getProjectOrThrow(tenantId: string, projectId: string) {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, tenantId, isArchived: false },
@@ -394,6 +403,7 @@ export class ProjectsService {
     projectId: string,
     user: RequestUser,
   ) {
+    await this.assertProjectExists(tenantId, projectId);
     if (this.canViewAllProjects(user)) return true;
 
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
@@ -675,6 +685,7 @@ export class ProjectsService {
     user: RequestUser,
     dto: UpdateProjectDto,
   ) {
+    const project = await this.getProjectOrThrow(tenantId, projectId);
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
     const membership = await this.getProjectMembership(
       tenantId,
@@ -685,7 +696,6 @@ export class ProjectsService {
       this.canEditProject(user) || this.isProjectLead(membership?.role),
     );
 
-    const project = await this.getProjectOrThrow(tenantId, projectId);
     const startDate = dto.startDate
       ? new Date(dto.startDate)
       : project.startDate;
@@ -749,8 +759,8 @@ export class ProjectsService {
   }
 
   async remove(tenantId: string, projectId: string, user: RequestUser) {
-    this.assertAccess(this.canDeleteProject(user));
     const project = await this.getProjectOrThrow(tenantId, projectId);
+    this.assertAccess(this.canDeleteProject(user));
 
     await this.prisma.$transaction(async (tx) => {
       await tx.project.update({
@@ -874,6 +884,7 @@ export class ProjectsService {
     employeeId: string,
     user: RequestUser,
   ) {
+    await this.assertProjectExists(tenantId, projectId);
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
     const membership = await this.getProjectMembership(
       tenantId,
@@ -1292,7 +1303,7 @@ export class ProjectsService {
       throw new BadRequestException('Send a stage or a status');
     }
     const task = await this.prisma.projectTask.findFirst({
-      where: { id: taskId, tenantId, project: { isArchived: false } },
+      where: { id: taskId, tenantId, project: { tenantId, isArchived: false } },
       include: {
         project: {
           select: {
@@ -1384,6 +1395,7 @@ export class ProjectsService {
     taskId: string,
     user: RequestUser,
   ) {
+    await this.assertProjectExists(tenantId, projectId);
     const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
     const membership = await this.getProjectMembership(
       tenantId,

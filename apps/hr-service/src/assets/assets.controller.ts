@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -53,6 +54,10 @@ export class AssetsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AssetsController.findAll delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   @ApiOperation({ summary: 'List tenant assets' })
   @ApiResponse({ status: 200, description: 'Assets retrieved successfully' })
@@ -61,6 +66,10 @@ export class AssetsController {
     return this.assetsService.findAll(req.user.tenantId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AssetsController.findAvailable delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('available')
   @ApiOperation({ summary: 'List assets that can be assigned' })
   @ApiResponse({
@@ -72,6 +81,10 @@ export class AssetsController {
     return this.assetsService.findAvailable(req.user.tenantId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AssetsController.findOne delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id')
   @ApiOperation({ summary: 'Get a single asset by ID' })
   @ApiParam({ name: 'id', description: 'Asset UUID' })

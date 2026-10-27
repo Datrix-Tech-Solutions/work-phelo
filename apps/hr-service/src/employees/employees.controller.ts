@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -173,6 +174,10 @@ export class EmployeesController {
     return this.employeesService.findAll(req.user.tenantId, query, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'EmployeesController.findOptions delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('options')
   @ApiOperation({
     summary:
@@ -356,6 +361,10 @@ export class EmployeesController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'EmployeesController.getResignation delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id/resignation')
   @ApiOperation({
     summary: 'Get resignation record for an employee',

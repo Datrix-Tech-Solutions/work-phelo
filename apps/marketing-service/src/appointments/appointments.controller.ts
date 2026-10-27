@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -66,6 +67,10 @@ type AuthedRequest = Request & { user: RequestUser };
 export class AppointmentsController {
   constructor(private readonly service: AppointmentsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'AppointmentsController.list delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   @ApiOperation({
     summary: 'List appointments',
@@ -76,6 +81,10 @@ export class AppointmentsController {
     return this.service.list(request.user, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppointmentsController.formOptions delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('form-options')
   @ApiOperation({
     summary: 'Marketers, managers and prospects the appointment form may offer',
@@ -89,6 +98,10 @@ export class AppointmentsController {
     return this.service.formOptions(request.user, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppointmentsController.findOne delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id')
   @ApiOperation({ summary: 'Get an appointment' })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -99,6 +112,10 @@ export class AppointmentsController {
     return this.service.findOne(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppointmentsController.create delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post()
   @ApiOperation({
     summary: 'Book an appointment',
@@ -109,6 +126,10 @@ export class AppointmentsController {
     return this.service.create(request.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppointmentsController.update delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id')
   @ApiOperation({ summary: 'Edit a pending appointment' })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -150,6 +171,10 @@ export class AppointmentsController {
     return this.service.reject(request.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppointmentsController.cancel delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -164,6 +189,10 @@ export class AppointmentsController {
     return this.service.cancel(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppointmentsController.complete delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

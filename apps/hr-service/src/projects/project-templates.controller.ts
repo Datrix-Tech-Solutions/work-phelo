@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -30,12 +31,20 @@ type Req_ = Request & { user: RequestUser };
 export class ProjectTemplatesController {
   constructor(private readonly templates: ProjectTemplatesService) {}
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant project template catalog; template writes enforce assertCanManage.',
+  )
   @Get()
   @ApiOperation({ summary: "List the company's project templates" })
   list(@Req() req: Req_) {
     return this.templates.list(req.user.tenantId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectTemplatesController.create delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post()
   @ApiOperation({ summary: 'Create a project template' })
   @ApiBody({ type: ProjectTemplateDto })
@@ -43,6 +52,10 @@ export class ProjectTemplatesController {
     return this.templates.create(req.user.tenantId, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectTemplatesController.saveDefault delegates caller and tenant scope to its existing policy checks.',
+  )
   @Put('defaults/:key')
   @ApiOperation({ summary: "Save the company's edit of a built-in template" })
   @ApiBody({ type: ProjectTemplateDto })
@@ -54,12 +67,20 @@ export class ProjectTemplatesController {
     return this.templates.saveDefault(req.user.tenantId, req.user, key, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectTemplatesController.resetDefault delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete('defaults/:key')
   @ApiOperation({ summary: 'Restore a built-in template to how it shipped' })
   resetDefault(@Param('key') key: string, @Req() req: Req_) {
     return this.templates.resetDefault(req.user.tenantId, req.user, key);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectTemplatesController.update delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id')
   @ApiOperation({ summary: 'Update a project template' })
   @ApiBody({ type: ProjectTemplateDto })
@@ -71,6 +92,10 @@ export class ProjectTemplatesController {
     return this.templates.update(req.user.tenantId, req.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProjectTemplatesController.remove delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a project template' })
   remove(@Param('id') id: string, @Req() req: Req_) {

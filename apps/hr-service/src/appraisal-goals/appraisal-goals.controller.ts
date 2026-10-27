@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   Body,
@@ -42,6 +43,10 @@ type AuthenticatedRequest = Request & { user: RequestUser };
 export class AppraisalGoalsController {
   constructor(private readonly goals: AppraisalGoalsService) {}
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal goal catalog; objectives enforce caller scope.',
+  )
   @Get()
   @ApiOperation({ summary: 'List goals, flagging the ones in a cycle' })
   list(@Req() req: AuthenticatedRequest) {
@@ -91,6 +96,10 @@ export class AppraisalObjectivesController {
   constructor(private readonly objectives: AppraisalObjectivesService) {}
 
   // The service decides between "for self" and "for others" from who the objective is for.
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalObjectivesController.create delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -103,6 +112,10 @@ export class AppraisalObjectivesController {
     return this.objectives.create(req.user.tenantId, req.user, dto);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal goal catalog; objectives enforce caller scope.',
+  )
   @Get('employee/:employeeId')
   @ApiOperation({ summary: "List an employee's objectives" })
   list(
@@ -127,6 +140,10 @@ export class AppraisalObjectivesController {
     return this.objectives.forCycle(req.user.tenantId, cycleId, employeeId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalObjectivesController.link delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':objectiveId/goal')
   @ApiOperation({ summary: 'Link an objective to a goal, or unlink it' })
   link(
@@ -137,6 +154,10 @@ export class AppraisalObjectivesController {
     return this.objectives.link(req.user.tenantId, req.user, objectiveId, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalObjectivesController.addComment delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':objectiveId/comments')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add a comment to an objective' })

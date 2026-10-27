@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CalendarClock, MapPin, UserRound } from 'lucide-react';
+import { Briefcase, CalendarClock } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { ScheduleInterviewPanel } from '@/components/organisms/hr/recruitment/ScheduleInterviewPanel';
@@ -26,6 +26,7 @@ import { extractError } from '@/lib/extractError';
 import { usePermission } from '@/hooks/hr/usePermission';
 import {
   useCandidates,
+  useCandidate,
   useJobOpening,
   useJobOpenings,
   useMoveCandidateStage,
@@ -68,16 +69,6 @@ function candidateName(c: RecruitmentCandidate): string {
   return [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Unnamed candidate';
 }
 
-function candidateLocation(c: RecruitmentCandidate): string {
-  return [c.city, c.country].filter(Boolean).join(', ') || '—';
-}
-
-function experienceLabel(years: number | null): string {
-  if (years === null) return '—';
-  if (years === 0) return 'No experience';
-  return `${years} ${years === 1 ? 'year' : 'years'}`;
-}
-
 function CardInfoRow({ icon: Icon, value }: { icon: typeof Briefcase; value: string }) {
   return (
     <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -92,8 +83,9 @@ function CardInfoRow({ icon: Icon, value }: { icon: typeof Briefcase; value: str
 export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
   const params = useParams<{ tenantSlug: string }>();
   const router = useRouter();
+  const canReadCandidate = usePermission(Permission.READ_RECRUITMENT_CANDIDATES);
   const openCandidate = (row: RecruitmentCandidate) =>
-    router.push(`/${params.tenantSlug}/hr/recruitment/candidates/${row.id}`);
+    canReadCandidate && router.push(`/${params.tenantSlug}/hr/recruitment/candidates/${row.id}`);
   const canMoveStage = usePermission(Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE);
   const canSchedule = usePermission(Permission.SCHEDULE_RECRUITMENT_INTERVIEW);
   const canReadStages = usePermission(Permission.READ_RECRUITMENT_STAGES);
@@ -129,6 +121,7 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
   const { data: vacancies } = useJobOpenings({ limit: 100 });
 
   const { data: onboardVacancy } = useJobOpening(onboardTarget?.vacancyId ?? '');
+  const { data: onboardDetail } = useCandidate(canReadCandidate ? onboardTarget?.id ?? '' : '');
   const { data: allEmployees } = useAllEmployees(undefined, { enabled: !!onboardTarget });
   const { mutate: moveStage, isPending: isRejecting } = useMoveCandidateStage();
   const rejectedStage = stages.find((s) => s.name.trim().toLowerCase() === 'rejected');
@@ -138,14 +131,14 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
     return {
       firstName: onboardTarget.firstName ?? '',
       lastName: onboardTarget.lastName ?? '',
-      email: onboardTarget.email ?? '',
-      phone: onboardTarget.phone ?? '',
+      email: onboardDetail?.email ?? '',
+      phone: onboardDetail?.phone ?? '',
       jobTitle: onboardVacancy?.title ?? onboardTarget.vacancy.title ?? '',
       departmentId: onboardVacancy?.departmentId ?? undefined,
       branchId: onboardVacancy?.branchId ?? undefined,
       employmentType: onboardVacancy?.jobType ?? 'FULL_TIME',
     };
-  }, [onboardTarget, onboardVacancy]);
+  }, [onboardTarget, onboardVacancy, onboardDetail]);
 
   const confirmReject = () => {
     if (!rejectTarget || !rejectedStage) return;
@@ -183,7 +176,6 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
           <Avatar name={candidateName(row)} size="sm" />
           <div className="flex flex-col min-w-0">
             <span className="font-medium text-gray-900 truncate">{candidateName(row)}</span>
-            <span className="text-xs text-gray-500 truncate">{row.email ?? '—'}</span>
           </div>
         </div>
       ),
@@ -202,20 +194,6 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
         <span className="text-sm text-gray-600">
           {formatDate(row.submittedAt ?? row.appliedAt)}
         </span>
-      ),
-    },
-    {
-      key: 'location',
-      label: 'Location',
-      width: 'minmax(140px, 0.6fr)',
-      render: (row) => <span className="text-sm text-gray-600">{candidateLocation(row)}</span>,
-    },
-    {
-      key: 'experience',
-      label: 'Experience',
-      width: '120px',
-      render: (row) => (
-        <span className="text-sm text-gray-600">{experienceLabel(row.yearsOfExperience)}</span>
       ),
     },
     {
@@ -379,7 +357,6 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
               onClick={() => openCandidate(row)}
               icon={<Avatar name={candidateName(row)} size="md" />}
               title={candidateName(row)}
-              subtitle={row.email ?? undefined}
               badge={
                 row.currentStage ? (
                   <Badge
@@ -391,8 +368,6 @@ export function CandidatesTable({ onManage }: { onManage?: () => void } = {}) {
               note={
                 <div className="flex flex-col gap-1.5">
                   <CardInfoRow icon={Briefcase} value={row.vacancy.title ?? '—'} />
-                  <CardInfoRow icon={MapPin} value={candidateLocation(row)} />
-                  <CardInfoRow icon={UserRound} value={experienceLabel(row.yearsOfExperience)} />
                   <CardInfoRow
                     icon={CalendarClock}
                     value={formatDate(row.submittedAt ?? row.appliedAt)}

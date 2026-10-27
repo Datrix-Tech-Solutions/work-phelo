@@ -622,7 +622,10 @@ export class RecruitmentController {
   })
   @ApiQuery({ name: 'page', required: false, description: 'Page number' })
   @ApiQuery({ name: 'limit', required: false, description: 'Page size' })
-  @ApiOkResponse({ description: 'Paginated submitted candidate list' })
+  @ApiOkResponse({
+    description:
+      'Paginated candidate summaries: identity, vacancy, stage, dates and aggregate score only. Contact details, answers and documents require candidate VIEW.',
+  })
   listCandidates(
     @Query() query: QueryRecruitmentCandidatesDto,
     @Req() req: Request & { user: RequestUser },
@@ -687,7 +690,10 @@ export class RecruitmentController {
     description: 'Recruitment application UUID',
   })
   @ApiBody({ type: UpdateRecruitmentCandidateStageDto })
-  @ApiOkResponse({ description: 'Candidate stage updated' })
+  @ApiOkResponse({
+    description:
+      'Candidate stage updated; returns a list-safe candidate summary',
+  })
   updateCandidateStage(
     @Param('candidateId') candidateId: string,
     @Body() dto: UpdateRecruitmentCandidateStageDto,
@@ -716,7 +722,10 @@ export class RecruitmentController {
   })
   @ApiParam({ name: 'questionId', description: 'Vacancy question UUID' })
   @ApiBody({ type: SetRecruitmentScreeningDecisionDto })
-  @ApiOkResponse({ description: 'The candidate with the decision applied' })
+  @ApiOkResponse({
+    description:
+      'List-safe candidate summary with the decision reflected in its aggregate score',
+  })
   setScreeningDecision(
     @Param('candidateId') candidateId: string,
     @Param('questionId') questionId: string,

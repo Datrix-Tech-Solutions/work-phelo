@@ -284,7 +284,7 @@ function ScheduleInterviewContent({
                 options={choices.map((c) => ({
                   value: c.id,
                   label: candidateFullName(c),
-                  sublabel: c.currentStage?.name ?? c.email ?? undefined,
+                  sublabel: c.currentStage?.name ?? undefined,
                 }))}
                 value={chosenId}
                 clearable={false}

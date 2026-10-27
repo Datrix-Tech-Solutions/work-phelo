@@ -183,31 +183,20 @@ export interface RecruitmentStage {
   isDefault: boolean;
 }
 
-/** A submitted application as listed on the candidates page. */
+/** Allowlisted submitted-application summary. Private fields are only on detail. */
 export interface RecruitmentCandidate {
   id: string;
   vacancyId: string;
   currentStageId: string | null;
   firstName: string | null;
   lastName: string | null;
-  email: string | null;
-  phone: string | null;
-  country: string | null;
-  city: string | null;
-  yearsOfExperience: number | null;
-  currentJobTitle: string | null;
-  currentEmployer: string | null;
-  skills: string[];
-  languages: string[];
-  certificates: string[];
-  highestEducationLevel: string | null;
+  status: 'SUBMITTED';
   /** 0–100, the current score: the application's match, blended with screening once reviewed. */
   matchScore: number | null;
-  resumeUrl: string | null;
   appliedAt: string;
   submittedAt: string | null;
   vacancy: { id: string; title: string | null };
-  currentStage: RecruitmentStage | null;
+  currentStage: Pick<RecruitmentStage, 'id' | 'name' | 'sortOrder' | 'isDefault'> | null;
 }
 
 export interface RecruitmentCandidatePage {
@@ -249,9 +238,20 @@ export interface RecruitmentCandidateAnswer {
 
 /** A single candidate with everything the application collected. */
 export interface RecruitmentCandidateDetail extends RecruitmentCandidate {
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  city: string | null;
+  yearsOfExperience: number | null;
+  currentJobTitle: string | null;
+  currentEmployer: string | null;
+  highestEducationLevel: string | null;
+  resumeUrl: string | null;
+  currentStage: RecruitmentStage | null;
   professionalSummary: string | null;
   skills: string[];
   languages: string[];
+  certificates: string[];
   /** School entries for the overview; derived from `education` when the API has no structure. */
   educationHistory: CandidateEducation[];
   /** Work history, newest first; derived from the current role when the API has no structure. */

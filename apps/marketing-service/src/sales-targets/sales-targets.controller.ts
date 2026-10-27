@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -63,6 +64,10 @@ type AuthedRequest = Request & { user: RequestUser };
 export class SalesTargetsController {
   constructor(private readonly service: SalesTargetsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'SalesTargetsController.list delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   // Open to every Marketing user: without marketing.targets.all:VIEW the service returns only the
   // caller's own targets.
