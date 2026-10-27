@@ -459,12 +459,7 @@ export class ClientsService {
                 ),
               }
             : {}),
-          ...(dto.location?.latitude !== undefined
-            ? { latitude: dto.location.latitude }
-            : {}),
-          ...(dto.location?.longitude !== undefined
-            ? { longitude: dto.location.longitude }
-            : {}),
+          ...this.coordinatesFrom(dto.location),
         },
       });
 
@@ -1106,6 +1101,33 @@ export class ClientsService {
   ): Prisma.MarketingClientWhereInput {
     if (!canViewAll) return { assignedUserId: user.id };
     return assignedUserId ? { assignedUserId } : {};
+  }
+
+  /**
+   * Coordinates to store with a location update. A new name sent without coordinates is a place
+   * typed in rather than found on the map, so the old pin is cleared instead of left on the wrong place.
+   */
+  private coordinatesFrom(location?: {
+    label?: string;
+    latitude?: number;
+    longitude?: number;
+  }) {
+    if (!location) return {};
+    if (
+      location.label !== undefined &&
+      location.latitude === undefined &&
+      location.longitude === undefined
+    ) {
+      return { latitude: null, longitude: null };
+    }
+    return {
+      ...(location.latitude !== undefined
+        ? { latitude: location.latitude }
+        : {}),
+      ...(location.longitude !== undefined
+        ? { longitude: location.longitude }
+        : {}),
+    };
   }
 
   private formatText(value: string): string {

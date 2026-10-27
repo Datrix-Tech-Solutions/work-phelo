@@ -184,7 +184,14 @@ export default function ClientDetailPage() {
           <DetailField label="Type of Business" value={client.businessType?.name} />
           <DetailField label="Source Type" value={client.sourceType?.name} />
           <DetailField label="Assigned To" value={client.assignedUserName} />
-          <DetailField label="Location" value={client.location?.label} />
+          <DetailField
+            label="Location"
+            value={
+              client.location
+                ? `${client.location.label}${client.location.latitude == null ? ' (not pinned on the map)' : ''}`
+                : undefined
+            }
+          />
           <DetailField label="Contact Person Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
           <DetailField label="Primary Contact Phone" value={primaryContact?.phone} />
