@@ -403,9 +403,9 @@ export const growthTrend: ReportDefinition = {
       subtitle: [`${year} against ${year - 1}`],
       stats: [
         { label: `Prospects ${year}`, value: String(tp) },
-        { label: 'Change on last year', value: changeText(tp, pp) },
+        { label: 'Prospects change on last year', value: changeText(tp, pp) },
         { label: `Clients ${year}`, value: String(tc) },
-        { label: 'Change on last year', value: changeText(tc, pc) },
+        { label: 'Clients change on last year', value: changeText(tc, pc) },
       ],
       tables: [
         {
