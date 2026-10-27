@@ -42,6 +42,7 @@ const user = (role = 'EMPLOYEE') => ({
 describe('GET /tenants/:id current caller scope', () => {
   let app: INestApplication;
   let storedUser: ReturnType<typeof user> | null;
+  const controllerPathReached = jest.fn();
   const records = new Map([
     ['tenant-a', tenant('tenant-a')],
     ['tenant-b', tenant('tenant-b')],
@@ -78,6 +79,13 @@ describe('GET /tenants/:id current caller scope', () => {
       ],
     }).compile();
     app = module.createNestApplication();
+    // Interceptors run after guards, without replacing the real JWT guard or handler.
+    app.useGlobalInterceptors({
+      intercept: (_context, next) => {
+        controllerPathReached();
+        return next.handle();
+      },
+    });
     await app.init();
   });
 
@@ -107,6 +115,7 @@ describe('GET /tenants/:id current caller scope', () => {
       storedUser = user(role);
       const response = await read('tenant-a').expect(200);
       expect(response.body).toEqual(records.get('tenant-a'));
+      expect(controllerPathReached).toHaveBeenCalledTimes(1);
       expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
         where: { id: 'tenant-a' },
         include: { _count: { select: { users: true } } },
@@ -122,6 +131,7 @@ describe('GET /tenants/:id current caller scope', () => {
       const missing = await read('unknown-tenant').expect(404);
       expect(existing.body).toEqual(missing.body);
       expect(existing.body).toMatchObject({ message: 'Tenant not found' });
+      expect(controllerPathReached).toHaveBeenCalledTimes(2);
       expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
     },
   );
@@ -130,6 +140,7 @@ describe('GET /tenants/:id current caller scope', () => {
     storedUser = user('SUPER_ADMIN');
     const response = await read('tenant-b').expect(200);
     expect(response.body).toEqual(records.get('tenant-b'));
+    expect(controllerPathReached).toHaveBeenCalledTimes(1);
   });
 
   it('uses existing service not-found behavior for a platform request for a nonexistent tenant', async () => {
@@ -144,20 +155,28 @@ describe('GET /tenants/:id current caller scope', () => {
 
   it('preserves service not-found behavior when the own-tenant target disappears after authentication', async () => {
     storedUser = { ...user(), tenantId: 'gone', tenant: tenant('gone') };
-    await read('gone').expect(404);
+    await read('gone', { tenantId: 'gone' }).expect(404);
+    expect(controllerPathReached).toHaveBeenCalledTimes(1);
     expect(prisma.tenant.findUnique).toHaveBeenCalledTimes(1);
   });
 
-  it('does not trust a stale admin role or tenant linkage in the signed token', async () => {
+  it('does not trust a stale admin role in a valid tenant-bound token', async () => {
     await read('tenant-b', {
       role: 'SUPER_ADMIN',
-      tenantId: 'tenant-b',
     }).expect(404);
     await read('tenant-a', {
       role: 'SUPER_ADMIN',
-      tenantId: 'tenant-b',
     }).expect(200);
+    expect(controllerPathReached).toHaveBeenCalledTimes(2);
     expect(prisma.tenant.findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a mismatched JWT tenant before the controller regardless of the target path', async () => {
+    const claims = { tenantId: 'tenant-b', role: 'SUPER_ADMIN' };
+    await read('tenant-b', claims).expect(401);
+    await read('tenant-a', claims).expect(401);
+    expect(controllerPathReached).not.toHaveBeenCalled();
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
   });
 
   it('denies a previously linked tenant after the user has moved tenants', async () => {
@@ -166,14 +185,23 @@ describe('GET /tenants/:id current caller scope', () => {
       tenantId: 'tenant-b',
       tenant: tenant('tenant-b'),
     };
-    await read('tenant-a').expect(404);
-    await read('tenant-b').expect(200);
+    // The previous tenant's token is invalid, even when targeting the new tenant.
+    await read('tenant-a').expect(401);
+    await read('tenant-b').expect(401);
+    expect(controllerPathReached).not.toHaveBeenCalled();
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+
+    // A fresh tenant-bound session reaches the resource-scope policy normally.
+    await read('tenant-a', { tenantId: 'tenant-b' }).expect(404);
+    await read('tenant-b', { tenantId: 'tenant-b' }).expect(200);
+    expect(controllerPathReached).toHaveBeenCalledTimes(2);
     expect(prisma.tenant.findUnique).toHaveBeenCalledTimes(1);
   });
 
   it('rejects invalid current tenant linkage rather than trusting the token', async () => {
     storedUser = { ...user(), tenantId: '' };
-    await read('tenant-a').expect(404);
+    await read('tenant-a').expect(401);
+    expect(controllerPathReached).not.toHaveBeenCalled();
     expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
   });
 
