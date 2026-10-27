@@ -21,6 +21,7 @@ import { computeMatchScore, computeOverallScore } from './candidate-match';
 import {
   CreateRecruitmentApplicationDto,
   QueryRecruitmentCandidatesDto,
+  RecruitmentCandidateSummary,
   UpdateRecruitmentApplicationAnswersDto,
   UpdateRecruitmentApplicationBasicInfoDto,
   UpdateRecruitmentApplicationProfessionalInfoDto,
@@ -79,6 +80,44 @@ const RECRUITMENT_CANDIDATE_INCLUDE = {
   },
   _count: { select: { stageHistory: true } },
 } satisfies Prisma.RecruitmentApplicationInclude;
+
+// Only score inputs are loaded alongside display fields; no contact, answer text or documents.
+const RECRUITMENT_CANDIDATE_SUMMARY_SELECT = {
+  id: true,
+  vacancyId: true,
+  status: true,
+  firstName: true,
+  lastName: true,
+  currentStageId: true,
+  appliedAt: true,
+  submittedAt: true,
+  skills: true,
+  languages: true,
+  certificates: true,
+  yearsOfExperience: true,
+  highestEducationLevel: true,
+  vacancy: {
+    select: {
+      id: true,
+      title: true,
+      details: true,
+      _count: { select: { questions: { where: { retiredAt: null } } } },
+    },
+  },
+  currentStage: {
+    select: { id: true, name: true, sortOrder: true, isDefault: true },
+  },
+  answers: {
+    select: {
+      screeningDecision: true,
+      question: { select: { retiredAt: true } },
+    },
+  },
+} satisfies Prisma.RecruitmentApplicationSelect;
+
+type CandidateSummarySource = Prisma.RecruitmentApplicationGetPayload<{
+  select: typeof RECRUITMENT_CANDIDATE_SUMMARY_SELECT;
+}>;
 
 const RECRUITMENT_INTERVIEW_INCLUDE = {
   createdByEmployee: {
@@ -806,7 +845,7 @@ export class RecruitmentService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.recruitmentApplication.findMany({
         where,
-        include: RECRUITMENT_CANDIDATE_INCLUDE,
+        select: RECRUITMENT_CANDIDATE_SUMMARY_SELECT,
         orderBy: [{ appliedAt: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -815,7 +854,9 @@ export class RecruitmentService {
     ]);
 
     return {
-      items: items.map((candidate) => this.serializeCandidate(candidate)),
+      items: items.map((candidate) =>
+        this.serializeCandidateSummary(candidate),
+      ),
       meta: { page, limit, total },
     };
   }
@@ -831,7 +872,21 @@ export class RecruitmentService {
     });
     if (!candidate)
       throw new NotFoundException('Recruitment candidate not found');
-    return this.serializeCandidate(candidate);
+    return this.serializeCandidateDetail(candidate);
+  }
+
+  private async getCandidateSummary(tenantId: string, candidateId: string) {
+    const candidate = await this.prisma.recruitmentApplication.findFirst({
+      where: {
+        tenantId,
+        id: candidateId,
+        status: RecruitmentApplicationStatus.SUBMITTED,
+      },
+      select: RECRUITMENT_CANDIDATE_SUMMARY_SELECT,
+    });
+    if (!candidate)
+      throw new NotFoundException('Recruitment candidate not found');
+    return this.serializeCandidateSummary(candidate);
   }
 
   async getCandidateDocuments(tenantId: string, candidateId: string) {
@@ -918,9 +973,9 @@ export class RecruitmentService {
 
       const updated = await tx.recruitmentApplication.findFirstOrThrow({
         where: { tenantId, id: candidateId },
-        include: RECRUITMENT_CANDIDATE_INCLUDE,
+        select: RECRUITMENT_CANDIDATE_SUMMARY_SELECT,
       });
-      return this.serializeCandidate(updated);
+      return this.serializeCandidateSummary(updated);
     });
   }
 
@@ -954,7 +1009,7 @@ export class RecruitmentService {
         screeningDecidedByUserId: decision ? user.id : null,
       },
     });
-    return this.getCandidate(tenantId, candidateId);
+    return this.getCandidateSummary(tenantId, candidateId);
   }
 
   /**
@@ -1433,7 +1488,7 @@ export class RecruitmentService {
         where: { tenantId, id: application.id },
         include: RECRUITMENT_CANDIDATE_INCLUDE,
       });
-      return this.serializeCandidate(created);
+      return this.serializeCandidateDetail(created);
     });
   }
 
@@ -1654,7 +1709,7 @@ export class RecruitmentService {
         },
         include: RECRUITMENT_CANDIDATE_INCLUDE,
       });
-      return this.serializeCandidate(submitted);
+      return this.serializeCandidateDetail(submitted);
     });
   }
 
@@ -2441,28 +2496,66 @@ export class RecruitmentService {
     };
   }
 
-  private serializeCandidate(
-    candidate: Prisma.RecruitmentApplicationGetPayload<{
-      include: typeof RECRUITMENT_CANDIDATE_INCLUDE;
-    }>,
+  private candidateMatchScore(
+    candidate: Pick<
+      CandidateSummarySource,
+      | 'skills'
+      | 'languages'
+      | 'certificates'
+      | 'yearsOfExperience'
+      | 'highestEducationLevel'
+      | 'vacancy'
+      | 'answers'
+    >,
   ) {
-    const { accessTokenHash: _accessTokenHash, ...safeCandidate } = candidate;
-    const { _count: vacancyCounts, ...vacancy } = candidate.vacancy;
-    // Answers to questions since retired no longer take part in the screening share.
     const activeAnswers = candidate.answers.filter(
       (answer) => answer.question.retiredAt === null,
     );
-    const matchScore = computeOverallScore(candidate, vacancy.details, {
-      total: vacancyCounts.questions,
+    return computeOverallScore(candidate, candidate.vacancy.details, {
+      total: candidate.vacancy._count.questions,
       accepted: activeAnswers.filter(
         (answer) => answer.screeningDecision === 'ACCEPTED',
       ).length,
       decided: activeAnswers.filter((answer) => answer.screeningDecision)
         .length,
     });
+  }
+
+  private serializeCandidateSummary(
+    candidate: CandidateSummarySource,
+  ): RecruitmentCandidateSummary {
+    return {
+      id: candidate.id,
+      vacancyId: candidate.vacancyId,
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      status: candidate.status,
+      currentStageId: candidate.currentStageId,
+      currentStage: candidate.currentStage
+        ? {
+            id: candidate.currentStage.id,
+            name: candidate.currentStage.name,
+            sortOrder: candidate.currentStage.sortOrder,
+            isDefault: candidate.currentStage.isDefault,
+          }
+        : null,
+      vacancy: { id: candidate.vacancy.id, title: candidate.vacancy.title },
+      appliedAt: candidate.appliedAt,
+      submittedAt: candidate.submittedAt,
+      matchScore: this.candidateMatchScore(candidate),
+    };
+  }
+
+  private serializeCandidateDetail(
+    candidate: Prisma.RecruitmentApplicationGetPayload<{
+      include: typeof RECRUITMENT_CANDIDATE_INCLUDE;
+    }>,
+  ) {
+    const { accessTokenHash: _accessTokenHash, ...safeCandidate } = candidate;
+    const { _count: _vacancyCounts, ...vacancy } = candidate.vacancy;
     return {
       ...safeCandidate,
-      matchScore,
+      matchScore: this.candidateMatchScore(candidate),
       expectedSalary: this.decimalToNumber(candidate.expectedSalary),
       vacancy: {
         ...vacancy,
