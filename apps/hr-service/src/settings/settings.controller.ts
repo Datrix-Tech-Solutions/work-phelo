@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -28,6 +29,10 @@ import { SettingsService } from './settings.service';
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant notice-period configuration for employee resignation self-service.',
+  )
   @Get('resignation')
   @ApiOperation({
     summary: 'Get resignation settings for the current tenant',
@@ -67,6 +72,10 @@ export class SettingsController {
     return this.settingsService.getAttendanceSettings(req.user.tenantId);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant company policy catalog for employee policy acknowledgement.',
+  )
   @Get('company-policies')
   @ApiOperation({
     summary: 'Get company policy settings for the current tenant',

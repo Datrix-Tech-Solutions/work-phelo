@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -223,6 +224,10 @@ export class TimeController {
     return this.timeService.createSchedule(req.user.tenantId, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TimeController.getSchedules delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('schedules')
   @ApiOperation({ summary: 'Get shift schedules' })
   @ApiQuery({ name: 'employeeId', required: false })
@@ -269,6 +274,10 @@ export class TimeController {
     return this.timeService.deleteSchedule(req.user.tenantId, id, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TimeController.getEligibleSwapColleagues delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('shift-swaps/eligible-colleagues')
   @ApiOperation({
     summary: 'Get eligible colleague shift options for a swap request',
@@ -299,6 +308,10 @@ export class TimeController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TimeController.createShiftSwap delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('shift-swaps')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a shift swap request' })
@@ -315,6 +328,10 @@ export class TimeController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TimeController.getMyShiftSwaps delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('shift-swaps/my')
   @ApiOperation({
     summary: 'List shift swap requests relevant to the current employee',
@@ -324,6 +341,10 @@ export class TimeController {
     return this.timeService.getMyShiftSwapRequests(req.user.tenantId, req.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TimeController.getPendingManagerShiftSwaps delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('shift-swaps/pending-manager')
   @ApiOperation({
     summary:
@@ -349,6 +370,10 @@ export class TimeController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TimeController.getShiftSwap delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('shift-swaps/:id')
   @ApiOperation({ summary: 'Get a single shift swap request' })
   @ApiParam({ name: 'id', description: 'Shift swap request UUID' })
@@ -361,6 +386,10 @@ export class TimeController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TimeController.respondToShiftSwap delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post('shift-swaps/:id/respond')
   @ApiOperation({
     summary: 'Accept or decline a shift swap request as the colleague',

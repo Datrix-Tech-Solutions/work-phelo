@@ -13,8 +13,6 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import {
   candidateFullName,
-  candidateLocation,
-  experienceLabel,
   stageVariant,
 } from '@/components/molecules/hr/recruitment/candidateUtils';
 import { usePermission } from '@/hooks/hr/usePermission';
@@ -64,14 +62,9 @@ function CandidateCard({
         <Avatar name={name} size="sm" />
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-medium text-gray-900">{name}</span>
-          <span className="truncate text-xs text-gray-500">{candidate.email ?? '—'}</span>
         </div>
       </div>
       <div className="flex flex-col gap-0.5 text-xs text-gray-500">
-        <span className="truncate">{candidate.currentJobTitle ?? '—'}</span>
-        <span className="truncate">
-          {experienceLabel(candidate.yearsOfExperience)} · {candidateLocation(candidate)}
-        </span>
         <span>Applied {formatDate(candidate.submittedAt ?? candidate.appliedAt)}</span>
       </div>
       {score !== null && <Badge label={`${score}% match`} variant={matchVariant(score)} />}

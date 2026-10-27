@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -96,6 +97,10 @@ export class LeaveController {
     return this.leaveService.createPublicHoliday(req.user.tenantId, dto);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant holiday calendar for employee leave planning.',
+  )
   @Get('public-holidays')
   @ApiOperation({ summary: 'List all public holidays for the company' })
   @ApiQuery({ name: 'year', required: false, type: Number })
@@ -163,6 +168,10 @@ export class LeaveController {
     return this.leaveService.getMyLeaveBalances(req.user.tenantId, req.user.id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'LeaveController.getBalances delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('balances/:employeeId')
   @ApiOperation({ summary: 'Get leave balances for a specific employee' })
   @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
@@ -233,6 +242,10 @@ export class LeaveController {
     return this.leaveService.createRequest(req.user.tenantId, req.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'LeaveController.getRequests delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('requests')
   @ApiOperation({ summary: 'Get leave requests — scoped by role' })
   @ApiQuery({
@@ -271,6 +284,10 @@ export class LeaveController {
     return this.leaveService.getPendingCount(req.user.tenantId, req.user);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'HR home intentionally exposes only tenant on-leave employee IDs, not leave details.',
+  )
   @Get('requests/on-leave-today')
   @ApiOperation({
     summary:

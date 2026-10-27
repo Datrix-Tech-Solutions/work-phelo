@@ -12,6 +12,7 @@ import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
@@ -42,6 +43,10 @@ export class ReportsController {
 
   // Open to every Marketing user: without marketing.targets.all:VIEW the service narrows the
   // report to the caller's own figures.
+  @PermissionExempt(
+    'service-policy',
+    'TargetReportService.report and SalesTargetsService.listOverlapping scope figures to the caller unless targets view-all is granted.',
+  )
   @Get('targets')
   @ApiOperation({
     summary: 'Yearly target against achievement, per sales rep',
@@ -55,6 +60,10 @@ export class ReportsController {
     return this.targetReport.report(request.user, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'TargetReportService.filters restricts reps and organization filters according to current targets view-all authority.',
+  )
   @Get('targets/filters')
   @ApiOperation({
     summary:
