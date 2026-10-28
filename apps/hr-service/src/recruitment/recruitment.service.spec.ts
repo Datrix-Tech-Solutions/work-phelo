@@ -1713,19 +1713,19 @@ describe('RecruitmentService', () => {
       });
     });
 
+    // File storage is not set up yet, so required documents are not enforced.
     it.each([
-      { resume: true, coverLetter: false, missing: ['resume'] },
-      { resume: false, coverLetter: true, missing: ['coverLetter'] },
-      { resume: true, coverLetter: true, missing: ['resume', 'coverLetter'] },
+      { resume: true, coverLetter: false },
+      { resume: false, coverLetter: true },
+      { resume: true, coverLetter: true },
     ])(
-      'review and submit require confirmed managed documents: %j',
-      async ({ resume, coverLetter, missing }) => {
+      'does not block review when required documents are not uploaded: %j',
+      async ({ resume, coverLetter }) => {
         prisma.recruitmentApplication.findFirst.mockResolvedValue(
           draftApplication({
             ...applicationDto(),
             answers: [],
             managedDocuments: [],
-            resumeUrl: 'https://external.example/unverified.pdf',
             vacancy: vacancy({
               questions: [],
               details: { documents: { resume, coverLetter } },
@@ -1736,13 +1736,8 @@ describe('RecruitmentService', () => {
           'application-1',
           'token',
         );
-        expect(review.missing.map((item) => item.field)).toEqual(
-          expect.arrayContaining(missing),
-        );
-        await expect(
-          service.submitPublicApplication('application-1', 'token'),
-        ).rejects.toThrow('incomplete');
-        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+        expect(review.missing).toEqual([]);
+        expect(review.canSubmit).toBe(true);
       },
     );
 
