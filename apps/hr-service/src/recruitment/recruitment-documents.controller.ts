@@ -40,7 +40,10 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { UploadRecruitmentDocumentDto } from './dto/document.dto';
+import {
+  CoverLetterTextDto,
+  UploadRecruitmentDocumentDto,
+} from './dto/document.dto';
 import { MAX_RECRUITMENT_DOCUMENT_BYTES } from './recruitment-document-validation';
 import { RecruitmentDocumentsService } from './recruitment-documents.service';
 
@@ -107,6 +110,24 @@ export class RecruitmentPublicDocumentsController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.documents.upload(applicationId, token, dto.type, file);
+  }
+
+  @Post('cover-letter-text')
+  @ApiOperation({
+    summary: 'Save or replace a typed cover letter',
+    description:
+      'Stores the text (max 10,000 characters) as the draft COVER_LETTER document, replacing any current one, so it satisfies a required cover letter exactly like an upload.',
+  })
+  @ApiCreatedResponse({
+    description: 'Active document metadata',
+    schema: { example: { ...metadataExample, type: 'COVER_LETTER' } },
+  })
+  saveCoverLetterText(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Headers('x-application-access-token') token: string | undefined,
+    @Body() dto: CoverLetterTextDto,
+  ) {
+    return this.documents.saveCoverLetterText(applicationId, token, dto.text);
   }
 
   @Get()

@@ -2235,25 +2235,8 @@ export class RecruitmentService {
     vacancyDetails: Prisma.JsonValue | null = null,
   ) {
     const missing: Array<{ field: string; label: string }> = [];
-    const documentRequirements =
-      vacancyDetails &&
-      typeof vacancyDetails === 'object' &&
-      !Array.isArray(vacancyDetails)
-        ? (vacancyDetails as unknown as VacancyDetails).documents
-        : undefined;
-    for (const [flag, type, label] of [
-      ['resume', 'RESUME', 'Resume'],
-      ['coverLetter', 'COVER_LETTER', 'Cover letter'],
-    ] as const) {
-      if (
-        documentRequirements?.[flag] &&
-        !application.managedDocuments?.some(
-          (document) => document.type === type,
-        )
-      ) {
-        missing.push({ field: flag, label });
-      }
-    }
+    // Resume and cover letter are not enforced: file storage is not set up yet, so the careers
+    // site cannot save them. Restore the document check once they can be stored.
     // Contact details, current job and notice period are asked on every application. The
     // rest is only required when the vacancy setup marked that requirement as required.
     const required = this.requiredRequirements(vacancyDetails);
