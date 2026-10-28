@@ -1,10 +1,10 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ChevronRight, X } from 'lucide-react';
+import { cn, inputClass } from '@/lib/utils';
 import { pageBreadcrumb, pagePx } from '@/lib/layout';
 import { ProjectBanner } from '@/components/molecules/hr/projects/ProjectBanner';
 import {
@@ -50,9 +50,13 @@ export default function ProjectDetailLayout({
   const isBillable = !!setup?.billable && !!setup.pricing;
   const updateProject = useUpdateProject();
   const save = useSaveWithToast();
-  // Turns a tab on for this project only, leaving its template alone. A project made before set-ups
-  // existed starts from the Tasks and Board tabs it was already showing.
-  const addFeature = (feature: ProjectFeature) =>
+  // Saves a change to this project's own tabs, leaving its template alone. A project made before
+  // set-ups existed starts from the Tasks and Board tabs it was already showing.
+  const saveTabs = (
+    nextFeatures: ProjectFeature[],
+    featureLabels: Partial<Record<ProjectFeature, string>>,
+    addedFeatures: ProjectFeature[],
+  ) =>
     save(
       updateProject.mutateAsync({
         id,
@@ -61,11 +65,44 @@ export default function ProjectDetailLayout({
             ...BLANK_PROJECT_CONFIG,
             ...setup?.config,
             ...(setup?.config ? {} : { workflow: ['To Do', 'In Progress', 'On Hold', 'Done'] }),
-            features: [...(features ?? ['LIST', 'BOARD']), feature],
+            features: nextFeatures,
+            featureLabels,
+            addedFeatures,
           },
         },
       }),
     );
+  // A name that matches the usual one isn't stored, so the tab keeps following the project's name.
+  const defaultTabName = (f: ProjectFeature) =>
+    `${labels.singular} ${f === 'LIST' ? 'Tasks' : PROJECT_FEATURE_LABELS[f]}`;
+  const withLabel = (f: ProjectFeature, name: string) => {
+    const rest = Object.fromEntries(
+      Object.entries(setup?.config?.featureLabels ?? {}).filter(([key]) => key !== f),
+    );
+    const trimmed = name.trim();
+    return trimmed && trimmed !== defaultTabName(f) ? { ...rest, [f]: trimmed } : rest;
+  };
+  // Tabs added to this project after it was made. The template's own tabs never appear here.
+  const addedFeatures = setup?.config?.addedFeatures ?? [];
+  const addFeature = (feature: ProjectFeature, name: string) =>
+    saveTabs([...(features ?? ['LIST', 'BOARD']), feature], withLabel(feature, name), [
+      ...addedFeatures,
+      feature,
+    ]);
+  const renameFeature = (feature: ProjectFeature, name: string) =>
+    saveTabs(features ?? ['LIST', 'BOARD'], withLabel(feature, name), addedFeatures);
+  // Only hides the view; the project's tasks, sprints and objectives stay as they are.
+  const removeFeature = async (feature: ProjectFeature) => {
+    if (pathname.startsWith(`${root}/${PROJECT_FEATURE_TAB_SEGMENTS[feature]}`)) {
+      router.push(`${root}/summary`);
+    }
+    await saveTabs(
+      (features ?? []).filter((f) => f !== feature),
+      withLabel(feature, ''),
+      addedFeatures.filter((f) => f !== feature),
+    );
+  };
+  const [renaming, setRenaming] = useState<ProjectFeature | null>(null);
   const router = useRouter();
   const { data: myProfile } = useMyProfile();
   const canManageProjects = usePermission(Permission.CREATE_PROJECT);
@@ -94,15 +131,15 @@ export default function ProjectDetailLayout({
   const featureTabs = features
     ? features.map((f) => ({
         // A name the template gave the view stands alone; the usual names follow the project's name.
-        label:
-          setup?.config?.featureLabels?.[f] ??
-          `${labels.singular} ${f === 'LIST' ? 'Tasks' : PROJECT_FEATURE_LABELS[f]}`,
+        label: setup?.config?.featureLabels?.[f] ?? defaultTabName(f),
         href: `${root}/${PROJECT_FEATURE_TAB_SEGMENTS[f]}`,
+        feature: f as ProjectFeature | undefined,
       }))
-    : [
-        { label: `${labels.singular} Tasks`, href: `${root}/tasks` },
-        { label: `${labels.singular} Board`, href: `${root}/board` },
-      ];
+    : (['LIST', 'BOARD'] as const).map((f) => ({
+        label: defaultTabName(f),
+        href: `${root}/${PROJECT_FEATURE_TAB_SEGMENTS[f]}`,
+        feature: f as ProjectFeature | undefined,
+      }));
   // The tabs a project doesn't have yet. A project with no saved setup shows Tasks and Board.
   const activeFeatures: ProjectFeature[] = features ?? ['LIST', 'BOARD'];
   const unusedTabs = PROJECT_FEATURE_OPTIONS.filter((o) => !activeFeatures.includes(o.value));
@@ -112,7 +149,7 @@ export default function ProjectDetailLayout({
     ? [{ label: `${labels.singular} Billing`, href: `${root}/billing` }]
     : [];
 
-  const tabs = [
+  const tabs: { label: string; href: string; feature?: ProjectFeature }[] = [
     { label: `${labels.singular} Summary`, href: `${root}/summary` },
     ...featureTabs,
     ...billingTabs,
@@ -142,10 +179,45 @@ export default function ProjectDetailLayout({
             <div className="flex items-end gap-1 border-b border-gray-200">
               {tabs.map((tab) => {
                 const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
-                return (
+                if (tab.feature && renaming === tab.feature) {
+                  const feature = tab.feature;
+                  return (
+                    <input
+                      key={tab.href}
+                      autoFocus
+                      defaultValue={tab.label}
+                      maxLength={40}
+                      aria-label={`Name of ${tab.label}`}
+                      onFocus={(e) => e.target.select()}
+                      onBlur={(e) => {
+                        setRenaming(null);
+                        if (e.target.value.trim() !== tab.label) {
+                          renameFeature(feature, e.target.value);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                        if (e.key === 'Escape') {
+                          e.currentTarget.value = tab.label;
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className={inputClass(undefined, 'w-44 mb-1 self-center')}
+                    />
+                  );
+                }
+                const removable =
+                  canAddTabs && !!tab.feature && addedFeatures.includes(tab.feature);
+                const link = (
                   <Link
                     key={tab.href}
                     href={tab.href}
+                    title={canAddTabs && tab.feature ? 'Double-click to rename' : undefined}
+                    onDoubleClick={(e) => {
+                      if (!canAddTabs || !tab.feature) return;
+                      e.preventDefault();
+                      setRenaming(tab.feature);
+                    }}
                     className={cn(
                       'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
                       isActive ? TAB_ACTIVE : TAB_IDLE,
@@ -154,6 +226,22 @@ export default function ProjectDetailLayout({
                     {tab.label}
                   </Link>
                 );
+                if (!removable || !tab.feature) return link;
+                const feature = tab.feature;
+                return (
+                  <span key={tab.href} className="group relative flex items-end">
+                    {link}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${tab.label}`}
+                      title="Remove tab"
+                      onClick={() => removeFeature(feature)}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded text-gray-400 opacity-0 transition hover:bg-gray-100 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                );
               })}
               {canAddTabs && (
                 <AddProjectTabMenu
@@ -161,8 +249,8 @@ export default function ProjectDetailLayout({
                     value: o.value,
                     label: o.value === 'LIST' ? 'Tasks' : o.label,
                   }))}
-                  onPick={(value) => {
-                    addFeature(value as ProjectFeature);
+                  onPick={(value, name) => {
+                    addFeature(value as ProjectFeature, name);
                     router.push(`${root}/${PROJECT_FEATURE_TAB_SEGMENTS[value as ProjectFeature]}`);
                   }}
                 />
