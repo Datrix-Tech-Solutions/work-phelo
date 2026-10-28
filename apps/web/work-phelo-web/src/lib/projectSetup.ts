@@ -23,6 +23,7 @@ export function projectSetup(project: Project | undefined): ProjectSetup | undef
           workTypes: c.workTypes,
           features: c.features,
           priorities: c.priorities,
+          featureLabels: c.featureLabels,
         }
       : undefined;
   return {

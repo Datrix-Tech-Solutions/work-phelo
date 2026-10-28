@@ -118,6 +118,17 @@ export class ProjectConfigDto {
   @Transform(({ value }) => featureLabelsFrom(value))
   @IsObject()
   featureLabels?: Partial<Record<(typeof PROJECT_FEATURES)[number], string>>;
+
+  @ApiPropertyOptional({
+    enum: PROJECT_FEATURES,
+    isArray: true,
+    description:
+      'Features added to this project after it was made; only these can be removed again',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(PROJECT_FEATURES, { each: true })
+  addedFeatures?: (typeof PROJECT_FEATURES)[number][];
 }
 
 export class MilestoneDto {

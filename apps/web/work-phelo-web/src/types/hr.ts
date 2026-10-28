@@ -1440,6 +1440,8 @@ export type ProjectConfig = Pick<
 > & {
   /** Names given to features in place of the usual ones; a feature left out keeps its own. */
   featureLabels?: ProjectTemplateContent['featureLabels'];
+  /** Features added after the project was made; only these can be removed, the template's stay. */
+  addedFeatures?: ProjectFeature[];
 };
 
 export type CreateProjectTemplateDto = Pick<

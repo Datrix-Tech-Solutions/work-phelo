@@ -3,23 +3,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus } from 'lucide-react';
-import { cn, popupClass } from '@/lib/utils';
+import { cn, inputClass, popupClass } from '@/lib/utils';
 
 interface Props {
   /** The tabs that aren't on yet; the button hides when there are none. */
   options: { value: string; label: string }[];
-  onPick: (value: string) => void;
+  /** `name` is what the person called the tab; it starts as the tab's usual name. */
+  onPick: (value: string, name: string) => void;
 }
 
-/** A "+" at the end of the tab bar: opens a short list of the tabs that aren't on yet. */
+/**
+ * A "+" at the end of the tab bar: opens a short list of the tabs that aren't on yet. Choosing one
+ * asks what to call it, starting from its usual name.
+ */
 export function AddProjectTabMenu({ options, onPick }: Props) {
   const ref = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [chosen, setChosen] = useState<{ value: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!pos) return;
-    const close = () => setPos(null);
+    const close = () => {
+      setPos(null);
+      setChosen(null);
+    };
     const onPress = (e: MouseEvent) => {
       const target = e.target as Node;
       if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
@@ -49,7 +57,10 @@ export function AddProjectTabMenu({ options, onPick }: Props) {
         aria-haspopup="menu"
         aria-expanded={!!pos}
         onClick={() => {
-          if (pos) return setPos(null);
+          if (pos) {
+            setPos(null);
+            return setChosen(null);
+          }
           const rect = ref.current?.getBoundingClientRect();
           if (rect) setPos({ top: rect.bottom + 4, left: rect.left });
         }}
@@ -70,21 +81,52 @@ export function AddProjectTabMenu({ options, onPick }: Props) {
             className={popupClass('fixed z-[70] p-1.5 flex flex-col gap-0.5 min-w-44')}
             style={{ top: pos.top, left: pos.left }}
           >
-            {options.map((option) => (
-              <li key={option.value} role="none">
+            {chosen ? (
+              <li role="none" className="p-1.5 flex flex-col gap-2">
+                <label htmlFor="new-tab-name" className="text-xs text-gray-500">
+                  Tab name
+                </label>
+                <input
+                  id="new-tab-name"
+                  autoFocus
+                  value={chosen.name}
+                  maxLength={40}
+                  onChange={(e) => setChosen({ ...chosen, name: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || !chosen.name.trim()) return;
+                    onPick(chosen.value, chosen.name.trim());
+                    setPos(null);
+                    setChosen(null);
+                  }}
+                  className={inputClass()}
+                />
                 <button
                   type="button"
-                  role="menuitem"
+                  disabled={!chosen.name.trim()}
                   onClick={() => {
+                    onPick(chosen.value, chosen.name.trim());
                     setPos(null);
-                    onPick(option.value);
+                    setChosen(null);
                   }}
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-800 transition-colors hover:bg-gray-100"
+                  className="rounded-lg px-3 py-2 text-sm text-gray-800 transition-colors hover:bg-gray-100 disabled:opacity-40"
                 >
-                  {option.label}
+                  Add tab
                 </button>
               </li>
-            ))}
+            ) : (
+              options.map((option) => (
+                <li key={option.value} role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => setChosen({ value: option.value, name: option.label })}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-800 transition-colors hover:bg-gray-100"
+                  >
+                    {option.label}
+                  </button>
+                </li>
+              ))
+            )}
           </ul>,
           document.body,
         )}
