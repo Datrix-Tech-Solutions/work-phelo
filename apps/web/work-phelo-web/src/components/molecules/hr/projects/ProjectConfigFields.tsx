@@ -14,6 +14,15 @@ export function getProjectConfigErrors(config: ProjectConfig) {
   if (config.workTypes.length < 1) errors.workTypes = 'Add at least one work type';
   if (config.features.length < 1) errors.features = 'Turn on at least one feature';
   if (config.priorities.length < 2) errors.priorities = 'Add at least two priority levels';
+  const hasBlankOrRepeat = (names: string[]) =>
+    names.some((n) => !n.trim()) ||
+    new Set(names.map((n) => n.trim().toLowerCase())).size !== names.length;
+  if (!errors.workflow && hasBlankOrRepeat(config.workflow))
+    errors.workflow = 'Give every status its own name';
+  if (!errors.workTypes && hasBlankOrRepeat(config.workTypes.map((w) => w.name)))
+    errors.workTypes = 'Give every work type its own name';
+  if (!errors.priorities && hasBlankOrRepeat(config.priorities.map((p) => p.name)))
+    errors.priorities = 'Give every priority level its own name';
   return errors;
 }
 

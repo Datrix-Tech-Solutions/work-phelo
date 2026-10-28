@@ -1,4 +1,10 @@
-import { ProjectConfig, ProjectTemplate } from '@/types/hr';
+import { ProjectConfig, ProjectTemplate, ProjectTemplateContent } from '@/types/hr';
+
+export const EMPTY_TEMPLATE_CONTENT: ProjectTemplateContent = {
+  objectives: [],
+  sprints: [],
+  featureLabels: {},
+};
 
 /** Templates every tenant gets. They live in code, not in storage, so they can't be edited or lost. */
 export const DEFAULT_PROJECT_TEMPLATES: ProjectTemplate[] = [
@@ -20,6 +26,7 @@ export const DEFAULT_PROJECT_TEMPLATES: ProjectTemplate[] = [
       { name: 'High', color: 'ORANGE' },
       { name: 'Urgent', color: 'RED' },
     ],
+    content: EMPTY_TEMPLATE_CONTENT,
     isDefault: true,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
@@ -39,6 +46,7 @@ export const DEFAULT_PROJECT_TEMPLATES: ProjectTemplate[] = [
       { name: 'Medium', color: 'YELLOW' },
       { name: 'High', color: 'RED' },
     ],
+    content: EMPTY_TEMPLATE_CONTENT,
     isDefault: true,
     createdAt: '2026-01-01T00:00:00.000Z',
   },

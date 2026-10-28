@@ -93,7 +93,10 @@ export default function ProjectDetailLayout({
   // Summary is always there. Projects with no saved setup (made before templates) keep Tasks and Board.
   const featureTabs = features
     ? features.map((f) => ({
-        label: `${labels.singular} ${f === 'LIST' ? 'Tasks' : PROJECT_FEATURE_LABELS[f]}`,
+        // A name the template gave the view stands alone; the usual names follow the project's name.
+        label:
+          setup?.config?.featureLabels?.[f] ??
+          `${labels.singular} ${f === 'LIST' ? 'Tasks' : PROJECT_FEATURE_LABELS[f]}`,
         href: `${root}/${PROJECT_FEATURE_TAB_SEGMENTS[f]}`,
       }))
     : [

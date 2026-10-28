@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -11,7 +12,19 @@ import {
   hasPermissionRule,
   isCompanyAdminUser,
 } from '../auth/access-scope';
-import { ProjectTemplateDto } from './dto/project-template.dto';
+import {
+  ProjectTemplateDto,
+  TemplateContentDto,
+} from './dto/project-template.dto';
+
+const EMPTY_CONTENT: TemplateContentDto = {
+  objectives: [],
+  sprints: [],
+  featureLabels: {},
+};
+
+const repeats = (names: string[]) =>
+  new Set(names.map((n) => n.trim().toLowerCase())).size !== names.length;
 
 /** Templates a company keeps for starting projects. The built-in ones ship with the app; a company's
  *  edit of one is a row with its `defaultKey`. */
@@ -31,8 +44,31 @@ export class ProjectTemplatesService {
     }
   }
 
+  /** The stored config, with the starter content kept beside the set-up. */
+  private configJson(
+    dto: ProjectTemplateDto,
+    kept?: TemplateContentDto,
+  ): Prisma.InputJsonValue {
+    const content = dto.content ?? kept ?? EMPTY_CONTENT;
+    if (repeats(content.objectives)) {
+      throw new BadRequestException('Give every objective its own name');
+    }
+    if (repeats(content.sprints.map((s) => s.name))) {
+      throw new BadRequestException('Give every sprint its own name');
+    }
+    return { ...dto.config, content } as unknown as Prisma.InputJsonValue;
+  }
+
+  private contentOf(config: Prisma.JsonValue): TemplateContentDto {
+    const { content } = config as unknown as { content?: TemplateContentDto };
+    return { ...EMPTY_CONTENT, ...content };
+  }
+
   private serialize(row: ProjectTemplate) {
-    const config = row.config as unknown as Record<string, unknown>;
+    const { content, ...config } = row.config as unknown as Record<
+      string,
+      unknown
+    >;
     return {
       id: row.id,
       name: row.name,
@@ -41,6 +77,7 @@ export class ProjectTemplatesService {
       isDefault: false,
       createdAt: row.createdAt,
       ...config,
+      content: { ...EMPTY_CONTENT, ...(content as object | undefined) },
     };
   }
 
@@ -59,7 +96,7 @@ export class ProjectTemplatesService {
         tenantId,
         name: dto.name.trim(),
         description: dto.description?.trim() || null,
-        config: dto.config as unknown as Prisma.InputJsonValue,
+        config: this.configJson(dto),
       },
     });
     return this.serialize(row);
@@ -74,7 +111,7 @@ export class ProjectTemplatesService {
     this.assertCanManage(user);
     const existing = await this.prisma.projectTemplate.findFirst({
       where: { id, tenantId, defaultKey: null },
-      select: { id: true },
+      select: { config: true },
     });
     if (!existing) throw new NotFoundException('Template not found');
     const row = await this.prisma.projectTemplate.update({
@@ -82,7 +119,7 @@ export class ProjectTemplatesService {
       data: {
         name: dto.name.trim(),
         description: dto.description?.trim() || null,
-        config: dto.config as unknown as Prisma.InputJsonValue,
+        config: this.configJson(dto, this.contentOf(existing.config)),
       },
     });
     return this.serialize(row);
@@ -105,10 +142,17 @@ export class ProjectTemplatesService {
     dto: ProjectTemplateDto,
   ) {
     this.assertCanManage(user);
+    const before = await this.prisma.projectTemplate.findUnique({
+      where: { tenantId_defaultKey: { tenantId, defaultKey } },
+      select: { config: true },
+    });
     const data = {
       name: dto.name.trim(),
       description: dto.description?.trim() || null,
-      config: dto.config as unknown as Prisma.InputJsonValue,
+      config: this.configJson(
+        dto,
+        before ? this.contentOf(before.config) : undefined,
+      ),
     };
     const row = await this.prisma.projectTemplate.upsert({
       where: { tenantId_defaultKey: { tenantId, defaultKey } },

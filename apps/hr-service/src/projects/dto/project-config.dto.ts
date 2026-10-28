@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsObject,
   IsNumber,
   IsOptional,
   IsString,
@@ -66,6 +67,21 @@ export class PriorityLevelDto {
   color!: (typeof PRIORITY_COLORS)[number];
 }
 
+/** Keeps only the names given to real features, trimmed and of a sensible length. */
+export function featureLabelsFrom(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(
+        ([key, label]) =>
+          (PROJECT_FEATURES as readonly string[]).includes(key) &&
+          typeof label === 'string' &&
+          label.trim().length > 0,
+      )
+      .map(([key, label]) => [key, (label as string).trim().slice(0, 40)]),
+  );
+}
+
 /** The workflow, work types, features and priority levels a project runs on. */
 export class ProjectConfigDto {
   @ApiProperty({ type: [String], example: ['To Do', 'In Progress', 'Done'] })
@@ -93,6 +109,15 @@ export class ProjectConfigDto {
   @ValidateNested({ each: true })
   @Type(() => PriorityLevelDto)
   priorities!: PriorityLevelDto[];
+
+  @ApiPropertyOptional({
+    description: 'Names given to features, by feature; others keep their own',
+    example: { BACKLOG: 'Sprints' },
+  })
+  @IsOptional()
+  @Transform(({ value }) => featureLabelsFrom(value))
+  @IsObject()
+  featureLabels?: Partial<Record<(typeof PROJECT_FEATURES)[number], string>>;
 }
 
 export class MilestoneDto {
