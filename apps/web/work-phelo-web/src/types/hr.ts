@@ -1400,6 +1400,21 @@ export interface ProjectWorkType {
   icon: WorkTypeIcon;
 }
 
+export interface TemplateSprint {
+  name: string;
+  /** How long the sprint runs, in days. */
+  days: number;
+}
+
+/** What a project starting from a template comes with, beyond its set-up. */
+export interface ProjectTemplateContent {
+  objectives: string[];
+  /** In order; each starts the day after the one before it. */
+  sprints: TemplateSprint[];
+  /** Names given to the project tabs; a tab left out keeps its own name. */
+  featureLabels: Partial<Record<ProjectFeature, string>>;
+}
+
 export interface ProjectTemplate {
   id: string;
   name: string;
@@ -1412,6 +1427,7 @@ export interface ProjectTemplate {
   features: ProjectFeature[];
   /** Levels of importance work can be given, ordered from lowest to highest. */
   priorities: PriorityLevel[];
+  content: ProjectTemplateContent;
   /** Built-in templates ship with the app and can't be deleted. */
   isDefault: boolean;
   createdAt: string;
@@ -1421,11 +1437,14 @@ export interface ProjectTemplate {
 export type ProjectConfig = Pick<
   ProjectTemplate,
   'workflow' | 'workTypes' | 'features' | 'priorities'
->;
+> & {
+  /** Names given to features in place of the usual ones; a feature left out keeps its own. */
+  featureLabels?: ProjectTemplateContent['featureLabels'];
+};
 
 export type CreateProjectTemplateDto = Pick<
   ProjectTemplate,
-  'name' | 'description' | 'workflow' | 'workTypes' | 'features' | 'priorities'
+  'name' | 'description' | 'workflow' | 'workTypes' | 'features' | 'priorities' | 'content'
 >;
 
 /** One line of a project invoice: a task's time, the project price, a milestone or a retainer month. */

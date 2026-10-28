@@ -9,9 +9,9 @@ const KEY = ['project-templates'];
 /** A template row as the backend sends it: the template's set-up is spread into the row. */
 type TemplateRow = ProjectTemplate & { defaultKey: string | null };
 
-/** The backend wants the set-up under `config`. */
-function toPayload({ name, description, ...config }: CreateProjectTemplateDto) {
-  return { name, description, config };
+/** The backend wants the set-up under `config`, beside the starter content. */
+function toPayload({ name, description, content, ...config }: CreateProjectTemplateDto) {
+  return { name, description, config, content };
 }
 
 /**
@@ -41,6 +41,7 @@ export function useProjectTemplates() {
             workTypes: edit.workTypes,
             features: edit.features,
             priorities: edit.priorities,
+            content: edit.content,
           }
         : t;
     });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
@@ -22,11 +23,13 @@ import { Permission } from '@/lib/permissionMap';
 import {
   CreateProjectDto,
   ProjectConfig,
+  ProjectFeature,
   ProjectPricing,
   ProjectTemplate,
   ProjectType,
 } from '@/types/hr';
 import { extractError } from '@/lib/extractError';
+import { seedProjectFromTemplate } from '@/lib/seedProjectFromTemplate';
 import { useToastStore } from '@/store/toast.store';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 
@@ -144,6 +147,20 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pagedProjects = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const queryClient = useQueryClient();
+  // What the chosen template adds beyond its set-up: view names, objectives and sprints.
+  const templateContent = selectedTemplate?.content;
+
+  /** The template's view names, for the views the project actually has. */
+  const withFeatureLabels = (config: ProjectConfig): ProjectConfig => {
+    const labels = Object.fromEntries(
+      Object.entries(templateContent?.featureLabels ?? {}).filter(([f]) =>
+        config.features.includes(f as ProjectFeature),
+      ),
+    );
+    return Object.keys(labels).length ? { ...config, featureLabels: labels } : config;
+  };
+
   const handleCreate = async (
     base: Omit<CreateProjectDto, 'kind' | 'config'>,
     projectType: ProjectType,
@@ -159,7 +176,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
       const data: CreateProjectDto = {
         ...base,
         kind: projectType,
-        config,
+        config: withFeatureLabels(config),
         ...(selectedTemplate ? { templateName: selectedTemplate.name } : {}),
         ...(clientInfo?.client
           ? { clientId: clientInfo.client.id, clientName: clientInfo.client.name }
@@ -181,8 +198,19 @@ export function ProjectsContent({ tenantSlug }: Props) {
             }
           : {}),
       };
-      await createProject.mutateAsync(data);
+      const created = await createProject.mutateAsync(data);
       setPanelOpen(false);
+      if (templateContent) {
+        try {
+          await seedProjectFromTemplate(created.id, templateContent, base.startDate);
+          queryClient.invalidateQueries({ queryKey: ['projects', created.id] });
+        } catch (err) {
+          toast({
+            message: `The project was created, but its starter content wasn't added: ${extractError(err)}`,
+            type: 'error',
+          });
+        }
+      }
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
     }

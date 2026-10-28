@@ -1,10 +1,12 @@
 import { LayoutTemplate } from 'lucide-react';
-import { ProjectTemplate } from '@/types/hr';
+import { ProjectFeature, ProjectTemplate } from '@/types/hr';
 import { ProjectTemplateSummary } from '@/components/molecules/hr/projects/ProjectTemplateSummary';
 import { DataCard, DataCardAction } from '@/components/organisms/shared/DataCard';
 
 interface Props {
   template: ProjectTemplate;
+  /** Names given to the template's features. */
+  featureLabels?: Partial<Record<ProjectFeature, string>>;
   onEdit?: () => void;
   onDelete?: () => void;
   /** A built-in template that has been edited; offers a reset back to how it shipped. */
@@ -12,7 +14,14 @@ interface Props {
   onReset?: () => void;
 }
 
-export function ProjectTemplateCard({ template, onEdit, onDelete, isEdited, onReset }: Props) {
+export function ProjectTemplateCard({
+  template,
+  featureLabels,
+  onEdit,
+  onDelete,
+  isEdited,
+  onReset,
+}: Props) {
   const actions: DataCardAction[] = [];
   if (onReset) {
     actions.push({
@@ -51,7 +60,7 @@ export function ProjectTemplateCard({ template, onEdit, onDelete, isEdited, onRe
           {template.description && (
             <p className="text-sm text-gray-600 leading-relaxed">{template.description}</p>
           )}
-          <ProjectTemplateSummary template={template} />
+          <ProjectTemplateSummary template={template} featureLabels={featureLabels} />
         </div>
       }
       actions={actions}
