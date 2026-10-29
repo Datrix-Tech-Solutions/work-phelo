@@ -16,6 +16,8 @@ import {
   renderPayrollApprovalRequestedTemplate,
   renderPayrollDecisionTemplate,
   renderRecruiterConfirmationEmailTemplate,
+  renderRecruitmentApplicationReceivedTemplate,
+  renderRecruitmentInterviewScheduledTemplate,
   renderResignationSubmittedTemplate,
   renderSchedulePublishedTemplate,
   renderShiftSwapTemplate,
@@ -120,6 +122,137 @@ export class EmailService {
           hour12: false,
         })
       : '—';
+  }
+
+  /** A date and time in the given IANA zone, with the zone's name so the time is unambiguous. */
+  private formatDateTimeInZone(iso: string, timeZone: string): string {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZoneName: 'short',
+    };
+    try {
+      return new Date(iso).toLocaleString('en-GB', { ...options, timeZone });
+    } catch {
+      return new Date(iso).toLocaleString('en-GB', {
+        ...options,
+        timeZone: 'UTC',
+      });
+    }
+  }
+
+  /** Meeting links point at third-party sites, so only the scheme is checked. */
+  private externalHttpUrl(url?: string): string | undefined {
+    if (!url) return undefined;
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol)
+        ? this.escapeHtml(parsed.toString())
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private recruitmentRoleLine(
+    vacancyTitle: string | null,
+    companyName: string | null,
+  ): string {
+    const role = vacancyTitle
+      ? ` for <strong>${this.escapeHtml(vacancyTitle)}</strong>`
+      : '';
+    const company = companyName ? ` at ${this.escapeHtml(companyName)}` : '';
+    return `${role}${company}`;
+  }
+
+  async sendRecruitmentApplicationReceived(input: {
+    to: string;
+    firstName: string;
+    vacancyTitle: string | null;
+    companyName: string | null;
+  }): Promise<boolean> {
+    return this.send(
+      input.to,
+      input.vacancyTitle
+        ? `We received your application for ${input.vacancyTitle}`
+        : 'We received your application',
+      renderRecruitmentApplicationReceivedTemplate({
+        firstName: this.escapeHtml(input.firstName),
+        roleLine: this.recruitmentRoleLine(
+          input.vacancyTitle,
+          input.companyName,
+        ),
+      }),
+    );
+  }
+
+  async sendRecruitmentInterviewScheduled(input: {
+    to: string;
+    firstName: string;
+    vacancyTitle: string | null;
+    companyName: string | null;
+    scheduledAt: string;
+    durationMinutes: number;
+    timeZone: string;
+    mode: 'VIDEO' | 'PHONE' | 'IN_PERSON';
+    platform?: string;
+    meetingLink?: string;
+    phone?: string;
+    location?: string;
+  }): Promise<boolean> {
+    const details: Array<{ label: string; valueHtml: string }> = [];
+    if (input.mode === 'VIDEO') {
+      details.push({
+        label: 'Format',
+        valueHtml: `Video call${input.platform ? ` on ${this.escapeHtml(input.platform)}` : ''}`,
+      });
+      const link = this.externalHttpUrl(input.meetingLink);
+      if (link) {
+        details.push({
+          label: 'Join link',
+          valueHtml: `<a href="${link}" style="color:#1a3557;">${link}</a>`,
+        });
+      }
+    } else if (input.mode === 'PHONE') {
+      details.push({ label: 'Format', valueHtml: 'Phone call' });
+      if (input.phone) {
+        details.push({
+          label: 'We will call',
+          valueHtml: this.escapeHtml(input.phone),
+        });
+      }
+    } else {
+      details.push({ label: 'Format', valueHtml: 'In person' });
+      if (input.location) {
+        details.push({
+          label: 'Location',
+          valueHtml: this.escapeHtmlWithBreaks(input.location),
+        });
+      }
+    }
+    return this.send(
+      input.to,
+      input.vacancyTitle
+        ? `Interview scheduled — ${input.vacancyTitle}`
+        : 'Your interview is scheduled',
+      renderRecruitmentInterviewScheduledTemplate({
+        firstName: this.escapeHtml(input.firstName),
+        roleLine: this.recruitmentRoleLine(
+          input.vacancyTitle,
+          input.companyName,
+        ),
+        whenText: this.escapeHtml(
+          this.formatDateTimeInZone(input.scheduledAt, input.timeZone),
+        ),
+        durationMinutes: input.durationMinutes,
+        details,
+      }),
+    );
   }
 
   private async send(
