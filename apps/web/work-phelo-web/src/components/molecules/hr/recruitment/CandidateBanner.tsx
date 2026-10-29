@@ -8,10 +8,10 @@ import {
   type ProfileBannerTab,
 } from '@/components/molecules/hr/employees/ProfileBannerTabs';
 import { candidateFullName, stageVariant } from './candidateUtils';
-import type { RecruitmentCandidate } from '@/types/recruitment';
+import type { RecruitmentCandidateDetail } from '@/types/recruitment';
 
 interface Props {
-  candidate: RecruitmentCandidate;
+  candidate: RecruitmentCandidateDetail;
   color?: string | null;
   canChangeStage: boolean;
   canScheduleInterview: boolean;

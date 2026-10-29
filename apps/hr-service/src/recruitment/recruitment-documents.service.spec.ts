@@ -94,7 +94,7 @@ function fixture() {
       expiresAt: '2026-10-16T12:02:00Z',
     }),
   };
-  const recruitment = new RecruitmentService(prisma);
+  const recruitment = new RecruitmentService(prisma, {} as any);
   const service = new RecruitmentDocumentsService(
     prisma,
     recruitment,

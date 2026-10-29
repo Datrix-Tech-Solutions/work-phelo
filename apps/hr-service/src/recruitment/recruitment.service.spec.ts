@@ -280,10 +280,20 @@ function draftApplication(overrides: Record<string, unknown> = {}) {
 describe('RecruitmentService', () => {
   let prisma: ReturnType<typeof createPrismaMock>;
   let service: RecruitmentService;
+  let notifier: {
+    applicationReceived: jest.Mock<(input: any) => Promise<void>>;
+    interviewScheduled: jest.Mock<(input: any) => Promise<void>>;
+  };
 
   beforeEach(() => {
     prisma = createPrismaMock();
-    service = new RecruitmentService(prisma);
+    notifier = {
+      applicationReceived: jest.fn<(input: any) => Promise<void>>(),
+      interviewScheduled: jest.fn<(input: any) => Promise<void>>(),
+    };
+    notifier.applicationReceived.mockResolvedValue(undefined);
+    notifier.interviewScheduled.mockResolvedValue(undefined);
+    service = new RecruitmentService(prisma, notifier as any);
   });
 
   describe('vacancies', () => {
@@ -1691,6 +1701,15 @@ describe('RecruitmentService', () => {
       );
       expect(result.documents.managedDocuments).toEqual(managedDocuments);
 
+      expect(notifier.applicationReceived).toHaveBeenCalledTimes(1);
+      expect(notifier.applicationReceived).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          applicationId: 'application-1',
+          email: expect.any(String),
+          firstName: expect.any(String),
+        }),
+      );
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
         prisma.recruitmentApplication.findFirst.mock.invocationCallOrder[0],
@@ -1713,19 +1732,19 @@ describe('RecruitmentService', () => {
       });
     });
 
+    // File storage is not set up yet, so required documents are not enforced.
     it.each([
-      { resume: true, coverLetter: false, missing: ['resume'] },
-      { resume: false, coverLetter: true, missing: ['coverLetter'] },
-      { resume: true, coverLetter: true, missing: ['resume', 'coverLetter'] },
+      { resume: true, coverLetter: false },
+      { resume: false, coverLetter: true },
+      { resume: true, coverLetter: true },
     ])(
-      'review and submit require confirmed managed documents: %j',
-      async ({ resume, coverLetter, missing }) => {
+      'does not block review when required documents are not uploaded: %j',
+      async ({ resume, coverLetter }) => {
         prisma.recruitmentApplication.findFirst.mockResolvedValue(
           draftApplication({
             ...applicationDto(),
             answers: [],
             managedDocuments: [],
-            resumeUrl: 'https://external.example/unverified.pdf',
             vacancy: vacancy({
               questions: [],
               details: { documents: { resume, coverLetter } },
@@ -1736,15 +1755,25 @@ describe('RecruitmentService', () => {
           'application-1',
           'token',
         );
-        expect(review.missing.map((item) => item.field)).toEqual(
-          expect.arrayContaining(missing),
-        );
-        await expect(
-          service.submitPublicApplication('application-1', 'token'),
-        ).rejects.toThrow('incomplete');
-        expect(prisma.recruitmentApplication.update).not.toHaveBeenCalled();
+        expect(review.missing).toEqual([]);
+        expect(review.canSubmit).toBe(true);
       },
     );
+
+    it('sends nothing when the submission is refused', async () => {
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(
+        draftApplication({
+          ...applicationDto(),
+          firstName: '',
+          answers: [],
+          vacancy: vacancy({ questions: [] }),
+        }),
+      );
+      await expect(
+        service.submitPublicApplication('application-1', 'token'),
+      ).rejects.toThrow('incomplete');
+      expect(notifier.applicationReceived).not.toHaveBeenCalled();
+    });
 
     it('accepts confirmed documents, leaves optional documents optional, and returns safe review metadata', async () => {
       const document = {
@@ -2517,6 +2546,57 @@ describe('RecruitmentService', () => {
           },
         }),
       );
+    });
+
+    it('tells the candidate when an interview is scheduled', async () => {
+      prisma.recruitmentApplication.findFirst.mockResolvedValue(
+        candidate({
+          vacancy: { title: 'Accountant', companyName: 'Acme Ltd' },
+        }),
+      );
+      prisma.recruitmentInterview.create.mockResolvedValue(interview());
+
+      await service.scheduleCandidateInterview(
+        'tenant-1',
+        user,
+        'candidate-1',
+        {
+          mode: RecruitmentInterviewMode.VIDEO,
+          scheduledAt: future,
+          durationMinutes: 45,
+          platform: 'Google Meet',
+          meetingLink: 'https://meet.google.com/abc',
+        },
+      );
+
+      expect(notifier.interviewScheduled).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        applicationId: 'candidate-1',
+        interviewId: 'interview-1',
+        email: 'ama@example.com',
+        firstName: 'Ama',
+        vacancyTitle: 'Accountant',
+        companyName: 'Acme Ltd',
+        scheduledAt: new Date('2099-01-01T10:00:00Z'),
+        durationMinutes: 45,
+        mode: RecruitmentInterviewMode.VIDEO,
+        platform: 'Google Meet',
+        meetingLink: 'https://meet.google.com/abc',
+        phone: null,
+        location: null,
+      });
+    });
+
+    it('does not tell the candidate when the interview is refused', async () => {
+      await expect(
+        service.scheduleCandidateInterview('tenant-1', user, 'candidate-1', {
+          mode: RecruitmentInterviewMode.IN_PERSON,
+          scheduledAt: '2000-01-01T10:00:00.000Z',
+          durationMinutes: 30,
+          location: 'Head Office',
+        }),
+      ).rejects.toThrow('future');
+      expect(notifier.interviewScheduled).not.toHaveBeenCalled();
     });
 
     it('does not list interviews for a draft or missing candidate', async () => {

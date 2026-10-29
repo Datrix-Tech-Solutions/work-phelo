@@ -623,6 +623,126 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Whether this recruitment mail already went out for the same application or interview. The
+   * ids are matched exactly, so two different applications from one address are never merged.
+   */
+  private async recruitmentMailAlreadySent(
+    type: NotificationType,
+    tenantId: string,
+    key: 'applicationId' | 'interviewId',
+    id: string,
+  ): Promise<boolean> {
+    const existing = await this.prisma.notificationLog.findFirst({
+      where: {
+        type,
+        tenantId,
+        status: 'SENT',
+        metadata: { path: [key], equals: id },
+      },
+      select: { id: true },
+    });
+    return !!existing;
+  }
+
+  async sendRecruitmentApplicationReceived(data: {
+    tenantId: string;
+    applicationId: string;
+    candidateEmail: string;
+    candidateFirstName: string;
+    vacancyTitle: string | null;
+    companyName: string | null;
+  }) {
+    if (
+      await this.recruitmentMailAlreadySent(
+        NotificationType.RECRUITMENT_APPLICATION_RECEIVED,
+        data.tenantId,
+        'applicationId',
+        data.applicationId,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate RECRUITMENT_APPLICATION_RECEIVED suppressed for application ${data.applicationId}`,
+      );
+      return;
+    }
+    const success = await this.email.sendRecruitmentApplicationReceived({
+      to: data.candidateEmail,
+      firstName: data.candidateFirstName,
+      vacancyTitle: data.vacancyTitle,
+      companyName: data.companyName,
+    });
+    await this.log({
+      userId: data.applicationId,
+      tenantId: data.tenantId,
+      type: 'RECRUITMENT_APPLICATION_RECEIVED',
+      channel: 'EMAIL',
+      recipient: data.candidateEmail,
+      subject: 'We received your application',
+      status: success ? 'SENT' : 'FAILED',
+      metadata: { applicationId: data.applicationId },
+    });
+  }
+
+  async sendRecruitmentInterviewScheduled(data: {
+    tenantId: string;
+    applicationId: string;
+    interviewId: string;
+    candidateEmail: string;
+    candidateFirstName: string;
+    vacancyTitle: string | null;
+    companyName: string | null;
+    scheduledAt: string;
+    durationMinutes: number;
+    timeZone: string;
+    mode: 'VIDEO' | 'PHONE' | 'IN_PERSON';
+    platform?: string;
+    meetingLink?: string;
+    phone?: string;
+    location?: string;
+  }) {
+    if (
+      await this.recruitmentMailAlreadySent(
+        NotificationType.RECRUITMENT_INTERVIEW_SCHEDULED,
+        data.tenantId,
+        'interviewId',
+        data.interviewId,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate RECRUITMENT_INTERVIEW_SCHEDULED suppressed for interview ${data.interviewId}`,
+      );
+      return;
+    }
+    const success = await this.email.sendRecruitmentInterviewScheduled({
+      to: data.candidateEmail,
+      firstName: data.candidateFirstName,
+      vacancyTitle: data.vacancyTitle,
+      companyName: data.companyName,
+      scheduledAt: data.scheduledAt,
+      durationMinutes: data.durationMinutes,
+      timeZone: data.timeZone,
+      mode: data.mode,
+      platform: data.platform,
+      meetingLink: data.meetingLink,
+      phone: data.phone,
+      location: data.location,
+    });
+    await this.log({
+      userId: data.applicationId,
+      tenantId: data.tenantId,
+      type: 'RECRUITMENT_INTERVIEW_SCHEDULED',
+      channel: 'EMAIL',
+      recipient: data.candidateEmail,
+      subject: 'Your interview is scheduled',
+      status: success ? 'SENT' : 'FAILED',
+      metadata: {
+        applicationId: data.applicationId,
+        interviewId: data.interviewId,
+      },
+    });
+  }
+
   async sendLeaveReviewedNotification(data: {
     tenantId: string;
     employeeId: string;
