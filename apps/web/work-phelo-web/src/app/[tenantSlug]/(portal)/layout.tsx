@@ -1,10 +1,10 @@
-// TENANT PORTAL LAYOUT — shared TopNav/tabs for the Modules and Executive Dashboard pages
+// TENANT PORTAL LAYOUT — shared TopNav for the Executive Dashboard page
 
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
-import { TopNav, NavTab } from '@/components/organisms/shared/TopNav';
+import { TopNav } from '@/components/organisms/shared/TopNav';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { MoodSelectorModal } from '@/components/organisms/shared/MoodSelectorModal';
 
@@ -14,14 +14,7 @@ const PORTAL_BACKGROUNDS = [
   '/background/backthree.jpg',
 ];
 
-export default function PortalLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: Promise<{ tenantSlug: string }>;
-}) {
-  const { tenantSlug } = use(params);
+export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
@@ -34,19 +27,9 @@ export default function PortalLayout({
     () => PORTAL_BACKGROUNDS[Math.floor(Math.random() * PORTAL_BACKGROUNDS.length)],
   );
 
-  const tabs: NavTab[] = [{ key: 'modules', label: 'Modules', href: `/${tenantSlug}/modules` }];
-  // if (isTenantAdmin) {
-  //   tabs.push({ key: 'executive', label: 'Executive Dashboard', href: `/${tenantSlug}/executive` });
-  // }
-
   return (
     <AppBackground backgroundImage={background} className="h-dvh overflow-hidden flex flex-col">
-      <TopNav
-        userInitials={initials}
-        logoVariant="image"
-        //remember to comment out the tabs when pushing to production because the executive dashboard is not ready yet
-        tabs={tabs}
-      />
+      <TopNav userInitials={initials} logoVariant="image" />
       {children}
       <MoodSelectorModal />
     </AppBackground>

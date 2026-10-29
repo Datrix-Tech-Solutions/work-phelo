@@ -103,11 +103,17 @@ export const DEFAULT_MODULES: Module[] = [
     name: 'Operation Module',
     description: 'Manage industry-specific operational workflows',
     enabled: false,
+    exclusive: true,
     options: [
       {
         key: 'reinsurance',
         label: 'Reinsurance Operations',
         description: 'Broker placements, counterparties and correspondence',
+      },
+      {
+        key: 'inventory',
+        label: 'Inventory Management',
+        description: 'Track items, stock levels and movements',
       },
     ],
   },

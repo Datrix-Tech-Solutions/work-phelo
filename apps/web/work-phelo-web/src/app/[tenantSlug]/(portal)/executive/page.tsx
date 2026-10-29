@@ -28,7 +28,7 @@ export default function ExecutiveDashboardPage({
 
   useEffect(() => {
     if (user && !isTenantAdmin) {
-      router.replace(`/${tenantSlug}/modules`);
+      router.replace(`/${tenantSlug}/hr`);
     }
   }, [user, isTenantAdmin, router, tenantSlug]);
 

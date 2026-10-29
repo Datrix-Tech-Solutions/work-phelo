@@ -10,7 +10,6 @@ import { useToast } from '@/hooks/useToast';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { AuthCard } from '@/components/organisms/login/AuthCard';
-import { useAuthStore } from '@/store/auth.store';
 
 interface LoginFormProps {
   showSocialLogin?: boolean;
@@ -41,10 +40,7 @@ export function LoginForm({
 
   const onSubmit = (data: LoginPayload) => {
     const onSuccess = () => {
-      const modules = useAuthStore.getState().user?.moduleConfig;
-      const destination = isTenantLogin
-        ? `/${tenantSlug}/${modules?.hr ? 'hr' : 'modules'}`
-        : (redirectTo ?? '/dashboard');
+      const destination = isTenantLogin ? `/${tenantSlug}/hr` : (redirectTo ?? '/dashboard');
       router.push(destination);
     };
     const onError = (err: unknown) => {

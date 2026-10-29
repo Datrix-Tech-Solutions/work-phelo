@@ -2164,12 +2164,45 @@ describe('RecruitmentService', () => {
         );
       });
 
-      it('never changes the candidate stage', async () => {
+      it('moves a candidate in the entry stage to Screening', async () => {
         prisma.recruitmentApplicationAnswer.findFirst.mockResolvedValue({
           id: 'answer-1',
         });
         prisma.recruitmentApplicationAnswer.update.mockResolvedValue({});
-        prisma.recruitmentApplication.findFirst.mockResolvedValue(candidate());
+        prisma.recruitmentApplication.findFirst.mockResolvedValue({
+          ...candidate(),
+          currentStageId: 'stage-applied',
+          currentStage: { isDefault: true },
+        });
+        prisma.recruitmentStage.findFirst.mockResolvedValue({
+          id: 'stage-screening',
+        });
+        prisma.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+
+        await service.setScreeningDecision(
+          'tenant-1',
+          user,
+          'candidate-1',
+          'question-1',
+          'ACCEPTED' as any,
+        );
+
+        expect(prisma.recruitmentApplication.update).toHaveBeenCalledWith({
+          where: { id: 'candidate-1' },
+          data: { currentStageId: 'stage-screening' },
+        });
+        expect(prisma.recruitmentStageHistory.create).toHaveBeenCalled();
+      });
+
+      it('does not move a candidate who is past the entry stage', async () => {
+        prisma.recruitmentApplicationAnswer.findFirst.mockResolvedValue({
+          id: 'answer-1',
+        });
+        prisma.recruitmentApplicationAnswer.update.mockResolvedValue({});
+        prisma.recruitmentApplication.findFirst.mockResolvedValue({
+          ...candidate(),
+          currentStage: { isDefault: false },
+        });
 
         await service.setScreeningDecision(
           'tenant-1',

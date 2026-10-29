@@ -62,7 +62,11 @@ export default function CandidateDetailPage({
     canReadVacancies === true,
   );
   const toast = useToast();
-  const { mutate: setScreeningDecision } = useSetScreeningDecision();
+  const {
+    mutate: setScreeningDecision,
+    isPending: decisionPending,
+    variables: decisionVars,
+  } = useSetScreeningDecision();
   const { data: interviews = [], isLoading: interviewsLoading } = useCandidateInterviews(
     canView ? id : '',
   );
@@ -138,6 +142,8 @@ export default function CandidateDetailPage({
                 enabled: !!candidate.currentStage && !isRejected && canChangeStage === true,
                 decisions,
                 onDecide: decide,
+                pendingQuestionId: decisionPending ? decisionVars?.questionId : undefined,
+                pendingDecision: decisionPending ? decisionVars?.decision : undefined,
               }}
             />
           )}

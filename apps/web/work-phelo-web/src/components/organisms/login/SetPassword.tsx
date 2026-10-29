@@ -45,9 +45,8 @@ export default function SetPassword() {
     mutate(
       { inviteToken: token, password: data.password },
       {
-        onSuccess: (result) => {
-          const modules = result?.user?.moduleConfig as Record<string, boolean> | undefined;
-          router.push(`/${tenantSlug}/${modules?.hr ? 'hr' : 'modules'}`);
+        onSuccess: () => {
+          router.push(`/${tenantSlug}/hr`);
         },
         onError: (err) => {
           setError('root', { message: extractError(err) });
