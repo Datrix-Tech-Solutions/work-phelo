@@ -116,3 +116,82 @@ describe('TenantConfigService.updateLabels', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('TenantConfigService.updateFeatures (exclusive modules)', () => {
+  let prisma: ReturnType<typeof makePrisma>;
+  let service: TenantConfigService;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    prisma.tenant.update.mockImplementation((args: unknown) =>
+      Promise.resolve({
+        featureConfig: (args as { data: { featureConfig: unknown } }).data
+          .featureConfig,
+      }),
+    );
+    prisma.tenant.findUnique.mockResolvedValue(
+      tenantWith({
+        moduleConfig: { operations: true },
+        featureConfig: { operations: { reinsurance: true } },
+      }),
+    );
+    service = new TenantConfigService(prisma as unknown as PrismaService);
+  });
+
+  it('switches the other operations feature off when one is enabled', async () => {
+    const result = await service.updateFeatures(
+      't-1',
+      'operations',
+      { inventory: true },
+      'admin-1',
+    );
+
+    expect(result.featureConfig).toEqual({
+      operations: { reinsurance: false, inventory: true },
+    });
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects enabling more than one operations feature', async () => {
+    await expect(
+      service.updateFeatures(
+        't-1',
+        'operations',
+        { reinsurance: true, inventory: true },
+        'admin-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects disabling the only enabled operations feature', async () => {
+    await expect(
+      service.updateFeatures(
+        't-1',
+        'operations',
+        { reinsurance: false },
+        'admin-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('leaves non-exclusive modules untouched', async () => {
+    prisma.tenant.findUnique.mockResolvedValue(
+      tenantWith({
+        moduleConfig: { hr: true },
+        featureConfig: { hr: { leave: true } },
+      }),
+    );
+
+    const result = await service.updateFeatures(
+      't-1',
+      'hr',
+      { payroll: true },
+      'admin-1',
+    );
+
+    expect(result.featureConfig).toEqual({
+      hr: { leave: true, payroll: true },
+    });
+  });
+});

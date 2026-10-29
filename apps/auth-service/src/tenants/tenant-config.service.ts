@@ -19,6 +19,11 @@ export const LABELLED_FEATURES: Record<
   projects: { module: 'hr', feature: 'projects' },
 };
 
+/**
+ * Modules where only one feature can be active at a time. Enabling one switches the others off.
+ */
+export const EXCLUSIVE_FEATURE_MODULES = new Set(['operations']);
+
 const LABEL_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} &'-]*$/u;
 export const LABEL_MAX_LENGTH = 30;
 
@@ -267,6 +272,21 @@ export class TenantConfigService {
     const currentModuleFeatures = currentFeatures[module] ?? {};
 
     const merged = { ...currentModuleFeatures, ...features };
+    if (EXCLUSIVE_FEATURE_MODULES.has(module)) {
+      const requested = Object.entries(features)
+        .filter(([, enabled]) => enabled)
+        .map(([feature]) => feature);
+      if (requested.length > 1) {
+        throw new BadRequestException(
+          `Only one ${module} feature can be enabled at a time.`,
+        );
+      }
+      if (requested.length === 1) {
+        for (const feature of Object.keys(merged)) {
+          if (feature !== requested[0]) merged[feature] = false;
+        }
+      }
+    }
     const enabledCount = Object.values(merged).filter(Boolean).length;
     if (enabledCount === 0) {
       throw new BadRequestException(
@@ -277,7 +297,7 @@ export class TenantConfigService {
     const updatedFeatureConfig = { ...currentFeatures, [module]: merged };
 
     const changes: string[] = [];
-    for (const [feature, enabled] of Object.entries(features)) {
+    for (const [feature, enabled] of Object.entries(merged)) {
       if (currentModuleFeatures[feature] !== enabled) {
         changes.push(
           `${module}.${feature}: ${currentModuleFeatures[feature] ? 'enabled' : 'disabled'} → ${enabled ? 'enabled' : 'disabled'}`,

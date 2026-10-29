@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { useIsManager } from '@/hooks/hr/useIsManager';
 import { Permission } from '@/lib/permissionMap';
+import { getActiveOperationsFeature } from '@/config/operations-features';
 
 /**
  * Which HR nav entries the current user can reach, keyed by nav item key. Shared by the sidebar and
@@ -17,7 +18,7 @@ export function useHrNavAccess(): Record<string, boolean> {
   const canViewHrDashboard = usePermission(Permission.VIEW_HR_DASHBOARD);
   const canViewHrReports = usePermission(Permission.VIEW_HR_REPORTS);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
-  // Operations' landing page (reinsurance dashboard) redirects back to /modules
+  // Operations' landing page (reinsurance dashboard) redirects back to HR
   // for anyone lacking this permission — so a user without it shouldn't see
   // "Operations" listed here in the first place, even if the tenant has the
   // module enabled for other users.
@@ -52,6 +53,7 @@ export function useHrNavAccess(): Record<string, boolean> {
   const canReadAssets = usePermission(Permission.READ_ASSETS);
 
   const moduleConfig = user?.moduleConfig ?? {};
+  const operationsFeature = getActiveOperationsFeature(user?.featureConfig);
 
   const navAccess: Record<string, boolean> = {
     // The dashboard is a self-service "my" view (my leave, my payslips, clock in/out) —
@@ -69,7 +71,11 @@ export function useHrNavAccess(): Record<string, boolean> {
     // Projects is a per-tenant feature flag rather than a permission.
     projects: !!user?.featureConfig?.hr?.projects,
     accounting: moduleConfig.accounting ?? false,
-    operations: (moduleConfig.operations ?? false) && canViewReinsuranceDashboard,
+    // Reinsurance is gated by its dashboard permission; other operations features have none yet.
+    operations:
+      (moduleConfig.operations ?? false) &&
+      !!operationsFeature &&
+      (operationsFeature.key !== 'reinsurance' || canViewReinsuranceDashboard),
     marketing: moduleConfig.marketing ?? false,
     recruitment: canAccessRecruitment,
     assets: canReadAssets,
@@ -91,6 +97,7 @@ export function useHrNavAccess(): Record<string, boolean> {
  */
 export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string): NavGroup[] {
   const navAccess = useHrNavAccess();
+  const operationsFeature = getActiveOperationsFeature(useAuthStore((s) => s.user?.featureConfig));
 
   const resolveHref = (href: string) =>
     href.startsWith('/') ? `/${tenantSlug}${href}` : `/${tenantSlug}/hr${href ? `/${href}` : ''}`;
@@ -108,6 +115,10 @@ export function useHrSidebarGroups(tenantSlug: string, currentModuleKey: string)
         .filter((item) => !HR_TAB_KEYS.includes(item.key))
         .map((item) => ({
           ...item,
+          // The operations link is named after, and shows the icon of, the selected feature.
+          ...(item.key === 'operations' && operationsFeature
+            ? { label: operationsFeature.navLabel, icon: operationsFeature.navIcon }
+            : {}),
           href: resolveHref(item.href),
           enabled: item.enabled !== false && (navAccess[item.key] ?? true),
           active: true,

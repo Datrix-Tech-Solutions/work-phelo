@@ -29,10 +29,14 @@ const EMPTY = <p className="text-sm text-gray-400">Not provided</p>;
 function AnswerDecision({
   decision,
   enabled,
+  pending,
+  pendingDecision,
   onDecide,
 }: {
   decision: ScreeningDecision | undefined;
   enabled: boolean;
+  pending: boolean;
+  pendingDecision: ScreeningDecision | null | undefined;
   onDecide: (decision: ScreeningDecision | null) => void;
 }) {
   if (!enabled) {
@@ -48,22 +52,46 @@ function AnswerDecision({
       </span>
     );
   }
-  // Pressing the active button again clears the decision.
+  // Once decided, the buttons give way to the outcome; "Change answer" clears it.
+  if (decision) {
+    return (
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <span
+          className={cn(
+            'rounded px-2 py-1 text-xs font-medium',
+            decision === 'ACCEPTED' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600',
+          )}
+        >
+          {decision === 'ACCEPTED' ? 'Accepted' : 'Rejected'}
+        </span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => onDecide(null)}
+          className="text-xs text-gray-500 underline hover:text-gray-700 disabled:opacity-50"
+        >
+          {pending ? 'Reverting…' : 'Change answer'}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="flex shrink-0 items-center gap-2">
       <TableButton
         variant="green"
-        className={cn(decision === 'ACCEPTED' && 'bg-green-600 text-white')}
-        onClick={() => onDecide(decision === 'ACCEPTED' ? null : 'ACCEPTED')}
+        isLoading={pending && pendingDecision === 'ACCEPTED'}
+        disabled={pending}
+        onClick={() => onDecide('ACCEPTED')}
       >
         Accept
       </TableButton>
       <TableButton
         variant="red"
-        className={cn(decision === 'DECLINED' && 'bg-red-500 text-white')}
-        onClick={() => onDecide(decision === 'DECLINED' ? null : 'DECLINED')}
+        isLoading={pending && pendingDecision === 'DECLINED'}
+        disabled={pending}
+        onClick={() => onDecide('DECLINED')}
       >
-        Decline
+        Reject
       </TableButton>
     </div>
   );
@@ -153,6 +181,9 @@ interface OverviewProps {
     enabled: boolean;
     decisions: ScreeningDecisions;
     onDecide: (questionId: string, decision: ScreeningDecision | null) => void;
+    /** The answer being saved right now, and the decision being saved for it. */
+    pendingQuestionId?: string;
+    pendingDecision?: ScreeningDecision | null;
   };
 }
 
@@ -270,6 +301,8 @@ export function CandidateOverviewTab({
                     <AnswerDecision
                       decision={review.decisions[a.questionId]}
                       enabled={review.enabled}
+                      pending={review.pendingQuestionId === a.questionId}
+                      pendingDecision={review.pendingDecision}
                       onDecide={(decision) => review.onDecide(a.questionId, decision)}
                     />
                   </li>

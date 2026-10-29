@@ -2,13 +2,15 @@
 
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { useNavRailStore } from '@/store/navRail.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { ModuleRail } from '@/components/organisms/shared/ModuleRail';
-import { REINSURANCE_NAV_GROUPS } from '@/config/reinsurance-nav';
+import { OPERATIONS_FEATURES, getActiveOperationsFeature } from '@/config/operations-features';
+import type { NavItem } from '@/components/organisms/shared/Sidebar';
 import { useHrSidebarGroups } from '@/hooks/hr/useHrSidebarGroups';
 import { AppBackground } from '@/components/atoms/AppBackground';
 import { useModuleThemeScope } from '@/hooks';
@@ -30,21 +32,37 @@ export default function OperationsLayout({
     () => typeof window !== 'undefined' && window.innerWidth < 768,
   );
 
-  const BASE = `/${tenantSlug}/operations/reinsurance`;
+  const router = useRouter();
+  const pathname = usePathname();
+  const authLoading = useAuthStore((s) => s.isLoading);
+  const feature = getActiveOperationsFeature(user?.featureConfig);
+  const BASE = feature ? `/${tenantSlug}/operations/${feature.segment}` : '';
 
-  // Recursively prefix hrefs with the module base path
-  function prefixItem(item: (typeof REINSURANCE_NAV_GROUPS)[0]['items'][0]): typeof item {
-    return {
+  // Only the selected operations feature is reachable; anything else goes back to it.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!feature) {
+      router.replace(`/${tenantSlug}/hr`);
+      return;
+    }
+    const segment = pathname.split('/')[3];
+    if (OPERATIONS_FEATURES.some((f) => f.segment === segment) && segment !== feature.segment) {
+      router.replace(BASE);
+    }
+  }, [authLoading, feature, pathname, router, tenantSlug, BASE]);
+
+  // Recursively prefix hrefs with the selected feature's base path
+  const groups = useMemo(() => {
+    const prefixItem = (item: NavItem): NavItem => ({
       ...item,
       href: `${BASE}${item.href ? `/${item.href}` : ''}`,
       children: item.children?.map(prefixItem),
-    };
-  }
-
-  const groups = REINSURANCE_NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.map(prefixItem),
-  }));
+    });
+    return (feature?.navGroups ?? []).map((group) => ({
+      ...group,
+      items: group.items.map(prefixItem),
+    }));
+  }, [feature, BASE]);
 
   // Parked, icon-only HR rail — shown once the user has visited HR, sitting
   // next to Operations' own sidebar (which behaves exactly as before).
@@ -52,7 +70,10 @@ export default function OperationsLayout({
   const parkedHrGroups = useHrSidebarGroups(tenantSlug, 'operations');
 
   return (
-    <AppBackground className="h-dvh overflow-hidden flex flex-col layout-operations">
+    <AppBackground
+      className="h-dvh overflow-hidden flex flex-col layout-operations"
+      data-operations-feature={feature?.key}
+    >
       <TopNav
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
@@ -70,6 +91,7 @@ export default function OperationsLayout({
           />
         )}
         <main
+          aria-label={feature?.label}
           className="flex-1 min-h-0 overflow-y-auto flex flex-col"
           onClick={() => {
             if (!collapsed) setCollapsed(true);

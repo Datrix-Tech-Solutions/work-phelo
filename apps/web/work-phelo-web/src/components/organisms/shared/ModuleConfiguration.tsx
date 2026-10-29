@@ -23,6 +23,8 @@ export interface Module {
   enabled: boolean;
   icon?: React.ReactNode;
   options?: ModuleOption[];
+  /** Only one option can be enabled at a time; enabling one switches the others off. */
+  exclusive?: boolean;
 }
 
 interface ModuleConfigurationProps {
@@ -98,7 +100,10 @@ export function ModuleConfiguration({
         if (mod.id !== moduleId || !mod.options) return mod;
         return {
           ...mod,
-          options: mod.options.map((o) => (o.key === optKey ? { ...o, enabled } : o)),
+          options: mod.options.map((o) => {
+            if (o.key === optKey) return { ...o, enabled };
+            return mod.exclusive && enabled ? { ...o, enabled: false } : o;
+          }),
         };
       }),
     );

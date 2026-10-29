@@ -984,8 +984,9 @@ export class RecruitmentService {
   }
 
   /**
-   * Records a reviewer's accept/decline on one screening answer, or clears it with null. This
-   * never moves the candidate; moving to Screening is a separate step.
+   * Records a reviewer's accept/decline on one screening answer, or clears it with null. The
+   * first decision on a candidate still in the entry stage moves them into Screening; they are
+   * never moved anywhere else, and clearing a decision does not move them back.
    */
   async setScreeningDecision(
     tenantId: string,
@@ -1013,7 +1014,53 @@ export class RecruitmentService {
         screeningDecidedByUserId: decision ? user.id : null,
       },
     });
+    if (decision) {
+      await this.moveToScreeningIfNew(tenantId, user, candidateId);
+    }
     return this.getCandidateSummary(tenantId, candidateId);
+  }
+
+  private async moveToScreeningIfNew(
+    tenantId: string,
+    user: RequestUser,
+    candidateId: string,
+  ) {
+    const [candidate, screeningStage, actorEmployee] = await Promise.all([
+      this.prisma.recruitmentApplication.findFirst({
+        where: { tenantId, id: candidateId },
+        select: {
+          currentStageId: true,
+          currentStage: { select: { isDefault: true } },
+        },
+      }),
+      this.prisma.recruitmentStage.findFirst({
+        where: { tenantId, normalizedName: this.normalizeName('Screening') },
+        select: { id: true },
+      }),
+      this.prisma.employee.findFirst({
+        where: { tenantId, userId: user.id },
+        select: { id: true },
+      }),
+    ]);
+    if (!candidate?.currentStage?.isDefault || !screeningStage) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.recruitmentApplication.update({
+        where: { id: candidateId },
+        data: { currentStageId: screeningStage.id },
+      });
+      await tx.recruitmentStageHistory.create({
+        data: {
+          tenantId,
+          applicationId: candidateId,
+          previousStageId: candidate.currentStageId,
+          newStageId: screeningStage.id,
+          changedByUserId: user.id,
+          changedByEmployeeId: actorEmployee?.id,
+          note: 'Moved to Screening: screening answers reviewed',
+        },
+      });
+    });
   }
 
   /**
