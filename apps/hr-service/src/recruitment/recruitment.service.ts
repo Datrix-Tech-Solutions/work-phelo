@@ -47,6 +47,7 @@ import {
   DEFAULT_RECRUITMENT_QUESTION_TYPE,
   questionBehaviour,
 } from './question-types';
+import { RecruitmentNotifier } from './recruitment-notifier.service';
 import { renderRequirementsText, VacancyDetails } from './vacancy-requirements';
 import {
   ACTIVE_RECRUITMENT_DOCUMENTS,
@@ -163,7 +164,10 @@ const RECRUITMENT_VACANCY_INCLUDE = {
 
 @Injectable()
 export class RecruitmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifier: RecruitmentNotifier,
+  ) {}
 
   async listVacancies(tenantId: string, query: QueryRecruitmentVacanciesDto) {
     const page = this.page(query.page);
@@ -1167,6 +1171,22 @@ export class RecruitmentService {
       }
       return interview;
     });
+    await this.notifier.interviewScheduled({
+      tenantId,
+      applicationId: candidateId,
+      interviewId: created.id,
+      email: candidate.email?.trim() || null,
+      firstName: candidate.firstName?.trim() || null,
+      vacancyTitle: candidate.vacancy?.title?.trim() || null,
+      companyName: candidate.vacancy?.companyName?.trim() || null,
+      scheduledAt: created.scheduledAt,
+      durationMinutes: created.durationMinutes,
+      mode: created.mode,
+      platform: created.platform,
+      meetingLink: created.meetingLink,
+      phone: created.phone,
+      location: created.location,
+    });
     return this.serializeInterview(created);
   }
 
@@ -1637,7 +1657,7 @@ export class RecruitmentService {
   }
 
   async submitPublicApplication(applicationId: string, accessToken?: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const { detail, draft } = await this.prisma.$transaction(async (tx) => {
       await lockRecruitmentApplication(tx, applicationId);
       const draft = await this.getDraftApplicationByToken(
         applicationId,
@@ -1709,8 +1729,19 @@ export class RecruitmentService {
         },
         include: RECRUITMENT_CANDIDATE_INCLUDE,
       });
-      return this.serializeCandidateDetail(submitted);
+      return { detail: this.serializeCandidateDetail(submitted), draft };
     });
+    // Only once the submission is committed, so a rolled-back one never sends anything.
+    await this.notifier.applicationReceived({
+      tenantId: draft.tenantId,
+      applicationId: draft.id,
+      email: draft.email?.trim() || null,
+      firstName: draft.firstName?.trim() || null,
+      lastName: draft.lastName?.trim() || null,
+      vacancyTitle: draft.vacancy.title?.trim() || null,
+      companyName: draft.vacancy.companyName?.trim() || null,
+    });
+    return detail;
   }
 
   private async ensureDefaultStages(tenantId: string) {
@@ -2984,6 +3015,9 @@ export class RecruitmentService {
       },
       select: {
         id: true,
+        firstName: true,
+        email: true,
+        vacancy: { select: { title: true, companyName: true } },
         currentStageId: true,
         currentStage: { select: { normalizedName: true, sortOrder: true } },
       },

@@ -21,6 +21,8 @@ import {
   EmployeeTerminationEvent,
   ResignationSubmittedEvent,
   LeaveRequestedEvent,
+  RecruitmentApplicationReceivedEvent,
+  RecruitmentInterviewScheduledEvent,
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
@@ -399,6 +401,48 @@ export class NotificationHandler {
         'notify.leave_requested',
         err,
         `managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.recruitment_application_received')
+  async handleRecruitmentApplicationReceived(
+    @Payload() data: WithMeta<RecruitmentApplicationReceivedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.recruitment_application_received] Received | application=${data.applicationId} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendRecruitmentApplicationReceived(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.recruitment_application_received',
+        err,
+        `application=${data.applicationId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.recruitment_interview_scheduled')
+  async handleRecruitmentInterviewScheduled(
+    @Payload() data: WithMeta<RecruitmentInterviewScheduledEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.recruitment_interview_scheduled] Received | interview=${data.interviewId} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendRecruitmentInterviewScheduled(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.recruitment_interview_scheduled',
+        err,
+        `interview=${data.interviewId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }

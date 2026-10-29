@@ -10,6 +10,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecruitmentController } from './recruitment.controller';
+import { RecruitmentNotifier } from './recruitment-notifier.service';
 import { RecruitmentService } from './recruitment.service';
 import { RecruitmentCandidateDocumentsController } from './recruitment-documents.controller';
 import { RecruitmentDocumentsService } from './recruitment-documents.service';
@@ -131,7 +132,10 @@ describe('Recruitment candidate response privacy', () => {
   const documents = { download: jest.fn() };
 
   beforeAll(async () => {
-    service = new RecruitmentService(prisma as unknown as PrismaService);
+    service = new RecruitmentService(
+      prisma as unknown as PrismaService,
+      {} as unknown as RecruitmentNotifier,
+    );
     const module = await Test.createTestingModule({
       controllers: [
         RecruitmentController,

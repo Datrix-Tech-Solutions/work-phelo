@@ -20,6 +20,8 @@ import {
   EmployeeTerminationEvent,
   ResignationSubmittedEvent,
   LeaveRequestedEvent,
+  RecruitmentApplicationReceivedEvent,
+  RecruitmentInterviewScheduledEvent,
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
@@ -391,6 +393,30 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_RESIGNATION_SUBMITTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationRecruitmentApplicationReceived(
+    data: RecruitmentApplicationReceivedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_RECRUITMENT_APPLICATION_RECEIVED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationRecruitmentInterviewScheduled(
+    data: RecruitmentInterviewScheduledEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_RECRUITMENT_INTERVIEW_SCHEDULED,
       data,
       correlationId,
     );

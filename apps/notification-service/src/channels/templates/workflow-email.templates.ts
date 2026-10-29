@@ -617,3 +617,52 @@ export function renderAppraisalManagerReviewedTemplate(input: {
     `,
   });
 }
+
+export function renderRecruitmentApplicationReceivedTemplate(input: {
+  firstName: string;
+  roleLine: string;
+}): string {
+  return renderStandardEmail({
+    title: 'Application received',
+    heading: 'We have received your application',
+    bodyHtml: `
+      <p>Hi ${input.firstName || 'there'},</p>
+      <p>Thank you for applying${input.roleLine}. Your application has been received and the recruiting team will review it.</p>
+      <p>If your profile is a good match, they will contact you about the next steps. There is nothing more you need to do for now.</p>
+    `,
+  });
+}
+
+export function renderRecruitmentInterviewScheduledTemplate(input: {
+  firstName: string;
+  roleLine: string;
+  whenText: string;
+  durationMinutes: number;
+  /** Already-escaped label/value pairs describing how to take part. */
+  details: Array<{ label: string; valueHtml: string }>;
+}): string {
+  const rows = [
+    { label: 'When', valueHtml: input.whenText },
+    { label: 'Length', valueHtml: `${input.durationMinutes} minutes` },
+    ...input.details,
+  ]
+    .map(
+      (row) => `
+        <tr>
+          <td style="padding:8px 0; width:120px; font-weight:500; vertical-align:top;">${row.label}:</td>
+          <td style="padding:8px 0;">${row.valueHtml}</td>
+        </tr>`,
+    )
+    .join('');
+  return renderStandardEmail({
+    title: 'Interview scheduled',
+    heading: 'Your interview is scheduled',
+    bodyHtml: `
+      <p>Hi ${input.firstName || 'there'},</p>
+      <p>We would like to invite you to an interview${input.roleLine}.</p>
+      <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">${rows}
+      </table>
+      <p>If this time does not work for you, please reply to the recruiting team as soon as possible.</p>
+    `,
+  });
+}
