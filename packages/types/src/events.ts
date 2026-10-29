@@ -68,6 +68,8 @@ export const EventPatterns = {
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
   NOTIFY_RESIGNATION_SUBMITTED: 'notify.resignation_submitted',
   NOTIFY_LEAVE_REQUESTED: 'notify.leave_requested',
+  NOTIFY_RECRUITMENT_APPLICATION_RECEIVED: 'notify.recruitment_application_received',
+  NOTIFY_RECRUITMENT_INTERVIEW_SCHEDULED: 'notify.recruitment_interview_scheduled',
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
   NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
   NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
@@ -433,6 +435,39 @@ export interface ResignationSubmittedEvent {
   reason?: string;
   additionalNotes?: string;
   detailLink?: string;
+}
+
+/** Sent to the applicant once their application is submitted. */
+export interface RecruitmentApplicationReceivedEvent {
+  tenantId: string;
+  applicationId: string;
+  candidateEmail: string;
+  candidateFirstName: string;
+  /** The vacancy's job title; null when the vacancy has none. */
+  vacancyTitle: string | null;
+  /** The company name the vacancy was published under; null when it has none. */
+  companyName: string | null;
+}
+
+/** Sent to the candidate when a recruiter schedules an interview. */
+export interface RecruitmentInterviewScheduledEvent {
+  tenantId: string;
+  applicationId: string;
+  interviewId: string;
+  candidateEmail: string;
+  candidateFirstName: string;
+  vacancyTitle: string | null;
+  companyName: string | null;
+  /** When the interview starts, as an ISO instant. */
+  scheduledAt: string;
+  durationMinutes: number;
+  /** IANA timezone the time is shown in, e.g. Africa/Accra. */
+  timeZone: string;
+  mode: 'VIDEO' | 'PHONE' | 'IN_PERSON';
+  platform?: string;
+  meetingLink?: string;
+  phone?: string;
+  location?: string;
 }
 
 export interface LeaveRequestedEvent {

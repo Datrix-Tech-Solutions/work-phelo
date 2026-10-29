@@ -73,3 +73,21 @@ function isWordOpenXml(body: Buffer): boolean {
     ![...names].some((name) => /vbaProject\.bin$/i.test(name))
   );
 }
+
+export const MAX_RECRUITMENT_TEXT_CHARS = 10000;
+
+/** Typed document content (a cover letter) as a plain-text file. */
+export function validateRecruitmentText(text?: string) {
+  const trimmed = text?.trim();
+  if (!trimmed) throw new BadRequestException('Cover letter text is required');
+  if (trimmed.length > MAX_RECRUITMENT_TEXT_CHARS) {
+    throw new BadRequestException(
+      `Cover letter must not exceed ${MAX_RECRUITMENT_TEXT_CHARS} characters`,
+    );
+  }
+  return {
+    body: Buffer.from(trimmed, 'utf8'),
+    mimeType: 'text/plain',
+    originalFileName: 'Cover_letter.txt',
+  };
+}

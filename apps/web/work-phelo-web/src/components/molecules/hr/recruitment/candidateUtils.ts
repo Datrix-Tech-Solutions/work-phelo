@@ -1,11 +1,11 @@
 import type { BadgeProps } from '@/components/atoms/Badge';
-import type { RecruitmentCandidate } from '@/types/recruitment';
+import type { RecruitmentCandidate, RecruitmentCandidateDetail } from '@/types/recruitment';
 
 export function candidateFullName(c: Pick<RecruitmentCandidate, 'firstName' | 'lastName'>): string {
   return [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Unnamed candidate';
 }
 
-export function candidateLocation(c: Pick<RecruitmentCandidate, 'city' | 'country'>): string {
+export function candidateLocation(c: Pick<RecruitmentCandidateDetail, 'city' | 'country'>): string {
   return [c.city, c.country].filter(Boolean).join(', ') || '—';
 }
 

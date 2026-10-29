@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { RecruitmentApplicationStatus } from '../../../prisma/generated/client';
 import { RECRUITMENT_EDUCATION_LEVEL_CODES } from '../vacancy-requirements';
 import {
   ArrayMaxSize,
@@ -19,6 +20,26 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+
+/** Allowlisted recruiter list/pipeline response; private applicant data belongs to detail. */
+export interface RecruitmentCandidateSummary {
+  id: string;
+  vacancyId: string;
+  firstName: string | null;
+  lastName: string | null;
+  status: RecruitmentApplicationStatus;
+  currentStageId: string | null;
+  currentStage: {
+    id: string;
+    name: string;
+    sortOrder: number;
+    isDefault: boolean;
+  } | null;
+  vacancy: { id: string; title: string | null };
+  appliedAt: Date;
+  submittedAt: Date | null;
+  matchScore: number | null;
+}
 
 export class QueryRecruitmentCandidatesDto {
   @ApiPropertyOptional({

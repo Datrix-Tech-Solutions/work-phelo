@@ -16,7 +16,10 @@ import {
   ACTIVE_RECRUITMENT_DOCUMENTS,
   lockRecruitmentApplication,
 } from './recruitment-document';
-import { validateRecruitmentDocument } from './recruitment-document-validation';
+import {
+  validateRecruitmentDocument,
+  validateRecruitmentText,
+} from './recruitment-document-validation';
 
 @Injectable()
 export class RecruitmentDocumentsService {
@@ -34,13 +37,40 @@ export class RecruitmentDocumentsService {
     type: RecruitmentDocumentType,
     file?: Express.Multer.File,
   ) {
+    if (!Object.values(RecruitmentDocumentType).includes(type))
+      throw new BadRequestException('Invalid document type');
+    return this.save(
+      applicationId,
+      token,
+      type,
+      validateRecruitmentDocument(file),
+    );
+  }
+
+  /** A cover letter the applicant typed instead of uploading; stored as a plain-text document. */
+  async saveCoverLetterText(
+    applicationId: string,
+    token: string | undefined,
+    text: string,
+  ) {
+    return this.save(
+      applicationId,
+      token,
+      RecruitmentDocumentType.COVER_LETTER,
+      validateRecruitmentText(text),
+    );
+  }
+
+  private async save(
+    applicationId: string,
+    token: string | undefined,
+    type: RecruitmentDocumentType,
+    validated: { body: Buffer; mimeType: string; originalFileName: string },
+  ) {
     const draft = await this.recruitment.getDraftApplicationByToken(
       applicationId,
       token,
     );
-    if (!Object.values(RecruitmentDocumentType).includes(type))
-      throw new BadRequestException('Invalid document type');
-    const validated = validateRecruitmentDocument(file);
     const id = randomUUID();
     const stored = await this.storage.storeRecruitmentDocument({
       ...validated,
