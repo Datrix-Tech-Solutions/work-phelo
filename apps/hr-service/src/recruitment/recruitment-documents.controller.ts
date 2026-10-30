@@ -35,9 +35,11 @@ import { Permission } from '@work-phelo/config';
 import { RequestUser } from '@work-phelo/types';
 import { Request } from 'express';
 import { RecruitmentDocumentType } from '../../prisma/generated/client';
+import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FeatureGuard } from '../auth/guards/feature.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
@@ -159,8 +161,9 @@ export class RecruitmentPublicDocumentsController {
 
 @ApiTags('HR Recruitment - Candidates')
 @Controller('recruitment/candidates/:candidateId/documents')
-@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('hr')
+@RequireFeature('hr', 'recruitment')
 @ApiBearerAuth('access-token')
 @ApiBadRequestResponse({ description: 'Invalid identifier' })
 @ApiUnauthorizedResponse({ description: 'Authentication required' })

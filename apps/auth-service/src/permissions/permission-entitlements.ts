@@ -23,6 +23,18 @@ type ResourceEntitlement = {
 const ALWAYS_ENABLED_MODULES = new Set(['AUTH']);
 
 const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
+  'recruitment.vacancies': {
+    moduleKey: 'hr',
+    featurePath: ['hr', 'recruitment'],
+  },
+  'recruitment.candidates': {
+    moduleKey: 'hr',
+    featurePath: ['hr', 'recruitment'],
+  },
+  'recruitment.settings': {
+    moduleKey: 'hr',
+    featurePath: ['hr', 'recruitment'],
+  },
   'marketing.crm-settings': {
     moduleKey: 'marketing',
   },

@@ -77,7 +77,8 @@ export function useHrNavAccess(): Record<string, boolean> {
       !!operationsFeature &&
       (operationsFeature.key !== 'reinsurance' || canViewReinsuranceDashboard),
     marketing: moduleConfig.marketing ?? false,
-    recruitment: canAccessRecruitment,
+    // Recruitment also needs the per-tenant feature flag.
+    recruitment: canAccessRecruitment && !!user?.featureConfig?.hr?.recruitment,
     assets: canReadAssets,
   };
 

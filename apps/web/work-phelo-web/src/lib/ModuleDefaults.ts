@@ -24,6 +24,11 @@ export const DEFAULT_MODULES: Module[] = [
         description: 'Manage employee records and profiles',
       },
       {
+        key: 'recruitment',
+        label: 'Recruitment',
+        description: 'Job openings, candidates and hiring settings',
+      },
+      {
         key: 'leave',
         label: 'Leave Management',
         description: 'Employee leave requests and balances',
