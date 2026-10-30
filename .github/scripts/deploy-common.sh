@@ -249,7 +249,8 @@ ensure_deploy_dirs() {
     mkdir -p \
       "$DEPLOY_PATH/apps/subscription-service" \
       "$DEPLOY_PATH/apps/marketing-service" \
-      "$DEPLOY_PATH/apps/accounting-service"
+      "$DEPLOY_PATH/apps/accounting-service" \
+      "$DEPLOY_PATH/apps/inventory-service"
   fi
 }
 

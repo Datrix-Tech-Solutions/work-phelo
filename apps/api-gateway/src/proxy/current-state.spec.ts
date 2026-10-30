@@ -263,6 +263,41 @@ describe('Gateway current-state authorization boundary', () => {
     expect(outgoing).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(403);
   });
+  it('routes public Inventory health without an Auth current-state lookup', async () => {
+    process.env.INVENTORY_SERVICE_URL = 'http://inventory.test:4009';
+    await send(
+      '/api/v1/operations/inventory/health',
+      {},
+      { authorization: '' },
+    );
+    expect(http.request).not.toHaveBeenCalled();
+    expect(outgoing).toHaveBeenCalledTimes(1);
+    const call = outgoing.mock.calls[0] as unknown[];
+    expect(call[1]).toMatchObject({
+      hostname: 'inventory.test',
+      port: 4009,
+      path: '/api/health',
+    });
+  });
+  it('signs the current context for the Inventory namespace', async () => {
+    process.env.INVENTORY_SERVICE_URL = 'http://inventory.test:4009';
+    // Proxy infrastructure test only; the scaffold exposes no business route.
+    const { req } = await send('/api/v1/operations/inventory');
+    expect(http.request).toHaveBeenCalledTimes(1);
+    expect(outgoing).toHaveBeenCalledTimes(1);
+    const signed = jwt.verify(req.headers['x-gateway-auth-context'], secret, {
+      issuer: 'workphelo-gateway',
+      audience: 'inventory',
+    }) as jwt.JwtPayload;
+    expect(signed.user).toMatchObject({ id: userId, role: 'EMPLOYEE' });
+  });
+  it('does not proxy the Inventory namespace if current Auth state is unavailable', async () => {
+    process.env.INVENTORY_SERVICE_URL = 'http://inventory.test:4009';
+    failure = 'network';
+    const { res } = await send('/api/v1/operations/inventory');
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(outgoing).not.toHaveBeenCalled();
+  });
   it('strips forged identity, permission and current-context headers', async () => {
     const { req } = await send(
       undefined,
