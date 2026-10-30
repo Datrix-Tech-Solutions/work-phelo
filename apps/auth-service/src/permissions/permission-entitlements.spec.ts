@@ -3,11 +3,11 @@ import { isResourceEnabledForTenant } from './permission-entitlements';
 describe('permission entitlements', () => {
   const marketingEnabledConfig = {
     moduleConfig: { marketing: true },
-    featureConfig: { marketing: { leads: true } },
+    featureConfig: { marketing: { 'sales-crm': true } },
   };
   const marketingDisabledFeatureConfig = {
     moduleConfig: { marketing: true },
-    featureConfig: { marketing: { leads: false } },
+    featureConfig: { marketing: { 'sales-crm': false } },
   };
   const enabledConfig = {
     moduleConfig: { operations: true },
@@ -66,18 +66,37 @@ describe('permission entitlements', () => {
   });
 
   it.each([
-    'marketing.fleet',
-    'marketing.requests',
-    'marketing.requests.all',
-    'marketing.appointments.all',
-    'marketing.transport-officers',
-    'marketing.campaigns',
-    'marketing.sms-sender-identities',
-    'marketing.domains',
-    'marketing.sms-wallet',
-    'marketing.sms-credits',
-  ])('scopes %s to the Marketing module only', (name) => {
+    ['campaign', 'marketing.campaigns'],
+    ['campaign', 'marketing.sms-sender-identities'],
+    ['campaign', 'marketing.domains'],
+    ['campaign', 'marketing.sms-wallet'],
+    ['campaign', 'marketing.sms-credits'],
+    ['transport', 'marketing.fleet'],
+    ['transport', 'marketing.requests'],
+    ['transport', 'marketing.requests.all'],
+    ['transport', 'marketing.transport-officers'],
+  ])('scopes the %s feature entitlement to %s', (feature, name) => {
     const resource = { name, module: 'MARKETING' };
+
+    expect(
+      isResourceEnabledForTenant(resource, {
+        moduleConfig: { marketing: true },
+        featureConfig: { marketing: { [feature]: true } },
+      }),
+    ).toBe(true);
+    expect(
+      isResourceEnabledForTenant(resource, {
+        moduleConfig: { marketing: true },
+        featureConfig: { marketing: { [feature]: false } },
+      }),
+    ).toBe(false);
+  });
+
+  it('scopes appointments to the Marketing module only', () => {
+    const resource = {
+      name: 'marketing.appointments.all',
+      module: 'MARKETING',
+    };
 
     expect(isResourceEnabledForTenant(resource, marketingEnabledConfig)).toBe(
       true,
@@ -88,7 +107,7 @@ describe('permission entitlements', () => {
     expect(
       isResourceEnabledForTenant(resource, {
         moduleConfig: { marketing: false },
-        featureConfig: { marketing: { leads: true } },
+        featureConfig: { marketing: { 'sales-crm': true } },
       }),
     ).toBe(false);
   });

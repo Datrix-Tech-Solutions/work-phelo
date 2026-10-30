@@ -57,7 +57,7 @@ import {
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ClientBillingController {
   constructor(private readonly service: ClientBillingService) {}
 

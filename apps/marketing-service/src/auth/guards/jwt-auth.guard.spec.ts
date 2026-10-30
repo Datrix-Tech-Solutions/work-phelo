@@ -23,7 +23,7 @@ const user: RequestUser = {
   permissions: [],
   moduleConfig: { marketing: true, accounting: true, operations: true },
   featureConfig: {
-    marketing: { leads: true, transport: true },
+    marketing: { 'sales-crm': true, transport: true },
     operations: { reinsurance: true },
   },
   integrationConfig: { reinsuranceAccounting: false },
@@ -151,7 +151,12 @@ describe(`${SERVICE} current Gateway trust contract`, () => {
     ['missing module state', { user: { ...user, moduleConfig: null } }],
     [
       'malformed feature state',
-      { user: { ...user, featureConfig: { marketing: { leads: 'true' } } } },
+      {
+        user: {
+          ...user,
+          featureConfig: { marketing: { 'sales-crm': 'true' } },
+        },
+      },
     ],
     [
       'malformed integration state',

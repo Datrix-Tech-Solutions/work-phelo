@@ -21,9 +21,12 @@ const handlerNames = [
 ] as const;
 
 describe('FleetController authorization contract', () => {
-  it('requires the marketing module and no extra feature flag', () => {
+  it('requires the marketing module and transport feature', () => {
     expect(Reflect.getMetadata(MODULE_KEY, FleetController)).toBe('marketing');
-    expect(Reflect.getMetadata(FEATURE_KEY, FleetController)).toBeUndefined();
+    expect(Reflect.getMetadata(FEATURE_KEY, FleetController)).toEqual({
+      module: 'marketing',
+      feature: 'transport',
+    });
   });
 
   it.each([

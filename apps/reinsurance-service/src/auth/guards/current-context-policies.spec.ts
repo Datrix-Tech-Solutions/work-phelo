@@ -30,7 +30,7 @@ const baseline: RequestUser = {
   permissions: [],
   moduleConfig: { marketing: true, accounting: true, operations: true },
   featureConfig: {
-    marketing: { leads: true, transport: true },
+    marketing: { 'sales-crm': true, transport: true },
     operations: { reinsurance: true },
   },
 };
@@ -148,7 +148,7 @@ describe('reinsurance current-role policy regression', () => {
     )?.value as (...args: never[]) => unknown;
     const ctx = authenticated(controller, handler, {
       featureConfig: {
-        marketing: { leads: false, transport: false },
+        marketing: { 'sales-crm': false, transport: false },
         operations: { reinsurance: false },
       },
     });

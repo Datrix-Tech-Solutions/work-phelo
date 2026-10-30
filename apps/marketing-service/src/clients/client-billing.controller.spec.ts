@@ -19,7 +19,7 @@ describe('ClientBillingController authorization contract', () => {
     );
     expect(Reflect.getMetadata(FEATURE_KEY, ClientBillingController)).toEqual({
       module: 'marketing',
-      feature: 'leads',
+      feature: 'sales-crm',
     });
   });
 

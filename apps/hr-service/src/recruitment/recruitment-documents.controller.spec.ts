@@ -46,6 +46,7 @@ describe('Recruitment document HTTP contracts', () => {
             tenantId: 'tenant-1',
             role: 'EMPLOYEE',
             moduleConfig: { hr: req.headers['test-hr'] !== 'disabled' },
+            featureConfig: { hr: { recruitment: true } },
             permissions: req.headers['test-permitted']
               ? ['recruitment.candidates:VIEW']
               : [],

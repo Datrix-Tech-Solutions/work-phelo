@@ -36,7 +36,7 @@ import { AssigneesService } from './assignees.service';
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class AssigneesController {
   constructor(private readonly service: AssigneesService) {}
 

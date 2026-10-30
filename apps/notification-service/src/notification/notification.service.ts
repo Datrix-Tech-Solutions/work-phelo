@@ -106,8 +106,16 @@ export class NotificationService {
     }
     const isTenantAdminInvite = data.inviteKind === 'TENANT_ADMIN';
     const isRecruiterConfirmation = data.inviteKind === 'RECRUITER';
+    const isRecruiterVerified = data.inviteKind === 'RECRUITER_VERIFIED';
     let success: boolean;
-    if (isRecruiterConfirmation) {
+    if (isRecruiterVerified) {
+      success = await this.email.sendRecruiterVerifiedEmail(
+        data.email,
+        data.firstName,
+        data.tenantName,
+        data.acceptInviteUrl,
+      );
+    } else if (isRecruiterConfirmation) {
       success = await this.email.sendRecruiterConfirmationEmail(
         data.email,
         data.firstName,
@@ -135,11 +143,13 @@ export class NotificationService {
       type: 'INVITE_USER',
       channel: 'EMAIL',
       recipient: data.email,
-      subject: isRecruiterConfirmation
-        ? 'Confirm your email'
-        : isTenantAdminInvite
-          ? `Welcome to ${data.tenantName}`
-          : `Invitation to ${data.tenantName}`,
+      subject: isRecruiterVerified
+        ? `${data.tenantName} is verified`
+        : isRecruiterConfirmation
+          ? 'Confirm your email'
+          : isTenantAdminInvite
+            ? `Welcome to ${data.tenantName}`
+            : `Invitation to ${data.tenantName}`,
       status: success ? 'SENT' : 'FAILED',
     });
   }

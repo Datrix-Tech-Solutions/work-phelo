@@ -198,6 +198,36 @@ describe('AuthService', () => {
       expect(signed[1]).toMatchObject({ type: 'refresh', scope: 'careers' });
     });
 
+    it('refuses an unverified careers-site recruiter on a normal app login', async () => {
+      setupHappyPath();
+      prisma.tenant.findUnique.mockResolvedValue({
+        ...TENANT,
+        source: 'WEBSITE',
+      });
+
+      await expect(service.login(loginDto)).rejects.toThrow(
+        'only sign in on the careers site',
+      );
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('lets a careers-site recruiter sign in with a careers-scoped session', async () => {
+      setupHappyPath();
+      prisma.tenant.findUnique.mockResolvedValue({
+        ...TENANT,
+        source: 'WEBSITE',
+      });
+
+      const result = await service.login(
+        loginDto,
+        undefined,
+        undefined,
+        'careers',
+      );
+
+      expect(result).toHaveProperty('accessToken');
+    });
+
     it('issues unscoped tokens for a normal app login', async () => {
       setupHappyPath();
 
