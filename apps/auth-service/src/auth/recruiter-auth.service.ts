@@ -110,6 +110,8 @@ export class RecruiterAuthService {
               source: 'WEBSITE',
               isVerified: false,
               moduleConfig: { hr: true, accounting: false, marketing: false },
+              // The job-posting routes in HR require this feature flag.
+              featureConfig: { hr: { recruitment: true } },
             },
             select: { id: true, name: true },
           });

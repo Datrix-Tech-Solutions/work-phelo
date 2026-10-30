@@ -87,6 +87,7 @@ describe('RecruiterAuthService', () => {
             source: 'WEBSITE',
             isVerified: false,
             moduleConfig: { hr: true, accounting: false, marketing: false },
+            featureConfig: { hr: { recruitment: true } },
           }),
         }),
       );

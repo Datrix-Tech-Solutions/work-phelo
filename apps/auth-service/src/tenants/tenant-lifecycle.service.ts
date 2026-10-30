@@ -224,7 +224,15 @@ export class TenantLifecycleService {
 
     const tenants = await this.prisma.tenant.findMany({
       where,
-      include: { _count: { select: { users: true } } },
+      include: {
+        _count: { select: { users: true } },
+        // A careers-site recruiter has one user; whether they confirmed their email decides if they can be verified.
+        users: {
+          select: { status: true },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -245,6 +253,7 @@ export class TenantLifecycleService {
         source: t.source,
         isVerified: t.isVerified,
         userCount: t._count.users,
+        emailConfirmed: t.users[0]?.status === 'ACTIVE',
         createdAt: t.createdAt,
       })),
     };
