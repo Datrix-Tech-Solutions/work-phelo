@@ -32,6 +32,7 @@ All frontend requests go through this gateway at port **4000**.
 | \`/api/v1/marketing/*\` | Development marketing scaffold | 4006 |
 | \`/api/v1/operations/reinsurance/*\` | Reinsurance operations | 4007 |
 | \`/api/v1/accounting/*\` | Accounting ledger | 4008 |
+| \`/api/v1/operations/inventory/*\` | Inventory Operations scaffold (health only) | 4009 |
 
 ### Public Endpoints (no auth required)
 - \`POST /api/v1/auth/login\`
