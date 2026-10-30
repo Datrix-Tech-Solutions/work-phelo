@@ -2275,8 +2275,6 @@ export class RecruitmentService {
       education: read('education'),
       experience: read('experience'),
       skills: read('skills'),
-      languages: read('languages'),
-      certificates: read('certificates'),
     };
   }
 
@@ -2355,15 +2353,10 @@ export class RecruitmentService {
         label: 'Years of experience',
       });
     }
+    // Languages and certificates are never blocking: an applicant who has none is scored lower
+    // against the vacancy's list instead of being unable to apply.
     const lists: Array<[string, string, string[] | undefined, boolean]> = [
       ['skills', 'Skills', application.skills, required.skills],
-      ['languages', 'Languages', application.languages, required.languages],
-      [
-        'certificates',
-        'Certificates',
-        application.certificates,
-        required.certificates,
-      ],
     ];
     for (const [field, label, value, isRequired] of lists) {
       if (isRequired && (!value || value.length === 0)) {
