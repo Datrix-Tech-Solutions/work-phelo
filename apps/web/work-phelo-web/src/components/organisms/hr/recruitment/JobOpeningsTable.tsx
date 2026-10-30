@@ -258,7 +258,7 @@ export function JobOpeningsTable() {
         isOpen={!!publishTarget}
         onClose={() => setPublishTarget(null)}
         title="Publish Job Opening"
-        description={`Publish "${publishTarget?.title ?? 'this job opening'}"? It will appear on the public job board and start accepting applications.`}
+        description={`Publish "${publishTarget?.title ?? 'this job opening'}"? It will appear on the workphelo job board and start accepting applications.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setPublishTarget(null)}>

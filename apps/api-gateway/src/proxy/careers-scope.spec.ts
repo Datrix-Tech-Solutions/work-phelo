@@ -5,6 +5,7 @@ describe('isAllowedForCareersToken', () => {
     ['GET', '/api/v1/hr/recruitment/vacancies'],
     ['POST', '/api/v1/hr/recruitment/vacancies'],
     ['GET', '/api/v1/hr/recruitment/vacancies/abc-123'],
+    ['PATCH', '/api/v1/hr/recruitment/vacancies/abc-123'],
     ['POST', '/api/v1/hr/recruitment/vacancies/abc-123/close'],
     ['POST', '/api/v1/hr/recruitment/vacancies/abc-123/reopen'],
     ['GET', '/api/v1/hr/recruitment/candidates'],
@@ -16,8 +17,8 @@ describe('isAllowedForCareersToken', () => {
 
   it.each([
     // Other recruitment actions the site never performs.
-    ['PATCH', '/api/v1/hr/recruitment/vacancies/abc-123'],
     ['POST', '/api/v1/hr/recruitment/vacancies/abc-123/cutoff'],
+    ['PATCH', '/api/v1/hr/recruitment/vacancies/abc-123/extra'],
     ['GET', '/api/v1/hr/recruitment/candidates/abc-123'],
     ['PATCH', '/api/v1/hr/recruitment/candidates/abc-123/stage'],
     ['POST', '/api/v1/hr/recruitment/candidates/abc-123/interviews'],
