@@ -43,7 +43,7 @@ async function seedPlatform(
           projects: false,
           assets: false,
         },
-        marketing: { leads: false, pipeline: false, contacts: false },
+        marketing: { campaign: false, 'sales-crm': false, transport: false },
       },
     },
   });
@@ -162,7 +162,7 @@ async function seedDemo(resources: Record<string, string>) {
           projects: false,
           assets: false,
         },
-        marketing: { leads: false, pipeline: false, contacts: false },
+        marketing: { campaign: false, 'sales-crm': false, transport: false },
       },
     },
   });
@@ -424,7 +424,7 @@ async function seedDemo(resources: Record<string, string>) {
           projects: false,
           assets: false,
         },
-        marketing: { leads: false, pipeline: false, contacts: false },
+        marketing: { campaign: false, 'sales-crm': false, transport: false },
       },
     },
   });
@@ -543,7 +543,7 @@ async function seedDemo(resources: Record<string, string>) {
           projects: false,
           assets: false,
         },
-        marketing: { leads: false, pipeline: false, contacts: false },
+        marketing: { campaign: false, 'sales-crm': false, transport: false },
       },
     },
   });
@@ -599,7 +599,7 @@ async function seedDemo(resources: Record<string, string>) {
           projects: false,
           assets: false,
         },
-        marketing: { leads: false, pipeline: false, contacts: false },
+        marketing: { campaign: false, 'sales-crm': false, transport: false },
       },
     },
   });

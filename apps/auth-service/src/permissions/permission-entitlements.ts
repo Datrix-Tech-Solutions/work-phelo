@@ -28,105 +28,114 @@ const RESOURCE_ENTITLEMENTS: Record<string, ResourceEntitlement> = {
   },
   'marketing.pipeline-stages': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'pipeline'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.products': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.decision-makers': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.source-types': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.interaction-media': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.business-types': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.prospects': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.prospects.all': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.clients': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.clients.all': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.clients.billing': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.dashboard': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.targets': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.targets.all': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.prospects.interactions': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.prospects.interactions.all': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.follow-ups': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.follow-ups.all': {
     moduleKey: 'marketing',
-    featurePath: ['marketing', 'leads'],
+    featurePath: ['marketing', 'sales-crm'],
   },
   'marketing.fleet': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'transport'],
   },
   'marketing.requests': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'transport'],
   },
   'marketing.requests.all': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'transport'],
   },
   'marketing.appointments.all': {
     moduleKey: 'marketing',
   },
   'marketing.transport-officers': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'transport'],
   },
   'marketing.campaigns': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'campaign'],
   },
   'marketing.sms-sender-identities': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'campaign'],
   },
   'marketing.domains': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'campaign'],
   },
   'marketing.sms-wallet': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'campaign'],
   },
   'marketing.sms-credits': {
     moduleKey: 'marketing',
+    featurePath: ['marketing', 'campaign'],
   },
   'operations.reinsurance.dashboard': {
     moduleKey: 'operations',

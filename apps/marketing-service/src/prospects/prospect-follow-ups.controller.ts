@@ -55,7 +55,7 @@ import { ProspectsService } from './prospects.service';
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ProspectFollowUpsController {
   constructor(private readonly service: ProspectsService) {}
 

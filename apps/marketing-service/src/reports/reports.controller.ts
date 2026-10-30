@@ -37,7 +37,7 @@ type AuthedRequest = Request & { user: RequestUser };
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ReportsController {
   constructor(private readonly targetReport: TargetReportService) {}
 

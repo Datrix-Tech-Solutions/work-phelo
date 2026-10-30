@@ -76,7 +76,7 @@ const { CLIENTS_CREATE, CLIENTS_DELETE, CLIENTS_DELETE_ALL } =
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ClientsController {
   constructor(private readonly service: ClientsService) {}
 
@@ -245,7 +245,7 @@ export class ClientsController {
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ProspectConversionController {
   constructor(private readonly service: ClientsService) {}
 

@@ -44,7 +44,7 @@ const baseline: RequestUser = {
   permissions: [],
   moduleConfig: { marketing: true, accounting: true, operations: true },
   featureConfig: {
-    marketing: { leads: true, transport: true },
+    marketing: { 'sales-crm': true, transport: true },
     operations: { reinsurance: true },
   },
 };
