@@ -80,9 +80,17 @@ export class AuthService {
       featureConfig: unknown;
       integrationConfig: unknown;
       labelConfig?: unknown;
+      source?: string;
     },
     scope?: TokenScope,
   ) {
+    // A company that only signed up on the careers site may post jobs there, but
+    // cannot use the main app until it is verified and becomes a normal company.
+    if (tenant.source === 'WEBSITE' && scope !== 'careers') {
+      throw new ForbiddenException(
+        'This account can only sign in on the careers site until it is verified.',
+      );
+    }
     const payload = {
       sub: user.id,
       email: user.email,

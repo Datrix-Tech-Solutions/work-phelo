@@ -258,7 +258,7 @@ export interface EmailVerificationEvent {
   tenantName: string;
 }
 
-export type InviteUserKind = 'EMPLOYEE' | 'TENANT_ADMIN' | 'RECRUITER';
+export type InviteUserKind = 'EMPLOYEE' | 'TENANT_ADMIN' | 'RECRUITER' | 'RECRUITER_VERIFIED';
 
 export interface InviteUserEvent {
   userId?: string;

@@ -117,6 +117,35 @@ export function renderRecruiterConfirmationEmailTemplate(input: {
   });
 }
 
+export function renderRecruiterVerifiedEmailTemplate(input: {
+  firstName: string;
+  companyName: string;
+  loginUrl?: string;
+}): string {
+  return renderStandardEmail({
+    title: 'Your company is verified',
+    heading: 'Your company is now on WorkPhelo',
+    bodyHtml: `
+      <p>Hi ${input.firstName},</p>
+      <p>
+        <strong>${input.companyName}</strong> has been verified and now has its own company workspace on WorkPhelo. Your jobs and applicants have moved with it, and you can sign in with the same email and password you already use.
+      </p>
+      ${
+        input.loginUrl
+          ? `<p style="margin:30px 0;">${renderPrimaryButton('Sign In to Your Workspace →', input.loginUrl)}</p>`
+          : ''
+      }
+      <hr style="border:none; border-top:1px solid #eee; margin:24px 0;" />
+      <p style="color:#555;">As Company Admin, you will be able to:</p>
+      <ul style="color:#555; padding-left:20px; line-height:1.8;">
+        <li>Keep posting jobs and reviewing applicants</li>
+        <li>Finish setting up your company workspace</li>
+        <li>Invite employees and assign access</li>
+      </ul>
+    `,
+  });
+}
+
 export function renderPasswordResetLinkTemplate(input: {
   appName: string;
   firstName: string;

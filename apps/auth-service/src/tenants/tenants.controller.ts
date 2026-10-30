@@ -485,6 +485,22 @@ export class TenantsController {
     return this.lifecycle.setVerified(id, dto.isVerified);
   }
 
+  @Patch(':id/verify-recruiter')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary:
+      'Verify a careers-site recruiter and convert them into a company — SuperAdmin only',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Recruiter converted to a company' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  @ApiResponse({ status: 409, description: 'Not a verifiable recruiter' })
+  verifyRecruiter(@Param('id') id: string) {
+    return this.lifecycle.verifyRecruiter(id);
+  }
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')

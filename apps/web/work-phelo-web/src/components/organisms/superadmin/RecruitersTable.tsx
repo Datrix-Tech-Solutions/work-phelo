@@ -9,9 +9,9 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import {
   useApproveTenant,
   useDeleteTenant,
-  useSetTenantVerified,
   useSuspendTenant,
   useTenants,
+  useVerifyRecruiter,
 } from '@/hooks/useTenants';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useToast } from '@/hooks/useToast';
@@ -54,9 +54,9 @@ const COLUMNS: Column<Company>[] = [
   },
 ];
 
-type Pending = { kind: 'block' | 'delete'; company: Company };
+type Pending = { kind: 'verify' | 'block' | 'delete'; company: Company };
 
-/** Companies that signed up on the careers site: verify, block, or remove them. */
+/** Companies that signed up on the careers site: verify (turns them into a company), block, or remove them. */
 export function RecruitersTable() {
   const router = useRouter();
   const toast = useToast();
@@ -66,7 +66,7 @@ export function RecruitersTable() {
   const [pending, setPending] = useState<Pending | null>(null);
 
   const { data, isLoading } = useTenants('WEBSITE');
-  const { mutate: setVerified } = useSetTenantVerified();
+  const { mutate: verify, isPending: isVerifying } = useVerifyRecruiter();
   const { mutate: suspend, isPending: isBlocking } = useSuspendTenant();
   const { mutate: approve } = useApproveTenant();
   const { mutate: deleteTenant, isPending: isDeleting } = useDeleteTenant();
@@ -93,20 +93,6 @@ export function RecruitersTable() {
 
   const fail = (fallback: string) => (err: unknown) => toast.error(extractError(err, fallback));
 
-  const toggleVerified = (company: Company) =>
-    setVerified(
-      { tenantId: company.id, isVerified: !company.isVerified },
-      {
-        onSuccess: () =>
-          toast.success(
-            company.isVerified
-              ? `${company.name} is no longer verified`
-              : `${company.name} is now verified`,
-          ),
-        onError: fail('Failed to update verification'),
-      },
-    );
-
   const unblock = (company: Company) =>
     approve(company.id, {
       onSuccess: () => toast.success(`${company.name} unblocked`),
@@ -117,7 +103,15 @@ export function RecruitersTable() {
     if (!pending) return;
     const { kind, company } = pending;
     const done = () => setPending(null);
-    if (kind === 'block') {
+    if (kind === 'verify') {
+      verify(company.id, {
+        onSuccess: () => {
+          toast.success(`${company.name} is verified and now a company on WorkPhelo`);
+          done();
+        },
+        onError: fail('Failed to verify recruiter'),
+      });
+    } else if (kind === 'block') {
       suspend(company.id, {
         onSuccess: () => {
           toast.success(`${company.name} blocked`);
@@ -136,7 +130,9 @@ export function RecruitersTable() {
     }
   };
 
+  const isVerify = pending?.kind === 'verify';
   const isBlock = pending?.kind === 'block';
+  const isBusy = isVerify ? isVerifying : isBlock ? isBlocking : isDeleting;
 
   return (
     <>
@@ -161,8 +157,8 @@ export function RecruitersTable() {
         rowActions={(row) => [
           { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
           {
-            label: row.isVerified ? 'Remove verification' : 'Verify',
-            onClick: () => toggleVerified(row),
+            label: 'Verify',
+            onClick: () => setPending({ kind: 'verify', company: row }),
           },
           row.status === 'SUSPENDED'
             ? { label: 'Unblock', variant: 'success', onClick: () => unblock(row) }
@@ -186,11 +182,13 @@ export function RecruitersTable() {
       <Modal
         isOpen={!!pending}
         onClose={() => setPending(null)}
-        title={isBlock ? 'Block Recruiter' : 'Delete Recruiter'}
+        title={isVerify ? 'Verify Recruiter' : isBlock ? 'Block Recruiter' : 'Delete Recruiter'}
         description={
-          isBlock
-            ? `"${pending?.company.name}" will be signed out and cannot sign in, and their jobs are hidden from the careers site. You can unblock them later.`
-            : `Are you sure you want to delete "${pending?.company.name}"? Their jobs are hidden from the careers site. This action cannot be undone.`
+          isVerify
+            ? `"${pending?.company.name}" will become a company on WorkPhelo with its own workspace. Their jobs and applicants stay as they are, they keep their password, and they are emailed a link to sign in.`
+            : isBlock
+              ? `"${pending?.company.name}" will be signed out and cannot sign in, and their jobs are hidden from the careers site. You can unblock them later.`
+              : `Are you sure you want to delete "${pending?.company.name}"? Their jobs are hidden from the careers site. This action cannot be undone.`
         }
         footer={
           <div className="flex justify-end gap-3">
@@ -198,12 +196,12 @@ export function RecruitersTable() {
               Cancel
             </Button>
             <Button
-              variant="danger"
-              isLoading={isBlock ? isBlocking : isDeleting}
-              loadingText={isBlock ? 'Blocking...' : 'Deleting...'}
+              variant={isVerify ? 'primary' : 'danger'}
+              isLoading={isBusy}
+              loadingText={isVerify ? 'Verifying...' : isBlock ? 'Blocking...' : 'Deleting...'}
               onClick={confirm}
             >
-              {isBlock ? 'Block' : 'Delete'}
+              {isVerify ? 'Verify' : isBlock ? 'Block' : 'Delete'}
             </Button>
           </div>
         }
