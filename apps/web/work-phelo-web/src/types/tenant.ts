@@ -18,6 +18,8 @@ export interface Tenant {
   source?: TenantSource;
   /** Shows the verified check mark next to the company on the careers site. */
   isVerified?: boolean;
+  /** Whether the tenant's first user has confirmed their email (a recruiter must before being verified). */
+  emailConfirmed?: boolean;
   createdAt: string;
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;

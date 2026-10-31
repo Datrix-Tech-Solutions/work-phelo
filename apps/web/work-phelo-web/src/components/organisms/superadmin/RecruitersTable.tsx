@@ -13,7 +13,6 @@ import {
   useTenants,
   useVerifyRecruiter,
 } from '@/hooks/useTenants';
-import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { toCompany } from '@/lib/tenantRows';
@@ -56,14 +55,17 @@ const COLUMNS: Column<Company>[] = [
 
 type Pending = { kind: 'verify' | 'block' | 'delete'; company: Company };
 
-/** Companies that signed up on the careers site: verify (turns them into a company), block, or remove them. */
+/**
+ * Companies that signed up on the careers site. They have no workspace yet, so a row opens a
+ * dialog rather than a page: verify (turns them into a company), block, or remove them.
+ */
 export function RecruitersTable() {
-  const router = useRouter();
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data, isLoading } = useTenants('WEBSITE');
   const { mutate: verify, isPending: isVerifying } = useVerifyRecruiter();
@@ -72,6 +74,10 @@ export function RecruitersTable() {
   const { mutate: deleteTenant, isPending: isDeleting } = useDeleteTenant();
 
   const recruiters = useMemo(() => (data ?? []).map(toCompany), [data]);
+  const selected = useMemo(
+    () => (data ?? []).find((t) => t.id === selectedId) ?? null,
+    [data, selectedId],
+  );
 
   const filtered = useMemo(() => {
     let rows = recruiters;
@@ -145,7 +151,7 @@ export function RecruitersTable() {
           setSearch(q);
           setPage(1);
         }}
-        onRowClick={(row) => router.push(`/dashboard/${row.id}`)}
+        onRowClick={(row) => setSelectedId(row.id)}
         filterOptions={[
           { value: 'ACTIVE', label: 'Active' },
           { value: 'SUSPENDED', label: 'Blocked' },
@@ -155,7 +161,7 @@ export function RecruitersTable() {
           setPage(1);
         }}
         rowActions={(row) => [
-          { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
+          { label: 'View', onClick: () => setSelectedId(row.id) },
           {
             label: 'Verify',
             onClick: () => setPending({ kind: 'verify', company: row }),
@@ -178,6 +184,83 @@ export function RecruitersTable() {
         totalPages={totalPages}
         onPageChange={setPage}
       />
+
+      <Modal
+        isOpen={!!selected}
+        onClose={() => setSelectedId(null)}
+        title={selected?.name ?? 'Recruiter'}
+        description="Signed up on the careers site. Verifying turns them into a company on WorkPhelo."
+        footer={
+          selected && (
+            <div className="flex flex-col gap-3">
+              {!selected.emailConfirmed && (
+                <p className="text-xs text-gray-500">
+                  They have not confirmed their email yet, so they cannot be verified.
+                </p>
+              )}
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setPending({ kind: 'delete', company: toCompany(selected) });
+                    setSelectedId(null);
+                  }}
+                >
+                  Delete
+                </Button>
+                {selected.status === 'SUSPENDED' ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      unblock(toCompany(selected));
+                      setSelectedId(null);
+                    }}
+                  >
+                    Unblock
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setPending({ kind: 'block', company: toCompany(selected) });
+                      setSelectedId(null);
+                    }}
+                  >
+                    Block
+                  </Button>
+                )}
+                <Button
+                  disabled={!selected.emailConfirmed || selected.status === 'SUSPENDED'}
+                  onClick={() => {
+                    setPending({ kind: 'verify', company: toCompany(selected) });
+                    setSelectedId(null);
+                  }}
+                >
+                  Verify
+                </Button>
+              </div>
+            </div>
+          )
+        }
+      >
+        {selected && (
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+            <Detail label="Email" value={selected.email} />
+            <Detail label="Phone" value={selected.phone} />
+            <Detail label="Industry" value={selected.industry} />
+            <Detail label="Company size" value={selected.size} />
+            <Detail label="Country" value={selected.country} />
+            <Detail
+              label="Signed up"
+              value={
+                selected.createdAt ? new Date(selected.createdAt).toLocaleDateString() : undefined
+              }
+            />
+            <Detail label="Email confirmed" value={selected.emailConfirmed ? 'Yes' : 'No'} />
+            <Detail label="Status" value={selected.status === 'SUSPENDED' ? 'Blocked' : 'Active'} />
+          </dl>
+        )}
+      </Modal>
 
       <Modal
         isOpen={!!pending}
@@ -207,5 +290,14 @@ export function RecruitersTable() {
         }
       />
     </>
+  );
+}
+
+function Detail({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-xs text-gray-400">{label}</dt>
+      <dd className="break-words text-gray-900">{value || '—'}</dd>
+    </div>
   );
 }

@@ -1591,9 +1591,12 @@ describe('RecruitmentService', () => {
           'highestEducationLevel',
           'yearsOfExperience',
           'skills',
-          'languages',
         ]),
       );
+      // Languages and certificates never block an application, even when marked required.
+      expect(
+        strict.missing.map((item: { field: string }) => item.field),
+      ).not.toContain('languages');
       expect(
         strict.missing.map((item: { field: string }) => item.field),
       ).not.toContain('certificates');

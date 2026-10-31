@@ -4,10 +4,15 @@
  * reach employee, payroll or other company data.
  */
 const CAREERS_SCOPE_ROUTES: { method: string; pattern: RegExp }[] = [
-  // Job openings: list, post, view, close, reopen.
+  // Job openings: list, post, view, edit (this is how a draft is published),
+  // close, reopen.
   { method: 'GET', pattern: /^\/api\/v1\/hr\/recruitment\/vacancies$/ },
   { method: 'POST', pattern: /^\/api\/v1\/hr\/recruitment\/vacancies$/ },
   { method: 'GET', pattern: /^\/api\/v1\/hr\/recruitment\/vacancies\/[^/]+$/ },
+  {
+    method: 'PATCH',
+    pattern: /^\/api\/v1\/hr\/recruitment\/vacancies\/[^/]+$/,
+  },
   {
     method: 'POST',
     pattern: /^\/api\/v1\/hr\/recruitment\/vacancies\/[^/]+\/(?:close|reopen)$/,
