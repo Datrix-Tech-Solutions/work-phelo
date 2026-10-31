@@ -7,6 +7,7 @@ import { useClients } from '@/hooks/marketing/useClients';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
 import { ClientCard } from '@/components/molecules/marketing/ClientCard';
+import { ImportClientsDialog } from '@/components/organisms/marketing/ImportClientsDialog';
 import { AddClientPanel } from '@/components/organisms/marketing/AddClientPanel';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,7 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const canCreate = usePermissionRule('marketing.clients:CREATE');
 
   const { data, isLoading, isError } = useClients({
@@ -47,6 +49,9 @@ export default function ClientsPage() {
             setSearch(q);
             setPage(1);
           }}
+          secondaryButton={
+            canCreate ? { label: 'Import', onClick: () => setImporting(true) } : undefined
+          }
           actionButton={
             canCreate ? { label: 'Add Client', onClick: () => setPanelOpen(true) } : undefined
           }
@@ -64,6 +69,7 @@ export default function ClientsPage() {
       </div>
 
       <AddClientPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+      <ImportClientsDialog isOpen={importing} onClose={() => setImporting(false)} />
     </>
   );
 }

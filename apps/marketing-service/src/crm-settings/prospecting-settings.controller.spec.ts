@@ -29,7 +29,7 @@ describe('ProspectingSettingsController authorization contract', () => {
     );
     expect(
       Reflect.getMetadata(FEATURE_KEY, ProspectingSettingsController),
-    ).toEqual({ module: 'marketing', feature: 'leads' });
+    ).toEqual({ module: 'marketing', feature: 'sales-crm' });
   });
 
   it('requires read permissions on list/detail endpoints', () => {

@@ -11,7 +11,8 @@ const SELECT = {
   lastName: true,
   email: true,
   jobTitle: true,
-  department: { select: { name: true } },
+  department: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true } },
 } as const;
 
 type EmployeeRow = {
@@ -21,7 +22,8 @@ type EmployeeRow = {
   lastName: string;
   email: string;
   jobTitle: string | null;
-  department: { name: string } | null;
+  department: { id: string; name: string } | null;
+  branch: { id: string; name: string } | null;
 };
 
 const toPerson = (employee: EmployeeRow) => ({
@@ -30,6 +32,9 @@ const toPerson = (employee: EmployeeRow) => ({
   userId: employee.userId,
   name: `${employee.firstName} ${employee.lastName}`,
   department: employee.department?.name ?? null,
+  departmentId: employee.department?.id ?? null,
+  branch: employee.branch?.name ?? null,
+  branchId: employee.branch?.id ?? null,
   jobTitle: employee.jobTitle ?? null,
   email: employee.email,
 });

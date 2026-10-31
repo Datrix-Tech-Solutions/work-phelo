@@ -5,6 +5,7 @@ import { CampaignsModule } from './campaigns/campaigns.module';
 import { ClientsModule } from './clients/clients.module';
 import { FleetModule } from './fleet/fleet.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportsModule } from './reports/reports.module';
 import { CrmSettingsModule } from './crm-settings/crm-settings.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -30,6 +31,7 @@ import { TransportOfficersModule } from './transport-officers/transport-officers
     RequestsModule,
     SalesTargetsModule,
     DashboardModule,
+    ReportsModule,
     SmsModule,
     TransportOfficersModule,
   ],

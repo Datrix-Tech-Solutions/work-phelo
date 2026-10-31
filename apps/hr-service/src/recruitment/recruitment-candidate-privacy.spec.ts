@@ -26,7 +26,7 @@ const user: RequestUser = {
   tenantSlug: 'tenant-a',
   tenantName: 'Tenant A',
   moduleConfig: { hr: true },
-  featureConfig: {},
+  featureConfig: { hr: { recruitment: true } },
   permissions: [],
 };
 

@@ -23,10 +23,12 @@ describe('Reinsurance entitlement and permission guards', () => {
     permissions: ['operations.reinsurance.dashboard:VIEW'],
   };
 
+  const handler = () => undefined;
+  class Controller {}
   const contextFor = (actor: RequestUser = user) =>
     ({
-      getHandler: () => 'handler',
-      getClass: () => 'class',
+      getHandler: () => handler,
+      getClass: () => Controller,
       switchToHttp: () => ({ getRequest: () => ({ user: actor }) }),
     }) as unknown as ExecutionContext;
 
@@ -45,8 +47,8 @@ describe('Reinsurance entitlement and permission guards', () => {
       ForbiddenException,
     );
     expect(getAllAndOverride).toHaveBeenCalledWith(MODULE_KEY, [
-      'handler',
-      'class',
+      handler,
+      Controller,
     ]);
   });
 
@@ -67,8 +69,8 @@ describe('Reinsurance entitlement and permission guards', () => {
       ForbiddenException,
     );
     expect(getAllAndOverride).toHaveBeenCalledWith(FEATURE_KEY, [
-      'handler',
-      'class',
+      handler,
+      Controller,
     ]);
   });
 
@@ -86,8 +88,7 @@ describe('Reinsurance entitlement and permission guards', () => {
       guard.canActivate(contextFor({ ...user, permissions: [] })),
     ).toThrow(ForbiddenException);
     expect(getAllAndOverride).toHaveBeenCalledWith(PERMISSIONS_KEY, [
-      'handler',
-      'class',
+      Controller,
     ]);
   });
 
@@ -119,8 +120,7 @@ describe('Reinsurance entitlement and permission guards', () => {
       guard.canActivate(contextFor({ ...user, permissions: [] })),
     ).toThrow(ForbiddenException);
     expect(getAllAndOverride).toHaveBeenCalledWith(ANY_PERMISSIONS_KEY, [
-      'handler',
-      'class',
+      Controller,
     ]);
   });
 

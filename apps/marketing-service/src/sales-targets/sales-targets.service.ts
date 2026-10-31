@@ -27,6 +27,7 @@ const PRODUCT_INVALID_MESSAGE = 'Choose a product from CRM Settings';
 const PERIOD_INVALID_MESSAGE = 'The end date cannot be before the start date';
 const OVERLAP_MESSAGE =
   'already has a target for the same product that overlaps these dates';
+const ENDED_MESSAGE = 'The dates of a target that has ended cannot be changed';
 const NOT_FOUND_MESSAGE = 'Target not found';
 const DAY_MS = 86_400_000;
 /** An invoice counts while it is submitted or posted; a rejected or reversed one counts for nothing. */
@@ -171,12 +172,43 @@ export class SalesTargetsService {
     return this.withProgress(user, created);
   }
 
+  /**
+   * Changes the amount and, while the target has not ended, its dates. The dates are checked
+   * against the rep's other targets for the same product, as when a target is created.
+   */
   async update(user: RequestUser, id: string, dto: UpdateSalesTargetDto) {
-    await this.findOrThrow(user.tenantId, id);
+    const existing = await this.findOrThrow(user.tenantId, id);
+    const startDate = dto.startDate ?? day(existing.startDate);
+    const endDate = dto.endDate ?? day(existing.endDate);
+    const datesChanged =
+      startDate !== day(existing.startDate) ||
+      endDate !== day(existing.endDate);
+
+    if (datesChanged) {
+      if (day(existing.endDate) < day(new Date())) {
+        throw new BadRequestException(ENDED_MESSAGE);
+      }
+      this.assertPeriod(startDate, endDate);
+      const names = await this.assignees.namesFor(user.tenantId, [
+        existing.userId,
+      ]);
+      await this.assertNoOverlap(
+        user.tenantId,
+        new Map([[existing.userId, names.get(existing.userId) ?? 'This rep']]),
+        existing.productId,
+        asDate(startDate),
+        asDate(endDate),
+        id,
+      );
+    }
+
     const updated = await this.prisma.marketingSalesTarget.update({
       where: { id },
       data: {
         amount: new Prisma.Decimal(dto.amount),
+        ...(datesChanged
+          ? { startDate: asDate(startDate), endDate: asDate(endDate) }
+          : {}),
         updatedByUserId: user.id,
       },
     });
@@ -313,10 +345,12 @@ export class SalesTargetsService {
     productId: string | null,
     startDate: Date,
     endDate: Date,
+    excludeId?: string,
   ) {
     const clashes = await this.prisma.marketingSalesTarget.findMany({
       where: {
         tenantId,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
         userId: { in: [...reps.keys()] },
         productId,
         startDate: { lte: endDate },

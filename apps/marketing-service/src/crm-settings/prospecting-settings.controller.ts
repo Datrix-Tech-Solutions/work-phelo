@@ -102,7 +102,7 @@ const DECISION_MAKERS_PERMISSIONS: CategoryPermissions = {
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ProspectingSettingsController {
   constructor(private readonly service: ProspectingSettingsService) {}
 

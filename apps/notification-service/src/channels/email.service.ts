@@ -16,6 +16,7 @@ import {
   renderPayrollApprovalRequestedTemplate,
   renderPayrollDecisionTemplate,
   renderRecruiterConfirmationEmailTemplate,
+  renderRecruiterVerifiedEmailTemplate,
   renderRecruitmentApplicationReceivedTemplate,
   renderRecruitmentInterviewScheduledTemplate,
   renderResignationSubmittedTemplate,
@@ -346,6 +347,23 @@ export class EmailService {
         firstName: this.escapeHtml(firstName),
         companyName: this.escapeHtml(companyName),
         confirmUrl: this.sanitizeUrl(confirmUrl, this.careersSiteUrl),
+      }),
+    );
+  }
+
+  async sendRecruiterVerifiedEmail(
+    to: string,
+    firstName: string,
+    companyName: string,
+    loginUrl: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `${companyName} is verified on ${this.appName}`,
+      renderRecruiterVerifiedEmailTemplate({
+        firstName: this.escapeHtml(firstName),
+        companyName: this.escapeHtml(companyName),
+        loginUrl: this.sanitizeUrl(loginUrl),
       }),
     );
   }

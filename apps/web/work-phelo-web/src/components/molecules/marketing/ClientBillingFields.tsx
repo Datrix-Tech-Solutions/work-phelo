@@ -82,6 +82,8 @@ interface Props {
   lockedEntityTypeId?: string | null;
   /** The client's products the transaction can be tagged to. Optional, and never sent to Accounting. */
   productOptions?: { value: string; label: string }[];
+  /** The amount is worked out elsewhere (e.g. from a project's lines), so it can't be typed over. */
+  lockAmount?: boolean;
 }
 
 export function ClientBillingFields({
@@ -91,6 +93,7 @@ export function ClientBillingFields({
   errors,
   lockedEntityTypeId,
   productOptions = [],
+  lockAmount,
 }: Props) {
   const entityTypeId = resolveEntityTypeId(values, options, lockedEntityTypeId);
   const entityTypeOptions = options.entityTypes.map((t) => ({ value: t.id, label: t.name }));
@@ -111,36 +114,27 @@ export function ClientBillingFields({
 
   return (
     <div className="flex flex-col gap-4">
-      <SearchSelect
-        label="Entity Type"
-        placeholder="Select entity type"
-        options={entityTypeOptions}
-        value={entityTypeId}
-        onChange={setEntityType}
-        error={errors?.entityTypeId}
-        disabled={!!lockedEntityTypeId}
-        clearable={!lockedEntityTypeId}
-      />
-      <SearchSelect
-        label="Transaction Type"
-        placeholder={entityTypeId ? 'Select transaction type' : 'Select an entity type first'}
-        options={transactionTypeOptions}
-        value={values.transactionTypeId}
-        onChange={(id) => onChange({ ...values, transactionTypeId: id })}
-        error={errors?.transactionTypeId}
-        disabled={!entityTypeId}
-      />
-      <Input
-        label={options.baseCurrency ? `Amount (${options.baseCurrency})` : 'Amount'}
-        type="number"
-        inputMode="decimal"
-        min="0"
-        step="0.01"
-        placeholder="0.00"
-        value={values.amount}
-        onChange={(e) => onChange({ ...values, amount: e.target.value })}
-        error={errors?.amount}
-      />
+      <div className="grid grid-cols-2 gap-4">
+        <SearchSelect
+          label="Entity Type"
+          placeholder="Select entity type"
+          options={entityTypeOptions}
+          value={entityTypeId}
+          onChange={setEntityType}
+          error={errors?.entityTypeId}
+          disabled={!!lockedEntityTypeId}
+          clearable={!lockedEntityTypeId}
+        />
+        <SearchSelect
+          label="Transaction Type"
+          placeholder={entityTypeId ? 'Select transaction type' : 'Select an entity type first'}
+          options={transactionTypeOptions}
+          value={values.transactionTypeId}
+          onChange={(id) => onChange({ ...values, transactionTypeId: id })}
+          error={errors?.transactionTypeId}
+          disabled={!entityTypeId}
+        />
+      </div>
       {productOptions.length > 0 && (
         <SearchSelect
           label="Product/Service (optional)"
@@ -150,13 +144,31 @@ export function ClientBillingFields({
           onChange={(id) => onChange({ ...values, productId: id })}
         />
       )}
-      <Input
-        label="Description (optional)"
-        placeholder="e.g. Annual policy premium"
-        value={values.description}
-        onChange={(e) => onChange({ ...values, description: e.target.value })}
-        maxLength={500}
-      />
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-1">
+          <Input
+            label={options.baseCurrency ? `Amount (${options.baseCurrency})` : 'Amount'}
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={values.amount}
+            onChange={(e) => onChange({ ...values, amount: e.target.value })}
+            error={errors?.amount}
+            readOnly={lockAmount}
+          />
+        </div>
+        <div className="col-span-2">
+          <Input
+            label="Description (optional)"
+            placeholder="e.g. Annual policy premium"
+            value={values.description}
+            onChange={(e) => onChange({ ...values, description: e.target.value })}
+            maxLength={500}
+          />
+        </div>
+      </div>
     </div>
   );
 }

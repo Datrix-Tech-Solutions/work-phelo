@@ -96,11 +96,11 @@ export class CreateClientDto {
   @Type(() => AddClientProductDto)
   products?: AddClientProductDto[];
 
-  @ApiProperty({ type: CreateProspectLocationDto })
-  @IsNotEmptyObject()
+  @ApiPropertyOptional({ type: CreateProspectLocationDto })
+  @IsOptional()
   @ValidateNested()
   @Type(() => CreateProspectLocationDto)
-  location!: CreateProspectLocationDto;
+  location?: CreateProspectLocationDto;
 
   @ApiPropertyOptional({
     type: CreateProspectInitialInteractionDto,

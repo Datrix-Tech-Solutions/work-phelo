@@ -7,6 +7,9 @@ export interface DirectoryPerson {
   userId?: string | null;
   name: string;
   department: string | null;
+  departmentId?: string | null;
+  branch?: string | null;
+  branchId?: string | null;
   jobTitle?: string | null;
   email?: string | null;
 }

@@ -111,19 +111,26 @@ export class CreateProspectLocationDto {
   @MaxLength(500)
   label!: string;
 
-  @ApiProperty({ example: 5.6037, minimum: -90, maximum: 90 })
+  @ApiPropertyOptional({
+    example: 5.6037,
+    minimum: -90,
+    maximum: 90,
+    description: 'Left out when the place is only known by name.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(-90)
   @Max(90)
-  latitude!: number;
+  latitude?: number;
 
-  @ApiProperty({ example: -0.187, minimum: -180, maximum: 180 })
+  @ApiPropertyOptional({ example: -0.187, minimum: -180, maximum: 180 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(-180)
   @Max(180)
-  longitude!: number;
+  longitude?: number;
 }
 
 export class CreateProspectInitialInteractionDto {
@@ -215,11 +222,11 @@ export class CreateProspectDto {
   @Type(() => CreateProspectProductDto)
   products!: CreateProspectProductDto[];
 
-  @ApiProperty({ type: CreateProspectLocationDto })
-  @IsNotEmptyObject()
+  @ApiPropertyOptional({ type: CreateProspectLocationDto })
+  @IsOptional()
   @ValidateNested()
   @Type(() => CreateProspectLocationDto)
-  location!: CreateProspectLocationDto;
+  location?: CreateProspectLocationDto;
 
   @ApiPropertyOptional({ type: CreateProspectInitialInteractionDto })
   @IsOptional()

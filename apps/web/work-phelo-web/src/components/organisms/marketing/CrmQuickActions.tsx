@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BellPlus, Handshake, MessageSquarePlus, UserPlus } from 'lucide-react';
+import { BellPlus, CalendarPlus, Handshake, MessageSquarePlus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -12,13 +12,14 @@ import {
 import { AddProspectPanel } from '@/components/organisms/marketing/AddProspectPanel';
 import { AddClientPanel } from '@/components/organisms/marketing/AddClientPanel';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
+import { NewAppointmentModal } from '@/components/organisms/marketing/NewAppointmentModal';
 import { AddReminderPanel } from '@/components/organisms/marketing/AddReminderPanel';
 import { useAnyPermissionRules } from '@/hooks/hr/usePermission';
 import { useProspect, useProspects } from '@/hooks/marketing/useProspects';
 
-type Action = 'prospect' | 'client' | 'follow-up' | 'reminder';
+type Action = 'prospect' | 'client' | 'follow-up' | 'reminder' | 'appointment';
 
-/** The CRM dashboard's shortcuts: add a prospect or client, record a follow-up, schedule a reminder. */
+/** The CRM dashboard's shortcuts: add a prospect or client, record a follow-up, schedule a reminder or an appointment. */
 export function CrmQuickActions({
   className,
   fillCell = false,
@@ -80,6 +81,14 @@ export function CrmQuickActions({
         allowed: canRecord,
       },
       {
+        key: 'appointment',
+        label: 'Add Appointment',
+        icon: CalendarPlus,
+        color: '#0d9488',
+        // Anyone can request one for themselves; the server limits whom they may book for.
+        allowed: true,
+      },
+      {
         key: 'reminder',
         label: 'Add Reminder',
         icon: BellPlus,
@@ -108,6 +117,7 @@ export function CrmQuickActions({
 
       <AddProspectPanel isOpen={active === 'prospect'} onClose={() => setActive(null)} />
       <AddClientPanel isOpen={active === 'client'} onClose={() => setActive(null)} />
+      <NewAppointmentModal isOpen={active === 'appointment'} onClose={() => setActive(null)} />
       <AddReminderPanel isOpen={active === 'reminder'} onClose={() => setActive(null)} />
 
       <Modal

@@ -110,6 +110,22 @@ export class RecruiterAuthService {
               source: 'WEBSITE',
               isVerified: false,
               moduleConfig: { hr: true, accounting: false, marketing: false },
+              featureConfig: {
+                hr: {
+                  leave: false,
+                  time: false,
+                  payroll: false,
+                  appraisals: false,
+                  projects: false,
+                  assets: false,
+                  recruitment: true,
+                },
+                marketing: {
+                  campaign: false,
+                  'sales-crm': false,
+                  transport: false,
+                },
+              },
             },
             select: { id: true, name: true },
           });

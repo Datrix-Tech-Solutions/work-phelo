@@ -30,7 +30,7 @@ describe('ProspectsController authorization contract', () => {
     );
     expect(Reflect.getMetadata(FEATURE_KEY, ProspectsController)).toEqual({
       module: 'marketing',
-      feature: 'leads',
+      feature: 'sales-crm',
     });
   });
 
@@ -86,7 +86,7 @@ describe('ProspectFollowUpsController authorization contract', () => {
       Reflect.getMetadata(FEATURE_KEY, ProspectFollowUpsController),
     ).toEqual({
       module: 'marketing',
-      feature: 'leads',
+      feature: 'sales-crm',
     });
   });
 });
@@ -124,7 +124,7 @@ describe('Prospects authorization guards', () => {
     const reflector = {
       getAllAndOverride: jest.fn().mockReturnValue({
         module: 'marketing',
-        feature: 'leads',
+        feature: 'sales-crm',
       }),
     };
     const guard = new FeatureGuard(reflector as unknown as Reflector);
@@ -132,7 +132,7 @@ describe('Prospects authorization guards', () => {
     expect(() =>
       guard.canActivate(
         executionContextFor({
-          featureConfig: { marketing: { leads: false } },
+          featureConfig: { marketing: { 'sales-crm': false } },
         }) as never,
       ),
     ).toThrow(ForbiddenException);

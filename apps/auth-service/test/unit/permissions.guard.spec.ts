@@ -44,12 +44,12 @@ describe('PermissionsGuard', () => {
     jest.clearAllMocks();
   });
 
-  it('allows when no permission metadata is set', async () => {
+  it('denies when no permission metadata is set', async () => {
     reflector.getAllAndOverride = jest.fn().mockReturnValue(undefined);
 
     await expect(
       guard.canActivate(executionContextWithUser({ id: 'u1', tenantId: 't1' })),
-    ).resolves.toBe(true);
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('allows SUPER_ADMIN without querying permission tables', async () => {

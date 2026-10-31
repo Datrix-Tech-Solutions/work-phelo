@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -40,8 +40,29 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function Section({
+  title,
+  columns = 2,
+  children,
+}: {
+  title: string;
+  columns?: 1 | 2;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-2 border-t border-gray-100 pt-4">
+      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400">{title}</h4>
+      <dl
+        className={columns === 2 ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'flex flex-col gap-3'}
+      >
+        {children}
+      </dl>
+    </section>
+  );
+}
+
 /** Mount with `key={appointment.id}` so the manager choice resets between appointments. */
-export function AppointmentDetailPanel({
+export function AppointmentDetailModal({
   appointment,
   onClose,
   onRequestTransport,
@@ -89,10 +110,12 @@ export function AppointmentDetailPanel({
   const hasActions = (canApprove && pending) || canCancel || canComplete || canRequestTransport;
 
   return (
-    <SidePanel
+    <Modal
       isOpen={!!appointment}
       onClose={onClose}
       title="Appointment Details"
+      width="max-w-lg"
+      height="max-h-fit"
       footer={
         appointment && hasActions ? (
           <div className="flex items-center justify-end gap-3 flex-wrap">
@@ -163,46 +186,55 @@ export function AppointmentDetailPanel({
       }
     >
       {appointment && (
-        <div className="flex flex-col gap-4">
-          <dl className="flex flex-col gap-4">
-            <Field label="Prospect">{appointment.prospectName}</Field>
-            {appointment.salesStage && (
-              <Field label="Sales stage">
-                {appointment.salesStage.name} ({appointment.salesStage.probability}%)
-              </Field>
-            )}
-            <Field label="Status">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-base font-bold text-gray-900">{appointment.prospectName}</h3>
+            <div className="flex flex-wrap items-center gap-2">
               <Badge
                 label={APPOINTMENT_STATUS_BADGES[appointment.status].label}
                 variant={APPOINTMENT_STATUS_BADGES[appointment.status].variant}
               />
-            </Field>
+              {appointment.salesStage && (
+                <Badge
+                  label={`${appointment.salesStage.name} (${appointment.salesStage.probability}%)`}
+                  variant="neutral"
+                />
+              )}
+            </div>
+          </div>
+
+          <Section title="Schedule">
             <Field label="Date">{formatDate(appointment.date)}</Field>
             <Field label="Time">{formatAppointmentTime(appointment)}</Field>
+          </Section>
+
+          <Section title="People">
             <Field label="Marketer">{appointment.marketerName}</Field>
-            {!(canApprove && pending) && (
+            {canApprove && pending ? (
+              <SearchSelect
+                label="Assign a manager (optional)"
+                placeholder="Select a manager"
+                options={managerOptions}
+                value={managerId}
+                onChange={setManagerId}
+              />
+            ) : (
               <Field label="Manager">{appointment.managerName ?? 'Not assigned'}</Field>
             )}
-            <Field label="Comment">{appointment.comment || '—'}</Field>
-            {appointment.reviewedByName && (
-              <Field label="Reviewed by">
-                {appointment.reviewedByName}
-                {appointment.reviewNote ? ` — ${appointment.reviewNote}` : ''}
-              </Field>
-            )}
-          </dl>
+          </Section>
 
-          {canApprove && pending && (
-            <SearchSelect
-              label="Assign a manager (optional)"
-              placeholder="Select a manager"
-              options={managerOptions}
-              value={managerId}
-              onChange={setManagerId}
-            />
+          <Section title="Notes" columns={1}>
+            <Field label="Comment">{appointment.comment || '—'}</Field>
+          </Section>
+
+          {appointment.reviewedByName && (
+            <Section title="Review" columns={1}>
+              <Field label="Reviewed by">{appointment.reviewedByName}</Field>
+              {appointment.reviewNote && <Field label="Note">{appointment.reviewNote}</Field>}
+            </Section>
           )}
         </div>
       )}
-    </SidePanel>
+    </Modal>
   );
 }

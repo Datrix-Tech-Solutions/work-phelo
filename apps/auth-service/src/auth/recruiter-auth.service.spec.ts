@@ -5,7 +5,17 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Reflector } from '@nestjs/core';
+import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
+import type { CanActivate } from '@nestjs/common';
+import type { JwtPayload } from '@work-phelo/types';
+import type { Prisma } from '../../prisma/generated/client';
+import { AuthService } from './auth.service';
+import { JwtStrategy } from './strategies/jwt.strategy';
 import { RecruiterAuthService } from './recruiter-auth.service';
+import { isResourceEnabledForTenant } from '../permissions/permission-entitlements';
 import * as permissionSets from '../permissions/system-permission-sets';
 
 jest.mock('../permissions/system-permission-sets', () => ({
@@ -65,7 +75,7 @@ function setup() {
     audit as never,
     authService as never,
   );
-  return { service, prisma, tx, rabbitmq, authService };
+  return { service, prisma, tx, rabbitmq, authService, audit };
 }
 
 describe('RecruiterAuthService', () => {
@@ -87,6 +97,22 @@ describe('RecruiterAuthService', () => {
             source: 'WEBSITE',
             isVerified: false,
             moduleConfig: { hr: true, accounting: false, marketing: false },
+            featureConfig: {
+              hr: {
+                leave: false,
+                time: false,
+                payroll: false,
+                appraisals: false,
+                projects: false,
+                assets: false,
+                recruitment: true,
+              },
+              marketing: {
+                campaign: false,
+                'sales-crm': false,
+                transport: false,
+              },
+            },
           }),
         }),
       );
@@ -166,6 +192,149 @@ describe('RecruiterAuthService', () => {
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
+  });
+
+  it('preserves recruitment access through registration, confirmation and current-state authentication', async () => {
+    const { prisma, tx, rabbitmq, audit } = setup();
+    let tenant: Prisma.TenantCreateInput & { id: string };
+    let user: Prisma.UserUncheckedCreateInput & { id: string };
+    tx.tenant.create.mockImplementation(
+      ({ data }: { data: Prisma.TenantCreateInput }) => {
+        tenant = { ...data, id: 'tenant-1' };
+        return Promise.resolve(tenant);
+      },
+    );
+    tx.user.create.mockImplementation(
+      ({ data }: { data: Prisma.UserUncheckedCreateInput }) => {
+        user = { ...data, id: 'user-1' };
+        return Promise.resolve(user);
+      },
+    );
+    prisma.user.findUnique.mockImplementation(() =>
+      Promise.resolve({ ...user, tenant }),
+    );
+    prisma.user.update.mockImplementation(
+      ({ data }: { data: Partial<typeof user> }) => {
+        Object.assign(user, data);
+        return Promise.resolve(user);
+      },
+    );
+    const database = {
+      ...prisma,
+      userPermission: { findMany: jest.fn().mockResolvedValue([]) },
+      userPermissionSet: {
+        findMany: jest.fn().mockImplementation(() => {
+          expect(tx.userPermissionSet.create).toHaveBeenCalledWith({
+            data: {
+              userId: user.id,
+              permissionSetId: 'recruiter-set',
+              grantedBy: user.id,
+            },
+          });
+          return Promise.resolve([
+            {
+              permissionSet: {
+                resources: [
+                  {
+                    resource: { name: 'recruitment.vacancies' },
+                    action: 'VIEW',
+                  },
+                ],
+              },
+            },
+          ]);
+        }),
+      },
+      refreshToken: { upsert: jest.fn().mockResolvedValue({}) },
+    };
+    const secret = 'recruiter-lifecycle-test-secret';
+    const jwt = new JwtService({ secret });
+    const auth = new AuthService(
+      database as never,
+      jwt,
+      rabbitmq as never,
+      audit as never,
+    );
+    const recruiter = new RecruiterAuthService(
+      database as never,
+      rabbitmq as never,
+      audit as never,
+      auth,
+    );
+    const strategy = new JwtStrategy(
+      database as never,
+      new ConfigService({ JWT_SECRET: secret }),
+    );
+
+    await recruiter.register(dto);
+    expect(tenant!.source).toBe('WEBSITE');
+    expect(user!.status).toBe('PENDING_VERIFICATION');
+    expect(permissionSets.seedRecruiterPermissionSet).toHaveBeenCalled();
+    await expect(
+      strategy.validate({ sub: 'user-1', tenantId: 'tenant-1' } as never),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    await recruiter.confirmEmail(user!.inviteToken!);
+    expect(user!.status).toBe('ACTIVE');
+    expect(user!.emailVerifiedAt).toBeInstanceOf(Date);
+    prisma.tenant.findFirst.mockResolvedValue(tenant!);
+    prisma.tenant.findUnique.mockResolvedValue(tenant!);
+    prisma.user.findFirst.mockImplementation(() => Promise.resolve(user));
+    const session = await recruiter.login({
+      email: dto.email,
+      password: dto.password,
+    });
+    const payload = jwt.verify<JwtPayload>(session.accessToken!);
+    expect(payload).toMatchObject({ scope: 'careers' });
+    const current = await strategy.validate(payload);
+    expect(current.moduleConfig).toEqual({
+      hr: true,
+      accounting: false,
+      marketing: false,
+    });
+    expect(current.featureConfig.hr).toEqual({
+      leave: false,
+      time: false,
+      payroll: false,
+      appraisals: false,
+      projects: false,
+      assets: false,
+      recruitment: true,
+    });
+    expect(current.featureConfig.marketing).toEqual({
+      campaign: false,
+      'sales-crm': false,
+      transport: false,
+    });
+    expect(current.permissions).toContain('recruitment.vacancies:VIEW');
+    expect(
+      isResourceEnabledForTenant(
+        { name: 'recruitment.vacancies', module: 'HR' },
+        current,
+      ),
+    ).toBe(true);
+
+    // Exercise HR's unchanged gate without starting a server or weakening its metadata.
+    const { FeatureGuard } = jest.requireActual<{
+      FeatureGuard: new (reflector: Reflector) => CanActivate;
+    }>('../../../hr-service/src/auth/guards/feature.guard');
+    const guard = new FeatureGuard({
+      getAllAndOverride: () => ({ module: 'hr', feature: 'recruitment' }),
+    } as unknown as Reflector);
+    const context = new ExecutionContextHost([{ user: current }]);
+    expect(guard.canActivate(context)).toBe(true);
+    expect(() =>
+      guard.canActivate(
+        new ExecutionContextHost([
+          {
+            user: {
+              ...current,
+              featureConfig: { hr: { recruitment: false } },
+            },
+          },
+        ]),
+      ),
+    ).toThrow(ForbiddenException);
   });
 
   describe('confirmEmail', () => {

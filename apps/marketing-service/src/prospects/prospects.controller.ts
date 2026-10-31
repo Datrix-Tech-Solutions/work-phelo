@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -73,10 +74,14 @@ import { ProspectsService } from './prospects.service';
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ProspectsController {
   constructor(private readonly service: ProspectsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.list delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   // Visible to its assignee without a permission: the service scopes the result to the caller's
   // own records unless they hold the tenant-wide one.
@@ -93,6 +98,10 @@ export class ProspectsController {
     return this.service.list(request.user, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.listInteractions delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':prospectId/interactions')
   // Visible to its assignee without a permission: the service scopes the result to the caller's
   // own records unless they hold the tenant-wide one.
@@ -111,6 +120,10 @@ export class ProspectsController {
     return this.service.listInteractions(request.user, prospectId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.createInteraction delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':prospectId/interactions')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -131,6 +144,10 @@ export class ProspectsController {
     return this.service.createInteraction(request.user, prospectId, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.listFollowUps delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':prospectId/follow-ups')
   // Visible to its assignee without a permission: the service scopes the result to the caller's
   // own records unless they hold the tenant-wide one.
@@ -149,6 +166,10 @@ export class ProspectsController {
     return this.service.listFollowUps(request.user, prospectId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.createFollowUp delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':prospectId/follow-ups')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -169,6 +190,10 @@ export class ProspectsController {
     return this.service.createFollowUp(request.user, prospectId, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.findOne delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id')
   // Visible to its assignee without a permission: the service scopes the result to the caller's
   // own records unless they hold the tenant-wide one.
@@ -187,6 +212,10 @@ export class ProspectsController {
     return this.service.findOne(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.update delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -207,6 +236,10 @@ export class ProspectsController {
     return this.service.update(request.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectsController.remove delegates caller and tenant scope to its existing policy checks.',
+  )
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   // Open to the record's assignee: the service scopes it to the caller's own records unless they

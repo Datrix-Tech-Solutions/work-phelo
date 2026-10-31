@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -56,10 +57,14 @@ import {
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ClientBillingController {
   constructor(private readonly service: ClientBillingService) {}
 
+  @PermissionExempt(
+    'module-reference',
+    'Billing form reference options; submission separately enforces client assignment or billing permission.',
+  )
   @Get('billing/options')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -73,6 +78,10 @@ export class ClientBillingController {
     return this.service.getOptions(request.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientBillingController.transactions delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id/billing/transactions')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -91,6 +100,10 @@ export class ClientBillingController {
     return this.service.listTransactions(request.user, id, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientBillingController.summary delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id/billing/summary')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -109,6 +122,10 @@ export class ClientBillingController {
     return this.service.getSummary(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ClientBillingController.raise delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/billing')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.

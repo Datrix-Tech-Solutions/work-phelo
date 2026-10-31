@@ -7,6 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { CompanyLocationMap } from '@/components/organisms/marketing/CompanyLocationMap';
 import { useGeocodeSearch } from '@/hooks';
 import { geocodeReverse } from '@/lib/maptiler';
+import type { NamedLocationPayload } from '@/types/marketing';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -14,6 +15,15 @@ export interface CompanyLocationFields {
   location: string;
   lat?: number;
   lng?: number;
+}
+
+/** What is sent to the API. A name with no coordinates is a location that was typed in rather than found on the map. */
+export function toLocationPayload(fields: CompanyLocationFields): NamedLocationPayload | undefined {
+  const label = fields.location.trim();
+  if (!label) return undefined;
+  return fields.lat != null && fields.lng != null
+    ? { label, latitude: fields.lat, longitude: fields.lng }
+    : { label };
 }
 
 interface Props {
@@ -37,8 +47,12 @@ export function CompanyLocationForm({
 
   // The currently confirmed location (from search, current-location, or the map pin) may not
   // be among the live search suggestions — merge it in so SearchSelect can still show its label.
-  const selectedValue =
-    values.lat != null && values.lng != null ? `${values.lat},${values.lng}` : '';
+  const pinned = values.lat != null && values.lng != null;
+  const selectedValue = pinned
+    ? `${values.lat},${values.lng}`
+    : values.location
+      ? `typed:${values.location}`
+      : '';
   const options = [
     ...(selectedValue ? [{ value: selectedValue, label: values.location }] : []),
     ...suggestions
@@ -48,7 +62,7 @@ export function CompanyLocationForm({
 
   function handleSelect(value: string) {
     const option = options.find((o) => o.value === value);
-    if (!option) return;
+    if (!option || value.startsWith('typed:')) return;
     const [lat, lng] = value.split(',').map(Number);
     onChange({ location: option.label, lat, lng });
     setQuery('');
@@ -91,6 +105,20 @@ export function CompanyLocationForm({
             value={selectedValue}
             onChange={handleSelect}
             onQueryChange={setQuery}
+            emptyState={({ query: typed, close }) => (
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm font-medium text-(--module-btn-bg,var(--color-brand)) hover:bg-gray-50"
+                onClick={() => {
+                  // Not found on the map: keep the name, with no pin until one is chosen.
+                  onChange({ location: typed.trim() });
+                  setQuery('');
+                  close();
+                }}
+              >
+                Use “{typed.trim()}” as typed
+              </button>
+            )}
           />
         </div>
         <div className="flex-1" />
@@ -113,6 +141,7 @@ export function CompanyLocationForm({
         >
           <MapPin className="w-4 h-4 text-(--module-btn-bg,var(--color-brand)) shrink-0" />
           <span>{values.location}</span>
+          {!pinned && <span className="ml-auto text-xs text-amber-600">Not pinned on the map</span>}
         </div>
       )}
 
