@@ -235,7 +235,7 @@ export function useMoveCandidateStage() {
   });
 }
 
-/** Accepts or declines one screening answer, or clears it with null. Never changes the stage. */
+/** Accepts or declines one screening answer, or clears it with null. The first decision moves an entry-stage candidate to Screening. */
 export function useSetScreeningDecision() {
   const queryClient = useQueryClient();
   return useMutation({

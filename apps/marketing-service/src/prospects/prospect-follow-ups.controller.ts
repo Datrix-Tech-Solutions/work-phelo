@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -54,10 +55,14 @@ import { ProspectsService } from './prospects.service';
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class ProspectFollowUpsController {
   constructor(private readonly service: ProspectsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectFollowUpsController.listWorklist delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -71,6 +76,10 @@ export class ProspectFollowUpsController {
     return this.service.listFollowUpWorklist(request.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectFollowUpsController.update delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -91,6 +100,10 @@ export class ProspectFollowUpsController {
     return this.service.updateFollowUp(request.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectFollowUpsController.cancel delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/cancel')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.
@@ -109,6 +122,10 @@ export class ProspectFollowUpsController {
     return this.service.cancelFollowUp(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'ProspectFollowUpsController.complete delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/complete')
   // Open to the record's assignee: the service scopes it to the caller's own records unless they
   // hold the matching tenant-wide permission.

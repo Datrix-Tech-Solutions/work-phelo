@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import {
   CompanyLocationForm,
   CompanyLocationFields,
+  toLocationPayload,
 } from '@/components/molecules/marketing/CompanyLocationForm';
 import { useUpdateProspect } from '@/hooks/marketing/useProspects';
 import { useToast } from '@/hooks/useToast';
@@ -15,7 +16,7 @@ import type { ProspectDetailLocation } from '@/types/marketing';
 interface Props {
   prospectId: string;
   prospectName: string;
-  currentLocation: ProspectDetailLocation;
+  currentLocation: ProspectDetailLocation | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -29,21 +30,28 @@ export function ChangeProspectLocationModal({
 }: Props) {
   const toast = useToast();
   const updateProspect = useUpdateProspect(prospectId);
-  const [location, setLocation] = useState<CompanyLocationFields>({
-    location: currentLocation.label,
-    lat: Number(currentLocation.latitude),
-    lng: Number(currentLocation.longitude),
-  });
+  const [location, setLocation] = useState<CompanyLocationFields>(
+    currentLocation
+      ? {
+          location: currentLocation.label,
+          lat: currentLocation.latitude != null ? Number(currentLocation.latitude) : undefined,
+          lng: currentLocation.longitude != null ? Number(currentLocation.longitude) : undefined,
+        }
+      : { location: '' },
+  );
 
   const changed =
-    location.lat !== Number(currentLocation.latitude) ||
-    location.lng !== Number(currentLocation.longitude) ||
-    location.location !== currentLocation.label;
+    location.lat !==
+      (currentLocation?.latitude != null ? Number(currentLocation.latitude) : undefined) ||
+    location.lng !==
+      (currentLocation?.longitude != null ? Number(currentLocation.longitude) : undefined) ||
+    location.location !== (currentLocation?.label ?? '');
 
   function handleSave() {
-    if (location.lat == null || location.lng == null) return;
+    const payload = toLocationPayload(location);
+    if (!payload) return;
     updateProspect.mutate(
-      { location: { label: location.location, latitude: location.lat, longitude: location.lng } },
+      { location: payload },
       {
         onSuccess: () => {
           toast.success('Location updated');
@@ -69,7 +77,7 @@ export function ChangeProspectLocationModal({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!changed || location.lat == null || location.lng == null}
+            disabled={!changed || !location.location.trim()}
             isLoading={updateProspect.isPending}
             loadingText="Saving…"
           >

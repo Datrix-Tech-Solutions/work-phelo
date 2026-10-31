@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -23,9 +24,11 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
+import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequireAnyPermission } from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FeatureGuard } from '../auth/guards/feature.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
@@ -62,11 +65,16 @@ type AuthedRequest = Request & { user: RequestUser };
   description:
     'Marketing module or transport request permission is unavailable.',
 })
-@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
+@RequireFeature('marketing', 'transport')
 export class RequestsController {
   constructor(private readonly service: RequestsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.list delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
   // lets approvers act on any).
@@ -82,6 +90,10 @@ export class RequestsController {
     return this.service.list(request.user, query);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant request-form identity, fleet and driver reference options.',
+  )
   @Get('form-options')
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
   // lets approvers act on any).
@@ -94,6 +106,10 @@ export class RequestsController {
     return this.service.formOptions(request.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.destinationOptions delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('destination-options')
   // Open to everyone, like the rest of the request form: the service limits it to the clients and
   // prospects the caller could already see (their own, or all with view-all access).
@@ -109,6 +125,10 @@ export class RequestsController {
     return this.service.destinationOptions(request.user, query);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant transport availability reference; allocation and review require separate permission.',
+  )
   @Get('availability')
   // Open to everyone, like form-options: a requester sees which vehicles and drivers are free.
   @ApiOperation({
@@ -139,6 +159,10 @@ export class RequestsController {
     return this.service.allocationOptions(request.user, id, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.findOne delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id')
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
   // lets approvers act on any).
@@ -151,6 +175,10 @@ export class RequestsController {
     return this.service.findOne(request.user, id);
   }
 
+  @PermissionExempt(
+    'self-service',
+    'RequestsService.create binds requester identity to the authenticated user and scopes stops.',
+  )
   @Post()
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
   // lets approvers act on any).
@@ -166,6 +194,10 @@ export class RequestsController {
     return this.service.create(request.user, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.update delegates caller and tenant scope to its existing policy checks.',
+  )
   @Patch(':id')
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
   // lets approvers act on any).
@@ -179,6 +211,10 @@ export class RequestsController {
     return this.service.update(request.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.cancel delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and
@@ -196,6 +232,10 @@ export class RequestsController {
     return this.service.cancel(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.startOptions delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get(':id/start-options')
   @ApiOperation({
     summary: 'Starting mileage and vehicle condition to prefill the start form',
@@ -208,6 +248,10 @@ export class RequestsController {
     return this.service.startOptions(request.user, id);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.start delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/start')
   @HttpCode(HttpStatus.OK)
   // Open to everyone, like complete: the service limits it to the caller's own requests (and
@@ -226,6 +270,10 @@ export class RequestsController {
     return this.service.start(request.user, id, dto);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'RequestsController.complete delegates caller and tenant scope to its existing policy checks.',
+  )
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
   // Open to everyone, like appointments: the service limits it to the caller's own requests (and

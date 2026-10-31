@@ -167,9 +167,9 @@ export function ProspectWizard({
       return hasCompleteRow;
     }
     if (currentStep === 2) {
-      const hasLocation = locationForm.lat != null && locationForm.lng != null;
-      setLocationError(hasLocation ? undefined : 'Select a location on the map or from search.');
-      return hasLocation;
+      // A typed-in name is enough; it does not have to be pinned on the map.
+      setLocationError(undefined);
+      return true;
     }
     if (currentStep === 3) {
       const hasStage = !!saleStageForm.pipelineStageId;

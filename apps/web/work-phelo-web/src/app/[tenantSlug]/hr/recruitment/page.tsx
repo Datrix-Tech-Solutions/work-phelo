@@ -20,6 +20,10 @@ export default function RecruitmentPage({ params }: { params: Promise<{ tenantSl
 
   useEffect(() => {
     if (user === null) return;
+    if (!user.featureConfig?.hr?.recruitment) {
+      router.replace(`/${tenantSlug}/hr`);
+      return;
+    }
     const base = `/${tenantSlug}/hr/recruitment`;
     if (canViewJobOpenings) router.replace(`${base}/job-openings`);
     else if (canViewCandidates) router.replace(`${base}/candidates`);

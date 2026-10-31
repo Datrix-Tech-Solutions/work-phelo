@@ -29,7 +29,7 @@ describe('PipelineStagesController authorization contract', () => {
     );
     expect(Reflect.getMetadata(FEATURE_KEY, PipelineStagesController)).toEqual({
       module: 'marketing',
-      feature: 'pipeline',
+      feature: 'sales-crm',
     });
   });
 
@@ -105,7 +105,7 @@ describe('Pipeline stage authorization guards', () => {
     const reflector = {
       getAllAndOverride: jest.fn().mockReturnValue({
         module: 'marketing',
-        feature: 'pipeline',
+        feature: 'sales-crm',
       }),
     };
     const guard = new FeatureGuard(reflector as unknown as Reflector);

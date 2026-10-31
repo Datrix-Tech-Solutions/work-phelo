@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import {
+  PERMISSIONS_KEY,
+  PERMISSION_EXEMPT_KEY,
+  PermissionExemption,
+  permissionTargets,
+} from '../decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
 import { PermissionAction } from '../../../prisma/generated/client';
 
@@ -148,19 +153,35 @@ export class PermissionsGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const targets = permissionTargets(context.getHandler(), context.getClass());
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
-      [context.getHandler(), context.getClass()],
+      targets,
     );
-
-    // No permission decorator — endpoint is protected by JwtAuthGuard only
-    if (!requiredPermissions || requiredPermissions.length === 0) return true;
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user;
 
     if (!user) {
       throw new ForbiddenException(DENY_MESSAGE);
+    }
+
+    if (!requiredPermissions?.length) {
+      const exemption = this.reflector.getAllAndOverride<PermissionExemption>(
+        PERMISSION_EXEMPT_KEY,
+        targets,
+      );
+      if (
+        !exemption ||
+        !['self-service', 'module-reference', 'service-policy'].includes(
+          exemption.policy,
+        ) ||
+        typeof exemption.reason !== 'string' ||
+        !exemption.reason.trim()
+      ) {
+        throw new ForbiddenException(DENY_MESSAGE);
+      }
+      return true;
     }
 
     // ── Step 1: SUPER_ADMIN bypass (global) ─────────────────────────────────

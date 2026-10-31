@@ -68,9 +68,9 @@ type RequestWithPassengers = Prisma.MarketingTransportRequestGetPayload<{
 interface PlaceRow {
   id: string;
   companyName: string;
-  locationLabel: string;
-  latitude: Prisma.Decimal;
-  longitude: Prisma.Decimal;
+  locationLabel: string | null;
+  latitude: Prisma.Decimal | null;
+  longitude: Prisma.Decimal | null;
 }
 
 /** A client or prospect as stored on a request: name and location are snapshots. */
@@ -1594,6 +1594,12 @@ export class RequestsService {
           normalizedCompanyName: { contains: this.normalizeText(query.search) },
         }
       : {};
+    // A trip needs coordinates, so places recorded without a location are not offered.
+    const hasLocation = {
+      locationLabel: { not: null },
+      latitude: { not: null },
+      longitude: { not: null },
+    } as const;
     const select = {
       id: true,
       companyName: true,
@@ -1608,6 +1614,7 @@ export class RequestsService {
           tenantId: user.tenantId,
           ...(scope.allClients ? {} : { assignedUserId: user.id }),
           ...nameFilter,
+          ...hasLocation,
         },
         select,
         orderBy: { companyName: 'asc' },
@@ -1620,6 +1627,7 @@ export class RequestsService {
           client: { is: null },
           ...(scope.allProspects ? {} : { assignedUserId: user.id }),
           ...nameFilter,
+          ...hasLocation,
         },
         select,
         orderBy: { companyName: 'asc' },
@@ -1634,7 +1642,7 @@ export class RequestsService {
       kind,
       id: row.id,
       name: row.companyName,
-      locationLabel: row.locationLabel,
+      locationLabel: row.locationLabel ?? '',
       latitude: Number(row.latitude),
       longitude: Number(row.longitude),
     });
@@ -1721,6 +1729,15 @@ export class RequestsService {
       const row = byKey.get(`${ref.kind}:${ref.id}`);
       if (!row) {
         throw new BadRequestException('One or more locations were not found');
+      }
+      if (
+        row.locationLabel === null ||
+        row.latitude === null ||
+        row.longitude === null
+      ) {
+        throw new BadRequestException(
+          `${row.companyName} has no location yet — add one before using it as a destination`,
+        );
       }
       return {
         kind: ref.kind,

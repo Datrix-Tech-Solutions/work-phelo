@@ -294,9 +294,9 @@ model MarketingProspect {
   sourceTypeId          String?
   pipelineStageId       String
   assignedUserId        String
-  locationLabel         String
-  latitude              Decimal  @db.Decimal(9, 6)
-  longitude             Decimal  @db.Decimal(9, 6)
+  locationLabel         String?
+  latitude              Decimal? @db.Decimal(9, 6)
+  longitude             Decimal? @db.Decimal(9, 6)
   createdByUserId       String?
   updatedByUserId       String?
   createdAt             DateTime @default(now())
@@ -428,9 +428,9 @@ model MarketingClient {
   businessTypeId          String?
   sourceTypeId            String?
   assignedUserId          String
-  locationLabel           String
-  latitude                Decimal   @db.Decimal(9, 6)
-  longitude               Decimal   @db.Decimal(9, 6)
+  locationLabel           String?
+  latitude                Decimal?  @db.Decimal(9, 6)
+  longitude               Decimal?  @db.Decimal(9, 6)
   isBillable              Boolean   @default(false)
   /// The client's entity in Accounting, created with its first billing transaction. One per client.
   accountingEntityId      String?

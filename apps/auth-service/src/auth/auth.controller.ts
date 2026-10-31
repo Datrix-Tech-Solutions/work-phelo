@@ -247,6 +247,7 @@ export class AuthController {
         avatarUrl,
         moduleConfig: req.user.moduleConfig ?? {},
         featureConfig: req.user.featureConfig ?? {},
+        integrationConfig: req.user.integrationConfig ?? {},
         labelConfig: req.user.labelConfig ?? {},
       },
       permissions: req.user.permissions ?? [],

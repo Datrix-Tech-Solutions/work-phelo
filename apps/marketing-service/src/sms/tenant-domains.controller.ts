@@ -25,9 +25,11 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
+import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequireAnyPermission } from '../auth/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FeatureGuard } from '../auth/guards/feature.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
@@ -58,8 +60,9 @@ const { DOMAINS_VIEW, DOMAINS_CREATE, DOMAINS_VERIFY, DOMAINS_DELETE } =
   type: ApiErrorResponseDto,
   description: 'Marketing module or domain permission is unavailable.',
 })
-@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
+@RequireFeature('marketing', 'campaign')
 export class TenantDomainsController {
   constructor(private readonly service: TenantDomainsService) {}
 

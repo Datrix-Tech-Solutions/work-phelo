@@ -15,6 +15,7 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { AddInteractionPanel } from '@/components/organisms/marketing/AddInteractionPanel';
+import { ProspectAppointmentsTab } from '@/components/organisms/marketing/ProspectAppointmentsTab';
 import { ProspectRemindersTab } from '@/components/organisms/marketing/ProspectRemindersTab';
 import { ProspectManageMenu } from '@/components/molecules/marketing/ProspectManageMenu';
 import { EditProspectProductsModal } from '@/components/organisms/marketing/EditProspectProductsModal';
@@ -51,7 +52,7 @@ function formatDate(value: string | null): string {
   });
 }
 
-type ProspectTab = 'products' | 'interactions' | 'reminders';
+type ProspectTab = 'products' | 'interactions' | 'reminders' | 'appointments';
 
 export default function ProspectDetailPage() {
   const { tenantSlug, id } = useParams<{ tenantSlug: string; id: string }>();
@@ -159,7 +160,14 @@ export default function ProspectDetailPage() {
           <DetailField label="Type of Business" value={prospect.businessType?.name} />
           <DetailField label="Source Type" value={prospect.sourceType?.name} />
           <DetailField label="Assigned To" value={prospect.assignedUserName} />
-          <DetailField label="Location" value={prospect.location.label} />
+          <DetailField
+            label="Location"
+            value={
+              prospect.location
+                ? `${prospect.location.label}${prospect.location.latitude == null ? ' (not pinned on the map)' : ''}`
+                : undefined
+            }
+          />
           {/* <DetailField label="Decision Maker" value={primaryContact?.name} /> */}
           <DetailField label="Contact Person Role" value={primaryContact?.decisionMaker?.name} />
           <DetailField label="Primary Contact" value={primaryContact?.name} />
@@ -192,6 +200,7 @@ export default function ProspectDetailPage() {
             label: 'Reminders',
             count: worklist.some((w) => w.prospectId === id && w.urgency === 'OVERDUE') ? 1 : 0,
           },
+          { key: 'appointments', label: 'Appointments' },
         ]}
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as ProspectTab)}
@@ -227,6 +236,14 @@ export default function ProspectDetailPage() {
               role: primaryContact.decisionMaker?.name,
             }
           }
+        />
+      )}
+
+      {activeTab === 'appointments' && (
+        <ProspectAppointmentsTab
+          prospectId={id}
+          companyName={prospect.companyName}
+          assignedUserId={prospect.assignedUserId}
         />
       )}
 

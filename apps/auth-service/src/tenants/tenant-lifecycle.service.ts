@@ -21,6 +21,7 @@ import { normalizeEmail } from '../common/email.helper';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import {
   ensurePermissionResources,
+  RECRUITER_PERMISSION_SET_NAME,
   seedDefaultPermissionTemplates,
 } from '../permissions/system-permission-sets';
 import { RESOURCES } from '../permissions/resource-definitions';
@@ -223,7 +224,15 @@ export class TenantLifecycleService {
 
     const tenants = await this.prisma.tenant.findMany({
       where,
-      include: { _count: { select: { users: true } } },
+      include: {
+        _count: { select: { users: true } },
+        // A careers-site recruiter has one user; whether they confirmed their email decides if they can be verified.
+        users: {
+          select: { status: true },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -244,6 +253,7 @@ export class TenantLifecycleService {
         source: t.source,
         isVerified: t.isVerified,
         userCount: t._count.users,
+        emailConfirmed: t.users[0]?.status === 'ACTIVE',
         createdAt: t.createdAt,
       })),
     };
@@ -404,6 +414,111 @@ export class TenantLifecycleService {
 
     return {
       message: isVerified ? 'Company verified' : 'Company verification removed',
+      tenant: updated,
+    };
+  }
+
+  /**
+   * Turns a company that signed up on the careers site into a normal company on
+   * WorkPhelo. It is the same tenant and user, so the jobs and applicants stay
+   * attached; the recruiter keeps their password and just gets full admin access.
+   */
+  async verifyRecruiter(id: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (tenant.source !== 'WEBSITE') {
+      throw new ConflictException(
+        'Only a company that signed up on the careers site can be verified this way',
+      );
+    }
+    if (tenant.status === 'SUSPENDED') {
+      throw new ConflictException(
+        'Unblock this recruiter before verifying them',
+      );
+    }
+
+    const recruiter = await this.prisma.user.findFirst({
+      where: { tenantId: id },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, email: true, firstName: true, status: true },
+    });
+    if (!recruiter) throw new NotFoundException('Recruiter user not found');
+    if (recruiter.status !== 'ACTIVE') {
+      throw new ConflictException(
+        'This recruiter has not confirmed their email yet',
+      );
+    }
+
+    // Idempotent, and done first so a failure leaves the recruiter untouched.
+    await this.rabbitmq.hrProvisionTenantWorkspace({
+      tenantId: id,
+      adminEmail: tenant.email,
+      adminUserId: recruiter.id,
+      country: tenant.country,
+      currency: tenant.currency,
+    });
+
+    const featureConfig = (tenant.featureConfig ?? {}) as Record<
+      string,
+      Record<string, boolean>
+    >;
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const company = await tx.tenant.update({
+        where: { id },
+        data: {
+          source: 'PLATFORM',
+          isVerified: true,
+          status: 'ACTIVE',
+          moduleConfig: { hr: true, accounting: false, marketing: false },
+          featureConfig: {
+            ...featureConfig,
+            hr: { ...featureConfig.hr, recruitment: true },
+          },
+        },
+      });
+      await tx.user.update({
+        where: { id: recruiter.id },
+        data: { role: 'TENANT_ADMIN', forcePasswordReset: false },
+      });
+      // The recruiter-only access is replaced by the company admin's full access.
+      await tx.permissionSet.deleteMany({
+        where: { tenantId: id, name: RECRUITER_PERMISSION_SET_NAME },
+      });
+      return company;
+    });
+
+    // Careers-site sessions are limited to job posting; they sign in again for a full one.
+    await this.revokeAllSessions(id);
+    await this.syncRecruitmentEmployer(updated);
+
+    void this.rabbitmq
+      .notificationInviteUser({
+        userId: recruiter.id,
+        tenantId: id,
+        email: recruiter.email,
+        firstName: recruiter.firstName,
+        acceptInviteUrl: WorkspaceUrl.login(updated.slug),
+        tenantName: updated.name,
+        inviteKind: 'RECRUITER_VERIFIED',
+      })
+      .catch((err) =>
+        this.logger.error('Failed to emit recruiter verified email', err),
+      );
+
+    await this.audit.log({
+      tenantId: id,
+      action: 'UPDATE',
+      resource: 'tenants',
+      resourceId: id,
+      changes: {
+        before: { source: 'WEBSITE', isVerified: false },
+        after: { source: 'PLATFORM', isVerified: true },
+      },
+      status: 'SUCCESS',
+    });
+
+    return {
+      message: 'Recruiter verified and converted to a company',
       tenant: updated,
     };
   }

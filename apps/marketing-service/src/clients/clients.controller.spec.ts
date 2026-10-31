@@ -21,7 +21,7 @@ describe('ClientsController authorization contract', () => {
       expect(Reflect.getMetadata(MODULE_KEY, controller)).toBe('marketing');
       expect(Reflect.getMetadata(FEATURE_KEY, controller)).toEqual({
         module: 'marketing',
-        feature: 'leads',
+        feature: 'sales-crm',
       });
     },
   );

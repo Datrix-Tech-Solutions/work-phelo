@@ -82,6 +82,7 @@ export interface ProspectListItem {
   id: string;
   companyName: string;
   businessType: { id: string; name: string } | null;
+  sourceType: { id: string; name: string } | null;
   expectedValue: string;
   achievedValue: string;
   products: ProspectListProduct[];
@@ -117,6 +118,9 @@ export interface ProspectsQuery {
   createdTo?: string;
   assignedUserId?: string;
   pipelineStageId?: string;
+  productId?: string;
+  sourceTypeId?: string;
+  businessTypeId?: string;
 }
 
 export interface CreateProspectContactPayload {
@@ -141,6 +145,13 @@ export interface CreateProspectLocationPayload {
   label: string;
   latitude: number;
   longitude: number;
+}
+
+/** A place on creation: coordinates are left out when it is only known by name. */
+export interface NamedLocationPayload {
+  label: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface ProspectInteractionParticipantPayload {
@@ -174,7 +185,7 @@ export interface CreateProspectPayload {
   pipelineStageId: string;
   primaryContact: CreateProspectContactPayload;
   products: CreateProspectProductPayload[];
-  location: CreateProspectLocationPayload;
+  location?: NamedLocationPayload;
   initialInteraction?: CreateProspectInitialInteractionPayload;
 }
 
@@ -186,7 +197,7 @@ export interface ProspectResponse {
   sourceTypeId: string | null;
   pipelineStageId: string;
   assignedUserId: string;
-  locationLabel: string;
+  locationLabel: string | null;
   latitude: unknown;
   longitude: unknown;
   contacts: unknown[];
@@ -225,8 +236,9 @@ export interface ProspectDetailProduct {
 
 export interface ProspectDetailLocation {
   label: string;
-  latitude: string;
-  longitude: string;
+  /** Null when the place is only known by name. */
+  latitude: string | null;
+  longitude: string | null;
 }
 
 export interface ProspectDetailSalesStage {
@@ -265,7 +277,7 @@ export interface ProspectDetail {
   assignedUserName: string | null;
   /** Set once the prospect has been converted to a client. */
   clientId: string | null;
-  location: ProspectDetailLocation;
+  location: ProspectDetailLocation | null;
   salesStage: ProspectDetailSalesStage;
   progress: number;
   contacts: ProspectDetailContact[];
@@ -386,8 +398,12 @@ export interface ClientListItem {
   id: string;
   companyName: string;
   businessType: ProspectReference | null;
-  locationLabel: string;
+  sourceType: ProspectReference | null;
+  locationLabel: string | null;
   isBillable: boolean;
+  /** Total expected value across the client's products. */
+  expectedValue: string;
+  lastInteractionDate: string | null;
   /** True once the client has its entity in Accounting (its first transaction was sent). */
   hasAccountingEntity: boolean;
   primaryContact: (ProspectListPrimaryContact & { email: string | null }) | null;
@@ -411,6 +427,11 @@ export interface ClientsQuery {
   limit?: number;
   search?: string;
   assignedUserId?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  productId?: string;
+  sourceTypeId?: string;
+  businessTypeId?: string;
 }
 
 export interface CreateClientPayload {
@@ -426,7 +447,7 @@ export interface CreateClientPayload {
   primaryContact: CreateProspectContactPayload;
   /** Products/services the client is linked to, with their terms — they start as PENDING. */
   products: AddClientProductPayload[];
-  location: CreateProspectLocationPayload;
+  location?: NamedLocationPayload;
   /** The first follow-up with the client; its date is the date contacted. */
   initialInteraction?: { occurredAt: string };
 }
@@ -468,7 +489,7 @@ export interface ClientDetail {
   hasAccountingEntity: boolean;
   /** The entity type the client's Accounting entity sits under. Fixed after the first transaction. */
   accountingEntityTypeId: string | null;
-  location: ProspectDetailLocation;
+  location: ProspectDetailLocation | null;
   contacts: ProspectDetailContact[];
   products: ClientDetailProduct[];
   /** Includes interactions recorded while the client was still a prospect. */
@@ -1405,6 +1426,7 @@ export interface AppointmentsQuery {
   /** Last day, inclusive (YYYY-MM-DD). */
   to?: string;
   status?: AppointmentStatus[];
+  prospectId?: string;
   limit?: number;
 }
 
@@ -1484,6 +1506,13 @@ export interface CreateSalesTargetPayload {
   startDate: string;
   endDate: string;
   amount: number;
+}
+
+export interface UpdateSalesTargetPayload {
+  amount: number;
+  /** Leave both out once the target has ended; its dates can no longer change. */
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface MarketingDashboardStage {
@@ -1677,4 +1706,33 @@ export interface MarketingDashboardBirthday {
 export interface MarketingDashboardBirthdays {
   withinDays: number;
   birthdays: MarketingDashboardBirthday[];
+}
+
+/** One rep's yearly target against achievement. Money is a 2dp string; null means it could not be read. */
+export interface TargetReportRow {
+  userId: string;
+  name: string;
+  branch: string | null;
+  department: string | null;
+  target: string;
+  achieved: string | null;
+  remaining: string | null;
+  percent: number | null;
+  /** Deals not yet won whose expected close date falls in the year. */
+  expected: string;
+}
+
+export interface TargetReport {
+  year: number;
+  currency: string | null;
+  /** The caller may see every rep and the team totals. */
+  canViewTeam: boolean;
+  reps: TargetReportRow[];
+  totals: Omit<TargetReportRow, 'userId' | 'name' | 'branch' | 'department'> | null;
+}
+
+export interface TargetReportFilters {
+  reps: { userId: string; name: string }[];
+  branches: { id: string; name: string }[];
+  departments: { id: string; name: string }[];
 }

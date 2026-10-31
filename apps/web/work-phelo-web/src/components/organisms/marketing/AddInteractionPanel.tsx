@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -187,11 +187,13 @@ export function AddInteractionPanel({
   }
 
   return (
-    <SidePanel
+    <Modal
       isOpen={isOpen}
       onClose={handleClose}
       title={`Add ${noun}`}
       description={`Log a contact you had with this ${clientId ? 'client' : 'prospect'}.`}
+      width="max-w-2xl"
+      height="max-h-fit"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>
@@ -204,65 +206,75 @@ export function AddInteractionPanel({
       }
     >
       <div className="flex flex-col gap-4">
-        <SearchSelect
-          label="Follow-up Type"
-          placeholder="Select or type to add new"
-          options={mediumOptions}
-          value={mediumId}
-          onChange={(v) => {
-            setMediumId(v);
-            setMediumError(undefined);
-          }}
-          error={mediumError}
-          emptyState={buildCreateOptionEmptyState(
-            'follow-up type',
-            createMedium,
-            setMediumId,
-            toast,
-          )}
-        />
-        <div className="flex items-center justify-between gap-4">
-          <span className="text-sm font-bold text-gray-900">Decision maker was met</span>
-          <Toggle enabled={decisionMakerMet} onChange={handleDecisionMakerMetChange} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SearchSelect
+            label="Follow-up Type"
+            placeholder="Select or type to add new"
+            options={mediumOptions}
+            value={mediumId}
+            onChange={(v) => {
+              setMediumId(v);
+              setMediumError(undefined);
+            }}
+            error={mediumError}
+            emptyState={buildCreateOptionEmptyState(
+              'follow-up type',
+              createMedium,
+              setMediumId,
+              toast,
+            )}
+          />
+          <div className="flex items-center justify-between gap-4 sm:self-end sm:py-2.5">
+            <span className="text-sm font-bold text-gray-900">Decision maker was met</span>
+            <Toggle enabled={decisionMakerMet} onChange={handleDecisionMakerMetChange} />
+          </div>
         </div>
+
         <FormField
           label="Contact Person Name"
           registration={register('contactPersonName')}
           placeholder="Name of the person met"
           error={fieldError(participantErrors.name)}
         />
-        <PhoneInput
-          label="Contact Person Number"
-          value={contactPhone}
-          onChange={setContactPhone}
-          error={participantErrors.phone}
-        />
-        <FormField
-          label="Contact Person Role"
-          registration={register('contactRole')}
-          placeholder="e.g. Finance Director"
-          error={fieldError(participantErrors.role)}
-        />
-        <DatePicker
-          label="Date Contacted"
-          value={occurredAt}
-          onChange={(v) => {
-            setPickedDate(v);
-            setDateError(undefined);
-          }}
-          error={dateError}
-          disableFuture
-        />
-        {!clientId && (
-          <SearchSelect
-            label="Sales Stage"
-            placeholder={stagesLoading || !prospect ? 'Loading stages...' : 'Select stage'}
-            options={stageOptions}
-            value={stageId}
-            onChange={setPickedStageId}
-            disabled={stagesLoading || !prospect}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <PhoneInput
+            label="Contact Person Number"
+            value={contactPhone}
+            onChange={setContactPhone}
+            error={participantErrors.phone}
           />
-        )}
+          <FormField
+            label="Contact Person Role"
+            registration={register('contactRole')}
+            placeholder="e.g. Finance Director"
+            error={fieldError(participantErrors.role)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <DatePicker
+            label="Date Contacted"
+            value={occurredAt}
+            onChange={(v) => {
+              setPickedDate(v);
+              setDateError(undefined);
+            }}
+            error={dateError}
+            disableFuture
+          />
+          {!clientId && (
+            <SearchSelect
+              label="Sales Stage"
+              placeholder={stagesLoading || !prospect ? 'Loading stages...' : 'Select stage'}
+              options={stageOptions}
+              value={stageId}
+              onChange={setPickedStageId}
+              disabled={stagesLoading || !prospect}
+            />
+          )}
+        </div>
+
         <FormField
           label="Notes"
           type="textarea"
@@ -271,6 +283,6 @@ export function AddInteractionPanel({
           placeholder="What was discussed?"
         />
       </div>
-    </SidePanel>
+    </Modal>
   );
 }

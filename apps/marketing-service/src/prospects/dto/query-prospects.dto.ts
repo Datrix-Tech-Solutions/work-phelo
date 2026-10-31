@@ -71,6 +71,30 @@ export class QueryProspectsDto {
   @IsOptional()
   @IsUUID()
   pipelineStageId?: string;
+
+  @ApiPropertyOptional({
+    example: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',
+    description: 'Only prospects that have this product or service.',
+  })
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @ApiPropertyOptional({
+    example: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',
+    description: 'Only prospects of this source type.',
+  })
+  @IsOptional()
+  @IsUUID()
+  sourceTypeId?: string;
+
+  @ApiPropertyOptional({
+    example: '5f01c5e7-4f1b-4e47-9b69-8ecf18bc6585',
+    description: 'Only prospects of this business type.',
+  })
+  @IsOptional()
+  @IsUUID()
+  businessTypeId?: string;
 }
 
 export class ProspectListProductDto {
@@ -143,6 +167,9 @@ export class ProspectListItemDto {
 
   @ApiPropertyOptional({ nullable: true, type: ProspectListBusinessTypeDto })
   businessType!: ProspectListBusinessTypeDto | null;
+
+  @ApiPropertyOptional({ nullable: true, type: ProspectListBusinessTypeDto })
+  sourceType!: ProspectListBusinessTypeDto | null;
 
   @ApiProperty({ type: [ProspectListProductDto] })
   products!: ProspectListProductDto[];

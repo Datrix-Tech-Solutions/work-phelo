@@ -74,7 +74,7 @@ export class CreateSalesTargetDto {
   amount!: number;
 }
 
-/** Who, what and when are fixed once a target exists; only the amount can change. */
+/** Who and what are fixed once a target exists; the amount and the dates can change. */
 export class UpdateSalesTargetDto {
   @ApiProperty({ example: 60000 })
   @Type(() => Number)
@@ -82,6 +82,23 @@ export class UpdateSalesTargetDto {
   @IsPositive()
   @Max(1_000_000_000_000)
   amount!: number;
+
+  @ApiPropertyOptional({
+    example: '2026-01-01',
+    description:
+      'New first day, inclusive. Dates cannot be changed once the target has ended.',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-03-31',
+    description: 'New last day, inclusive.',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  endDate?: string;
 }
 
 export class QuerySalesTargetsDto {

@@ -36,7 +36,7 @@ type AuthedRequest = Request & { user: RequestUser };
 @ApiForbiddenResponse({ type: ApiErrorResponseDto })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'transport')
 export class TransportDashboardController {
   constructor(private readonly service: TransportDashboardService) {}
 

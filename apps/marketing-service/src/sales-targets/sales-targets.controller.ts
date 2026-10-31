@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   Body,
   Controller,
@@ -59,10 +60,14 @@ type AuthedRequest = Request & { user: RequestUser };
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class SalesTargetsController {
   constructor(private readonly service: SalesTargetsService) {}
 
+  @PermissionExempt(
+    'service-policy',
+    'SalesTargetsController.list delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get()
   // Open to every Marketing user: without marketing.targets.all:VIEW the service returns only the
   // caller's own targets.
@@ -98,7 +103,7 @@ export class SalesTargetsController {
 
   @Patch(':id')
   @RequirePermissions(P.TARGETS_EDIT)
-  @ApiOperation({ summary: 'Change a target’s amount' })
+  @ApiOperation({ summary: 'Change a target’s amount and dates' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   update(

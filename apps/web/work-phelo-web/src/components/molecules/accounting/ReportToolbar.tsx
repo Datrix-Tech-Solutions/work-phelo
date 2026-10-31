@@ -20,7 +20,7 @@ export function ReportToolbar({
   onDownloadPdf,
   onDownloadCsv,
   downloadDisabled,
-  pdfBusy,
+  pdfBusy = false,
 }: {
   fields: React.ReactNode;
   /** Chips describing the filters the visible report was generated with. */
@@ -32,10 +32,11 @@ export function ReportToolbar({
   onGenerate: () => void;
   generateDisabled: boolean;
   generating: boolean;
-  onDownloadPdf: () => void;
+  /** Reports with no PDF leave this out and the button is not shown. */
+  onDownloadPdf?: () => void;
   onDownloadCsv: () => void;
   downloadDisabled: boolean;
-  pdfBusy: boolean;
+  pdfBusy?: boolean;
 }) {
   return (
     <div className={cardClass('p-4 flex flex-col gap-4')}>
@@ -51,14 +52,16 @@ export function ReportToolbar({
         >
           Generate Report
         </Button>
-        <Button
-          variant="outline"
-          onClick={onDownloadPdf}
-          disabled={downloadDisabled || pdfBusy}
-          icon={<Icons.Download className="w-4 h-4" />}
-        >
-          {pdfBusy ? 'Preparing PDF…' : 'Download PDF'}
-        </Button>
+        {onDownloadPdf && (
+          <Button
+            variant="outline"
+            onClick={onDownloadPdf}
+            disabled={downloadDisabled || pdfBusy}
+            icon={<Icons.Download className="w-4 h-4" />}
+          >
+            {pdfBusy ? 'Preparing PDF…' : 'Download PDF'}
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={onDownloadCsv}

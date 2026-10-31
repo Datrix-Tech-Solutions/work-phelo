@@ -67,7 +67,7 @@ const PIPELINE_STAGE_PERMISSIONS = {
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'pipeline')
+@RequireFeature('marketing', 'sales-crm')
 export class PipelineStagesController {
   constructor(private readonly service: PipelineStagesService) {}
 

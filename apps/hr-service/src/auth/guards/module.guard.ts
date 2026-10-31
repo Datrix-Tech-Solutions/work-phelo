@@ -15,18 +15,18 @@ export class ModuleGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredModule = this.reflector.get<string>(
+    const requiredModule = this.reflector.getAllAndOverride<string>(
       MODULE_KEY,
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
-    if (!requiredModule) return true;
+    if (requiredModule === undefined) return true;
 
     const request = context
       .switchToHttp()
       .getRequest<Request & { user?: RequestUser }>();
     const moduleConfig = request.user?.moduleConfig;
 
-    if (!moduleConfig || !moduleConfig[requiredModule]) {
+    if (moduleConfig?.[requiredModule] !== true) {
       throw new ForbiddenException(
         'This module is not available for your company. Please contact your platform administrator.',
       );

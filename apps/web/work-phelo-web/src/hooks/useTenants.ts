@@ -15,12 +15,13 @@ export function useTenants(source?: TenantSource) {
   });
 }
 
-export function useSetTenantVerified() {
+/** Verifies a careers-site recruiter and turns them into a normal company. */
+export function useVerifyRecruiter() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ tenantId, isVerified }: { tenantId: string; isVerified: boolean }) => {
-      const res = await api.patch(`/auth/tenants/${tenantId}/verified`, { isVerified });
+    mutationFn: async (tenantId: string) => {
+      const res = await api.patch(`/auth/tenants/${tenantId}/verify-recruiter`);
       return res.data;
     },
     onSuccess: () => {

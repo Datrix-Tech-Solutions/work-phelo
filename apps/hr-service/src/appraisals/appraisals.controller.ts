@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -73,6 +74,10 @@ export class AppraisalsController {
     );
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal cycle catalog for self and manager workflows.',
+  )
   @Get('cycles')
   @ApiOperation({ summary: 'List all appraisal cycles for the tenant' })
   @ApiResponse({ status: 200, description: 'Appraisal cycles retrieved' })
@@ -80,6 +85,10 @@ export class AppraisalsController {
     return this.appraisalsService.getCycles(req.user.tenantId);
   }
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal cycle configuration for self and manager workflows.',
+  )
   @Get('cycles/:cycleId')
   @ApiOperation({ summary: 'Get a single appraisal cycle' })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
@@ -155,6 +164,10 @@ export class AppraisalsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.getAppraisals enforces tenant-wide appraisal read policy.',
+  )
   @Get('cycles/:cycleId/appraisals')
   @ApiOperation({ summary: 'Get all appraisal records for a cycle' })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
@@ -174,6 +187,7 @@ export class AppraisalsController {
   @ApiOperation({
     summary: 'Get cycle results summary with rating distribution',
   })
+  @RequirePermissions(Permission.READ_APPRAISALS)
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
   @ApiResponse({ status: 200, description: 'Cycle results retrieved' })
   getCycleResults(
@@ -185,6 +199,10 @@ export class AppraisalsController {
 
   // ── KPIs ────────────────────────────────────────────────────────────────────
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal cycle KPIs for self and manager workflows.',
+  )
   @Get('cycles/:cycleId/kpis')
   @ApiOperation({ summary: 'Get KPIs for a cycle' })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
@@ -196,6 +214,10 @@ export class AppraisalsController {
     return this.appraisalsService.getCycleKpis(req.user.tenantId, cycleId);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.createCycleKpi requires HR appraisal access.',
+  )
   @Post('cycles/:cycleId/kpis')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a KPI for a cycle' })
@@ -215,6 +237,10 @@ export class AppraisalsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.updateCycleKpi requires HR appraisal access.',
+  )
   @Put('cycles/:cycleId/kpis/:kpiId')
   @ApiOperation({ summary: 'Update a KPI for a cycle' })
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
@@ -265,6 +291,10 @@ export class AppraisalsController {
 
   // ── Templates ───────────────────────────────────────────────────────────────
 
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal template catalog; mutations require configuration permission.',
+  )
   @Get('templates')
   @ApiOperation({ summary: 'List appraisal templates' })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -349,6 +379,10 @@ export class AppraisalsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.getAppraisal checks self, direct manager or HR permissions.',
+  )
   @Get(':id')
   @ApiOperation({ summary: 'Get a single appraisal record' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
@@ -414,6 +448,10 @@ export class AppraisalsController {
     );
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalsService.reopenAppraisal checks finalizer or direct-manager redo authority.',
+  )
   @Patch(':id/reopen')
   @ApiOperation({ summary: 'Reopen an appraisal for redo' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })

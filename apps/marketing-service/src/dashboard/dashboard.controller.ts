@@ -1,3 +1,4 @@
+import { PermissionExempt } from '../auth/decorators/permissions.decorator';
 import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -45,7 +46,7 @@ type AuthedRequest = Request & { user: RequestUser };
 })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('marketing')
-@RequireFeature('marketing', 'leads')
+@RequireFeature('marketing', 'sales-crm')
 export class DashboardController {
   constructor(private readonly service: DashboardService) {}
 
@@ -53,6 +54,10 @@ export class DashboardController {
   // to the caller (their personal dashboard). Either way they are scoped like the lists they
   // summarise: without the matching view-all permission they cover only the caller's own
   // prospects and clients.
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.summary delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('summary')
   @ApiOperation({
     summary: 'Marketing dashboard figures for a period',
@@ -67,6 +72,10 @@ export class DashboardController {
     return this.service.summary(request.user, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.targets delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('targets')
   @ApiOperation({
     summary: 'Sales target progress for a period, optionally for one rep',
@@ -81,6 +90,10 @@ export class DashboardController {
     return this.service.targetsOverview(request.user, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.upcomingBirthdays delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('upcoming-birthdays')
   @ApiOperation({
     summary: 'Upcoming birthdays of prospect and client contacts',
@@ -107,6 +120,10 @@ export class DashboardController {
     return this.service.reps(request.user);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.growth delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('growth')
   @ApiOperation({
     summary: 'New prospects and new clients for several date ranges at once',
@@ -121,6 +138,10 @@ export class DashboardController {
     return this.service.growth(request.user, query);
   }
 
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.revenueByProduct delegates caller and tenant scope to its existing policy checks.',
+  )
   @Get('revenue-by-product')
   @ApiOperation({
     summary: 'Revenue achieved in a period, split by product',
