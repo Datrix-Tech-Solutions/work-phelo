@@ -88,8 +88,6 @@ export enum Permission {
   SUBMIT_MANAGER_REVIEW = 'submit:manager_review',
   FINALIZE_APPRAISAL = 'finalize:appraisal',
   READ_OWN_REVIEW = 'read:own_review',
-  CREATE_OWN_OBJECTIVE = 'create:own_objective',
-  CREATE_OBJECTIVE_FOR_OTHERS = 'create:objective_for_others',
 
   // ── Assets ────────────────────────────────────────────────────────────────
   MANAGE_ASSETS = 'manage:assets',
