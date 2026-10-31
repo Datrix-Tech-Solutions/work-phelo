@@ -6,10 +6,7 @@ import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-hos
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { RequireModule } from '../decorators/module.decorator';
 import { RequireFeature } from '../decorators/feature.decorator';
-import {
-  AppraisalGoalsController,
-  AppraisalObjectivesController,
-} from '../../appraisal-goals/appraisal-goals.controller';
+import { AppraisalsController } from '../../appraisals/appraisals.controller';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ModuleGuard } from './module.guard';
 import { FeatureGuard } from './feature.guard';
@@ -227,16 +224,7 @@ describe('HR entitlement guard resolution', () => {
   );
 
   it.each([
-    [
-      'goals',
-      AppraisalGoalsController,
-      AppraisalGoalsController.prototype.list,
-    ],
-    [
-      'objectives',
-      AppraisalObjectivesController,
-      AppraisalObjectivesController.prototype.list,
-    ],
+    ['cycles', AppraisalsController, AppraisalsController.prototype.getCycles],
   ] as const)(
     'closes the real appraisal %s controller class-metadata bypass',
     (_name, controller, handler) => {
@@ -270,8 +258,8 @@ describe('HR entitlement guard resolution', () => {
 
   it('does not turn enabled entitlements into granular permission grants', () => {
     const createGoal = context(
-      AppraisalGoalsController,
-      AppraisalGoalsController.prototype.create,
+      AppraisalsController,
+      AppraisalsController.prototype.createCycle,
       enabled,
     );
     expect(moduleGuard.canActivate(createGoal)).toBe(true);
