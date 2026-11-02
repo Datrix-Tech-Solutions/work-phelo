@@ -1,67 +1,60 @@
-# WorkPhelo Inventory Operations
+# Inventory Operations - Core and Stock In
 
-Scaffold only. Business APIs and domain models will be implemented from approved
-Jira user stories. There are no Inventory permission resources, tenant flags,
-tables, migrations, RabbitMQ queues/events or Redis jobs.
+Port: `INVENTORY_SERVICE_PORT=4009`. Required: `JWT_SECRET` (same verification
+secret as Auth/Gateway) and `DATABASE_URL` (service-owned `inventory` schema).
+Public process health: `/api/health`; optional Swagger: `/api/docs`.
 
-## HTTP and Configuration
+## API
 
-- Service port: INVENTORY_SERVICE_PORT (default 4009; integer 1..65535).
-- Public process health: GET /api/health.
-- Gateway: GET /api/v1/operations/inventory/health.
-- Optional Swagger: /api/docs; controlled by ENABLE_SWAGGER/DEPLOY_ENV/NODE_ENV.
-- Required JWT_SECRET: same verification secret as Auth/Gateway; never put it in Git.
-- Optional HTTP_BODY_LIMIT defaults to 1mb for ordinary JSON/urlencoded bodies.
-- DATABASE_URL is not used at runtime until approved models enable Prisma persistence.
+External prefix: `/api/v1/operations/inventory`; service prefix: `/api`.
 
-Health returns only status, service and timestamp. It proves process readiness,
-not database/broker readiness. No CORS policy is added for direct browser access:
-use the API Gateway, matching the Accounting service boundary.
+- `/categories`, `/units`, `/locations`: POST, GET; `/:id`: GET, PATCH, DELETE.
+- `/items`: POST, GET; `/items/:id`: GET, PATCH (including status/reorder level).
+- `/stock-in`: POST; `/stock-balances`, `/stock-movements`: GET.
+- DELETE returns 204; referenced categories, units and locations return 409.
+- Lists are deterministic arrays with no search/pagination contract in this batch.
+- Names/SKUs are trimmed, required and unique within the tenant (case-sensitive).
 
-## Local Commands
+Business controllers require fresh signed Gateway context, enabled Operations and
+the matching `operations.inventory.{categories|units|locations|items|stock-in}`
+grant. Actions are VIEW/CREATE/EDIT/DELETE; items have no DELETE endpoint and
+stock-in uses CREATE/VIEW only. Balances require items:VIEW. No new feature flag.
+Tenant and creator are derived from verified context, never request payloads.
 
-Build shared packages first, then start using your normal local environment loader:
+## Receipts
+
+Stock In locks the tenant-owned item, validates ACTIVE status and tenant location,
+creates the movement and atomically increments/upserts its location balance in one
+transaction. Decimal quantities/prices support 14 integer and 4 fractional digits;
+send strings to avoid client-side floating-point loss. Numeric JSON inputs are also
+accepted within those limits. Quantity must be positive; prices/reorder non-negative.
+
+`totalCost = quantity * unitCost` uses a local 40-digit Decimal context and is stored
+at Decimal(36,8). Omitted/null unitCost produces null totalCost, not a default price.
+The movement captures the configured item unit; callers cannot override it. Item
+unit changes after a balance exists return 409 because conversion is out of scope.
+`isLowStock` is derived per location using <=; null means no reorder level configured.
+
+No idempotency key is defined in these stories: repeated successful POSTs record
+distinct receipts; clients must not blindly retry an ambiguous successful request.
+
+## Validation
 
 ```bash
 npm ci
-npm run build --workspace=packages/types
-npm run build --workspace=packages/config
-npm run build --workspace=packages/internal-auth
-npm run dev:inventory
-
+npm run build --workspace=packages/types --workspace=packages/config --workspace=packages/internal-auth
+npm run db:generate --workspace=apps/inventory-service
 npm run check-types --workspace=apps/inventory-service
 npm run lint --workspace=apps/inventory-service
 npm test --workspace=apps/inventory-service -- --runInBand
 npm run build --workspace=apps/inventory-service
-docker build -f apps/inventory-service/Dockerfile -t workphelo-inventory-scaffold:local .
 ```
 
-.env.example lists names only. Do not copy shared DEV/PROD credentials into a local
-smoke test. The Prisma README explains why empty persistence has no generated client
-or migrations; the future domain schema is inventory, not a new shared schema.
+Database acceptance tests additionally require an explicit disposable localhost
+`INVENTORY_TEST_DATABASE_URL`, database name `inventory_test`, with the migration
+applied. Never use DEV/PROD URLs for these tests.
 
-## Security Contract
-
-AuthModule exports current Gateway-context JWT verification, strict module/feature
-guards, fail-closed permission declarations and the shared internal HMAC guard.
-Health is intentionally public, following current per-controller guard conventions.
-There are no production protected endpoints yet. Future controllers must explicitly
-use JwtAuthGuard, applicable ModuleGuard/FeatureGuard, and PermissionsGuard with
-approved permissions or a justified service policy. Direct token-only user requests
-must not pass the inventory-audience Gateway assertion check.
-
-Current Auth state is resolved by Gateway /me lookup, not a stale JWT snapshot or
-direct Auth database access. Tenant identity comes from verified request.user.
-Internal callers use @work-phelo/internal-auth; credentials/allowlists are only
-needed when an approved internal route is introduced.
-
-## Deployment Scope
-
-DEV image/build/Compose/env/preflight/health wiring is configured. No Inventory
-migration command runs, because there are no models. Gateway INVENTORY_SERVICE_URL
-is optional; no company moduleConfig change is needed to boot.
-
-PROD is intentionally not enabled, matching Accounting/Marketing rollout staging.
-A separate promotion must add PROD image/Compose/env/verification wiring when
-approved. This scaffold does not deploy, expose a direct public Nginx upstream or
-enable Inventory business functionality.
+DEV deployment configuration is prepared; no deployment/migration against shared
+environments is performed here. PROD activation is separate. No RabbitMQ or Redis.
+Accounting posting, valuation methods (FIFO/LIFO/average), stock-out/transfers,
+adjustments, alerts, scheduled jobs and frontend work remain deferred.

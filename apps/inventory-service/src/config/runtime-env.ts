@@ -1,4 +1,4 @@
-export const inventoryRequiredEnvVars = ['JWT_SECRET'] as const;
+export const inventoryRequiredEnvVars = ['JWT_SECRET', 'DATABASE_URL'] as const;
 
 export function inventoryServicePort(): number {
   const value = process.env.INVENTORY_SERVICE_PORT ?? '4009';

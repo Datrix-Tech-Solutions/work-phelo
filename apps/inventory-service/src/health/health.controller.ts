@@ -5,7 +5,7 @@ import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 @ApiTags('Inventory - Health')
 export class HealthController {
   @Get()
-  @ApiOperation({ summary: 'Check Inventory scaffold process health (no database configured)' })
+  @ApiOperation({ summary: 'Check Inventory process health' })
   @ApiOkResponse({ description: 'The Inventory HTTP scaffold is ready' })
   check() {
     return {
