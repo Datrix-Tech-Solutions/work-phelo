@@ -41,7 +41,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
-    if (user !== null && !user.featureConfig?.hr?.timeclock) {
+    if (user !== null && !user.featureConfig?.hr?.time) {
       router.replace(`/${tenantSlug}/hr`);
     }
   }, [user, tenantSlug, router]);
