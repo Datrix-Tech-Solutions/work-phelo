@@ -397,6 +397,31 @@ export const RESOURCES = [
 
   // ── OPERATIONS / REINSURANCE module ───────────────────────────
   {
+    name: 'operations.inventory.categories',
+    module: 'OPERATIONS',
+    description: 'Inventory item categories',
+  },
+  {
+    name: 'operations.inventory.units',
+    module: 'OPERATIONS',
+    description: 'Inventory units of measure',
+  },
+  {
+    name: 'operations.inventory.locations',
+    module: 'OPERATIONS',
+    description: 'Inventory warehouses and stock locations',
+  },
+  {
+    name: 'operations.inventory.items',
+    module: 'OPERATIONS',
+    description: 'Inventory items, status, reorder levels and balances',
+  },
+  {
+    name: 'operations.inventory.stock-in',
+    module: 'OPERATIONS',
+    description: 'Inventory stock receipts and movement history',
+  },
+  {
     name: 'operations.reinsurance.dashboard',
     module: 'OPERATIONS',
     description: 'Reinsurance operations dashboard',

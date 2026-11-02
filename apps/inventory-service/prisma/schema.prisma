@@ -10,4 +10,137 @@ datasource db {
   schemas  = ["inventory"]
 }
 
-// No models until approved Inventory Operations user stories define them.
+enum StockLocationType {
+  WAREHOUSE
+  STORE
+  BRANCH
+  OFFICE_STORE
+  OTHER
+
+  @@schema("inventory")
+}
+
+enum InventoryItemStatus {
+  ACTIVE
+  INACTIVE
+
+  @@schema("inventory")
+}
+
+enum StockMovementType {
+  STOCK_IN
+
+  @@schema("inventory")
+}
+
+model InventoryCategory {
+  id        String          @id @default(uuid())
+  tenantId  String
+  name      String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  items     InventoryItem[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@schema("inventory")
+}
+
+model UnitOfMeasure {
+  id        String          @id @default(uuid())
+  tenantId  String
+  name      String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  items     InventoryItem[]
+  movements StockMovement[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@schema("inventory")
+}
+
+model StockLocation {
+  id        String            @id @default(uuid())
+  tenantId  String
+  name      String
+  type      StockLocationType
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  balances  StockBalance[]
+  movements StockMovement[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@schema("inventory")
+}
+
+model InventoryItem {
+  id              String              @id @default(uuid())
+  tenantId        String
+  name            String
+  sku             String
+  categoryId      String
+  unitOfMeasureId String
+  description     String?
+  costPrice       Decimal?            @db.Decimal(18, 4)
+  sellingPrice    Decimal?            @db.Decimal(18, 4)
+  reorderLevel    Decimal?            @db.Decimal(18, 4)
+  status          InventoryItemStatus @default(ACTIVE)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  category        InventoryCategory   @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  unitOfMeasure   UnitOfMeasure       @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
+  balances        StockBalance[]
+  movements       StockMovement[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, id])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, unitOfMeasureId])
+  @@schema("inventory")
+}
+
+model StockBalance {
+  id         String        @id @default(uuid())
+  tenantId   String
+  itemId     String
+  locationId String
+  quantity   Decimal       @db.Decimal(18, 4)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  item       InventoryItem @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  location   StockLocation @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, itemId, locationId])
+  @@index([tenantId, locationId])
+  @@schema("inventory")
+}
+
+model StockMovement {
+  id              String            @id @default(uuid())
+  tenantId        String
+  itemId          String
+  locationId      String
+  unitOfMeasureId String
+  type            StockMovementType @default(STOCK_IN)
+  quantity        Decimal           @db.Decimal(18, 4)
+  unitCost        Decimal?          @db.Decimal(18, 4)
+  totalCost       Decimal?          @db.Decimal(36, 8)
+  date            DateTime
+  source          String?
+  supplier        String?
+  reference       String?
+  notes           String?
+  createdBy       String
+  createdAt       DateTime          @default(now())
+  item            InventoryItem     @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  location        StockLocation     @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  unitOfMeasure   UnitOfMeasure     @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt, id])
+  @@index([tenantId, itemId])
+  @@index([tenantId, locationId])
+  @@index([tenantId, unitOfMeasureId])
+  @@schema("inventory")
+}

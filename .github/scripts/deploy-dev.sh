@@ -220,6 +220,7 @@ write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 write_env_file "${DEPLOY_PATH}/apps/inventory-service/.env.dev" \
+  "DATABASE_URL=$(db_url_for_schema inventory)" \
   "INVENTORY_SERVICE_PORT=4009" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
@@ -274,6 +275,7 @@ docker_compose run --rm subscription-service sh -c "npx prisma@5.22.0 migrate de
 docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma"
 docker_compose run --rm reinsurance-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/reinsurance-service/prisma/schema.prisma"
 docker_compose run --rm accounting-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/accounting-service/prisma/schema.prisma"
+docker_compose run --rm inventory-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/inventory-service/prisma/schema.prisma"
 log "✓ Migrations complete"
 
 section "Deploy"

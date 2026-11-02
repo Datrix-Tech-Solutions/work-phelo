@@ -1,19 +1,15 @@
-# Inventory Persistence Scaffold
+# Inventory Persistence
 
-The reserved domain schema is inventory, following hr/marketing/accounting/reinsurance.
-The w_auth prefix is an Auth exception, not the general naming convention.
+Inventory owns the PostgreSQL `inventory` schema. The first domain migration is
+`20261102000000_add_inventory_core_stock_in`; it creates six tenant-scoped tables,
+three enums, composite tenant foreign keys, unique names/SKUs/balances, indexes and
+non-negative receipt/value checks. Referenced settings/locations use RESTRICT.
 
-There are no models, generated client, database connection or migrations.
-AppModule deliberately does not import a PrismaModule. Prisma cannot generate
-a useful client without models; db:generate and db:migrate explicitly do nothing.
+`npm run db:generate --workspace=apps/inventory-service` generates the ignored
+service-owned client. `DATABASE_URL` is required at runtime. The DEV deployment
+script now supplies it and runs the normal migration deploy command after review.
+No shared database migration is authorized by this implementation task.
 
-DATABASE_URL is only needed for Prisma tooling, not Inventory startup/health.
-To validate the empty schema without connecting to a database:
-
-```bash
-DATABASE_URL='postgresql://unused:unused@127.0.0.1:5432/unused?schema=inventory' npm run db:validate --workspace=apps/inventory-service
-```
-
-When approved models arrive, add the normal service-owned PrismaModule,
-PrismaService, client generation and reviewed migrations, then add migration
-deployment/runtime database configuration. Do not create placeholder tables.
+Optional database tests only run when `INVENTORY_TEST_DATABASE_URL` explicitly
+targets a disposable `inventory_test` database on localhost. They never fall back
+to `DATABASE_URL`.

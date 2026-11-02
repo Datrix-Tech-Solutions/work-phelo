@@ -10,11 +10,15 @@ import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { InternalServiceAuthGuard } from './auth/internal-service-auth';
+import { PrismaService } from './prisma/prisma.service';
 
 describe('Inventory scaffold HTTP application', () => {
   let app: INestApplication<Server>;
   beforeAll(async () => {
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PrismaService)
+      .useValue({})
+      .compile();
     app = module.createNestApplication({ bodyParser: false, logger: false });
     configureApplication(app);
     await app.init();
@@ -23,7 +27,7 @@ describe('Inventory scaffold HTTP application', () => {
     await app?.close();
   });
 
-  it('boots with the normal security providers and no persistence/messaging modules', () => {
+  it('boots with the normal security providers and mocked persistence', () => {
     for (const guard of [
       JwtAuthGuard,
       ModuleGuard,
@@ -56,8 +60,8 @@ describe('Inventory scaffold HTTP application', () => {
       /attacker|forged|DATABASE_URL|JWT_SECRET|stack/,
     );
   });
-  it('has no scaffold business APIs or accidental bare-prefix routes', async () => {
-    await request(app.getHttpServer()).get('/api/items').expect(404);
+  it('requires authentication on business APIs and has no accidental bare-prefix routes', async () => {
+    await request(app.getHttpServer()).get('/api/items').expect(401);
     await request(app.getHttpServer()).get('/health').expect(404);
   });
 });
