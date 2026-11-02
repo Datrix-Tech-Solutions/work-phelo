@@ -29,6 +29,21 @@ enum InventoryItemStatus {
 
 enum StockMovementType {
   STOCK_IN
+  STOCK_OUT
+  TRANSFER_OUT
+  TRANSFER_IN
+
+  @@schema("inventory")
+}
+
+enum StockOutPurpose {
+  INTERNAL_USE
+  SALE
+  CONSUMPTION
+  PROJECT_USE
+  EMPLOYEE_ISSUE
+  DAMAGE
+  OTHER
 
   @@schema("inventory")
 }
@@ -132,6 +147,9 @@ model StockMovement {
   supplier        String?
   reference       String?
   notes           String?
+  recipient       String?
+  purpose         StockOutPurpose?
+  transferId      String?
   createdBy       String
   createdAt       DateTime          @default(now())
   item            InventoryItem     @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
@@ -142,5 +160,6 @@ model StockMovement {
   @@index([tenantId, itemId])
   @@index([tenantId, locationId])
   @@index([tenantId, unitOfMeasureId])
+  @@index([tenantId, transferId])
   @@schema("inventory")
 }

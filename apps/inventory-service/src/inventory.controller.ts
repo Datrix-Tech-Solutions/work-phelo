@@ -17,7 +17,8 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { RequireModule } from './auth/decorators/module.decorator';
-import { RequirePermissions } from './auth/decorators/permissions.decorator';
+import { RequireAnyPermission, RequirePermissions } from './auth/decorators/permissions.decorator';
+import { StockMovementType } from '../prisma/generated/client';
 import { InventoryService } from './inventory.service';
 import {
   NameDto,
@@ -27,6 +28,8 @@ import {
   ItemDto,
   UpdateItemDto,
   StockInDto,
+  StockOutDto,
+  StockTransferDto,
 } from './inventory.dto';
 
 type UserRequest = { user: RequestUser };
@@ -192,14 +195,37 @@ export class StockController {
   receive(@Req() req: UserRequest, @Body() dto: StockInDto) {
     return this.service.stockIn(req.user.tenantId, req.user.id, dto);
   }
+  @Post('stock-out')
+  @RequirePermissions('operations.inventory.stock-out:CREATE')
+  issue(@Req() req: UserRequest, @Body() dto: StockOutDto) {
+    return this.service.stockOut(req.user.tenantId, req.user.id, dto);
+  }
+  @Post('stock-transfers')
+  @RequirePermissions('operations.inventory.transfers:CREATE')
+  transfer(@Req() req: UserRequest, @Body() dto: StockTransferDto) {
+    return this.service.transfer(req.user.tenantId, req.user.id, dto);
+  }
   @Get('stock-balances')
   @RequirePermissions('operations.inventory.items:VIEW')
   balances(@Req() req: UserRequest) {
     return this.service.balances(req.user.tenantId);
   }
   @Get('stock-movements')
-  @RequirePermissions('operations.inventory.stock-in:VIEW')
+  @RequireAnyPermission(
+    'operations.inventory.stock-in:VIEW',
+    'operations.inventory.stock-out:VIEW',
+    'operations.inventory.transfers:VIEW',
+  )
   movements(@Req() req: UserRequest) {
-    return this.service.movements(req.user.tenantId);
+    if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'TENANT_ADMIN') {
+      return this.service.movements(req.user.tenantId);
+    }
+    const permissions = new Set(req.user.permissions);
+    const types: StockMovementType[] = [];
+    if (permissions.has('operations.inventory.stock-in:VIEW')) types.push('STOCK_IN');
+    if (permissions.has('operations.inventory.stock-out:VIEW')) types.push('STOCK_OUT');
+    if (permissions.has('operations.inventory.transfers:VIEW'))
+      types.push('TRANSFER_OUT', 'TRANSFER_IN');
+    return this.service.movements(req.user.tenantId, types);
   }
 }

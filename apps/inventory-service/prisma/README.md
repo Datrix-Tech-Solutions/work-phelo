@@ -5,6 +5,11 @@ Inventory owns the PostgreSQL `inventory` schema. The first domain migration is
 three enums, composite tenant foreign keys, unique names/SKUs/balances, indexes and
 non-negative receipt/value checks. Referenced settings/locations use RESTRICT.
 
+`20261102010000_add_inventory_stock_out_transfers` extends movement types, adds
+the purpose enum and nullable recipient/purpose/transferId fields with a tenant/link
+index and issue/transfer checks. It leaves existing STOCK_IN rows and the historical
+migration unchanged. No new transfer table is introduced.
+
 `npm run db:generate --workspace=apps/inventory-service` generates the ignored
 service-owned client. `DATABASE_URL` is required at runtime. The DEV deployment
 script now supplies it and runs the normal migration deploy command after review.

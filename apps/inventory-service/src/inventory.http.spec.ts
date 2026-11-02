@@ -9,6 +9,7 @@ import { AppModule } from './app.module';
 import { configureApplication } from './app.setup';
 import { PrismaService } from './prisma/prisma.service';
 import { InventoryService } from './inventory.service';
+import { StockOutPurpose } from '../prisma/generated/client';
 
 describe('Inventory HTTP authorization and validation', () => {
   let app: INestApplication<Server>;
@@ -22,10 +23,15 @@ describe('Inventory HTTP authorization and validation', () => {
     createItem: jest.fn().mockResolvedValue({ id }),
     updateItem: jest.fn().mockResolvedValue({ id }),
     stockIn: jest.fn().mockResolvedValue({ movement: { id } }),
+    stockOut: jest.fn().mockResolvedValue({ movement: { id } }),
+    transfer: jest.fn().mockResolvedValue({ transferId: id }),
+    movements: jest.fn().mockResolvedValue([]),
   };
-  function headers(permission: string, tenantId = 'tenant-a', enabled = true) {
+  function headers(permission: string | string[], tenantId = 'tenant-a', enabled = true) {
     const token = jwt.sign({ sub: 'user-a', tenantId }, secret);
-    const permissions = JSON.stringify(permission ? [permission] : []);
+    const permissions = JSON.stringify(
+      Array.isArray(permission) ? permission : permission ? [permission] : [],
+    );
     const hash = (v: string) => createHash('sha256').update(v).digest('hex');
     return {
       Authorization: 'Bearer ' + token,
@@ -80,25 +86,35 @@ describe('Inventory HTTP authorization and validation', () => {
     expect(document.components?.schemas?.StockInDto).toHaveProperty('properties.dateReceived');
   });
 
-  it.each(['categories', 'units', 'locations', 'items', 'stock-in'])(
-    'denies unauthenticated %s',
-    async (route) => {
-      await request(app.getHttpServer())
-        .post('/api/' + route)
-        .send({})
-        .expect(401);
-    },
-  );
-  it.each(['categories', 'units', 'locations', 'items', 'stock-in'])(
-    'denies missing %s permission',
-    async (route) => {
-      await request(app.getHttpServer())
-        .post('/api/' + route)
-        .set(headers(''))
-        .send({})
-        .expect(403);
-    },
-  );
+  it.each([
+    'categories',
+    'units',
+    'locations',
+    'items',
+    'stock-in',
+    'stock-out',
+    'stock-transfers',
+  ])('denies unauthenticated %s', async (route) => {
+    await request(app.getHttpServer())
+      .post('/api/' + route)
+      .send({})
+      .expect(401);
+  });
+  it.each([
+    'categories',
+    'units',
+    'locations',
+    'items',
+    'stock-in',
+    'stock-out',
+    'stock-transfers',
+  ])('denies missing %s permission', async (route) => {
+    await request(app.getHttpServer())
+      .post('/api/' + route)
+      .set(headers(''))
+      .send({})
+      .expect(403);
+  });
   it('enforces Operations entitlement even with a correct grant', async () => {
     await request(app.getHttpServer())
       .post('/api/categories')
@@ -222,5 +238,132 @@ describe('Inventory HTTP authorization and validation', () => {
       'user-a',
       expect.objectContaining({ quantity: '1.25', unitCost: '0.1' }),
     );
+  });
+
+  const issue = {
+    itemId: id,
+    locationId: id,
+    quantity: '1.25',
+    date: '2026-11-02',
+    purpose: 'INTERNAL_USE',
+  };
+  const transfer = {
+    itemId: id,
+    sourceLocationId: id,
+    destinationLocationId: 'f908c2a8-686e-4902-91fd-67d8839bca19',
+    quantity: '1.25',
+    date: '2026-11-02',
+  };
+  it.each(Object.values(StockOutPurpose))(
+    'accepts purpose %s and trusted tenant/creator',
+    async (purpose) => {
+      await request(app.getHttpServer())
+        .post('/api/stock-out')
+        .set(headers('operations.inventory.stock-out:CREATE', 'tenant-b'))
+        .send({ ...issue, purpose, recipient: 'Team', reference: 'ISSUE-1', notes: 'Approved use' })
+        .expect(201);
+      expect(service.stockOut).toHaveBeenCalledWith(
+        'tenant-b',
+        'user-a',
+        expect.objectContaining({ purpose, recipient: 'Team' }),
+      );
+    },
+  );
+  it.each([undefined, null, ''])('requires Stock Out purpose %p', async (purpose) => {
+    await request(app.getHttpServer())
+      .post('/api/stock-out')
+      .set(headers('operations.inventory.stock-out:CREATE'))
+      .send({ ...issue, purpose })
+      .expect(400);
+    expect(service.stockOut).not.toHaveBeenCalled();
+  });
+  it('accepts authorized transfer with only trusted tenant/creator', async () => {
+    await request(app.getHttpServer())
+      .post('/api/stock-transfers')
+      .set(headers('operations.inventory.transfers:CREATE', 'tenant-b'))
+      .send(transfer)
+      .expect(201);
+    expect(service.transfer).toHaveBeenCalledWith(
+      'tenant-b',
+      'user-a',
+      expect.objectContaining(transfer),
+    );
+  });
+  it.each(['stock-out', 'stock-transfers'])('denies disabled Operations on %s', async (route) => {
+    const resource = route === 'stock-out' ? 'stock-out' : 'transfers';
+    await request(app.getHttpServer())
+      .post('/api/' + route)
+      .set(headers('operations.inventory.' + resource + ':CREATE', 'tenant-a', false))
+      .send(route === 'stock-out' ? issue : transfer)
+      .expect(403);
+  });
+  it.each(['0', '-1', '1.00001'])(
+    'rejects invalid issue/transfer quantity %s',
+    async (quantity) => {
+      await request(app.getHttpServer())
+        .post('/api/stock-out')
+        .set(headers('operations.inventory.stock-out:CREATE'))
+        .send({ ...issue, quantity })
+        .expect(400);
+      await request(app.getHttpServer())
+        .post('/api/stock-transfers')
+        .set(headers('operations.inventory.transfers:CREATE'))
+        .send({ ...transfer, quantity })
+        .expect(400);
+    },
+  );
+  it.each([
+    { date: undefined },
+    { date: '2026-02-30' },
+    { unitOfMeasureId: id },
+    { tenantId: 'spoofed' },
+    { createdBy: 'spoofed' },
+    { unitCost: '2' },
+  ])('rejects invalid or caller-owned issue/transfer fields %j', async (extra) => {
+    await request(app.getHttpServer())
+      .post('/api/stock-out')
+      .set(headers('operations.inventory.stock-out:CREATE'))
+      .send({ ...issue, ...extra })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/stock-transfers')
+      .set(headers('operations.inventory.transfers:CREATE'))
+      .send({ ...transfer, ...extra })
+      .expect(400);
+  });
+  it.each([
+    ['stock-in', ['STOCK_IN']],
+    ['stock-out', ['STOCK_OUT']],
+    ['transfers', ['TRANSFER_OUT', 'TRANSFER_IN']],
+  ])('restricts shared history to the %s VIEW grant', async (resource, types) => {
+    await request(app.getHttpServer())
+      .get('/api/stock-movements')
+      .set(headers('operations.inventory.' + String(resource) + ':VIEW'))
+      .expect(200);
+    expect(service.movements).toHaveBeenCalledWith('tenant-a', types);
+  });
+  it('allows combined history grants but never treats CREATE as VIEW', async () => {
+    await request(app.getHttpServer())
+      .get('/api/stock-movements')
+      .set(
+        headers([
+          'operations.inventory.stock-in:VIEW',
+          'operations.inventory.stock-out:VIEW',
+          'operations.inventory.transfers:VIEW',
+        ]),
+      )
+      .expect(200);
+    expect(service.movements).toHaveBeenCalledWith('tenant-a', [
+      'STOCK_IN',
+      'STOCK_OUT',
+      'TRANSFER_OUT',
+      'TRANSFER_IN',
+    ]);
+    service.movements.mockClear();
+    await request(app.getHttpServer())
+      .get('/api/stock-movements')
+      .set(headers('operations.inventory.stock-out:CREATE'))
+      .expect(403);
+    expect(service.movements).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,15 @@
 import { isResourceEnabledForTenant } from './permission-entitlements';
 
 describe('permission entitlements', () => {
-  it.each(['categories', 'units', 'locations', 'items', 'stock-in'])(
+  it.each([
+    'categories',
+    'units',
+    'locations',
+    'items',
+    'stock-in',
+    'stock-out',
+    'transfers',
+  ])(
     'scopes Inventory %s to Operations without inventing a feature flag',
     (name) => {
       const resource = {
