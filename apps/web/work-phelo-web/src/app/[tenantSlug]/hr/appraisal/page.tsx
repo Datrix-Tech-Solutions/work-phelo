@@ -30,7 +30,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
 
   useEffect(() => {
     if (user === null) return;
-    if (!user.featureConfig?.hr?.appraisal) {
+    if (!user.featureConfig?.hr?.appraisals) {
       router.replace(`/${tenantSlug}/hr`);
       return;
     }

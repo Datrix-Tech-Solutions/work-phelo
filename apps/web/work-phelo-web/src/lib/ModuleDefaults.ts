@@ -29,12 +29,12 @@ export const DEFAULT_MODULES: Module[] = [
         description: 'Employee leave requests and balances',
       },
       {
-        key: 'appraisal',
+        key: 'appraisals',
         label: 'Appraisal',
         description: 'Performance reviews and cycles',
       },
       {
-        key: 'timeclock',
+        key: 'time',
         label: 'Time Clock',
         description: 'Clock in/out and attendance tracking',
       },
