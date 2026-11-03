@@ -25,6 +25,37 @@ movement types; tenant/super admins retain existing all-types access in their te
 No new feature flag.
 Tenant and creator are derived from verified context, never request payloads.
 
+## Settings Contracts
+
+Categories accept name, nullable description (max 4000), nullable icon key (max 100)
+and optional ACTIVE/INACTIVE status. Icons are strings, not a React-specific enum.
+Category list/detail responses derive itemCount from the item relation.
+
+Units accept name, symbol (1-10 trimmed characters), nullable description (max 4000)
+and optional status. Symbols need not be unique. Locations accept name, code (1-50
+trimmed uppercase characters, unique per tenant), nullable address (max 4000),
+optional type and status. New locations default to WAREHOUSE when type is omitted;
+PATCH never resets an omitted type. All configuration statuses default to ACTIVE.
+Locations list/detail derive itemCount from balance rows: one row per distinct
+item/location, including zero-quantity rows. stockValue is unsupported until an
+approved valuation contract exists; clients should render unavailable, not zero.
+
+Compatibility: existing name-only unit and name/type location API requests remain
+valid. New UI integrations should always send the chosen symbol/code. Omission on
+create generates an identifier-based placeholder (unit: first 10 ID characters;
+location: LOC-<uppercase full UUID>); omission on PATCH preserves current values.
+Empty/null supplied symbol/code/type/status is rejected. The migration backfills
+legacy unit symbols from IDs and unique LEGACY-<ordinal> codes per tenant without
+changing names, item relationships, movements or balances. No unit conversions.
+
+Inactive categories/units remain readable and cannot be newly assigned to items.
+Existing items stay valid; PATCH retaining the same category/unit is allowed, but
+switching to an inactive configuration is not. Inactive locations remain readable
+with their history and balances; all new receipts, issues, transfer source/destination
+activity and adjustments at them return 409. No automatic record changes occur.
+Referenced configuration deletion remains restrictive (409); no cascade deletes.
+After configuration writes, refresh the list/detail endpoint for derived counts.
+
 ## Receipts
 
 Stock In locks the tenant-owned item, validates ACTIVE status and tenant location,
