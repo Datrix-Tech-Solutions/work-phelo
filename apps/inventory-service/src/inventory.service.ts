@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '../prisma/generated/client';
+import { randomUUID } from 'crypto';
+import { Prisma, StockMovementType } from '../prisma/generated/client';
 import { PrismaService } from './prisma/prisma.service';
 import {
   ItemDto,
@@ -14,6 +15,8 @@ import {
   NameDto,
   UpdateNameDto,
   StockInDto,
+  StockOutDto,
+  StockTransferDto,
 } from './inventory.dto';
 
 // Two Decimal(18,4) inputs can produce 36 significant digits.
@@ -162,7 +165,7 @@ export class InventoryService {
     );
   }
   private async lockItem(tx: Prisma.TransactionClient, tenantId: string, id: string) {
-    // Serialize receipts and UOM edits for this item, including the first balance insert.
+    // All stock mutations and UOM edits lock the item first, in the same order.
     await tx.$queryRaw`SELECT "id" FROM "inventory"."InventoryItem" WHERE "tenantId" = ${tenantId} AND "id" = ${id} FOR UPDATE`;
     const item = await tx.inventoryItem.findFirst({ where: { tenantId, id } });
     if (!item) throw new NotFoundException('Inventory item not found');
@@ -232,6 +235,126 @@ export class InventoryService {
       }),
     );
   }
+  private async requireLocations(tx: Prisma.TransactionClient, tenantId: string, ids: string[]) {
+    const rows = await tx.stockLocation.findMany({
+      where: { tenantId, id: { in: ids } },
+      select: { id: true },
+    });
+    if (rows.length !== ids.length) throw new NotFoundException('Stock location not found');
+  }
+  private async sourceBalance(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    locationId: string,
+    quantity: Prisma.Decimal,
+  ) {
+    await tx.$queryRaw`SELECT "id" FROM "inventory"."StockBalance" WHERE "tenantId" = ${tenantId} AND "itemId" = ${itemId} AND "locationId" = ${locationId} FOR UPDATE`;
+    const balance = await tx.stockBalance.findUnique({
+      where: { tenantId_itemId_locationId: { tenantId, itemId, locationId } },
+    });
+    if (!balance || balance.quantity.lt(quantity))
+      throw new ConflictException('Insufficient stock');
+    return balance;
+  }
+  stockOut(tenantId: string, userId: string, dto: StockOutDto) {
+    const quantity = new StockDecimal(dto.quantity);
+    if (!quantity.gt(0)) throw new BadRequestException('Quantity must be greater than zero');
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const item = await this.lockItem(tx, tenantId, dto.itemId);
+        if (item.status !== 'ACTIVE')
+          throw new ConflictException('Inactive items cannot issue stock');
+        await this.requireLocations(tx, tenantId, [dto.locationId]);
+        await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+        const movement = await tx.stockMovement.create({
+          data: {
+            tenantId,
+            itemId: item.id,
+            locationId: dto.locationId,
+            unitOfMeasureId: item.unitOfMeasureId,
+            type: 'STOCK_OUT',
+            quantity,
+            unitCost: null,
+            totalCost: null,
+            date: new Date(dto.date),
+            purpose: dto.purpose,
+            recipient: dto.recipient,
+            reference: dto.reference,
+            notes: dto.notes,
+            createdBy: userId,
+          },
+        });
+        const balance = await tx.stockBalance.update({
+          where: {
+            tenantId_itemId_locationId: { tenantId, itemId: item.id, locationId: dto.locationId },
+          },
+          data: { quantity: { decrement: quantity } },
+        });
+        return { movement, balance };
+      }),
+    );
+  }
+  transfer(tenantId: string, userId: string, dto: StockTransferDto) {
+    if (dto.sourceLocationId === dto.destinationLocationId)
+      throw new BadRequestException('Source and destination must differ');
+    const quantity = new StockDecimal(dto.quantity);
+    if (!quantity.gt(0)) throw new BadRequestException('Quantity must be greater than zero');
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const item = await this.lockItem(tx, tenantId, dto.itemId);
+        if (item.status !== 'ACTIVE')
+          throw new ConflictException('Inactive items cannot transfer stock');
+        await this.requireLocations(tx, tenantId, [
+          dto.sourceLocationId,
+          dto.destinationLocationId,
+        ]);
+        await this.sourceBalance(tx, tenantId, item.id, dto.sourceLocationId, quantity);
+        const sourceBalance = await tx.stockBalance.update({
+          where: {
+            tenantId_itemId_locationId: {
+              tenantId,
+              itemId: item.id,
+              locationId: dto.sourceLocationId,
+            },
+          },
+          data: { quantity: { decrement: quantity } },
+        });
+        const destinationBalance = await tx.stockBalance.upsert({
+          where: {
+            tenantId_itemId_locationId: {
+              tenantId,
+              itemId: item.id,
+              locationId: dto.destinationLocationId,
+            },
+          },
+          create: { tenantId, itemId: item.id, locationId: dto.destinationLocationId, quantity },
+          update: { quantity: { increment: quantity } },
+        });
+        const transferId = randomUUID();
+        const data = {
+          tenantId,
+          itemId: item.id,
+          unitOfMeasureId: item.unitOfMeasureId,
+          quantity,
+          unitCost: null,
+          totalCost: null,
+          transferId,
+          date: new Date(dto.date),
+          reference: dto.reference,
+          notes: dto.notes,
+          createdBy: userId,
+        };
+        const out = await tx.stockMovement.create({
+          data: { ...data, type: 'TRANSFER_OUT', locationId: dto.sourceLocationId },
+        });
+        const incoming = await tx.stockMovement.create({
+          data: { ...data, type: 'TRANSFER_IN', locationId: dto.destinationLocationId },
+        });
+        return { transferId, movements: [out, incoming], sourceBalance, destinationBalance };
+      }),
+    );
+  }
   async balances(tenantId: string) {
     const rows = await this.prisma.stockBalance.findMany({
       where: { tenantId },
@@ -243,9 +366,9 @@ export class InventoryService {
       isLowStock: item.reorderLevel === null ? null : row.quantity.lte(item.reorderLevel),
     }));
   }
-  movements(tenantId: string) {
+  movements(tenantId: string, types?: StockMovementType[]) {
     return this.prisma.stockMovement.findMany({
-      where: { tenantId },
+      where: { tenantId, ...(types ? { type: { in: types } } : {}) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   }

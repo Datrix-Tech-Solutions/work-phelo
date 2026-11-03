@@ -11,8 +11,12 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
-import { PartialType, ApiProperty } from '@nestjs/swagger';
-import { InventoryItemStatus, StockLocationType } from '../prisma/generated/client';
+import { PartialType, PickType, ApiProperty } from '@nestjs/swagger';
+import {
+  InventoryItemStatus,
+  StockLocationType,
+  StockOutPurpose,
+} from '../prisma/generated/client';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const decimal = ({ value }: { value: unknown }) =>
@@ -121,4 +125,45 @@ export class StockInDto {
   @IsString()
   @MaxLength(4000)
   notes?: string | null;
+}
+
+export class StockOutDto extends PickType(StockInDto, [
+  'itemId',
+  'locationId',
+  'quantity',
+  'reference',
+  'notes',
+] as const) {
+  @ApiProperty({ example: '2026-11-02', description: 'ISO issue date or date-time' })
+  @IsDateString({ strict: true })
+  date!: string;
+
+  @ApiProperty({ enum: StockOutPurpose, description: 'Required for every stock issue' })
+  @IsEnum(StockOutPurpose)
+  purpose!: StockOutPurpose;
+
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  recipient?: string | null;
+}
+
+export class StockTransferDto extends PickType(StockInDto, [
+  'itemId',
+  'quantity',
+  'reference',
+  'notes',
+] as const) {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  sourceLocationId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  destinationLocationId!: string;
+
+  @ApiProperty({ example: '2026-11-02', description: 'ISO transfer date or date-time' })
+  @IsDateString({ strict: true })
+  date!: string;
 }

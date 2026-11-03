@@ -11,14 +11,18 @@ External prefix: `/api/v1/operations/inventory`; service prefix: `/api`.
 - `/categories`, `/units`, `/locations`: POST, GET; `/:id`: GET, PATCH, DELETE.
 - `/items`: POST, GET; `/items/:id`: GET, PATCH (including status/reorder level).
 - `/stock-in`: POST; `/stock-balances`, `/stock-movements`: GET.
+- `/stock-out`, `/stock-transfers`: POST.
 - DELETE returns 204; referenced categories, units and locations return 409.
 - Lists are deterministic arrays with no search/pagination contract in this batch.
 - Names/SKUs are trimmed, required and unique within the tenant (case-sensitive).
 
 Business controllers require fresh signed Gateway context, enabled Operations and
-the matching `operations.inventory.{categories|units|locations|items|stock-in}`
+the matching `operations.inventory.{categories|units|locations|items|stock-in|stock-out|transfers}`
 grant. Actions are VIEW/CREATE/EDIT/DELETE; items have no DELETE endpoint and
-stock-in uses CREATE/VIEW only. Balances require items:VIEW. No new feature flag.
+stock-in, stock-out and transfers use CREATE/VIEW only. Balances require items:VIEW.
+Shared movement history accepts any corresponding VIEW grant and returns only its
+movement types; tenant/super admins retain existing all-types access in their tenant.
+No new feature flag.
 Tenant and creator are derived from verified context, never request payloads.
 
 ## Receipts
@@ -38,6 +42,30 @@ unit changes after a balance exists return 409 because conversion is out of scop
 No idempotency key is defined in these stories: repeated successful POSTs record
 distinct receipts; clients must not blindly retry an ambiguous successful request.
 
+## Issues and Transfers
+
+`POST /stock-out` accepts itemId, locationId, quantity, date, purpose, and optional
+recipient/reference/notes. Purpose is required for EVERY issue in this first
+implementation (until Jira defines conditional rules): INTERNAL_USE, SALE,
+CONSUMPTION, PROJECT_USE, EMPLOYEE_ISSUE, DAMAGE or OTHER. Notes can describe OTHER;
+there is no separate reason table or approval flow. Date is a required ISO date/time.
+
+`POST /stock-transfers` accepts itemId, sourceLocationId, destinationLocationId,
+quantity, date, and optional reference/notes. Locations must differ. Both operations
+require an ACTIVE tenant-owned item and tenant-owned locations. Caller-supplied UOM,
+creator, tenant, costs and transferId are rejected.
+
+Item and source balance locks protect availability checks and balance mutations.
+Missing or insufficient stock returns 409 with no movement or quantity change.
+An issue creates one STOCK_OUT movement and decrements its balance transactionally.
+A transfer decrements source, upserts/increments destination, and records
+TRANSFER_OUT + TRANSFER_IN sharing a server-generated transferId in one transaction.
+Any failure rolls back all writes. Company-wide quantity is conserved on transfer.
+
+Movement quantities stay positive; type encodes direction. New movements capture
+the item's configured unit and keep unitCost/totalCost null: no valuation or posting.
+Stock In's existing dateReceived field and cost behavior are unchanged.
+
 ## Validation
 
 ```bash
@@ -56,5 +84,5 @@ applied. Never use DEV/PROD URLs for these tests.
 
 DEV deployment configuration is prepared; no deployment/migration against shared
 environments is performed here. PROD activation is separate. No RabbitMQ or Redis.
-Accounting posting, valuation methods (FIFO/LIFO/average), stock-out/transfers,
-adjustments, alerts, scheduled jobs and frontend work remain deferred.
+Accounting posting, valuation methods (FIFO/LIFO/average), adjustments, alerts,
+scheduled jobs and frontend work remain deferred. Transfers never post to Accounting.

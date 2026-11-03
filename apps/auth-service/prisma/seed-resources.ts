@@ -422,6 +422,16 @@ export const RESOURCES = [
     description: 'Inventory stock receipts and movement history',
   },
   {
+    name: 'operations.inventory.stock-out',
+    module: 'OPERATIONS',
+    description: 'Inventory stock issues and issue history',
+  },
+  {
+    name: 'operations.inventory.transfers',
+    module: 'OPERATIONS',
+    description: 'Inventory location transfers and transfer history',
+  },
+  {
     name: 'operations.reinsurance.dashboard',
     module: 'OPERATIONS',
     description: 'Reinsurance operations dashboard',
