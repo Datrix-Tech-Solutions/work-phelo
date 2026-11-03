@@ -11,28 +11,20 @@ import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { useStockPositions } from '@/hooks/inventory/useStockBalances';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 import { useCreateStockMovement } from '@/hooks/inventory/useStockMovements';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
+import { ADJUSTMENT_REASONS, STOCK_OUT_PURPOSES } from '@/lib/inventoryMovement';
+import {
+  useStockMovementDrafts,
+  type DraftFormValues,
+  type StockMovementDraft,
+} from '@/hooks/inventory/useStockMovementDrafts';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
-interface PanelFormValues {
-  reference: string;
-  date: string;
-  party: string;
-  /** The warehouse stock goes into (in), comes out of (out), or is sent from (transfer). */
-  warehouseId: string;
-  /** Transfers only: the warehouse the stock is sent to. */
-  toWarehouseId: string;
-  /** Stock out only: why the stock is issued. */
-  purpose: string;
-  /** Adjustments only. */
-  reason: string;
-  adjustmentType: AdjustmentDirection;
-  notes: string;
-}
-
+type PanelFormValues = DraftFormValues;
 interface LineRow {
   key: string;
   itemId: string;
@@ -69,29 +61,6 @@ const formatValue = (n: number) =>
   n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 type PanelType = 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'ADJUSTMENT';
-
-// Values are the inventory service's reason and purpose codes.
-const ADJUSTMENT_REASONS = [
-  { value: 'DAMAGE', label: 'Damage' },
-  { value: 'LOSS', label: 'Loss' },
-  { value: 'THEFT', label: 'Theft' },
-  { value: 'PHYSICAL_COUNT_DIFFERENCE', label: 'Physical Count Difference' },
-  { value: 'DATA_CORRECTION', label: 'Data Correction' },
-  { value: 'EXPIRED_GOODS', label: 'Expired Goods' },
-  { value: 'OTHER', label: 'Other' },
-];
-
-const STOCK_OUT_PURPOSES = [
-  { value: 'SALE', label: 'Sale' },
-  { value: 'INTERNAL_USE', label: 'Internal Use' },
-  { value: 'CONSUMPTION', label: 'Consumption' },
-  { value: 'PROJECT_USE', label: 'Project Use' },
-  { value: 'EMPLOYEE_ISSUE', label: 'Employee Issue' },
-  { value: 'DAMAGE', label: 'Damage' },
-  { value: 'OTHER', label: 'Other' },
-];
-
-type AdjustmentDirection = 'INCREASE' | 'DECREASE';
 
 const ADJUSTMENT_TYPE_OPTIONS = [
   {
@@ -169,9 +138,11 @@ interface StockMovementPanelProps {
   type: PanelType;
   isOpen: boolean;
   onClose: () => void;
+  /** A saved draft to continue; omit to start a new movement. */
+  draft?: StockMovementDraft | null;
 }
 
-export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanelProps) {
+export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMovementPanelProps) {
   const isOut = type === 'STOCK_OUT';
   const isTransfer = type === 'TRANSFER';
   const isAdjustment = type === 'ADJUSTMENT';
@@ -179,8 +150,13 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
   const toast = useToast();
   const { items } = useInventoryItems();
   const { warehouses } = useInventoryWarehouses();
+  const { positions } = useStockPositions();
   const { createMovement, isPending } = useCreateStockMovement();
-  const [lines, setLines] = useState<LineRow[]>(() => [newLine()]);
+  const { saveDraft, deleteDraft } = useStockMovementDrafts();
+  // The page remounts the panel per draft (keyed by draft id), so the lines start from the draft.
+  const [lines, setLines] = useState<LineRow[]>(() =>
+    draft?.lines.length ? draft.lines.map((l) => ({ ...l, key: newLine().key })) : [newLine()],
+  );
   const [showLineErrors, setShowLineErrors] = useState(false);
 
   const {
@@ -200,19 +176,29 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
 
   useEffect(() => {
     if (!isOpen) return;
-    reset(blankForm());
-  }, [isOpen, reset]);
+    reset(draft ? draft.form : blankForm());
+  }, [isOpen, draft, reset]);
 
+  // On-hand quantity of an item in one warehouse (not the total across warehouses).
+  const stockAt = (itemId: string, warehouseId: string) =>
+    positions.get(itemId)?.get(warehouseId) ?? 0;
+
+  // Taking stock out needs a source warehouse first, and only offers what that warehouse holds.
   const itemOptions = useMemo(
     () =>
       items
-        .filter((i) => i.status === 'ACTIVE' && (!drawsStock || i.currentStock > 0))
+        .filter(
+          (i) =>
+            i.status === 'ACTIVE' &&
+            (!drawsStock || (!!sourceWarehouseId && stockAt(i.id, sourceWarehouseId) > 0)),
+        )
         .map((i) => ({
           value: i.id,
           label: i.name,
-          sublabel: drawsStock ? `${i.sku} · ${i.currentStock} in stock` : i.sku,
+          sublabel: drawsStock ? `${i.sku} · ${stockAt(i.id, sourceWarehouseId)} in stock` : i.sku,
         })),
-    [items, drawsStock],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, drawsStock, positions, sourceWarehouseId],
   );
   const warehouseOptions = useMemo(
     () =>
@@ -227,10 +213,12 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
   const updateLine = (key: string, patch: Partial<LineRow>) =>
     setLines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
-  // Picking an item fills in its purchase cost, which can still be changed.
+  // Picking an item fills in its price, which can still be changed: the selling price when
+  // stock goes out to a customer, the purchase cost otherwise.
   const pickItem = (key: string, itemId: string) => {
-    const cost = items.find((i) => i.id === itemId)?.costPrice ?? 0;
-    updateLine(key, { itemId, unitCost: cost });
+    const item = items.find((i) => i.id === itemId);
+    const price = (isOut ? item?.sellingPrice : item?.costPrice) ?? 0;
+    updateLine(key, { itemId, unitCost: price });
   };
 
   const handleClose = () => {
@@ -250,11 +238,24 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
     },
   });
 
-  // Stock out can't issue more than is on hand (stock is tracked as a total per item for now).
+  // Stock leaving a warehouse can't exceed what that warehouse holds.
   const stockError = (l: LineRow) => {
-    if (!drawsStock || !l.itemId) return undefined;
-    const available = items.find((i) => i.id === l.itemId)?.currentStock ?? 0;
+    if (!drawsStock || !l.itemId || !sourceWarehouseId) return undefined;
+    const available = stockAt(l.itemId, sourceWarehouseId);
+    if (available <= 0) return 'Not in stock at this warehouse';
     return l.quantity > available ? `Only ${available} in stock` : undefined;
+  };
+
+  // Changing the source warehouse drops items the new one doesn't hold.
+  const changeSourceWarehouse = (warehouseId: string) => {
+    if (!drawsStock) return;
+    setLines((rows) =>
+      rows.map((l) =>
+        l.itemId && stockAt(l.itemId, warehouseId) <= 0
+          ? { ...l, itemId: '', quantity: 0, unitCost: 0 }
+          : l,
+      ),
+    );
   };
 
   const save = async (data: PanelFormValues) => {
@@ -280,8 +281,28 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
       purpose: isOut ? data.purpose : null,
       notes: data.notes.trim() || null,
     });
+    if (draft) deleteDraft(draft.id);
     toast.success(copy.toast);
     entry.finishSave({ title: copy.promptTitle, message: copy.promptMessage }, handleClose);
+  };
+
+  // Drafts skip validation and stay in this browser; nothing reaches the service.
+  const handleSaveDraft = () => {
+    saveDraft({
+      id: draft?.id,
+      type,
+      form: getValues(),
+      lines: lines.map(({ itemId, quantity, unitCost }) => ({ itemId, quantity, unitCost })),
+    });
+    toast.success('Draft saved');
+    handleClose();
+  };
+
+  const handleDeleteDraft = () => {
+    if (!draft) return;
+    deleteDraft(draft.id);
+    toast.success('Draft deleted');
+    handleClose();
   };
 
   const onSubmit = async (data: PanelFormValues) => {
@@ -296,17 +317,27 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title={copy.title}
+      title={draft ? `${copy.title} (Draft)` : copy.title}
       description={copy.description}
       {...entry.panelProps}
       footer={
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            {copy.save}
-          </Button>
+        <div className={cn('flex gap-3', draft ? 'justify-between' : 'justify-end')}>
+          {draft && (
+            <Button variant="danger" onClick={handleDeleteDraft} disabled={isPending}>
+              Delete Draft
+            </Button>
+          )}
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={handleClose} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={handleSaveDraft} disabled={isPending}>
+              Save Draft
+            </Button>
+            <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
+              {copy.save}
+            </Button>
+          </div>
         </div>
       }
     >
@@ -353,7 +384,10 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
                       placeholder="Select warehouse"
                       options={warehouseOptions}
                       value={field.value}
-                      onChange={field.onChange}
+                      onChange={(v) => {
+                        field.onChange(v);
+                        changeSourceWarehouse(v);
+                      }}
                       error={fieldState.error?.message}
                     />
                   )}
@@ -423,6 +457,7 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
                     value={field.value}
                     onChange={(v) => {
                       field.onChange(v);
+                      changeSourceWarehouse(v);
                       if (v === getValues('toWarehouseId')) setValue('toWarehouseId', '');
                     }}
                     error={fieldState.error?.message}
@@ -474,7 +509,10 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
                     placeholder="Select warehouse"
                     options={warehouseOptions}
                     value={field.value}
-                    onChange={field.onChange}
+                    onChange={(v) => {
+                      field.onChange(v);
+                      changeSourceWarehouse(v);
+                    }}
                     error={fieldState.error?.message}
                   />
                 )}
@@ -529,27 +567,37 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
               {lines.map((line) => (
                 <div key={line.key} className={cn(LINE_GRID, 'items-start px-2.5 py-2')}>
                   <SearchSelect
-                    placeholder="Select item…"
+                    placeholder={
+                      drawsStock && !sourceWarehouseId ? 'Select a warehouse first' : 'Select item…'
+                    }
+                    disabled={drawsStock && !sourceWarehouseId}
                     options={itemOptions}
                     value={line.itemId}
                     onChange={(v) => pickItem(line.key, v)}
                     error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
                   />
-                  <NumberField
-                    ariaLabel="Quantity"
-                    className="w-full py-2"
-                    placeholder="0"
-                    decimals={4}
-                    value={line.quantity}
-                    onChange={(v) => updateLine(line.key, { quantity: v })}
-                    error={
-                      showLineErrors
-                        ? line.quantity <= 0
-                          ? 'Enter a quantity'
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <NumberField
+                      ariaLabel="Quantity"
+                      className="w-full py-2"
+                      placeholder="0"
+                      decimals={4}
+                      value={line.quantity}
+                      onChange={(v) => updateLine(line.key, { quantity: v })}
+                      error={
+                        line.quantity <= 0
+                          ? showLineErrors
+                            ? 'Enter a quantity'
+                            : undefined
                           : stockError(line)
-                        : undefined
-                    }
-                  />
+                      }
+                    />
+                    {drawsStock && line.itemId && sourceWarehouseId && !stockError(line) && (
+                      <span className="text-xs text-gray-500">
+                        Max: {stockAt(line.itemId, sourceWarehouseId)}
+                      </span>
+                    )}
+                  </div>
                   <NumberField
                     ariaLabel="Unit cost"
                     className="w-full py-2"
@@ -589,7 +637,7 @@ export function StockMovementPanel({ type, isOpen, onClose }: StockMovementPanel
               variant="outline"
               onClick={() => setLines((r) => [...r, newLine()])}
             >
-              Add Line
+              Add Item
             </Button>
             <div className="text-sm text-gray-600">
               Total{' '}

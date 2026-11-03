@@ -1,5 +1,9 @@
-import { Transform } from 'class-transformer';
+import { applyDecorators } from '@nestjs/common';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsDecimal,
   IsEnum,
@@ -10,6 +14,7 @@ import {
   Matches,
   MaxLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { PartialType, PickType, ApiProperty } from '@nestjs/swagger';
 import {
@@ -263,4 +268,71 @@ export class StockTransferDto extends PickType(StockInDto, [
   @ApiProperty({ example: '2026-11-02', description: 'ISO transfer date or date-time' })
   @IsDateString({ strict: true })
   date!: string;
+}
+
+// Batches: several items saved together as one movement. Every line is applied in one database
+// transaction, so either all of them post or none do, and they share a batchId.
+export const MAX_BATCH_LINES = 100;
+
+const batchLines = (line: new () => object) =>
+  applyDecorators(
+    ApiProperty({ type: [line], minItems: 1, maxItems: MAX_BATCH_LINES }),
+    IsArray(),
+    ArrayMinSize(1),
+    ArrayMaxSize(MAX_BATCH_LINES),
+    ValidateNested({ each: true }),
+    Type(() => line),
+  );
+
+export class StockInLineDto extends PickType(StockInDto, [
+  'itemId',
+  'quantity',
+  'unitCost',
+] as const) {}
+export class StockInBatchDto extends PickType(StockInDto, [
+  'locationId',
+  'dateReceived',
+  'source',
+  'supplier',
+  'reference',
+  'notes',
+] as const) {
+  @batchLines(StockInLineDto)
+  lines!: StockInLineDto[];
+}
+
+export class StockLineDto extends PickType(StockInDto, ['itemId', 'quantity'] as const) {}
+export class StockOutBatchDto extends PickType(StockOutDto, [
+  'locationId',
+  'date',
+  'purpose',
+  'recipient',
+  'reference',
+  'notes',
+] as const) {
+  @batchLines(StockLineDto)
+  lines!: StockLineDto[];
+}
+
+export class StockTransferBatchDto extends PickType(StockTransferDto, [
+  'sourceLocationId',
+  'destinationLocationId',
+  'date',
+  'reference',
+  'notes',
+] as const) {
+  @batchLines(StockLineDto)
+  lines!: StockLineDto[];
+}
+
+export class StockAdjustmentBatchDto extends PickType(StockAdjustmentDto, [
+  'locationId',
+  'type',
+  'reason',
+  'date',
+  'reference',
+  'notes',
+] as const) {
+  @batchLines(StockLineDto)
+  lines!: StockLineDto[];
 }

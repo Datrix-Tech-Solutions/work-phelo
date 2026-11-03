@@ -181,6 +181,7 @@ model StockMovement {
   recipient        String?
   purpose          StockOutPurpose?
   transferId       String?
+  batchId          String?
   adjustmentReason StockAdjustmentReason?
   createdBy        String
   createdAt        DateTime               @default(now())
@@ -193,5 +194,6 @@ model StockMovement {
   @@index([tenantId, locationId])
   @@index([tenantId, unitOfMeasureId])
   @@index([tenantId, transferId])
+  @@index([tenantId, batchId])
   @@schema("inventory")
 }

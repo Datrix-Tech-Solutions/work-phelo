@@ -2,20 +2,23 @@
 
 import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Avatar } from '@/components/atoms/Avatar';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { TableButton } from '@/components/atoms/TableButton';
+import { EditItemValueModal } from '@/components/organisms/inventory/EditItemValueModal';
+import { EditReorderLevelModal } from '@/components/organisms/inventory/EditReorderLevelModal';
 import { ItemPanel } from '@/components/organisms/inventory/ItemPanel';
 import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
+import { useStockPositions } from '@/hooks/inventory/useStockBalances';
 import { useInventoryUnits } from '@/hooks/inventory/useInventoryUnits';
 import { useToast } from '@/hooks/useToast';
+import { formatInventoryValue } from '@/lib/inventoryCurrency';
 import { pageHeader, pageContent } from '@/lib/layout';
 import {
   useInventoryItems,
   useDeleteInventoryItem,
-  getItemValue,
   getStockStatus,
   type InventoryItem,
   type InventoryStockStatus,
@@ -34,8 +37,6 @@ const STATUS_BADGE: Record<
 };
 
 const formatNumber = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
-const formatValue = (n: number) =>
-  n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function InventoryItemsPage() {
   const [search, setSearch] = useState('');
@@ -44,6 +45,8 @@ export default function InventoryItemsPage() {
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [valueTarget, setValueTarget] = useState<InventoryItem | null>(null);
+  const [reorderTarget, setReorderTarget] = useState<InventoryItem | null>(null);
   const [editTarget, setEditTarget] = useState<InventoryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
   const toast = useToast();
@@ -52,6 +55,12 @@ export default function InventoryItemsPage() {
   const { categories } = useInventoryCategories();
   const { units } = useInventoryUnits();
   const { warehouses } = useInventoryWarehouses();
+  const { positions } = useStockPositions();
+
+  // With a warehouse selected, stock and value are that warehouse's; the status below still
+  // judges the item's total, because a reorder level is set per item, not per warehouse.
+  const shownStock = (i: InventoryItem) =>
+    warehouseFilter ? (positions.get(i.id)?.get(warehouseFilter) ?? 0) : i.currentStock;
 
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? '—';
   const unitName = (id: string) => units.find((u) => u.id === id)?.name ?? '—';
@@ -75,7 +84,17 @@ export default function InventoryItemsPage() {
       key: 'item',
       label: 'Item',
       width: 'minmax(180px, 2fr)',
-      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+      render: (row) => (
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Avatar name={row.name} avatarUrl={row.imageUrl} size="sm" />
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="font-bold text-gray-900 truncate">{row.name}</span>
+            <span className="text-xs font-bold text-gray-500 truncate">
+              {categoryName(row.categoryId)}
+            </span>
+          </div>
+        </div>
+      ),
     },
     {
       key: 'sku',
@@ -84,33 +103,32 @@ export default function InventoryItemsPage() {
       render: (row) => <span className="text-sm text-gray-600 font-mono">{row.sku}</span>,
     },
     {
-      key: 'category',
-      label: 'Category',
-      width: '140px',
-      render: (row) => (
-        <span className="text-sm text-gray-600">{categoryName(row.categoryId)}</span>
-      ),
-    },
-    {
       key: 'unit',
       label: 'Unit',
       width: '70px',
-      render: (row) => <span className="text-sm text-gray-600">{unitName(row.unitId)}</span>,
+      render: (row) => (
+        <span className="text-sm font-semibold text-gray-600">{unitName(row.unitId)}</span>
+      ),
     },
     {
       key: 'currentStock',
       label: 'Current Stock',
-      width: '130px',
+      width: '100px',
       render: (row) => (
-        <span className="text-sm text-gray-900">{formatNumber(row.currentStock)}</span>
+        <div className="flex flex-col leading-tight">
+          <span className="text-sm font-bold text-gray-900">{formatNumber(shownStock(row))}</span>
+          {warehouseFilter && (
+            <span className="text-xs text-gray-500">of {formatNumber(row.currentStock)}</span>
+          )}
+        </div>
       ),
     },
     {
       key: 'reorderLevel',
       label: 'Reorder Level',
-      width: '130px',
+      width: '100px',
       render: (row) => (
-        <span className="text-sm text-gray-600">
+        <span className="text-sm font-extrabold text-gray-600">
           {row.reorderLevel === null ? '—' : formatNumber(row.reorderLevel)}
         </span>
       ),
@@ -118,34 +136,22 @@ export default function InventoryItemsPage() {
     {
       key: 'value',
       label: 'Value',
-      width: '130px',
+      width: '150px',
+      className: 'text-right pr-4',
       render: (row) => (
-        <span className="text-sm text-gray-900">{formatValue(getItemValue(row))}</span>
+        <span className="text-sm font-semibold text-gray-900">
+          {formatInventoryValue(shownStock(row) * (row.costPrice ?? 0))}
+        </span>
       ),
     },
     {
       key: 'status',
       label: 'Status',
-      width: '80px',
+      width: '100px',
       render: (row) => {
         const { label, variant } = STATUS_BADGE[getStockStatus(row)];
         return <Badge variant={variant} label={label} />;
       },
-    },
-    {
-      key: 'actions',
-      label: 'Actions',
-      width: 'minmax(130px, auto)',
-      render: (row) => (
-        <div className="flex items-center gap-3.5" onClick={(e) => e.stopPropagation()}>
-          <TableButton variant="blue" onClick={() => setEditTarget(row)}>
-            Edit
-          </TableButton>
-          <TableButton variant="red" onClick={() => setDeleteTarget(row)}>
-            Delete
-          </TableButton>
-        </div>
-      ),
     },
   ];
 
@@ -170,6 +176,12 @@ export default function InventoryItemsPage() {
       <div className={`${pageContent} flex flex-col`}>
         <DataTable
           columns={columns}
+          rowActions={(row) => [
+            { label: 'Edit', onClick: () => setEditTarget(row) },
+            { label: 'Edit Value', onClick: () => setValueTarget(row) },
+            { label: 'Edit Reorder Level', onClick: () => setReorderTarget(row) },
+            { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
+          ]}
           data={rows}
           isLoading={isLoading}
           emptyMessage="No inventory items found"
@@ -241,6 +253,16 @@ export default function InventoryItemsPage() {
           setEditTarget(null);
         }}
         item={editTarget}
+      />
+      <EditItemValueModal
+        key={`value-${valueTarget?.id ?? 'none'}`}
+        item={valueTarget}
+        onClose={() => setValueTarget(null)}
+      />
+      <EditReorderLevelModal
+        key={`reorder-${reorderTarget?.id ?? 'none'}`}
+        item={reorderTarget}
+        onClose={() => setReorderTarget(null)}
       />
       <DeleteInventoryRecordModal
         kind="Item"

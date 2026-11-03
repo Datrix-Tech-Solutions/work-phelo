@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { TableButton } from '@/components/atoms/TableButton';
 import {
   useInventoryWarehouses,
   useDeleteInventoryWarehouse,
+  LOCATION_TYPE_LABEL,
+  type InventoryLocationType,
   type InventoryWarehouse,
 } from '@/hooks/inventory/useInventoryWarehouses';
 import { WarehouseModal } from '@/components/organisms/inventory/WarehouseModal';
@@ -16,12 +20,22 @@ import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
 
+const LOCATION_TYPE_COLOR: Record<InventoryLocationType, TypeChipColor> = {
+  WAREHOUSE: 'blue',
+  STORE: 'green',
+  BRANCH: 'purple',
+  OFFICE_STORE: 'teal',
+  OTHER: 'gray',
+};
+
 export default function InventoryWarehousesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<InventoryWarehouse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InventoryWarehouse | null>(null);
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const toast = useToast();
   const { deleteWarehouse } = useDeleteInventoryWarehouse();
 
@@ -39,30 +53,30 @@ export default function InventoryWarehousesPage() {
       key: 'name',
       label: 'Location Name',
       width: 'minmax(160px, 1fr)',
-      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+      render: (row) => <span className="font-semibold text-gray-900">{row.name}</span>,
     },
     {
       key: 'code',
       label: 'Code',
       width: '110px',
-      render: (row) => <span className="text-sm text-gray-600">{row.code}</span>,
+      render: (row) => <span className="text-sm font-semibold text-gray-500">{row.code}</span>,
     },
     {
-      key: 'address',
-      label: 'Address',
-      width: 'minmax(200px, 2fr)',
-      className: 'overflow-hidden min-w-0 pr-4',
+      key: 'type',
+      label: 'Type',
+      width: 'minmax(140px, 1fr)',
       render: (row) => (
-        <span className="text-sm text-gray-500 block truncate" title={row.address ?? undefined}>
-          {row.address || <span className="text-gray-400 italic">No address</span>}
-        </span>
+        <TypeChip
+          label={LOCATION_TYPE_LABEL[row.type] ?? row.type}
+          color={LOCATION_TYPE_COLOR[row.type] ?? 'gray'}
+        />
       ),
     },
     {
       key: 'itemCount',
       label: 'No. of Items',
       width: '120px',
-      render: (row) => <span className="text-sm text-gray-600">{row.itemCount}</span>,
+      render: (row) => <span className="text-sm font-bold text-gray-900">{row.itemCount}</span>,
     },
     {
       key: 'status',
@@ -80,7 +94,7 @@ export default function InventoryWarehousesPage() {
       label: 'Actions',
       width: 'minmax(160px, auto)',
       render: (row) => (
-        <div className="flex items-center gap-3.5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
           <TableButton variant="blue" onClick={() => setEditTarget(row)}>
             Edit
           </TableButton>
@@ -121,6 +135,9 @@ export default function InventoryWarehousesPage() {
           setSearch(q);
           setPage(1);
         }}
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/operations/inventory/settings/warehouses/${row.id}`)
+        }
         actionButton={{ label: 'Add Warehouse', onClick: () => setModalOpen(true) }}
         currentPage={page}
         totalPages={totalPages}

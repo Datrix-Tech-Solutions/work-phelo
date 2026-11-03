@@ -2,20 +2,30 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryApi, inventoryKeys } from '@/hooks/inventory/inventoryApi';
 
+/** Location types the inventory service accepts. */
+export type InventoryLocationType = 'WAREHOUSE' | 'STORE' | 'BRANCH' | 'OFFICE_STORE' | 'OTHER';
+
+export const LOCATION_TYPE_LABEL: Record<InventoryLocationType, string> = {
+  WAREHOUSE: 'Warehouse',
+  STORE: 'Store',
+  BRANCH: 'Branch Store',
+  OFFICE_STORE: 'Office Store',
+  OTHER: 'Other',
+};
+
 export interface InventoryWarehouse {
   id: string;
   name: string;
   code: string;
+  type: InventoryLocationType;
   address: string | null;
   /** Items with a stock balance row here, including zero-quantity rows. */
   itemCount: number;
   status: 'ACTIVE' | 'INACTIVE';
 }
 
-export type NewInventoryWarehouse = Pick<
-  InventoryWarehouse,
-  'name' | 'code' | 'address' | 'status'
->;
+/** What the service accepts when saving a location. */
+export type NewInventoryWarehouse = Pick<InventoryWarehouse, 'name' | 'code' | 'type' | 'status'>;
 
 interface ApiLocation extends Omit<InventoryWarehouse, 'itemCount'> {
   itemCount?: number;
@@ -33,8 +43,6 @@ export function useInventoryWarehouses() {
   return { warehouses, isLoading };
 }
 
-// The UI has no location type yet; the service defaults new locations to WAREHOUSE and never
-// resets the type on update.
 export function useCreateInventoryWarehouse() {
   const queryClient = useQueryClient();
   const m = useMutation({

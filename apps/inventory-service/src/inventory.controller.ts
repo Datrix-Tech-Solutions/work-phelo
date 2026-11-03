@@ -31,6 +31,10 @@ import {
   ItemDto,
   UpdateItemDto,
   StockInDto,
+  StockInBatchDto,
+  StockOutBatchDto,
+  StockTransferBatchDto,
+  StockAdjustmentBatchDto,
   StockOutDto,
   StockTransferDto,
   StockAdjustmentDto,
@@ -200,15 +204,30 @@ export class StockController {
   receive(@Req() req: UserRequest, @Body() dto: StockInDto) {
     return this.service.stockIn(req.user.tenantId, req.user.id, dto);
   }
+  @Post('stock-in-batches')
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  receiveBatch(@Req() req: UserRequest, @Body() dto: StockInBatchDto) {
+    return this.service.stockInBatch(req.user.tenantId, req.user.id, dto);
+  }
   @Post('stock-out')
   @RequirePermissions('operations.inventory.stock-out:CREATE')
   issue(@Req() req: UserRequest, @Body() dto: StockOutDto) {
     return this.service.stockOut(req.user.tenantId, req.user.id, dto);
   }
+  @Post('stock-out-batches')
+  @RequirePermissions('operations.inventory.stock-out:CREATE')
+  issueBatch(@Req() req: UserRequest, @Body() dto: StockOutBatchDto) {
+    return this.service.stockOutBatch(req.user.tenantId, req.user.id, dto);
+  }
   @Post('stock-transfers')
   @RequirePermissions('operations.inventory.transfers:CREATE')
   transfer(@Req() req: UserRequest, @Body() dto: StockTransferDto) {
     return this.service.transfer(req.user.tenantId, req.user.id, dto);
+  }
+  @Post('stock-transfer-batches')
+  @RequirePermissions('operations.inventory.transfers:CREATE')
+  transferBatch(@Req() req: UserRequest, @Body() dto: StockTransferBatchDto) {
+    return this.service.transferBatch(req.user.tenantId, req.user.id, dto);
   }
   @Get('stock-balances')
   @RequirePermissions('operations.inventory.items:VIEW')
@@ -219,6 +238,11 @@ export class StockController {
   @RequirePermissions('operations.inventory.adjustments:CREATE')
   adjust(@Req() req: UserRequest, @Body() dto: StockAdjustmentDto) {
     return this.service.adjust(req.user.tenantId, req.user.id, dto);
+  }
+  @Post('stock-adjustment-batches')
+  @RequirePermissions('operations.inventory.adjustments:CREATE')
+  adjustBatch(@Req() req: UserRequest, @Body() dto: StockAdjustmentBatchDto) {
+    return this.service.adjustBatch(req.user.tenantId, req.user.id, dto);
   }
   @Get('stock-movements')
   @RequireAnyPermission(
