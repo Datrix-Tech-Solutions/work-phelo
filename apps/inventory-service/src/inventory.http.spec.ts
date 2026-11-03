@@ -9,7 +9,7 @@ import { AppModule } from './app.module';
 import { configureApplication } from './app.setup';
 import { PrismaService } from './prisma/prisma.service';
 import { InventoryService } from './inventory.service';
-import { StockOutPurpose } from '../prisma/generated/client';
+import { StockOutPurpose, StockAdjustmentReason } from '../prisma/generated/client';
 
 describe('Inventory HTTP authorization and validation', () => {
   let app: INestApplication<Server>;
@@ -26,6 +26,8 @@ describe('Inventory HTTP authorization and validation', () => {
     stockOut: jest.fn().mockResolvedValue({ movement: { id } }),
     transfer: jest.fn().mockResolvedValue({ transferId: id }),
     movements: jest.fn().mockResolvedValue([]),
+    adjust: jest.fn().mockResolvedValue({ movement: { id } }),
+    balances: jest.fn().mockResolvedValue([]),
   };
   function headers(permission: string | string[], tenantId = 'tenant-a', enabled = true) {
     const token = jwt.sign({ sub: 'user-a', tenantId }, secret);
@@ -238,6 +240,104 @@ describe('Inventory HTTP authorization and validation', () => {
       'user-a',
       expect.objectContaining({ quantity: '1.25', unitCost: '0.1' }),
     );
+  });
+
+  const adjustment = {
+    itemId: id,
+    locationId: id,
+    quantity: '1',
+    date: '2026-11-03',
+    type: 'INCREASE',
+    reason: 'DATA_CORRECTION',
+  };
+  it('requires authentication, CREATE permission and Operations for adjustments', async () => {
+    await request(app.getHttpServer()).post('/api/stock-adjustments').send(adjustment).expect(401);
+    await request(app.getHttpServer())
+      .post('/api/stock-adjustments')
+      .set(headers(''))
+      .send(adjustment)
+      .expect(403);
+    await request(app.getHttpServer())
+      .post('/api/stock-adjustments')
+      .set(headers('operations.inventory.adjustments:CREATE', 'tenant-a', false))
+      .send(adjustment)
+      .expect(403);
+    expect(service.adjust).not.toHaveBeenCalled();
+  });
+  it.each(Object.values(StockAdjustmentReason))('accepts adjustment reason %s', async (reason) => {
+    for (const type of ['INCREASE', 'DECREASE']) {
+      await request(app.getHttpServer())
+        .post('/api/stock-adjustments')
+        .set(headers('operations.inventory.adjustments:CREATE', 'tenant-b'))
+        .send({ ...adjustment, type, reason })
+        .expect(201);
+      expect(service.adjust).toHaveBeenLastCalledWith(
+        'tenant-b',
+        'user-a',
+        expect.objectContaining({ type, reason }),
+      );
+    }
+  });
+  it.each([
+    { reason: undefined },
+    { reason: null },
+    { reason: 'INVALID' },
+    { type: undefined },
+    { type: 'STOCK_IN' },
+    { type: null },
+    { quantity: '0' },
+    { quantity: '-1' },
+    { quantity: '1.00001' },
+    { date: undefined },
+    { date: '2026-02-30' },
+    { unitOfMeasureId: id },
+    { unitCost: '1' },
+    { tenantId: 'spoof' },
+    { createdBy: 'spoof' },
+  ])('rejects invalid adjustment payload %j', async (extra) => {
+    await request(app.getHttpServer())
+      .post('/api/stock-adjustments')
+      .set(headers('operations.inventory.adjustments:CREATE'))
+      .send({ ...adjustment, ...extra })
+      .expect(400);
+    expect(service.adjust).not.toHaveBeenCalled();
+  });
+  it('requires items VIEW for balance reporting and validates status', async () => {
+    await request(app.getHttpServer()).get('/api/stock-balances').set(headers('')).expect(403);
+    for (const status of ['LOW_STOCK', 'OUT_OF_STOCK']) {
+      await request(app.getHttpServer())
+        .get('/api/stock-balances?status=' + status)
+        .set(headers('operations.inventory.items:VIEW', 'tenant-b'))
+        .expect(200);
+      expect(service.balances).toHaveBeenLastCalledWith('tenant-b', status);
+    }
+    await request(app.getHttpServer())
+      .get('/api/stock-balances')
+      .set(headers('operations.inventory.items:VIEW'))
+      .expect(200);
+    expect(service.balances).toHaveBeenLastCalledWith('tenant-a', undefined);
+    service.balances.mockClear();
+    await request(app.getHttpServer())
+      .get('/api/stock-balances?status=INVALID')
+      .set(headers('operations.inventory.items:VIEW'))
+      .expect(400);
+    expect(service.balances).not.toHaveBeenCalled();
+  });
+  it('includes only adjustment history with adjustments VIEW, not CREATE', async () => {
+    await request(app.getHttpServer())
+      .get('/api/stock-movements')
+      .set(headers('operations.inventory.adjustments:VIEW'))
+      .expect(200);
+    expect(service.movements).toHaveBeenCalledWith('tenant-a', [
+      'ADJUSTMENT_INCREASE',
+      'ADJUSTMENT_DECREASE',
+    ]);
+    service.movements.mockClear();
+    await request(app.getHttpServer())
+      .get('/api/stock-movements')
+      .set(headers('operations.inventory.adjustments:CREATE'))
+      .expect(403);
+    expect(service.movements).not.toHaveBeenCalled();
   });
 
   const issue = {

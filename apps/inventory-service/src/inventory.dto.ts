@@ -16,6 +16,7 @@ import {
   InventoryItemStatus,
   StockLocationType,
   StockOutPurpose,
+  StockAdjustmentReason,
 } from '../prisma/generated/client';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -147,6 +148,43 @@ export class StockOutDto extends PickType(StockInDto, [
   @IsString()
   @MaxLength(150)
   recipient?: string | null;
+}
+
+export enum StockAdjustmentType {
+  INCREASE = 'INCREASE',
+  DECREASE = 'DECREASE',
+}
+
+export enum StockBalanceStatus {
+  LOW_STOCK = 'LOW_STOCK',
+  OUT_OF_STOCK = 'OUT_OF_STOCK',
+}
+
+export class StockBalanceQueryDto {
+  @ApiProperty({ required: false, enum: StockBalanceStatus })
+  @IsOptional()
+  @IsEnum(StockBalanceStatus)
+  status?: StockBalanceStatus;
+}
+
+export class StockAdjustmentDto extends PickType(StockInDto, [
+  'itemId',
+  'locationId',
+  'quantity',
+  'reference',
+  'notes',
+] as const) {
+  @ApiProperty({ enum: StockAdjustmentType })
+  @IsEnum(StockAdjustmentType)
+  type!: StockAdjustmentType;
+
+  @ApiProperty({ enum: StockAdjustmentReason })
+  @IsEnum(StockAdjustmentReason)
+  reason!: StockAdjustmentReason;
+
+  @ApiProperty({ example: '2026-11-03', description: 'ISO adjustment date or date-time' })
+  @IsDateString({ strict: true })
+  date!: string;
 }
 
 export class StockTransferDto extends PickType(StockInDto, [

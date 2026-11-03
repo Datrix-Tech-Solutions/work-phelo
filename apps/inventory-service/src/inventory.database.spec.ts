@@ -207,7 +207,7 @@ localTests('Inventory PostgreSQL integrity and transactions', () => {
   it('derives low-stock state per location only when configured and prevents reinterpreting balances in another unit', async () => {
     const created = await item();
     await receive(created.id, '1');
-    expect((await service.balances(tenant))[0].isLowStock).toBeNull();
+    expect((await service.balances(tenant))[0].isLowStock).toBe(false);
     await service.updateItem(tenant, created.id, { reorderLevel: '1' });
     expect((await service.balances(tenant))[0].isLowStock).toBe(true);
     const other = await service.createLocation(tenant, { name: 'Other', type: 'STORE' });

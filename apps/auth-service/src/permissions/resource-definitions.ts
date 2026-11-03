@@ -421,6 +421,11 @@ export const RESOURCES = [
     description: 'Inventory location transfers and transfer history',
   },
   {
+    name: 'operations.inventory.adjustments',
+    module: 'OPERATIONS',
+    description: 'Inventory stock adjustments and adjustment history',
+  },
+  {
     name: 'operations.reinsurance.dashboard',
     module: 'OPERATIONS',
     description: 'Reinsurance operations dashboard',
