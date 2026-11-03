@@ -2,29 +2,60 @@
 
 import type { ChangeEvent } from 'react';
 import { useEffect } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { StatusRadioGroup } from '@/components/atoms/StatusRadioGroup';
 import { FormField } from '@/components/molecules/shared/FormField';
 import {
   useCreateInventoryWarehouse,
   useUpdateInventoryWarehouse,
+  type InventoryLocationType,
   type InventoryWarehouse,
 } from '@/hooks/inventory/useInventoryWarehouses';
+import { useInventoryModuleUsers } from '@/hooks/inventory/useInventoryModuleUsers';
+import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { suggestTransactionTypeCode } from '@/lib/accounting/transactionTypeCode';
 import { extractError } from '@/lib/extractError';
 
+type FormLocationType = InventoryLocationType | 'TRANSIT';
+
+// "Transit Location" is offered in the form, but the service has no such type yet, so it is saved
+// as Other until the service adds it.
+const LOCATION_TYPE_OPTIONS: { value: FormLocationType; label: string }[] = [
+  { value: 'WAREHOUSE', label: 'Warehouse' },
+  { value: 'STORE', label: 'Store' },
+  { value: 'BRANCH', label: 'Branch Store' },
+  { value: 'OFFICE_STORE', label: 'Office Store' },
+  { value: 'TRANSIT', label: 'Transit Location' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+const toApiType = (t: FormLocationType): InventoryLocationType => (t === 'TRANSIT' ? 'OTHER' : t);
+
 interface WarehouseFormValues {
   name: string;
   code: string;
-  address: string;
+  type: FormLocationType;
+  /** Not saved yet: the service has no field for branch, manager or description. */
+  branchId: string;
+  managerId: string;
+  description: string;
   status: 'ACTIVE' | 'INACTIVE';
 }
 
-const FORM_DEFAULTS: WarehouseFormValues = { name: '', code: '', address: '', status: 'ACTIVE' };
+const FORM_DEFAULTS: WarehouseFormValues = {
+  name: '',
+  code: '',
+  type: 'WAREHOUSE',
+  branchId: '',
+  managerId: '',
+  description: '',
+  status: 'ACTIVE',
+};
 
 interface WarehouseModalProps {
   isOpen: boolean;
@@ -38,6 +69,8 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
   const isEditing = !!warehouse;
   const { createWarehouse, isPending } = useCreateInventoryWarehouse();
   const { updateWarehouse } = useUpdateInventoryWarehouse();
+  const { data: branches = [] } = useBranchOptions(isOpen);
+  const { users: managers } = useInventoryModuleUsers();
 
   const {
     register,
@@ -56,7 +89,10 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
         ? {
             name: warehouse.name,
             code: warehouse.code,
-            address: warehouse.address ?? '',
+            type: warehouse.type,
+            branchId: '',
+            managerId: '',
+            description: '',
             status: warehouse.status,
           }
         : FORM_DEFAULTS,
@@ -81,7 +117,7 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
     const values = {
       name: data.name.trim(),
       code: data.code.trim(),
-      address: data.address.trim() || null,
+      type: toApiType(data.type),
       status: data.status,
     };
     if (warehouse) {
@@ -160,15 +196,65 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
           />
         </div>
 
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="flex-1 min-w-0">
+            <Controller
+              control={control}
+              name="type"
+              rules={{ required: 'Select a location type' }}
+              render={({ field, fieldState }) => (
+                <SearchSelect
+                  label="Location Type"
+                  placeholder="Select type"
+                  options={LOCATION_TYPE_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message}
+                  clearable={false}
+                />
+              )}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <Controller
+              control={control}
+              name="branchId"
+              render={({ field }) => (
+                <SearchSelect
+                  label="Branch / Location"
+                  placeholder="Select branch"
+                  options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </div>
+        </div>
+
+        <Controller
+          control={control}
+          name="managerId"
+          render={({ field }) => (
+            <SearchSelect
+              label="Warehouse Manager"
+              placeholder="Select manager"
+              options={managers.map((u) => ({ value: u.id, label: u.name, sublabel: u.email }))}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
+
         <FormField
-          label="Address"
+          label="Description"
           type="textarea"
           rows={3}
-          registration={register('address', {
-            maxLength: { value: 300, message: 'Address cannot exceed 300 characters' },
+          registration={register('description', {
+            maxLength: { value: 500, message: 'Description cannot exceed 500 characters' },
           })}
-          error={errors.address}
-          placeholder="e.g. 12 Industrial Road, Tema"
+          error={errors.description}
+          placeholder="Optional details about this location"
         />
 
         <StatusRadioGroup value={status} onChange={(v) => setValue('status', v)} />

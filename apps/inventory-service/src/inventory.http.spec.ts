@@ -27,6 +27,10 @@ describe('Inventory HTTP authorization and validation', () => {
     updateItem: jest.fn().mockResolvedValue({ id }),
     stockIn: jest.fn().mockResolvedValue({ movement: { id } }),
     stockOut: jest.fn().mockResolvedValue({ movement: { id } }),
+    stockInBatch: jest.fn().mockResolvedValue({ batchId: id, results: [] }),
+    stockOutBatch: jest.fn().mockResolvedValue({ batchId: id, results: [] }),
+    transferBatch: jest.fn().mockResolvedValue({ batchId: id, results: [] }),
+    adjustBatch: jest.fn().mockResolvedValue({ batchId: id, results: [] }),
     transfer: jest.fn().mockResolvedValue({ transferId: id }),
     movements: jest.fn().mockResolvedValue([]),
     adjust: jest.fn().mockResolvedValue({ movement: { id } }),
@@ -543,5 +547,137 @@ describe('Inventory HTTP authorization and validation', () => {
       .set(headers('operations.inventory.stock-out:CREATE'))
       .expect(403);
     expect(service.movements).not.toHaveBeenCalled();
+  });
+
+  describe('batches', () => {
+    const lines = [
+      { itemId: id, quantity: '1' },
+      { itemId: id, quantity: '2.5' },
+    ];
+    const batches = [
+      {
+        route: 'stock-in-batches',
+        permission: 'operations.inventory.stock-in:CREATE',
+        method: 'stockInBatch' as const,
+        body: {
+          locationId: id,
+          dateReceived: '2026-11-04',
+          lines: [{ ...lines[0], unitCost: '3.5' }, lines[1]],
+        },
+      },
+      {
+        route: 'stock-out-batches',
+        permission: 'operations.inventory.stock-out:CREATE',
+        method: 'stockOutBatch' as const,
+        body: { locationId: id, date: '2026-11-04', purpose: StockOutPurpose.SALE, lines },
+      },
+      {
+        route: 'stock-transfer-batches',
+        permission: 'operations.inventory.transfers:CREATE',
+        method: 'transferBatch' as const,
+        body: {
+          sourceLocationId: id,
+          destinationLocationId: '4f1d0d3c-8f6e-4a43-9d57-1f8a0d3a6b11',
+          date: '2026-11-04',
+          lines,
+        },
+      },
+      {
+        route: 'stock-adjustment-batches',
+        permission: 'operations.inventory.adjustments:CREATE',
+        method: 'adjustBatch' as const,
+        body: {
+          locationId: id,
+          type: 'DECREASE',
+          reason: StockAdjustmentReason.DAMAGE,
+          date: '2026-11-04',
+          lines,
+        },
+      },
+    ];
+
+    it.each(batches)(
+      'requires authentication, CREATE permission and Operations on $route',
+      async ({ route, permission, method, body }) => {
+        await request(app.getHttpServer())
+          .post('/api/' + route)
+          .send(body)
+          .expect(401);
+        await request(app.getHttpServer())
+          .post('/api/' + route)
+          .set(headers(''))
+          .send(body)
+          .expect(403);
+        await request(app.getHttpServer())
+          .post('/api/' + route)
+          .set(headers(permission, 'tenant-a', false))
+          .send(body)
+          .expect(403);
+        expect(service[method]).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(batches)(
+      'accepts a valid batch on $route',
+      async ({ route, permission, method, body }) => {
+        await request(app.getHttpServer())
+          .post('/api/' + route)
+          .set(headers(permission, 'tenant-b'))
+          .send(body)
+          .expect(201);
+        expect(service[method]).toHaveBeenCalledWith(
+          'tenant-b',
+          'user-a',
+          expect.objectContaining({ lines: expect.any(Array) as unknown[] }),
+        );
+        const [, , sent] = service[method].mock.calls[0] as [
+          string,
+          string,
+          { lines: { itemId: string }[] },
+        ];
+        expect(sent.lines).toHaveLength(body.lines.length);
+        expect(sent.lines.every((l) => l.itemId === id)).toBe(true);
+      },
+    );
+
+    it.each(batches)(
+      'rejects an invalid batch on $route',
+      async ({ route, permission, method, body }) => {
+        const bad: Record<string, unknown>[] = [
+          { ...body, lines: [] },
+          { ...body, lines: undefined },
+          { ...body, lines: 'nope' },
+          { ...body, lines: Array.from({ length: 101 }, () => ({ itemId: id, quantity: '1' })) },
+          { ...body, lines: [{ itemId: id, quantity: '0' }] },
+          { ...body, lines: [{ itemId: id, quantity: '-1' }] },
+          { ...body, lines: [{ itemId: id, quantity: '1.00001' }] },
+          { ...body, lines: [{ quantity: '1' }] },
+          { ...body, lines: [{ itemId: 'not-a-uuid', quantity: '1' }] },
+          { ...body, lines: [{ itemId: id, quantity: '1', tenantId: 'spoof' }] },
+          { ...body, lines: [{ itemId: id, quantity: '1', batchId: 'spoof' }] },
+          { ...body, itemId: id },
+          { ...body, quantity: '1' },
+          { ...body, batchId: 'spoof' },
+          { ...body, tenantId: 'spoof' },
+        ];
+        for (const payload of bad) {
+          await request(app.getHttpServer())
+            .post('/api/' + route)
+            .set(headers(permission))
+            .send(payload)
+            .expect(400);
+        }
+        expect(service[method]).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows a unit cost on stock-in batch lines only', async () => {
+      const line = { itemId: id, quantity: '1', unitCost: '2' };
+      await request(app.getHttpServer())
+        .post('/api/stock-out-batches')
+        .set(headers('operations.inventory.stock-out:CREATE'))
+        .send({ ...batches[1].body, lines: [line] })
+        .expect(400);
+    });
   });
 });

@@ -1,0 +1,207 @@
+'use client';
+
+import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Badge } from '@/components/atoms/Badge';
+import { TypeChip } from '@/components/atoms/TypeChip';
+import {
+  MOVEMENT_STATUS_BADGE,
+  MOVEMENT_TYPE_COLOR,
+  MOVEMENT_TYPE_LABEL,
+} from '@/lib/inventoryMovement';
+import { formatInventoryValue } from '@/lib/inventoryCurrency';
+import { formatDate } from '@/lib/formatters';
+import {
+  getMovementQuantity,
+  getMovementValue,
+  type StockMovement,
+} from '@/hooks/inventory/useStockMovements';
+import { canReverse, useMovementActions } from '@/hooks/inventory/useMovementActions';
+import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
+
+const PAGE_SIZE = 10;
+
+const formatNumber = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+
+interface StockMovementsTableProps {
+  movements: StockMovement[];
+  isLoading?: boolean;
+  /** The primary toolbar button, e.g. "Record Movement". */
+  actionButton?: { label: string; onClick: () => void };
+  /** Opens a draft row; drafts have no details page. */
+  onDraftClick?: (id: string) => void;
+}
+
+/** Searchable, paged table of stock movements — shared by Stock Management and warehouse details. */
+export function StockMovementsTable({
+  movements,
+  isLoading,
+  actionButton,
+  onDraftClick,
+}: StockMovementsTableProps) {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const { exportMovement, requestReverse, requestDeleteDraft, modals } = useMovementActions();
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const { items } = useInventoryItems();
+  const { warehouses } = useInventoryWarehouses();
+
+  const warehouseName = (id: string | null) =>
+    id ? (warehouses.find((w) => w.id === id)?.name ?? '—') : null;
+
+  // "3 items" for a multi-line movement; the item's own name for a single line.
+  const itemsLabel = (m: StockMovement) => {
+    if (m.lines.length === 1) {
+      return items.find((i) => i.id === m.lines[0].itemId)?.name ?? '1 item';
+    }
+    return `${m.lines.length} items`;
+  };
+
+  const fromLabel = (m: StockMovement) => warehouseName(m.fromWarehouseId) ?? m.source ?? '—';
+  const toLabel = (m: StockMovement) => warehouseName(m.toWarehouseId) ?? '—';
+
+  const term = search.trim().toLowerCase();
+  const filtered = movements.filter(
+    (m) =>
+      !term ||
+      m.reference.toLowerCase().includes(term) ||
+      MOVEMENT_TYPE_LABEL[m.type].toLowerCase().includes(term) ||
+      itemsLabel(m).toLowerCase().includes(term),
+  );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const columns: Column<StockMovement>[] = [
+    {
+      key: 'reference',
+      label: 'Reference',
+      width: 'minmax(130px, 1fr)',
+      render: (row) => <span className="font-medium text-gray-900 font-mono">{row.reference}</span>,
+    },
+    {
+      key: 'date',
+      label: 'Date',
+      width: '120px',
+      render: (row) => (
+        <span className="text-sm font-semibold text-gray-500">{formatDate(row.date)}</span>
+      ),
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      width: '120px',
+      render: (row) => (
+        <TypeChip label={MOVEMENT_TYPE_LABEL[row.type]} color={MOVEMENT_TYPE_COLOR[row.type]} />
+      ),
+    },
+    {
+      key: 'items',
+      label: 'Items',
+      width: 'minmax(140px, 1.5fr)',
+      className: 'overflow-hidden min-w-0 pr-4',
+      render: (row) => (
+        <span
+          className="text-sm font-semibold text-gray-900 block truncate"
+          title={itemsLabel(row)}
+        >
+          {itemsLabel(row)}
+        </span>
+      ),
+    },
+    {
+      key: 'from',
+      label: 'From',
+      width: 'minmax(120px, 1fr)',
+      render: (row) => (
+        <span className="text-sm font-semibold text-gray-500">{fromLabel(row)}</span>
+      ),
+    },
+    {
+      key: 'to',
+      label: 'To',
+      width: 'minmax(120px, 1fr)',
+      render: (row) => <span className="text-sm font-semibold text-gray-500">{toLabel(row)}</span>,
+    },
+    {
+      key: 'quantity',
+      label: 'QTY',
+      width: '80px',
+      render: (row) => (
+        <span className="text-sm font-semibold text-gray-500">
+          {formatNumber(getMovementQuantity(row))}
+        </span>
+      ),
+    },
+    {
+      key: 'value',
+      label: 'Value',
+      width: '150px',
+      className: 'text-right pr-4',
+      render: (row) => (
+        <span className="text-sm font-semibold text-gray-600">
+          {formatInventoryValue(getMovementValue(row))}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      width: '120px',
+      render: (row) => {
+        const { label, variant } = MOVEMENT_STATUS_BADGE[row.status];
+        return <Badge variant={variant} label={label} />;
+      },
+    },
+  ];
+
+  return (
+    <>
+      <DataTable
+        columns={columns}
+        data={rows}
+        isLoading={isLoading}
+        emptyMessage="No stock movements found"
+        searchPlaceholder="Search by reference, type or item..."
+        searchValue={search}
+        onSearch={(q) => {
+          setSearch(q);
+          setPage(1);
+        }}
+        rowActions={(row) =>
+          row.status === 'DRAFT'
+            ? [
+                { label: 'Edit', onClick: () => onDraftClick?.(row.id) },
+                { label: 'Export', onClick: () => exportMovement(row) },
+                { label: 'Delete', danger: true, onClick: () => requestDeleteDraft(row) },
+              ]
+            : [
+                ...(canReverse(row)
+                  ? [
+                      {
+                        label: 'Reverse Transaction',
+                        danger: true,
+                        onClick: () => requestReverse(row),
+                      },
+                    ]
+                  : []),
+                { label: 'Export', onClick: () => exportMovement(row) },
+              ]
+        }
+        onRowClick={(row) =>
+          row.status === 'DRAFT'
+            ? onDraftClick?.(row.id)
+            : router.push(`/${tenantSlug}/operations/inventory/stock-management/${row.id}`)
+        }
+        actionButton={actionButton}
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        noInternalScroll
+      />
+      {modals}
+    </>
+  );
+}

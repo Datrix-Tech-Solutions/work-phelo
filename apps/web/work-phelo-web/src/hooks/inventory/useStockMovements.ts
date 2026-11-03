@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useReversedMovementStore } from '@/hooks/inventory/useReversedMovements';
 import { inventoryApi, inventoryKeys, toDecimal, toNumber } from '@/hooks/inventory/inventoryApi';
 
 export type StockMovementType = 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'ADJUSTMENT';
-export type StockMovementStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED';
+/** DRAFT movements exist in this browser only; the service has no draft stage. */
+/** REVERSED is recorded in this browser only; see useReversedMovements. */
+export type StockMovementStatus = 'DRAFT' | 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'REVERSED';
 
 export interface StockMovementLine {
   itemId: string;
@@ -67,6 +70,8 @@ interface ApiStockMovement {
   recipient: string | null;
   purpose: string | null;
   transferId: string | null;
+  /** Shared by movements saved together (several items on one form); null for single saves. */
+  batchId: string | null;
   adjustmentReason: string | null;
 }
 
@@ -87,16 +92,22 @@ const UI_TYPE: Record<ApiMovementType, StockMovementType> = {
   ADJUSTMENT_DECREASE: 'ADJUSTMENT',
 };
 
-/** Turns service rows into movements. A transfer is two rows sharing a transferId: one movement. */
+/**
+ * Turns service rows into movements. A transfer is two rows sharing a transferId, and rows saved
+ * together share a batchId: each of those reads back as one movement with several lines.
+ */
 function toMovements(rows: ApiStockMovement[]): StockMovement[] {
   const result: StockMovement[] = [];
   const transfers = new Map<string, StockMovement>();
+  const batchIdOf = new Map<StockMovement, string>();
   for (const m of rows) {
+    const before = result.length;
     const type = UI_TYPE[m.type];
     const quantity = toNumber(m.quantity) ?? 0;
     const base = {
       id: m.id,
-      reference: m.reference ?? `${REFERENCE_PREFIX[type]}-${m.id.slice(0, 8).toUpperCase()}`,
+      reference:
+        m.reference ?? `${REFERENCE_PREFIX[type]}-${(m.batchId ?? m.id).slice(0, 8).toUpperCase()}`,
       date: m.date,
       type,
       lines: [{ itemId: m.itemId, quantity, unitCost: toNumber(m.unitCost) }],
@@ -137,8 +148,28 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
         reason: m.adjustmentReason,
       });
     }
+    // A row that started a new movement carries its batch along for the grouping below.
+    if (m.batchId && result.length > before) batchIdOf.set(result[result.length - 1], m.batchId);
   }
-  return result;
+  // The list is newest first, so older rows of a batch come later: put them in front of the
+  // lines gathered so far to restore the order they were saved in.
+  const grouped: StockMovement[] = [];
+  const batches = new Map<string, StockMovement>();
+  for (const mv of result) {
+    const batchId = batchIdOf.get(mv);
+    if (!batchId) {
+      grouped.push(mv);
+      continue;
+    }
+    const existing = batches.get(batchId);
+    if (existing) existing.lines.unshift(...mv.lines);
+    else {
+      const batch = { ...mv, id: batchId, lines: [...mv.lines] };
+      batches.set(batchId, batch);
+      grouped.push(batch);
+    }
+  }
+  return grouped;
 }
 
 export function useStockMovements() {
@@ -147,63 +178,75 @@ export function useStockMovements() {
     queryFn: () => inventoryApi.get<ApiStockMovement[]>('/stock-movements'),
   });
   // The service returns newest first.
-  const movements = useMemo(() => toMovements(data ?? []), [data]);
+  const reversedIds = useReversedMovementStore((s) => s.ids);
+  const movements = useMemo(
+    () =>
+      toMovements(data ?? []).map((m) =>
+        reversedIds.includes(m.id) ? { ...m, status: 'REVERSED' as const } : m,
+      ),
+    [data, reversedIds],
+  );
   return { movements, isLoading };
 }
 
-/** Posts one movement. The service records one item per request, so each line is its own request. */
-async function postLine(movement: NewStockMovement, line: StockMovementLine) {
+/**
+ * Posts a movement as one batch request: every item is saved together under a shared batchId, or
+ * none is, so a failure part-way never leaves half a movement behind.
+ */
+function postMovement(movement: NewStockMovement) {
   const common = {
-    itemId: line.itemId,
     reference: movement.reference?.trim() || null,
     notes: movement.notes,
   };
-  const quantity = toDecimal(Math.abs(line.quantity));
+  const lines = movement.lines.map((l) => ({
+    itemId: l.itemId,
+    quantity: toDecimal(Math.abs(l.quantity)),
+  }));
   if (movement.type === 'STOCK_IN') {
     if (!movement.toWarehouseId) throw new Error('Choose a warehouse to receive the stock.');
-    return inventoryApi.post('/stock-in', {
+    return inventoryApi.post('/stock-in-batches', {
       ...common,
       locationId: movement.toWarehouseId,
-      quantity,
       dateReceived: movement.date,
-      unitCost: toDecimal(line.unitCost),
       source: movement.source,
+      lines: movement.lines.map((l, i) => ({ ...lines[i], unitCost: toDecimal(l.unitCost) })),
     });
   }
   if (movement.type === 'STOCK_OUT') {
     if (!movement.fromWarehouseId) throw new Error('Choose a warehouse to issue stock from.');
     if (!movement.purpose) throw new Error('Choose a purpose for this issue.');
-    return inventoryApi.post('/stock-out', {
+    return inventoryApi.post('/stock-out-batches', {
       ...common,
       locationId: movement.fromWarehouseId,
-      quantity,
       date: movement.date,
       purpose: movement.purpose,
       recipient: movement.source,
+      lines,
     });
   }
   if (movement.type === 'TRANSFER') {
     if (!movement.fromWarehouseId || !movement.toWarehouseId)
       throw new Error('Choose the warehouses to transfer between.');
-    return inventoryApi.post('/stock-transfers', {
+    return inventoryApi.post('/stock-transfer-batches', {
       ...common,
       sourceLocationId: movement.fromWarehouseId,
       destinationLocationId: movement.toWarehouseId,
-      quantity,
       date: movement.date,
+      lines,
     });
   }
-  const decrease = line.quantity < 0;
+  // One adjustment is all increases or all decreases (the form has a single type).
+  const decrease = movement.lines.some((l) => l.quantity < 0);
   const locationId = decrease ? movement.fromWarehouseId : movement.toWarehouseId;
   if (!locationId) throw new Error('Choose a warehouse to adjust.');
   if (!movement.reason) throw new Error('Choose a reason for this adjustment.');
-  return inventoryApi.post('/stock-adjustments', {
+  return inventoryApi.post('/stock-adjustment-batches', {
     ...common,
     locationId,
     type: decrease ? 'DECREASE' : 'INCREASE',
-    quantity,
     reason: movement.reason,
     date: movement.date,
+    lines,
   });
 }
 
@@ -211,7 +254,7 @@ export function useCreateStockMovement() {
   const queryClient = useQueryClient();
   const m = useMutation({
     mutationFn: async (movement: NewStockMovement) => {
-      for (const line of movement.lines) await postLine(movement, line);
+      await postMovement(movement);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: inventoryKeys.movements });
