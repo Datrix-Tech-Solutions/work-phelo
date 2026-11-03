@@ -1,4 +1,6 @@
-import { create } from 'zustand';
+import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { inventoryApi, inventoryKeys } from '@/hooks/inventory/inventoryApi';
 
 export interface InventoryUnit {
   id: string;
@@ -11,45 +13,42 @@ export interface InventoryUnit {
 
 export type NewInventoryUnit = Pick<InventoryUnit, 'name' | 'description' | 'symbol' | 'status'>;
 
-interface UnitStore {
-  units: InventoryUnit[];
-  add: (unit: NewInventoryUnit) => void;
-  update: (id: string, patch: NewInventoryUnit) => void;
-  remove: (id: string) => void;
-}
-
-// Stand-in until the inventory service exists: units live in memory for the session only.
-// Swap the store for API calls in the two hooks below; the pages don't need to change.
-const useUnitStore = create<UnitStore>((set) => ({
-  units: [],
-  add: (unit) =>
-    set((s) => ({
-      units: [
-        { ...unit, id: crypto.randomUUID(), createdAt: new Date().toISOString() },
-        ...s.units,
-      ],
-    })),
-  update: (id, patch) =>
-    set((s) => ({ units: s.units.map((u) => (u.id === id ? { ...u, ...patch } : u)) })),
-  remove: (id) => set((s) => ({ units: s.units.filter((u) => u.id !== id) })),
-}));
-
 export function useInventoryUnits() {
-  const units = useUnitStore((s) => s.units);
-  return { units, isLoading: false };
+  const { data, isLoading } = useQuery({
+    queryKey: inventoryKeys.units,
+    queryFn: () => inventoryApi.get<InventoryUnit[]>('/units'),
+  });
+  const units = useMemo(() => data ?? [], [data]);
+  return { units, isLoading };
 }
 
 export function useCreateInventoryUnit() {
-  const add = useUnitStore((s) => s.add);
-  return { createUnit: add, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: (v: NewInventoryUnit) => inventoryApi.post<InventoryUnit>('/units', v),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.units }),
+  });
+  return { createUnit: m.mutateAsync, isPending: m.isPending };
 }
 
 export function useUpdateInventoryUnit() {
-  const update = useUnitStore((s) => s.update);
-  return { updateUnit: update, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: NewInventoryUnit }) =>
+      inventoryApi.patch<InventoryUnit>(`/units/${id}`, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.units }),
+  });
+  return {
+    updateUnit: (id: string, patch: NewInventoryUnit) => m.mutateAsync({ id, patch }),
+    isPending: m.isPending,
+  };
 }
 
 export function useDeleteInventoryUnit() {
-  const remove = useUnitStore((s) => s.remove);
-  return { deleteUnit: remove, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: (id: string) => inventoryApi.delete(`/units/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.units }),
+  });
+  return { deleteUnit: m.mutateAsync, isPending: m.isPending };
 }

@@ -5,7 +5,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
-import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
+import { StatusRadioGroup } from '@/components/atoms/StatusRadioGroup';
 import { FormField } from '@/components/molecules/shared/FormField';
 import {
   useCreateInventoryUnit,
@@ -20,6 +20,7 @@ import {
   nameForUnitSymbol,
   symbolForUnitName,
 } from '@/lib/inventoryUnits';
+import { extractError } from '@/lib/extractError';
 
 interface UnitFormValues {
   name: string;
@@ -88,7 +89,7 @@ export function UnitModal({ isOpen, onClose, unit }: UnitModalProps) {
     onContinue: () => reset({ ...FORM_DEFAULTS, status: getValues('status') }),
   });
 
-  const onSubmit = (data: UnitFormValues) => {
+  const save = async (data: UnitFormValues) => {
     const values = {
       name: data.name.trim(),
       symbol: data.symbol.trim(),
@@ -96,17 +97,25 @@ export function UnitModal({ isOpen, onClose, unit }: UnitModalProps) {
       status: data.status,
     };
     if (unit) {
-      updateUnit(unit.id, values);
+      await updateUnit(unit.id, values);
       toast.success('Unit of measure updated successfully');
       handleClose();
       return;
     }
-    createUnit(values);
+    await createUnit(values);
     toast.success('Unit of measure created successfully');
     entry.finishSave(
       { title: 'Unit Added!', message: `${data.name.trim()} has been added.` },
       handleClose,
     );
+  };
+
+  const onSubmit = async (data: UnitFormValues) => {
+    try {
+      await save(data);
+    } catch (err) {
+      toast.error(extractError(err, 'Could not save unit of measure'));
+    }
   };
 
   return (
@@ -190,17 +199,7 @@ export function UnitModal({ isOpen, onClose, unit }: UnitModalProps) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-bold text-gray-900">Status</span>
-          <SegmentedToggle
-            value={status}
-            onChange={(v) => setValue('status', v)}
-            options={[
-              { label: 'Active', value: 'ACTIVE' },
-              { label: 'Inactive', value: 'INACTIVE' },
-            ]}
-          />
-        </div>
+        <StatusRadioGroup value={status} onChange={(v) => setValue('status', v)} />
 
         <FormField
           label="Description"

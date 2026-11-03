@@ -13,6 +13,7 @@ import { UnitModal } from '@/components/organisms/inventory/UnitModal';
 import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/formatters';
+import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
 
@@ -92,9 +93,14 @@ export default function InventoryUnitsOfMeasurePage() {
     },
   ];
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
-    deleteUnit(deleteTarget.id);
+    try {
+      await deleteUnit(deleteTarget.id);
+    } catch (err) {
+      toast.error(extractError(err, 'Could not delete unit of measure'));
+      return;
+    }
     toast.success('Unit of measure deleted successfully');
     setDeleteTarget(null);
   };

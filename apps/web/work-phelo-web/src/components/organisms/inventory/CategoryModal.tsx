@@ -5,7 +5,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CategoryIconPicker } from '@/components/atoms/CategoryIconPicker';
-import { SegmentedToggle } from '@/components/atoms/SegmentedToggle';
+import { StatusRadioGroup } from '@/components/atoms/StatusRadioGroup';
 import { FormField } from '@/components/molecules/shared/FormField';
 import {
   useCreateInventoryCategory,
@@ -15,6 +15,7 @@ import {
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { DEFAULT_CATEGORY_ICON, type CategoryIconKey } from '@/lib/inventoryCategoryIcons';
+import { extractError } from '@/lib/extractError';
 
 interface CategoryFormValues {
   name: string;
@@ -89,7 +90,7 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
       }),
   });
 
-  const onSubmit = (data: CategoryFormValues) => {
+  const save = async (data: CategoryFormValues) => {
     const values = {
       name: data.name.trim(),
       description: data.description.trim() || null,
@@ -97,17 +98,25 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
       status: data.status,
     };
     if (category) {
-      updateCategory(category.id, values);
+      await updateCategory(category.id, values);
       toast.success('Category updated successfully');
       handleClose();
       return;
     }
-    createCategory(values);
+    await createCategory(values);
     toast.success('Category created successfully');
     entry.finishSave(
       { title: 'Category Added!', message: `${data.name.trim()} has been added.` },
       handleClose,
     );
+  };
+
+  const onSubmit = async (data: CategoryFormValues) => {
+    try {
+      await save(data);
+    } catch (err) {
+      toast.error(extractError(err, 'Could not save category'));
+    }
   };
 
   return (
@@ -148,17 +157,7 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
               placeholder="e.g. Electronics, Stationery"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-bold text-gray-900">Status</span>
-            <SegmentedToggle
-              value={status}
-              onChange={(v) => setValue('status', v)}
-              options={[
-                { label: 'Active', value: 'ACTIVE' },
-                { label: 'Inactive', value: 'INACTIVE' },
-              ]}
-            />
-          </div>
+          <StatusRadioGroup value={status} onChange={(v) => setValue('status', v)} />
         </div>
 
         <FormField

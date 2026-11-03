@@ -14,6 +14,7 @@ import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/Del
 import { useToast } from '@/hooks/useToast';
 import { CategoryIconBadge } from '@/lib/inventoryCategoryIcons';
 import { formatDate } from '@/lib/formatters';
+import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
 
@@ -96,9 +97,14 @@ export default function InventoryCategoriesPage() {
     },
   ];
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
-    deleteCategory(deleteTarget.id);
+    try {
+      await deleteCategory(deleteTarget.id);
+    } catch (err) {
+      toast.error(extractError(err, 'Could not delete category'));
+      return;
+    }
     toast.success('Category deleted successfully');
     setDeleteTarget(null);
   };
