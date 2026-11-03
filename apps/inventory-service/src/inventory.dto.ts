@@ -14,6 +14,7 @@ import {
 import { PartialType, PickType, ApiProperty } from '@nestjs/swagger';
 import {
   InventoryItemStatus,
+  InventoryConfigurationStatus,
   StockLocationType,
   StockOutPurpose,
   StockAdjustmentReason,
@@ -30,11 +31,69 @@ export class NameDto {
   @Length(1, 150)
   name!: string;
 }
-export class UpdateNameDto extends PartialType(NameDto, { skipNullProperties: false }) {}
-export class LocationDto extends NameDto {
-  @ApiProperty({ enum: StockLocationType })
+export class ConfigurationDto extends NameDto {
+  @ApiProperty({ required: false, default: 'ACTIVE', enum: InventoryConfigurationStatus })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsEnum(InventoryConfigurationStatus)
+  status?: InventoryConfigurationStatus;
+}
+export class DescribedConfigurationDto extends ConfigurationDto {
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(4000)
+  description?: string | null;
+}
+export class CategoryDto extends DescribedConfigurationDto {
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 100 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  icon?: string | null;
+}
+export class UpdateCategoryDto extends PartialType(CategoryDto, { skipNullProperties: false }) {}
+export class UnitDto extends DescribedConfigurationDto {
+  @ApiProperty({
+    required: false,
+    maxLength: 10,
+    description:
+      'Send the chosen symbol. Omission preserves legacy clients with an identifier-derived fallback.',
+  })
+  @ValidateIf((_o, value) => value !== undefined)
+  @Transform(trim)
+  @IsString()
+  @Length(1, 10)
+  symbol?: string;
+}
+export class UpdateUnitDto extends PartialType(UnitDto, { skipNullProperties: false }) {}
+export class LocationDto extends ConfigurationDto {
+  @ApiProperty({ required: false, enum: StockLocationType, default: 'WAREHOUSE' })
+  @ValidateIf((_o, value) => value !== undefined)
   @IsEnum(StockLocationType)
-  type!: StockLocationType;
+  type?: StockLocationType;
+
+  @ApiProperty({
+    required: false,
+    maxLength: 50,
+    description:
+      'Trimmed uppercase tenant-unique code. Omission generates LOC-<id> for legacy clients.',
+  })
+  @ValidateIf((_o, value) => value !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @Length(1, 50)
+  code?: string;
+
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(4000)
+  address?: string | null;
 }
 export class UpdateLocationDto extends PartialType(LocationDto, { skipNullProperties: false }) {}
 

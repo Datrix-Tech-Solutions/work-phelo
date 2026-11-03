@@ -20,6 +20,13 @@ enum StockLocationType {
   @@schema("inventory")
 }
 
+enum InventoryConfigurationStatus {
+  ACTIVE
+  INACTIVE
+
+  @@schema("inventory")
+}
+
 enum InventoryItemStatus {
   ACTIVE
   INACTIVE
@@ -63,12 +70,15 @@ enum StockOutPurpose {
 }
 
 model InventoryCategory {
-  id        String          @id @default(uuid())
-  tenantId  String
-  name      String
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  items     InventoryItem[]
+  id          String                       @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  icon        String?
+  status      InventoryConfigurationStatus @default(ACTIVE)
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+  items       InventoryItem[]
 
   @@unique([tenantId, name])
   @@unique([tenantId, id])
@@ -76,13 +86,16 @@ model InventoryCategory {
 }
 
 model UnitOfMeasure {
-  id        String          @id @default(uuid())
-  tenantId  String
-  name      String
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  items     InventoryItem[]
-  movements StockMovement[]
+  id          String                       @id @default(uuid())
+  tenantId    String
+  name        String
+  symbol      String
+  description String?
+  status      InventoryConfigurationStatus @default(ACTIVE)
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+  items       InventoryItem[]
+  movements   StockMovement[]
 
   @@unique([tenantId, name])
   @@unique([tenantId, id])
@@ -90,16 +103,20 @@ model UnitOfMeasure {
 }
 
 model StockLocation {
-  id        String            @id @default(uuid())
+  id        String                       @id @default(uuid())
   tenantId  String
   name      String
+  code      String
+  address   String?
+  status    InventoryConfigurationStatus @default(ACTIVE)
   type      StockLocationType
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
   balances  StockBalance[]
   movements StockMovement[]
 
   @@unique([tenantId, name])
+  @@unique([tenantId, code])
   @@unique([tenantId, id])
   @@schema("inventory")
 }

@@ -22,8 +22,10 @@ import { RequireAnyPermission, RequirePermissions } from './auth/decorators/perm
 import { StockMovementType } from '../prisma/generated/client';
 import { InventoryService } from './inventory.service';
 import {
-  NameDto,
-  UpdateNameDto,
+  CategoryDto,
+  UpdateCategoryDto,
+  UnitDto,
+  UpdateUnitDto,
   LocationDto,
   UpdateLocationDto,
   ItemDto,
@@ -51,7 +53,7 @@ export class CategoriesController {
   }
   @Post()
   @RequirePermissions('operations.inventory.categories:CREATE')
-  create(@Req() req: UserRequest, @Body() dto: NameDto) {
+  create(@Req() req: UserRequest, @Body() dto: CategoryDto) {
     return this.service.createCategory(req.user.tenantId, dto);
   }
   @Get(':id')
@@ -64,7 +66,7 @@ export class CategoriesController {
   update(
     @Req() req: UserRequest,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateNameDto,
+    @Body() dto: UpdateCategoryDto,
   ) {
     return this.service.updateCategory(req.user.tenantId, id, dto);
   }
@@ -90,7 +92,7 @@ export class UnitsController {
   }
   @Post()
   @RequirePermissions('operations.inventory.units:CREATE')
-  create(@Req() req: UserRequest, @Body() dto: NameDto) {
+  create(@Req() req: UserRequest, @Body() dto: UnitDto) {
     return this.service.createUnit(req.user.tenantId, dto);
   }
   @Get(':id')
@@ -103,7 +105,7 @@ export class UnitsController {
   update(
     @Req() req: UserRequest,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateNameDto,
+    @Body() dto: UpdateUnitDto,
   ) {
     return this.service.updateUnit(req.user.tenantId, id, dto);
   }

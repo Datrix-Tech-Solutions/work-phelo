@@ -20,6 +20,9 @@ describe('Inventory HTTP authorization and validation', () => {
     createCategory: jest.fn().mockResolvedValue({ id }),
     createUnit: jest.fn().mockResolvedValue({ id }),
     createLocation: jest.fn().mockResolvedValue({ id }),
+    updateCategory: jest.fn().mockResolvedValue({ id }),
+    updateUnit: jest.fn().mockResolvedValue({ id }),
+    updateLocation: jest.fn().mockResolvedValue({ id }),
     createItem: jest.fn().mockResolvedValue({ id }),
     updateItem: jest.fn().mockResolvedValue({ id }),
     stockIn: jest.fn().mockResolvedValue({ movement: { id } }),
@@ -240,6 +243,81 @@ describe('Inventory HTTP authorization and validation', () => {
       'user-a',
       expect.objectContaining({ quantity: '1.25', unitCost: '0.1' }),
     );
+  });
+
+  it.each([
+    ['categories', { name: 'Office', description: 'Supplies', icon: 'box', status: 'INACTIVE' }],
+    ['units', { name: 'Each', symbol: 'ea', description: 'Individual', status: 'ACTIVE' }],
+    ['locations', { name: 'Main', code: ' main ', address: 'Accra', status: 'ACTIVE' }],
+  ])('accepts %s settings for create and PATCH', async (resource, payload) => {
+    await request(app.getHttpServer())
+      .post('/api/' + resource)
+      .set(headers(`operations.inventory.${resource}:CREATE`, 'tenant-b'))
+      .send(payload)
+      .expect(201);
+    await request(app.getHttpServer())
+      .patch('/api/' + resource + '/' + id)
+      .set(headers(`operations.inventory.${resource}:EDIT`, 'tenant-b'))
+      .send(payload)
+      .expect(200);
+    if (resource === 'locations') {
+      expect(service.createLocation).toHaveBeenCalledWith(
+        'tenant-b',
+        expect.objectContaining({ code: 'MAIN' }),
+      );
+      expect(service.updateLocation).toHaveBeenCalledWith(
+        'tenant-b',
+        id,
+        expect.objectContaining({ code: 'MAIN' }),
+      );
+    }
+  });
+  it.each(['categories', 'units', 'locations'])(
+    'preserves legacy name-only %s payloads',
+    async (resource) => {
+      await request(app.getHttpServer())
+        .post('/api/' + resource)
+        .set(headers(`operations.inventory.${resource}:CREATE`))
+        .send({ name: 'Legacy' })
+        .expect(201);
+    },
+  );
+  it.each<[string, Record<string, unknown>]>([
+    ['categories', { icon: 'x'.repeat(101) }],
+    ['categories', { description: 'x'.repeat(4001) }],
+    ['units', { symbol: '' }],
+    ['units', { symbol: ' ' }],
+    ['units', { symbol: null }],
+    ['units', { symbol: 'x'.repeat(11) }],
+    ['locations', { code: '' }],
+    ['locations', { code: null }],
+    ['locations', { code: 'x'.repeat(51) }],
+    ['locations', { type: null }],
+    ['locations', { type: 'INVALID' }],
+    ['locations', { address: 'x'.repeat(4001) }],
+    ...['categories', 'units', 'locations'].flatMap<[string, Record<string, unknown>]>(
+      (resource) => [
+        [resource, { status: null }],
+        [resource, { status: 'INVALID' }],
+        [resource, { itemCount: 5 }],
+        [resource, { tenantId: 'spoofed' }],
+        [resource, { createdAt: '2026-11-03' }],
+        [resource, { updatedAt: '2026-11-03' }],
+      ],
+    ),
+    ['locations', { stockValue: 100 }],
+  ])('rejects invalid/server-owned %s setting fields %j', async (resource, extra) => {
+    for (const method of ['post', 'patch'] as const) {
+      await request(app.getHttpServer())
+        [method]('/api/' + String(resource) + (method === 'patch' ? '/' + id : ''))
+        .set(
+          headers(
+            `operations.inventory.${String(resource)}:${method === 'patch' ? 'EDIT' : 'CREATE'}`,
+          ),
+        )
+        .send({ name: 'Config', ...(extra as object) })
+        .expect(400);
+    }
   });
 
   const adjustment = {

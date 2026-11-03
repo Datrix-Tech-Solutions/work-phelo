@@ -12,8 +12,10 @@ import {
   UpdateItemDto,
   LocationDto,
   UpdateLocationDto,
-  NameDto,
-  UpdateNameDto,
+  CategoryDto,
+  UpdateCategoryDto,
+  UnitDto,
+  UpdateUnitDto,
   StockInDto,
   StockOutDto,
   StockTransferDto,
@@ -34,7 +36,7 @@ export class InventoryService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002')
-          throw new ConflictException('Name or SKU already exists in this company');
+          throw new ConflictException('Name, SKU or location code already exists in this company');
         if (error.code === 'P2003')
           throw new ConflictException('Record is referenced by inventory records');
         if (error.code === 'P2025') throw new NotFoundException('Inventory record not found');
@@ -45,21 +47,27 @@ export class InventoryService {
     }
   }
 
-  listCategory(tenantId: string) {
-    return this.prisma.inventoryCategory.findMany({
+  async listCategory(tenantId: string) {
+    const rows = await this.prisma.inventoryCategory.findMany({
       where: { tenantId },
+      include: { _count: { select: { items: true } } },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
     });
+    return rows.map(({ _count, ...row }) => ({ ...row, itemCount: _count.items }));
   }
   async getCategory(tenantId: string, id: string) {
-    const record = await this.prisma.inventoryCategory.findFirst({ where: { id, tenantId } });
+    const record = await this.prisma.inventoryCategory.findFirst({
+      where: { id, tenantId },
+      include: { _count: { select: { items: true } } },
+    });
     if (!record) throw new NotFoundException('Inventory record not found');
-    return record;
+    const { _count, ...row } = record;
+    return { ...row, itemCount: _count.items };
   }
-  createCategory(tenantId: string, dto: NameDto) {
+  createCategory(tenantId: string, dto: CategoryDto) {
     return this.write(() => this.prisma.inventoryCategory.create({ data: { ...dto, tenantId } }));
   }
-  async updateCategory(tenantId: string, id: string, dto: UpdateNameDto) {
+  async updateCategory(tenantId: string, id: string, dto: UpdateCategoryDto) {
     await this.getCategory(tenantId, id);
     return this.write(() =>
       this.prisma.inventoryCategory.update({ where: { tenantId_id: { tenantId, id } }, data: dto }),
@@ -83,10 +91,15 @@ export class InventoryService {
     if (!record) throw new NotFoundException('Inventory record not found');
     return record;
   }
-  createUnit(tenantId: string, dto: NameDto) {
-    return this.write(() => this.prisma.unitOfMeasure.create({ data: { ...dto, tenantId } }));
+  createUnit(tenantId: string, dto: UnitDto) {
+    const id = randomUUID();
+    return this.write(() =>
+      this.prisma.unitOfMeasure.create({
+        data: { ...dto, id, tenantId, symbol: dto.symbol ?? id.slice(0, 10) },
+      }),
+    );
   }
-  async updateUnit(tenantId: string, id: string, dto: UpdateNameDto) {
+  async updateUnit(tenantId: string, id: string, dto: UpdateUnitDto) {
     await this.getUnit(tenantId, id);
     return this.write(() =>
       this.prisma.unitOfMeasure.update({ where: { tenantId_id: { tenantId, id } }, data: dto }),
@@ -99,24 +112,45 @@ export class InventoryService {
     );
   }
 
-  listLocation(tenantId: string) {
-    return this.prisma.stockLocation.findMany({
+  async listLocation(tenantId: string) {
+    const rows = await this.prisma.stockLocation.findMany({
       where: { tenantId },
+      include: { _count: { select: { balances: true } } },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
     });
+    // One balance per tenant/item/location makes this a distinct item count, including zero.
+    return rows.map(({ _count, ...row }) => ({ ...row, itemCount: _count.balances }));
   }
   async getLocation(tenantId: string, id: string) {
-    const record = await this.prisma.stockLocation.findFirst({ where: { id, tenantId } });
+    const record = await this.prisma.stockLocation.findFirst({
+      where: { id, tenantId },
+      include: { _count: { select: { balances: true } } },
+    });
     if (!record) throw new NotFoundException('Inventory record not found');
-    return record;
+    const { _count, ...row } = record;
+    return { ...row, itemCount: _count.balances };
   }
   createLocation(tenantId: string, dto: LocationDto) {
-    return this.write(() => this.prisma.stockLocation.create({ data: { ...dto, tenantId } }));
+    const id = randomUUID();
+    return this.write(() =>
+      this.prisma.stockLocation.create({
+        data: {
+          ...dto,
+          id,
+          tenantId,
+          code: dto.code?.trim().toUpperCase() ?? 'LOC-' + id.toUpperCase(),
+          type: dto.type ?? 'WAREHOUSE',
+        },
+      }),
+    );
   }
   async updateLocation(tenantId: string, id: string, dto: UpdateLocationDto) {
     await this.getLocation(tenantId, id);
     return this.write(() =>
-      this.prisma.stockLocation.update({ where: { tenantId_id: { tenantId, id } }, data: dto }),
+      this.prisma.stockLocation.update({
+        where: { tenantId_id: { tenantId, id } },
+        data: { ...dto, code: dto.code?.trim().toUpperCase() },
+      }),
     );
   }
   async deleteLocation(tenantId: string, id: string) {
@@ -142,22 +176,22 @@ export class InventoryService {
     tenantId: string,
     dto: { categoryId?: string; unitOfMeasureId?: string },
   ) {
-    if (
-      dto.categoryId &&
-      !(await tx.inventoryCategory.findFirst({
+    if (dto.categoryId) {
+      const category = await tx.inventoryCategory.findFirst({
         where: { tenantId, id: dto.categoryId },
-        select: { id: true },
-      }))
-    )
-      throw new NotFoundException('Category not found');
-    if (
-      dto.unitOfMeasureId &&
-      !(await tx.unitOfMeasure.findFirst({
+        select: { id: true, status: true },
+      });
+      if (!category) throw new NotFoundException('Category not found');
+      if (category.status !== 'ACTIVE') throw new ConflictException('Category is inactive');
+    }
+    if (dto.unitOfMeasureId) {
+      const unit = await tx.unitOfMeasure.findFirst({
         where: { tenantId, id: dto.unitOfMeasureId },
-        select: { id: true },
-      }))
-    )
-      throw new NotFoundException('Unit of measure not found');
+        select: { id: true, status: true },
+      });
+      if (!unit) throw new NotFoundException('Unit of measure not found');
+      if (unit.status !== 'ACTIVE') throw new ConflictException('Unit of measure is inactive');
+    }
   }
   createItem(tenantId: string, dto: ItemDto) {
     return this.write(() =>
@@ -178,7 +212,11 @@ export class InventoryService {
     return this.write(() =>
       this.prisma.$transaction(async (tx) => {
         const item = await this.lockItem(tx, tenantId, id);
-        await this.references(tx, tenantId, dto);
+        await this.references(tx, tenantId, {
+          categoryId: dto.categoryId !== item.categoryId ? dto.categoryId : undefined,
+          unitOfMeasureId:
+            dto.unitOfMeasureId !== item.unitOfMeasureId ? dto.unitOfMeasureId : undefined,
+        });
         if (
           dto.unitOfMeasureId &&
           dto.unitOfMeasureId !== item.unitOfMeasureId &&
@@ -205,9 +243,10 @@ export class InventoryService {
           throw new ConflictException('Inactive items cannot receive stock');
         const location = await tx.stockLocation.findFirst({
           where: { tenantId, id: dto.locationId },
-          select: { id: true },
+          select: { id: true, status: true },
         });
         if (!location) throw new NotFoundException('Stock location not found');
+        if (location.status !== 'ACTIVE') throw new ConflictException('Stock location is inactive');
         const unitCost = dto.unitCost == null ? null : new StockDecimal(dto.unitCost);
         const movement = await tx.stockMovement.create({
           data: {
@@ -241,9 +280,11 @@ export class InventoryService {
   private async requireLocations(tx: Prisma.TransactionClient, tenantId: string, ids: string[]) {
     const rows = await tx.stockLocation.findMany({
       where: { tenantId, id: { in: ids } },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (rows.length !== ids.length) throw new NotFoundException('Stock location not found');
+    if (rows.some((row) => row.status !== 'ACTIVE'))
+      throw new ConflictException('Stock location is inactive');
   }
   private async sourceBalance(
     tx: Prisma.TransactionClient,

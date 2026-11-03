@@ -15,6 +15,14 @@ the adjustment reason enum and nullable adjustmentReason column. A DB check requ
 a reason on adjustment movements; the existing non-receipt null-cost check applies.
 No historical migration or movement is changed and no new table is introduced.
 
+`20261103020000_add_inventory_settings_contract` adds the ACTIVE/INACTIVE
+configuration enum and category description/icon/status, unit symbol/description/status,
+and location code/address/status with tenant/code uniqueness. Existing rows default
+to ACTIVE; existing symbols use the first 10 ID characters and location codes use a
+deterministic per-tenant LEGACY-<ordinal> sequence before making columns NOT NULL.
+No empty duplicate codes, name changes or FK/history rewrites. Counts stay derived;
+stockValue and valuation are not implemented. Apply migration before the new binary.
+
 `npm run db:generate --workspace=apps/inventory-service` generates the ignored
 service-owned client. `DATABASE_URL` is required at runtime. The DEV deployment
 script now supplies it and runs the normal migration deploy command after review.
