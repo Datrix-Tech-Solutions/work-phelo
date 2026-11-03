@@ -17,6 +17,9 @@ import {
   StockInDto,
   StockOutDto,
   StockTransferDto,
+  StockAdjustmentDto,
+  StockAdjustmentType,
+  StockBalanceStatus,
 } from './inventory.dto';
 
 // Two Decimal(18,4) inputs can produce 36 significant digits.
@@ -355,16 +358,78 @@ export class InventoryService {
       }),
     );
   }
-  async balances(tenantId: string) {
+  adjust(tenantId: string, userId: string, dto: StockAdjustmentDto) {
+    const quantity = new StockDecimal(dto.quantity);
+    if (!quantity.gt(0)) throw new BadRequestException('Quantity must be greater than zero');
+    const decrease = dto.type === StockAdjustmentType.DECREASE;
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const item = await this.lockItem(tx, tenantId, dto.itemId);
+        if (item.status !== 'ACTIVE')
+          throw new ConflictException('Inactive items cannot adjust stock');
+        await this.requireLocations(tx, tenantId, [dto.locationId]);
+        if (decrease) await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+        const movement = await tx.stockMovement.create({
+          data: {
+            tenantId,
+            itemId: item.id,
+            locationId: dto.locationId,
+            unitOfMeasureId: item.unitOfMeasureId,
+            type: decrease ? 'ADJUSTMENT_DECREASE' : 'ADJUSTMENT_INCREASE',
+            quantity,
+            adjustmentReason: dto.reason,
+            date: new Date(dto.date),
+            reference: dto.reference,
+            notes: dto.notes,
+            createdBy: userId,
+            unitCost: null,
+            totalCost: null,
+          },
+        });
+        const where = {
+          tenantId_itemId_locationId: { tenantId, itemId: item.id, locationId: dto.locationId },
+        };
+        const balance = decrease
+          ? await tx.stockBalance.update({ where, data: { quantity: { decrement: quantity } } })
+          : await tx.stockBalance.upsert({
+              where,
+              create: { tenantId, itemId: item.id, locationId: dto.locationId, quantity },
+              update: { quantity: { increment: quantity } },
+            });
+        return { movement, balance };
+      }),
+    );
+  }
+  async balances(tenantId: string, status?: StockBalanceStatus) {
     const rows = await this.prisma.stockBalance.findMany({
       where: { tenantId },
-      include: { item: { select: { reorderLevel: true } } },
+      include: {
+        item: {
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            reorderLevel: true,
+            unitOfMeasureId: true,
+            unitOfMeasure: { select: { id: true, name: true } },
+          },
+        },
+        location: { select: { id: true, name: true, type: true } },
+      },
       orderBy: [{ itemId: 'asc' }, { locationId: 'asc' }],
     });
-    return rows.map(({ item, ...row }) => ({
+    const balances = rows.map(({ item, ...row }) => ({
       ...row,
-      isLowStock: item.reorderLevel === null ? null : row.quantity.lte(item.reorderLevel),
+      item,
+      reorderLevel: item.reorderLevel,
+      unitOfMeasure: item.unitOfMeasure,
+      isLowStock: item.reorderLevel !== null && row.quantity.lte(item.reorderLevel),
+      isOutOfStock: row.quantity.isZero(),
     }));
+    if (status === StockBalanceStatus.LOW_STOCK) return balances.filter((row) => row.isLowStock);
+    if (status === StockBalanceStatus.OUT_OF_STOCK)
+      return balances.filter((row) => row.isOutOfStock);
+    return balances;
   }
   movements(tenantId: string, types?: StockMovementType[]) {
     return this.prisma.stockMovement.findMany({

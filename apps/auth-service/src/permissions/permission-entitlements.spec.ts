@@ -9,6 +9,7 @@ describe('permission entitlements', () => {
     'stock-in',
     'stock-out',
     'transfers',
+    'adjustments',
   ])(
     'scopes Inventory %s to Operations without inventing a feature flag',
     (name) => {

@@ -10,6 +10,11 @@ the purpose enum and nullable recipient/purpose/transferId fields with a tenant/
 index and issue/transfer checks. It leaves existing STOCK_IN rows and the historical
 migration unchanged. No new transfer table is introduced.
 
+`20261103010000_add_inventory_adjustments` adds two adjustment movement types,
+the adjustment reason enum and nullable adjustmentReason column. A DB check requires
+a reason on adjustment movements; the existing non-receipt null-cost check applies.
+No historical migration or movement is changed and no new table is introduced.
+
 `npm run db:generate --workspace=apps/inventory-service` generates the ignored
 service-owned client. `DATABASE_URL` is required at runtime. The DEV deployment
 script now supplies it and runs the normal migration deploy command after review.

@@ -1,4 +1,4 @@
-# Inventory Operations - Core and Stock In
+# Inventory Operations - Stock Movements and Balances
 
 Port: `INVENTORY_SERVICE_PORT=4009`. Required: `JWT_SECRET` (same verification
 secret as Auth/Gateway) and `DATABASE_URL` (service-owned `inventory` schema).
@@ -11,15 +11,15 @@ External prefix: `/api/v1/operations/inventory`; service prefix: `/api`.
 - `/categories`, `/units`, `/locations`: POST, GET; `/:id`: GET, PATCH, DELETE.
 - `/items`: POST, GET; `/items/:id`: GET, PATCH (including status/reorder level).
 - `/stock-in`: POST; `/stock-balances`, `/stock-movements`: GET.
-- `/stock-out`, `/stock-transfers`: POST.
+- `/stock-out`, `/stock-transfers`, `/stock-adjustments`: POST.
 - DELETE returns 204; referenced categories, units and locations return 409.
 - Lists are deterministic arrays with no search/pagination contract in this batch.
 - Names/SKUs are trimmed, required and unique within the tenant (case-sensitive).
 
 Business controllers require fresh signed Gateway context, enabled Operations and
-the matching `operations.inventory.{categories|units|locations|items|stock-in|stock-out|transfers}`
+the matching `operations.inventory.{categories|units|locations|items|stock-in|stock-out|transfers|adjustments}`
 grant. Actions are VIEW/CREATE/EDIT/DELETE; items have no DELETE endpoint and
-stock-in, stock-out and transfers use CREATE/VIEW only. Balances require items:VIEW.
+stock-in, stock-out, transfers and adjustments use CREATE/VIEW only. Balances require items:VIEW.
 Shared movement history accepts any corresponding VIEW grant and returns only its
 movement types; tenant/super admins retain existing all-types access in their tenant.
 No new feature flag.
@@ -37,7 +37,7 @@ accepted within those limits. Quantity must be positive; prices/reorder non-nega
 at Decimal(36,8). Omitted/null unitCost produces null totalCost, not a default price.
 The movement captures the configured item unit; callers cannot override it. Item
 unit changes after a balance exists return 409 because conversion is out of scope.
-`isLowStock` is derived per location using <=; null means no reorder level configured.
+`isLowStock` is derived per location using <=; false means not low or no reorder level configured.
 
 No idempotency key is defined in these stories: repeated successful POSTs record
 distinct receipts; clients must not blindly retry an ambiguous successful request.
@@ -66,6 +66,31 @@ Movement quantities stay positive; type encodes direction. New movements capture
 the item's configured unit and keep unitCost/totalCost null: no valuation or posting.
 Stock In's existing dateReceived field and cost behavior are unchanged.
 
+## Adjustments and Stock Status
+
+`POST /stock-adjustments` accepts itemId, locationId, type (INCREASE or DECREASE),
+positive quantity, required reason, date, and optional reference/notes. Reasons:
+DAMAGE, LOSS, THEFT, PHYSICAL_COUNT_DIFFERENCE, DATA_CORRECTION, EXPIRED_GOODS, OTHER.
+The item's configured UOM remains authoritative; tenant/creator/UOM/cost overrides
+are rejected. An ACTIVE tenant-owned item and tenant-owned location are required.
+
+One transaction locks the item, records ADJUSTMENT_INCREASE/ADJUSTMENT_DECREASE,
+and updates the balance. Increase creates/increments the location balance. Decrease
+reuses source balance locking and returns 409 for missing/insufficient availability.
+Any failure rolls back movement and balance. Costs remain null; no valuation.
+
+`GET /stock-balances` returns existing balance IDs/timestamps/quantity plus item
+(id/name/sku/reorderLevel/unitOfMeasureId/unitOfMeasure), location (id/name/type),
+top-level unitOfMeasure (id/name), reorderLevel, isLowStock and isOutOfStock.
+Decimal values serialize as strings. Low stock means a configured reorder level
+and quantity <= reorderLevel; out of stock means quantity == 0. Both may be true.
+Null reorderLevel gives isLowStock=false (previously null). Flags are not persisted.
+
+Optional `?status=LOW_STOCK` or `?status=OUT_OF_STOCK` filters the same deterministic
+tenant-scoped balance list. Unconfigured item/location pairs are not generated or
+reported as zero. All stock POSTs complete atomically: no draft lifecycle exists,
+and balances reflect only committed mutations. No reporting jobs/alerts are added.
+
 ## Validation
 
 ```bash
@@ -84,5 +109,5 @@ applied. Never use DEV/PROD URLs for these tests.
 
 DEV deployment configuration is prepared; no deployment/migration against shared
 environments is performed here. PROD activation is separate. No RabbitMQ or Redis.
-Accounting posting, valuation methods (FIFO/LIFO/average), adjustments, alerts,
+Accounting posting, valuation methods (FIFO/LIFO/average), alerts,
 scheduled jobs and frontend work remain deferred. Transfers never post to Accounting.

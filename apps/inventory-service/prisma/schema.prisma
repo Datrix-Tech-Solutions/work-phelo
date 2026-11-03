@@ -32,6 +32,20 @@ enum StockMovementType {
   STOCK_OUT
   TRANSFER_OUT
   TRANSFER_IN
+  ADJUSTMENT_INCREASE
+  ADJUSTMENT_DECREASE
+
+  @@schema("inventory")
+}
+
+enum StockAdjustmentReason {
+  DAMAGE
+  LOSS
+  THEFT
+  PHYSICAL_COUNT_DIFFERENCE
+  DATA_CORRECTION
+  EXPIRED_GOODS
+  OTHER
 
   @@schema("inventory")
 }
@@ -133,28 +147,29 @@ model StockBalance {
 }
 
 model StockMovement {
-  id              String            @id @default(uuid())
-  tenantId        String
-  itemId          String
-  locationId      String
-  unitOfMeasureId String
-  type            StockMovementType @default(STOCK_IN)
-  quantity        Decimal           @db.Decimal(18, 4)
-  unitCost        Decimal?          @db.Decimal(18, 4)
-  totalCost       Decimal?          @db.Decimal(36, 8)
-  date            DateTime
-  source          String?
-  supplier        String?
-  reference       String?
-  notes           String?
-  recipient       String?
-  purpose         StockOutPurpose?
-  transferId      String?
-  createdBy       String
-  createdAt       DateTime          @default(now())
-  item            InventoryItem     @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
-  location        StockLocation     @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
-  unitOfMeasure   UnitOfMeasure     @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
+  id               String                 @id @default(uuid())
+  tenantId         String
+  itemId           String
+  locationId       String
+  unitOfMeasureId  String
+  type             StockMovementType      @default(STOCK_IN)
+  quantity         Decimal                @db.Decimal(18, 4)
+  unitCost         Decimal?               @db.Decimal(18, 4)
+  totalCost        Decimal?               @db.Decimal(36, 8)
+  date             DateTime
+  source           String?
+  supplier         String?
+  reference        String?
+  notes            String?
+  recipient        String?
+  purpose          StockOutPurpose?
+  transferId       String?
+  adjustmentReason StockAdjustmentReason?
+  createdBy        String
+  createdAt        DateTime               @default(now())
+  item             InventoryItem          @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  location         StockLocation          @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  unitOfMeasure    UnitOfMeasure          @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, createdAt, id])
   @@index([tenantId, itemId])

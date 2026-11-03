@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Req,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -30,6 +31,8 @@ import {
   StockInDto,
   StockOutDto,
   StockTransferDto,
+  StockAdjustmentDto,
+  StockBalanceQueryDto,
 } from './inventory.dto';
 
 type UserRequest = { user: RequestUser };
@@ -207,14 +210,20 @@ export class StockController {
   }
   @Get('stock-balances')
   @RequirePermissions('operations.inventory.items:VIEW')
-  balances(@Req() req: UserRequest) {
-    return this.service.balances(req.user.tenantId);
+  balances(@Req() req: UserRequest, @Query() query: StockBalanceQueryDto) {
+    return this.service.balances(req.user.tenantId, query.status);
+  }
+  @Post('stock-adjustments')
+  @RequirePermissions('operations.inventory.adjustments:CREATE')
+  adjust(@Req() req: UserRequest, @Body() dto: StockAdjustmentDto) {
+    return this.service.adjust(req.user.tenantId, req.user.id, dto);
   }
   @Get('stock-movements')
   @RequireAnyPermission(
     'operations.inventory.stock-in:VIEW',
     'operations.inventory.stock-out:VIEW',
     'operations.inventory.transfers:VIEW',
+    'operations.inventory.adjustments:VIEW',
   )
   movements(@Req() req: UserRequest) {
     if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'TENANT_ADMIN') {
@@ -226,6 +235,8 @@ export class StockController {
     if (permissions.has('operations.inventory.stock-out:VIEW')) types.push('STOCK_OUT');
     if (permissions.has('operations.inventory.transfers:VIEW'))
       types.push('TRANSFER_OUT', 'TRANSFER_IN');
+    if (permissions.has('operations.inventory.adjustments:VIEW'))
+      types.push('ADJUSTMENT_INCREASE', 'ADJUSTMENT_DECREASE');
     return this.service.movements(req.user.tenantId, types);
   }
 }
