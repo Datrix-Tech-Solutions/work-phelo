@@ -10,6 +10,11 @@ export interface Goal {
   /** Whether a cycle runs it; such a goal cannot be deleted. */
   inCycle?: boolean;
 }
+/** An objective and the employees it is given to; each objective has its own people. */
+export interface GoalObjectiveDraft {
+  name: string;
+  employeeIds: string[];
+}
 export type GoalInput = Omit<Goal, 'id' | 'inCycle'>;
 
 export type GoalCycleStatus = 'UPCOMING' | 'ACTIVE' | 'CLOSED' | 'CANCELLED';

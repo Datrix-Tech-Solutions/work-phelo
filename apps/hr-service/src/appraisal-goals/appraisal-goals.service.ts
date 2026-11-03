@@ -3,12 +3,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppraisalObjectivesService } from './appraisal-objectives.service';
 import { CreateAppraisalGoalDto, UpdateAppraisalGoalDto } from './dto/goal.dto';
 
 @Injectable()
 export class AppraisalGoalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly objectives: AppraisalObjectivesService,
+  ) {}
 
   private async assertNameFree(
     tenantId: string,
@@ -41,22 +46,59 @@ export class AppraisalGoalsService {
     }));
   }
 
-  async create(tenantId: string, userId: string, dto: CreateAppraisalGoalDto) {
+  /**
+   * Creates the goal and, when given, its objectives together: the checks run first, then everything
+   * is written in one transaction, so a goal never ends up with only some of its objectives.
+   */
+  async create(
+    tenantId: string,
+    actor: RequestUser,
+    dto: CreateAppraisalGoalDto,
+  ) {
     const name = dto.name.trim();
     await this.assertNameFree(tenantId, name);
-    return this.prisma.appraisalGoal.create({
-      data: {
-        tenantId,
-        name,
-        selfAssessmentWeight: dto.selfAssessmentWeight,
-        managerAssessmentWeight: 100 - dto.selfAssessmentWeight,
-        employeeIds: dto.employeeIds ?? [],
-        createdBy: userId,
-      },
+    const employeeIds = dto.employeeIds ?? [];
+    const assignments = dto.objectives?.length
+      ? await this.objectives.resolveAssignments(
+          tenantId,
+          actor,
+          employeeIds,
+          dto.objectives,
+        )
+      : [];
+
+    return this.prisma.$transaction(async (tx) => {
+      const goal = await tx.appraisalGoal.create({
+        data: {
+          tenantId,
+          name,
+          selfAssessmentWeight: dto.selfAssessmentWeight,
+          managerAssessmentWeight: 100 - dto.selfAssessmentWeight,
+          employeeIds,
+          createdBy: actor.id,
+        },
+      });
+      if (assignments.length > 0) {
+        await tx.appraisalObjective.createMany({
+          data: this.objectives.objectiveRows(
+            tenantId,
+            actor,
+            goal.id,
+            assignments,
+          ),
+        });
+      }
+      return goal;
     });
   }
 
-  async update(tenantId: string, goalId: string, dto: UpdateAppraisalGoalDto) {
+  /** New objectives given on an update are added; the ones the goal already has are left alone. */
+  async update(
+    tenantId: string,
+    actor: RequestUser,
+    goalId: string,
+    dto: UpdateAppraisalGoalDto,
+  ) {
     const goal = await this.prisma.appraisalGoal.findFirst({
       where: { id: goalId, tenantId },
     });
@@ -66,18 +108,41 @@ export class AppraisalGoalsService {
     if (name && name.toLowerCase() !== goal.name.toLowerCase()) {
       await this.assertNameFree(tenantId, name, goalId);
     }
-    return this.prisma.appraisalGoal.update({
-      where: { id: goalId },
-      data: {
-        ...(name ? { name } : {}),
-        ...(dto.selfAssessmentWeight !== undefined
-          ? {
-              selfAssessmentWeight: dto.selfAssessmentWeight,
-              managerAssessmentWeight: 100 - dto.selfAssessmentWeight,
-            }
-          : {}),
-        ...(dto.employeeIds ? { employeeIds: dto.employeeIds } : {}),
-      },
+    // Objectives can go to anyone on the goal once this update has been applied.
+    const assignments = dto.objectives?.length
+      ? await this.objectives.resolveAssignments(
+          tenantId,
+          actor,
+          dto.employeeIds ?? goal.employeeIds,
+          dto.objectives,
+        )
+      : [];
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.appraisalGoal.update({
+        where: { id: goalId },
+        data: {
+          ...(name ? { name } : {}),
+          ...(dto.selfAssessmentWeight !== undefined
+            ? {
+                selfAssessmentWeight: dto.selfAssessmentWeight,
+                managerAssessmentWeight: 100 - dto.selfAssessmentWeight,
+              }
+            : {}),
+          ...(dto.employeeIds ? { employeeIds: dto.employeeIds } : {}),
+        },
+      });
+      if (assignments.length > 0) {
+        await tx.appraisalObjective.createMany({
+          data: this.objectives.objectiveRows(
+            tenantId,
+            actor,
+            goalId,
+            assignments,
+          ),
+        });
+      }
+      return updated;
     });
   }
 

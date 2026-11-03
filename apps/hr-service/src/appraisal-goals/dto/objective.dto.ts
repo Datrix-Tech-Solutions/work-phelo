@@ -1,11 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  ArrayUnique,
   IsArray,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 
 export class CreateAppraisalObjectiveDto {
@@ -53,4 +58,38 @@ export class AddObjectiveCommentDto {
   @IsNotEmpty()
   @MaxLength(1000)
   body!: string;
+}
+
+/** One objective and the employees it is given to; each objective has its own set of people. */
+export class GoalObjectiveInputDto {
+  @ApiProperty({ example: 'Close 20 support tickets a week' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiProperty({
+    type: [String],
+    description: 'Employees it is given to; they must be on the goal',
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @ArrayMaxSize(1000)
+  @IsUUID('4', { each: true })
+  employeeIds!: string[];
+}
+
+export class CreateGoalObjectivesDto {
+  @ApiProperty()
+  @IsUUID()
+  goalId!: string;
+
+  @ApiProperty({ type: [GoalObjectiveInputDto] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => GoalObjectiveInputDto)
+  objectives!: GoalObjectiveInputDto[];
 }

@@ -10,9 +10,18 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { CollapsibleSection } from '@/components/organisms/hr/payroll/payroll-groups/PayrollGroupFields';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
+import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useGoals } from '@/hooks/hr/useGoalAppraisals';
+import { usePermission } from '@/hooks/hr/usePermission';
+import { Permission } from '@/lib/permissionMap';
+import {
+  ObjectiveAssignmentsField,
+  draftsPayload,
+  newDraft,
+  type ObjectiveDraft,
+} from '@/components/organisms/hr/appraisal/ObjectiveAssignmentsField';
 import type { Employee, EmploymentType } from '@/types/hr';
-import type { Goal, GoalInput } from '@/types/appraisal';
+import type { Goal, GoalInput, GoalObjectiveDraft } from '@/types/appraisal';
 
 interface FormValues {
   name: string;
@@ -20,7 +29,7 @@ interface FormValues {
   managerAssessmentWeight: number | '';
 }
 
-const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
+export const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
   { value: 'FULL_TIME', label: 'Full Time' },
   { value: 'PART_TIME', label: 'Part Time' },
   { value: 'CONTRACT', label: 'Contract' },
@@ -28,7 +37,7 @@ const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
 ];
 
 /** '' is nothing chosen yet; 'all' is the explicit "All ..." choice, which doesn't narrow. */
-const narrows = (filter: string) => filter !== '' && filter !== 'all';
+export const narrows = (filter: string) => filter !== '' && filter !== 'all';
 
 /** Only employees who can be appraised can be given a goal. */
 export function eligibleEmployees(employees: Employee[]) {
@@ -41,7 +50,8 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   employees: Employee[];
-  onSave: (goal: GoalInput) => void;
+  /** The goal and any new objectives, saved together. */
+  onSave: (goal: GoalInput, objectives: GoalObjectiveDraft[]) => void;
   /** The goal being edited; leave out to create one. Remount (key) when it changes. */
   goal?: Goal;
 }
@@ -68,6 +78,9 @@ export function CreateGoalModal({ isOpen, onClose, employees, onSave, goal }: Pr
   const [department, setDepartment] = useState('');
   const [employmentType, setEmploymentType] = useState('');
   const [memberIds, setMemberIds] = useState<string[]>(goal?.employeeIds ?? []);
+  // New objectives to set with the goal; the ones it already has are on its details page.
+  const canSetObjectives = usePermission(Permission.CREATE_OBJECTIVE_FOR_OTHERS);
+  const [drafts, setDrafts] = useState<ObjectiveDraft[]>(() => [newDraft()]);
 
   const eligible = eligibleEmployees(employees);
   const matching = (dept: string, type: string) =>
@@ -88,8 +101,23 @@ export function CreateGoalModal({ isOpen, onClose, employees, onSave, goal }: Pr
 
   const handleClose = () => {
     reset();
+    setDrafts([newDraft()]);
     onClose();
   };
+
+  // Multi-entry: with the lock on, saving keeps the modal open and asks Continue / Stop.
+  // Continue clears everything for the next goal.
+  const entry = useMultiEntryPanel({
+    isOpen,
+    onStop: handleClose,
+    onContinue: () => {
+      reset();
+      setMemberIds([]);
+      setDepartment('');
+      setEmploymentType('');
+      setDrafts([newDraft()]);
+    },
+  });
 
   // Manager weight is derived from the self weight so the two always add up to 100%.
   useEffect(() => {
@@ -101,14 +129,33 @@ export function CreateGoalModal({ isOpen, onClose, employees, onSave, goal }: Pr
     setValue('managerAssessmentWeight', 100 - clamped, { shouldValidate: true });
   }, [selfWeightRaw, setValue]);
 
+  const draftsStarted = drafts.some((d) => d.name.trim() !== '' || d.employeeIds.length > 0);
+  // A half-filled objective would be dropped silently, so it blocks saving instead.
+  const draftsIncomplete = drafts.some(
+    (d) =>
+      (d.name.trim() !== '' || d.employeeIds.length > 0) &&
+      (d.name.trim() === '' || !d.employeeIds.some((id) => validMembers.includes(id))),
+  );
+
   const submit = handleSubmit((values) => {
-    onSave({
-      name: values.name.trim(),
-      selfAssessmentWeight: Number(values.selfAssessmentWeight),
-      managerAssessmentWeight: Number(values.managerAssessmentWeight),
-      employeeIds: validMembers,
-    });
-    handleClose();
+    if (draftsIncomplete) return;
+    onSave(
+      {
+        name: values.name.trim(),
+        selfAssessmentWeight: Number(values.selfAssessmentWeight),
+        managerAssessmentWeight: Number(values.managerAssessmentWeight),
+        employeeIds: validMembers,
+      },
+      canSetObjectives ? draftsPayload(drafts, validMembers) : [],
+    );
+    if (goal) {
+      handleClose();
+      return;
+    }
+    entry.finishSave(
+      { title: 'Goal Created!', message: `${values.name.trim()} has been created.` },
+      handleClose,
+    );
   });
 
   return (
@@ -117,12 +164,16 @@ export function CreateGoalModal({ isOpen, onClose, employees, onSave, goal }: Pr
       onClose={handleClose}
       title={goal ? 'Edit Goal' : 'Create Goal'}
       width="max-w-2xl"
+      {...entry.panelProps}
+      lock={goal ? undefined : entry.panelProps.lock}
       footer={
         <>
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={submit}>{goal ? 'Save Changes' : 'Create Goal'}</Button>
+          <Button onClick={submit} disabled={draftsIncomplete}>
+            {goal ? 'Save Changes' : 'Create Goal'}
+          </Button>
         </>
       }
     >
@@ -261,6 +312,29 @@ export function CreateGoalModal({ isOpen, onClose, employees, onSave, goal }: Pr
             </ul>
           )}
         </CollapsibleSection>
+
+        {canSetObjectives && (
+          <CollapsibleSection
+            title="Objectives"
+            summary={
+              draftsIncomplete
+                ? 'Needs a name and employees'
+                : draftsStarted
+                  ? `${drafts.filter((d) => d.name.trim()).length} to add`
+                  : 'None added'
+            }
+          >
+            {validMembers.length === 0 ? (
+              <p className="text-sm text-gray-400">Choose the goal&apos;s employees first.</p>
+            ) : (
+              <ObjectiveAssignmentsField
+                value={drafts}
+                onChange={setDrafts}
+                members={eligible.filter((e) => validMembers.includes(e.id))}
+              />
+            )}
+          </CollapsibleSection>
+        )}
       </div>
     </Modal>
   );

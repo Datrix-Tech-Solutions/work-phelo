@@ -29,6 +29,7 @@ import { CreateAppraisalGoalDto, UpdateAppraisalGoalDto } from './dto/goal.dto';
 import {
   AddObjectiveCommentDto,
   CreateAppraisalObjectiveDto,
+  CreateGoalObjectivesDto,
   LinkAppraisalObjectiveDto,
 } from './dto/objective.dto';
 
@@ -61,7 +62,7 @@ export class AppraisalGoalsController {
     @Body() dto: CreateAppraisalGoalDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.goals.create(req.user.tenantId, req.user.id, dto);
+    return this.goals.create(req.user.tenantId, req.user, dto);
   }
 
   @Patch(':goalId')
@@ -72,7 +73,7 @@ export class AppraisalGoalsController {
     @Body() dto: UpdateAppraisalGoalDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.goals.update(req.user.tenantId, goalId, dto);
+    return this.goals.update(req.user.tenantId, req.user, goalId, dto);
   }
 
   @Delete(':goalId')
@@ -110,6 +111,33 @@ export class AppraisalObjectivesController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.objectives.create(req.user.tenantId, req.user, dto);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'AppraisalObjectivesController.createForGoal delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Post('bulk')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Set several objectives under a goal, each given to its own employees on it, in one request',
+  })
+  createForGoal(
+    @Body() dto: CreateGoalObjectivesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.objectives.createForGoal(req.user.tenantId, req.user, dto);
+  }
+
+  @Get('goal/:goalId')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: "Every employee's objectives under a goal" })
+  listForGoal(
+    @Param('goalId') goalId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.objectives.listForGoal(req.user.tenantId, goalId);
   }
 
   @PermissionExempt(
