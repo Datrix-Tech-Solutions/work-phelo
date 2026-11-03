@@ -84,7 +84,7 @@ export function ObjectivesSection({ employeeId, projects }: Props) {
   );
 }
 
-function ObjectiveCard({
+export function ObjectiveCard({
   objective,
   cycleNames,
   goalOptions,

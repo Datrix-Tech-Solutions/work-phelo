@@ -9,6 +9,7 @@ import type {
   Goal,
   GoalCycle,
   GoalInput,
+  GoalObjectiveDraft,
   Ratings,
 } from '@/types/appraisal';
 
@@ -44,17 +45,30 @@ function useInvalidate() {
 export function useSaveGoal() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: ({ id, input }: { id?: string; input: GoalInput }) => {
+    mutationFn: ({
+      id,
+      input,
+      objectives,
+    }: {
+      id?: string;
+      input: GoalInput;
+      /** New objectives saved together with the goal, each for its own employees on it. */
+      objectives?: GoalObjectiveDraft[];
+    }) => {
       const body = {
         name: input.name,
         selfAssessmentWeight: input.selfAssessmentWeight,
         employeeIds: input.employeeIds,
+        ...(objectives?.length ? { objectives } : {}),
       };
       return id
         ? api.patch(`/hr/appraisal-goals/${id}`, body).then((r) => r.data)
         : api.post('/hr/appraisal-goals', body).then((r) => r.data);
     },
-    onSuccess: () => invalidate('appraisal-goals'),
+    onSuccess: () => {
+      invalidate('appraisal-goals');
+      invalidate('appraisal-objectives');
+    },
     onError: toastError,
   });
 }
@@ -197,6 +211,28 @@ export function useEmployeeObjectives(employeeId?: string) {
     enabled: !!employeeId,
   });
   return { objectives: query.data ?? (NONE as EmployeeObjective[]), isLoading: query.isLoading };
+}
+
+/** Every employee's objectives under a goal. */
+export function useGoalObjectives(goalId?: string) {
+  const query = useQuery({
+    queryKey: ['appraisal-objectives', 'goal', goalId],
+    queryFn: () =>
+      api.get<EmployeeObjective[]>(`/hr/appraisal-objectives/goal/${goalId}`).then((r) => r.data),
+    enabled: !!goalId,
+  });
+  return { objectives: query.data ?? (NONE as EmployeeObjective[]), isLoading: query.isLoading };
+}
+
+/** Sets several objectives under a goal in one request, each for its own employees on it. */
+export function useCreateGoalObjectives() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: { goalId: string; objectives: GoalObjectiveDraft[] }) =>
+      api.post<{ created: number }>('/hr/appraisal-objectives/bulk', input).then((r) => r.data),
+    onSuccess: () => invalidate('appraisal-objectives'),
+    onError: toastError,
+  });
 }
 
 export function useCreateObjective() {

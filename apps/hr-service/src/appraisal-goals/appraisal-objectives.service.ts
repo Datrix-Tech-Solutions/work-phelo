@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '../../prisma/generated/client';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -15,6 +16,8 @@ import {
 import { cycleWindowBounds, type CycleWindow } from './objective-window';
 import {
   CreateAppraisalObjectiveDto,
+  CreateGoalObjectivesDto,
+  GoalObjectiveInputDto,
   LinkAppraisalObjectiveDto,
 } from './dto/objective.dto';
 
@@ -129,7 +132,14 @@ export class AppraisalObjectivesService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    // createdBy is a user id; show the person's name.
+    return this.withCreatorNames(tenantId, objectives);
+  }
+
+  /** createdBy is a user id; show the person's name. */
+  private async withCreatorNames<T extends { createdBy: string }>(
+    tenantId: string,
+    objectives: T[],
+  ) {
     const creators = await this.prisma.employee.findMany({
       where: {
         tenantId,
@@ -144,6 +154,102 @@ export class AppraisalObjectivesService {
       ...o,
       createdByName: nameOf.get(o.createdBy) ?? 'Administrator',
     }));
+  }
+
+  /** Every objective under a goal, across its employees, for the goal's details page. */
+  async listForGoal(tenantId: string, goalId: string) {
+    await this.assertGoal(tenantId, goalId);
+    const objectives = await this.prisma.appraisalObjective.findMany({
+      where: { tenantId, goalId },
+      include: {
+        comments: { orderBy: { createdAt: 'asc' } },
+        goal: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return this.withCreatorNames(tenantId, objectives);
+  }
+
+  /**
+   * Check a set of objectives, each with its own employees, can be set under a goal, and expand
+   * them into one assignment per employee and objective. Nothing is written. Two objectives with the
+   * same name that share an employee give that employee it once.
+   */
+  async resolveAssignments(
+    tenantId: string,
+    actor: RequestUser,
+    goalEmployeeIds: string[],
+    drafts: GoalObjectiveInputDto[],
+  ) {
+    const onGoal = new Set(goalEmployeeIds);
+    const seen = new Set<string>();
+    const assignments: { employeeId: string; name: string }[] = [];
+    for (const draft of drafts) {
+      const name = draft.name.trim();
+      if (!name) throw new BadRequestException('An objective needs a name');
+      for (const employeeId of draft.employeeIds) {
+        if (!onGoal.has(employeeId)) {
+          throw new BadRequestException(
+            'Objectives can only be given to employees on the goal',
+          );
+        }
+        const id = `${employeeId}:${name.toLowerCase()}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        assignments.push({ employeeId, name });
+      }
+    }
+
+    // Every person it is for must be one the caller may set objectives for.
+    const people = [...new Set(assignments.map((a) => a.employeeId))];
+    await Promise.all(
+      people.map((employeeId) =>
+        this.assertCanActFor(tenantId, actor, employeeId),
+      ),
+    );
+    return assignments;
+  }
+
+  /** The rows to insert for resolved assignments under a goal. */
+  objectiveRows(
+    tenantId: string,
+    actor: RequestUser,
+    goalId: string,
+    assignments: { employeeId: string; name: string }[],
+  ): Prisma.AppraisalObjectiveCreateManyInput[] {
+    const linkedAt = new Date();
+    return assignments.map((a) => ({
+      tenantId,
+      employeeId: a.employeeId,
+      goalId,
+      name: a.name,
+      createdBy: actor.id,
+      linkedAt,
+    }));
+  }
+
+  /** Set several objectives under an existing goal, each for its own employees, in one go. */
+  async createForGoal(
+    tenantId: string,
+    actor: RequestUser,
+    dto: CreateGoalObjectivesDto,
+  ) {
+    const goal = await this.prisma.appraisalGoal.findFirst({
+      where: { id: dto.goalId, tenantId },
+      select: { id: true, employeeIds: true },
+    });
+    if (!goal) throw new NotFoundException('Goal not found');
+
+    const assignments = await this.resolveAssignments(
+      tenantId,
+      actor,
+      goal.employeeIds,
+      dto.objectives,
+    );
+    const { count } = await this.prisma.appraisalObjective.createMany({
+      data: this.objectiveRows(tenantId, actor, goal.id, assignments),
+    });
+    return { created: count };
   }
 
   /**
