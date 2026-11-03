@@ -1,5 +1,11 @@
-import { create } from 'zustand';
-import type { CategoryIconKey } from '@/lib/inventoryCategoryIcons';
+import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { inventoryApi, inventoryKeys } from '@/hooks/inventory/inventoryApi';
+import {
+  CATEGORY_ICONS,
+  DEFAULT_CATEGORY_ICON,
+  type CategoryIconKey,
+} from '@/lib/inventoryCategoryIcons';
 
 export interface InventoryCategory {
   id: string;
@@ -16,50 +22,68 @@ export type NewInventoryCategory = Pick<
   'name' | 'description' | 'icon' | 'status'
 >;
 
-interface CategoryStore {
-  categories: InventoryCategory[];
-  add: (category: NewInventoryCategory) => void;
-  update: (id: string, patch: NewInventoryCategory) => void;
-  remove: (id: string) => void;
+interface ApiCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  itemCount?: number;
+  createdAt: string;
 }
 
-// Stand-in until the inventory service exists: categories live in memory for the session only.
-// Swap the store for API calls in the two hooks below; the pages don't need to change.
-const useCategoryStore = create<CategoryStore>((set) => ({
-  categories: [],
-  add: (category) =>
-    set((s) => ({
-      categories: [
-        {
-          ...category,
-          id: crypto.randomUUID(),
-          itemCount: 0,
-          createdAt: new Date().toISOString(),
-        },
-        ...s.categories,
-      ],
-    })),
-  update: (id, patch) =>
-    set((s) => ({ categories: s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
-  remove: (id) => set((s) => ({ categories: s.categories.filter((c) => c.id !== id) })),
-}));
+const isIconKey = (icon: string | null): icon is CategoryIconKey =>
+  !!icon && icon in CATEGORY_ICONS;
 
 export function useInventoryCategories() {
-  const categories = useCategoryStore((s) => s.categories);
-  return { categories, isLoading: false };
+  const { data, isLoading } = useQuery({
+    queryKey: inventoryKeys.categories,
+    queryFn: () => inventoryApi.get<ApiCategory[]>('/categories'),
+  });
+
+  const categories = useMemo<InventoryCategory[]>(
+    () =>
+      (data ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        icon: isIconKey(c.icon) ? c.icon : DEFAULT_CATEGORY_ICON,
+        status: c.status,
+        itemCount: c.itemCount ?? 0,
+        createdAt: c.createdAt,
+      })),
+    [data],
+  );
+  return { categories, isLoading };
 }
 
 export function useCreateInventoryCategory() {
-  const add = useCategoryStore((s) => s.add);
-  return { createCategory: add, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: (v: NewInventoryCategory) => inventoryApi.post<ApiCategory>('/categories', v),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.categories }),
+  });
+  return { createCategory: m.mutateAsync, isPending: m.isPending };
 }
 
 export function useUpdateInventoryCategory() {
-  const update = useCategoryStore((s) => s.update);
-  return { updateCategory: update, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: NewInventoryCategory }) =>
+      inventoryApi.patch<ApiCategory>(`/categories/${id}`, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.categories }),
+  });
+  return {
+    updateCategory: (id: string, patch: NewInventoryCategory) => m.mutateAsync({ id, patch }),
+    isPending: m.isPending,
+  };
 }
 
 export function useDeleteInventoryCategory() {
-  const remove = useCategoryStore((s) => s.remove);
-  return { deleteCategory: remove, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: (id: string) => inventoryApi.delete(`/categories/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.categories }),
+  });
+  return { deleteCategory: m.mutateAsync, isPending: m.isPending };
 }

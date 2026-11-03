@@ -1,62 +1,67 @@
-import { create } from 'zustand';
+import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { inventoryApi, inventoryKeys } from '@/hooks/inventory/inventoryApi';
 
 export interface InventoryWarehouse {
   id: string;
   name: string;
   code: string;
   address: string | null;
+  /** Items with a stock balance row here, including zero-quantity rows. */
   itemCount: number;
-  stockValue: number;
   status: 'ACTIVE' | 'INACTIVE';
 }
 
-export type NewInventoryWarehouse = Pick<InventoryWarehouse, 'name' | 'code' | 'address'>;
+export type NewInventoryWarehouse = Pick<
+  InventoryWarehouse,
+  'name' | 'code' | 'address' | 'status'
+>;
 
-interface WarehouseStore {
-  warehouses: InventoryWarehouse[];
-  add: (warehouse: NewInventoryWarehouse) => void;
-  update: (id: string, patch: NewInventoryWarehouse) => void;
-  remove: (id: string) => void;
+interface ApiLocation extends Omit<InventoryWarehouse, 'itemCount'> {
+  itemCount?: number;
 }
-
-// Stand-in until the inventory service exists: warehouses live in memory for the session only.
-// Swap the store for API calls in the two hooks below; the pages don't need to change.
-const useWarehouseStore = create<WarehouseStore>((set) => ({
-  warehouses: [],
-  add: (warehouse) =>
-    set((s) => ({
-      warehouses: [
-        {
-          ...warehouse,
-          id: crypto.randomUUID(),
-          itemCount: 0,
-          stockValue: 0,
-          status: 'ACTIVE',
-        },
-        ...s.warehouses,
-      ],
-    })),
-  update: (id, patch) =>
-    set((s) => ({ warehouses: s.warehouses.map((w) => (w.id === id ? { ...w, ...patch } : w)) })),
-  remove: (id) => set((s) => ({ warehouses: s.warehouses.filter((w) => w.id !== id) })),
-}));
 
 export function useInventoryWarehouses() {
-  const warehouses = useWarehouseStore((s) => s.warehouses);
-  return { warehouses, isLoading: false };
+  const { data, isLoading } = useQuery({
+    queryKey: inventoryKeys.locations,
+    queryFn: () => inventoryApi.get<ApiLocation[]>('/locations'),
+  });
+  const warehouses = useMemo<InventoryWarehouse[]>(
+    () => (data ?? []).map((w) => ({ ...w, itemCount: w.itemCount ?? 0 })),
+    [data],
+  );
+  return { warehouses, isLoading };
 }
 
+// The UI has no location type yet; the service defaults new locations to WAREHOUSE and never
+// resets the type on update.
 export function useCreateInventoryWarehouse() {
-  const add = useWarehouseStore((s) => s.add);
-  return { createWarehouse: add, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: (v: NewInventoryWarehouse) => inventoryApi.post<ApiLocation>('/locations', v),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.locations }),
+  });
+  return { createWarehouse: m.mutateAsync, isPending: m.isPending };
 }
 
 export function useUpdateInventoryWarehouse() {
-  const update = useWarehouseStore((s) => s.update);
-  return { updateWarehouse: update, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: NewInventoryWarehouse }) =>
+      inventoryApi.patch<ApiLocation>(`/locations/${id}`, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.locations }),
+  });
+  return {
+    updateWarehouse: (id: string, patch: NewInventoryWarehouse) => m.mutateAsync({ id, patch }),
+    isPending: m.isPending,
+  };
 }
 
 export function useDeleteInventoryWarehouse() {
-  const remove = useWarehouseStore((s) => s.remove);
-  return { deleteWarehouse: remove, isPending: false };
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: (id: string) => inventoryApi.delete(`/locations/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.locations }),
+  });
+  return { deleteWarehouse: m.mutateAsync, isPending: m.isPending };
 }

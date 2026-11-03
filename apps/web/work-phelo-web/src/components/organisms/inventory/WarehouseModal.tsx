@@ -2,9 +2,10 @@
 
 import type { ChangeEvent } from 'react';
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { StatusRadioGroup } from '@/components/atoms/StatusRadioGroup';
 import { FormField } from '@/components/molecules/shared/FormField';
 import {
   useCreateInventoryWarehouse,
@@ -14,14 +15,16 @@ import {
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { suggestTransactionTypeCode } from '@/lib/accounting/transactionTypeCode';
+import { extractError } from '@/lib/extractError';
 
 interface WarehouseFormValues {
   name: string;
   code: string;
   address: string;
+  status: 'ACTIVE' | 'INACTIVE';
 }
 
-const FORM_DEFAULTS: WarehouseFormValues = { name: '', code: '', address: '' };
+const FORM_DEFAULTS: WarehouseFormValues = { name: '', code: '', address: '', status: 'ACTIVE' };
 
 interface WarehouseModalProps {
   isOpen: boolean;
@@ -41,6 +44,7 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
     handleSubmit,
     reset,
     setValue,
+    control,
     formState: { errors, dirtyFields },
   } = useForm<WarehouseFormValues>({ defaultValues: FORM_DEFAULTS });
 
@@ -49,10 +53,17 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
     if (!isOpen) return;
     reset(
       warehouse
-        ? { name: warehouse.name, code: warehouse.code, address: warehouse.address ?? '' }
+        ? {
+            name: warehouse.name,
+            code: warehouse.code,
+            address: warehouse.address ?? '',
+            status: warehouse.status,
+          }
         : FORM_DEFAULTS,
     );
   }, [isOpen, warehouse, reset]);
+
+  const status = useWatch({ control, name: 'status' });
 
   const handleClose = () => {
     reset(FORM_DEFAULTS);
@@ -66,24 +77,33 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
     onContinue: () => reset(FORM_DEFAULTS),
   });
 
-  const onSubmit = (data: WarehouseFormValues) => {
+  const save = async (data: WarehouseFormValues) => {
     const values = {
       name: data.name.trim(),
       code: data.code.trim(),
       address: data.address.trim() || null,
+      status: data.status,
     };
     if (warehouse) {
-      updateWarehouse(warehouse.id, values);
+      await updateWarehouse(warehouse.id, values);
       toast.success('Warehouse updated successfully');
       handleClose();
       return;
     }
-    createWarehouse(values);
+    await createWarehouse(values);
     toast.success('Warehouse created successfully');
     entry.finishSave(
       { title: 'Warehouse Added!', message: `${data.name.trim()} has been added.` },
       handleClose,
     );
+  };
+
+  const onSubmit = async (data: WarehouseFormValues) => {
+    try {
+      await save(data);
+    } catch (err) {
+      toast.error(extractError(err, 'Could not save warehouse'));
+    }
   };
 
   return (
@@ -150,6 +170,8 @@ export function WarehouseModal({ isOpen, onClose, warehouse }: WarehouseModalPro
           error={errors.address}
           placeholder="e.g. 12 Industrial Road, Tema"
         />
+
+        <StatusRadioGroup value={status} onChange={(v) => setValue('status', v)} />
       </div>
     </Modal>
   );

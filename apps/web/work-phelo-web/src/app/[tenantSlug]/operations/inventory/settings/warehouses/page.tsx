@@ -12,7 +12,7 @@ import {
 import { WarehouseModal } from '@/components/organisms/inventory/WarehouseModal';
 import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
 import { useToast } from '@/hooks/useToast';
-import { formatMoney } from '@/lib/formatMoney';
+import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
 
@@ -65,12 +65,6 @@ export default function InventoryWarehousesPage() {
       render: (row) => <span className="text-sm text-gray-600">{row.itemCount}</span>,
     },
     {
-      key: 'stockValue',
-      label: 'Stock Value',
-      width: '140px',
-      render: (row) => <span className="text-sm text-gray-600">{formatMoney(row.stockValue)}</span>,
-    },
-    {
       key: 'status',
       label: 'Status',
       width: '120px',
@@ -98,9 +92,14 @@ export default function InventoryWarehousesPage() {
     },
   ];
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
-    deleteWarehouse(deleteTarget.id);
+    try {
+      await deleteWarehouse(deleteTarget.id);
+    } catch (err) {
+      toast.error(extractError(err, 'Could not delete warehouse'));
+      return;
+    }
     toast.success('Warehouse deleted successfully');
     setDeleteTarget(null);
   };
