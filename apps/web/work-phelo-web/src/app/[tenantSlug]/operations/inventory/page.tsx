@@ -1,9 +1,15 @@
-import { pageBanner } from '@/lib/layout';
+'use client';
 
-export default function InventoryPage() {
+import { InventoryDashboardKpis } from '@/components/organisms/inventory/InventoryDashboardKpis';
+import { DashboardShell } from '@/components/organisms/shared/DashboardShell';
+import { useDashboardFilters } from '@/hooks/useDashboardFilters';
+
+export default function InventoryDashboardPage() {
+  const filters = useDashboardFilters();
+
   return (
-    <div className={pageBanner}>
-      <h1 className="text-lg font-semibold text-gray-900">Inventory Management</h1>
-    </div>
+    <DashboardShell filters={filters}>
+      <InventoryDashboardKpis />
+    </DashboardShell>
   );
 }
