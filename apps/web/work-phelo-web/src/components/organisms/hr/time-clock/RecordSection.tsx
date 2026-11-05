@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Badge } from '@/components/atoms/Badge';
 import { formatDate, formatTime, formatMinutes } from '@/lib/formatters';
 import { Column, DataTable } from '../../shared/DataTable';
 import type { TimeEntry } from '@/types/timeclock';
+import { ExportAttendanceModal } from './ExportAttendanceModal';
 
 interface Props {
   recordsData: { data?: TimeEntry[]; totalPages?: number } | undefined;
@@ -39,6 +41,7 @@ export function RecordsSection({
   onRecordsSearchChange,
   departments,
 }: Props) {
+  const [exportOpen, setExportOpen] = useState(false);
   const recordsList = recordsData?.data ?? [];
   const recordsTotalPages = recordsData?.totalPages ?? 1;
 
@@ -137,10 +140,16 @@ export function RecordsSection({
         totalPages={recordsTotalPages}
         onPageChange={onRecordsPageChange}
         noInternalScroll
-        onExport={() => {
-          // CSV export logic can be added here
-          console.log('Exporting records...');
-        }}
+        onExport={() => setExportOpen(true)}
+      />
+
+      <ExportAttendanceModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        departments={departments}
+        initialFrom={filterFrom}
+        initialTo={filterTo}
+        initialDepartment={filterDept}
       />
     </div>
   );

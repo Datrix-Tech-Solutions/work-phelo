@@ -1066,6 +1066,7 @@ model RecruitmentApplication {
   coverLetterFileName    String?
   portfolioUrl           String?
   githubUrl              String?
+  reference              String?
   metadata               Json?
   appliedAt              DateTime                     @default(now())
   createdAt              DateTime                     @default(now())

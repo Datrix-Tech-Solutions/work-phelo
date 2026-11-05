@@ -437,6 +437,12 @@ export class CreateRecruitmentApplicationDto {
   @MaxLength(1000)
   githubUrl?: string;
 
+  @ApiPropertyOptional({ description: 'Applicant reference', maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reference?: string;
+
   @ApiPropertyOptional({
     description: 'Languages selected from the vacancy list',
     type: [String],
@@ -626,6 +632,12 @@ export class UpdateRecruitmentApplicationProfessionalInfoDto {
   @IsString()
   @MaxLength(1000)
   githubUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Applicant reference', maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reference?: string;
 
   @ApiPropertyOptional({
     description: 'Languages selected from the vacancy list',

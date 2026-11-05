@@ -267,6 +267,14 @@ export function CandidateOverviewTab({
           )}
         </SummarySection>
 
+        {candidate.reference && (
+          <SummarySection title="Reference">
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+              {candidate.reference}
+            </p>
+          </SummarySection>
+        )}
+
         <SummarySection title="Expected Salary">
           {salary ? <p className="text-sm font-semibold text-gray-900">{salary}</p> : EMPTY}
         </SummarySection>

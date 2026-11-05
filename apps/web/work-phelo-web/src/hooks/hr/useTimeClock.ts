@@ -260,6 +260,36 @@ export function useAttendanceRecords(params: {
   });
 }
 
+/** Every attendance record matching the filters, fetched page by page (for export). */
+export async function fetchAllAttendanceRecords(params: {
+  fromDate?: string;
+  toDate?: string;
+  employeeId?: string;
+  departmentId?: string;
+}): Promise<TimeEntry[]> {
+  const MAX_PAGES = 200;
+  const all: TimeEntry[] = [];
+  let totalPages = 1;
+  for (let page = 1; page <= totalPages && page <= MAX_PAGES; page++) {
+    const res = await api.get('/hr/time/attendance', {
+      params: {
+        page,
+        employeeId: params.employeeId || undefined,
+        from: params.fromDate || undefined,
+        to: params.toDate || undefined,
+        departmentId: params.departmentId || undefined,
+      },
+    });
+    const raw = res.data as
+      | RawAttendanceRecord[]
+      | { data: RawAttendanceRecord[]; totalPages: number };
+    const records = Array.isArray(raw) ? raw : (raw?.data ?? []);
+    totalPages = Array.isArray(raw) ? 1 : (raw?.totalPages ?? 1);
+    all.push(...records.map(transformAttendanceRecord));
+  }
+  return all;
+}
+
 export function useCorrectionRequests(status?: string, options?: { enabled?: boolean }) {
   return useQuery<CorrectionRequest[]>({
     queryKey: ['timeclock', 'corrections', status ?? 'all'],

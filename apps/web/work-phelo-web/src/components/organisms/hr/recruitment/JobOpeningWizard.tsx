@@ -58,7 +58,11 @@ const TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
   { value: 'INTERN', label: 'Intern' },
 ];
 
-type DocumentRequestKey = 'requireCoverLetter' | 'requestPortfolio' | 'requestGithub';
+type DocumentRequestKey =
+  | 'requireCoverLetter'
+  | 'requestPortfolio'
+  | 'requestGithub'
+  | 'requestReference';
 
 const DOCUMENT_REQUESTS: { key: DocumentRequestKey; label: string; hint: string }[] = [
   {
@@ -72,6 +76,7 @@ const DOCUMENT_REQUESTS: { key: DocumentRequestKey; label: string; hint: string 
     hint: 'Ask applicants for a portfolio link.',
   },
   { key: 'requestGithub', label: 'GitHub link', hint: 'Ask applicants for a GitHub profile link.' },
+  { key: 'requestReference', label: 'Reference', hint: 'Ask applicants for a reference.' },
 ];
 
 const WORK_MODE_OPTIONS: { value: WorkMode; label: string }[] = [
@@ -168,6 +173,7 @@ const EMPTY_VALUES: JobOpeningFormValues = {
   requireCoverLetter: false,
   requestPortfolio: false,
   requestGithub: false,
+  requestReference: false,
   questions: [],
 };
 

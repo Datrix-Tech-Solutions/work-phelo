@@ -79,6 +79,7 @@ export interface VacancyDetails {
     coverLetter: boolean;
     portfolio: boolean;
     github: boolean;
+    reference?: boolean;
   };
 }
 

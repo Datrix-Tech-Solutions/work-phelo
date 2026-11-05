@@ -689,6 +689,7 @@ describe('RecruitmentService', () => {
           coverLetter: true,
           portfolio: false,
           github: false,
+          reference: false,
         },
       });
       expect(createdData().requirements).toBe(

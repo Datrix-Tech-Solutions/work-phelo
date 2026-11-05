@@ -39,6 +39,7 @@ export function toVacancyPayload(
       coverLetter: values.requireCoverLetter,
       portfolio: values.requestPortfolio,
       github: values.requestGithub,
+      reference: values.requestReference,
     },
   };
   if (included.education && values.educationLevels.length > 0) {
@@ -157,6 +158,7 @@ export function toFormValues(vacancy: RecruitmentVacancy): JobOpeningFormValues 
     requireCoverLetter: documents?.coverLetter ?? false,
     requestPortfolio: documents?.portfolio ?? false,
     requestGithub: documents?.github ?? false,
+    requestReference: documents?.reference ?? false,
     questions: [...vacancy.questions]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((q) => ({
