@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Badge } from '@/components/atoms/Badge';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import {
@@ -17,7 +18,12 @@ import {
   getMovementValue,
   type StockMovement,
 } from '@/hooks/inventory/useStockMovements';
-import { canReverse, useMovementActions } from '@/hooks/inventory/useMovementActions';
+import {
+  canCancel,
+  canDelete,
+  canReverse,
+  useMovementActions,
+} from '@/hooks/inventory/useMovementActions';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 
@@ -32,6 +38,10 @@ interface StockMovementsTableProps {
   actionButton?: { label: string; onClick: () => void };
   /** Opens a draft row; drafts have no details page. */
   onDraftClick?: (id: string) => void;
+  /** Show a filter for the movement type. */
+  typeFilter?: boolean;
+  /** Show a Variant column and filter: for the history of one item. */
+  showVariant?: boolean;
 }
 
 /** Searchable, paged table of stock movements — shared by Stock Management and warehouse details. */
@@ -40,12 +50,23 @@ export function StockMovementsTable({
   isLoading,
   actionButton,
   onDraftClick,
+  typeFilter,
+  showVariant,
 }: StockMovementsTableProps) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const { exportMovement, requestReverse, requestDeleteDraft, modals } = useMovementActions();
+  const {
+    exportMovement,
+    requestReverse,
+    requestDelete,
+    requestCancel,
+    requestDeleteDraft,
+    modals,
+  } = useMovementActions();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [typeValue, setTypeValue] = useState('');
+  const [variantValue, setVariantValue] = useState('');
   const { items } = useInventoryItems();
   const { warehouses } = useInventoryWarehouses();
 
@@ -64,15 +85,30 @@ export function StockMovementsTable({
   const toLabel = (m: StockMovement) => warehouseName(m.toWarehouseId) ?? '—';
 
   const term = search.trim().toLowerCase();
-  const filtered = movements.filter(
+  // With a variant chosen, each movement keeps only that variant's lines, so the Variant, QTY and
+  // Value columns describe that variant alone.
+  const scoped = variantValue
+    ? movements
+        .map((m) => ({ ...m, lines: m.lines.filter((l) => l.variant === variantValue) }))
+        .filter((m) => m.lines.length > 0)
+    : movements;
+  const filtered = scoped.filter(
     (m) =>
-      !term ||
-      m.reference.toLowerCase().includes(term) ||
-      MOVEMENT_TYPE_LABEL[m.type].toLowerCase().includes(term) ||
-      itemsLabel(m).toLowerCase().includes(term),
+      (!typeValue || m.type === typeValue) &&
+      (!term ||
+        m.reference.toLowerCase().includes(term) ||
+        MOVEMENT_TYPE_LABEL[m.type].toLowerCase().includes(term) ||
+        itemsLabel(m).toLowerCase().includes(term)),
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // The variants named on these movements, for the filter.
+  const variantNames = [
+    ...new Set(movements.flatMap((m) => m.lines.map((l) => l.variant).filter(Boolean) as string[])),
+  ];
+  const variantsLabel = (m: StockMovement) =>
+    [...new Set(m.lines.map((l) => l.variant).filter(Boolean))].join(', ');
 
   const columns: Column<StockMovement>[] = [
     {
@@ -111,6 +147,20 @@ export function StockMovementsTable({
         </span>
       ),
     },
+    ...(showVariant
+      ? [
+          {
+            key: 'variant',
+            label: 'Variant',
+            width: 'minmax(100px, 1fr)',
+            render: (row: StockMovement) => (
+              <span className="text-sm font-semibold text-gray-600">
+                {variantsLabel(row) || '—'}
+              </span>
+            ),
+          },
+        ]
+      : []),
     {
       key: 'from',
       label: 'From',
@@ -170,6 +220,47 @@ export function StockMovementsTable({
           setSearch(q);
           setPage(1);
         }}
+        extraFilters={
+          typeFilter || (showVariant && variantNames.length > 0) ? (
+            <div className="flex items-center gap-2">
+              {typeFilter && (
+                <div className="w-44">
+                  <SearchSelect
+                    placeholder="Type"
+                    allLabel="All Types"
+                    showAllOption
+                    clearable={false}
+                    options={Object.entries(MOVEMENT_TYPE_LABEL).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                    value={typeValue}
+                    onChange={(v) => {
+                      setTypeValue(v);
+                      setPage(1);
+                    }}
+                  />
+                </div>
+              )}
+              {showVariant && variantNames.length > 0 && (
+                <div className="w-44">
+                  <SearchSelect
+                    placeholder="Variant"
+                    allLabel="All Variants"
+                    showAllOption
+                    clearable={false}
+                    options={variantNames.map((v) => ({ value: v, label: v }))}
+                    value={variantValue}
+                    onChange={(v) => {
+                      setVariantValue(v);
+                      setPage(1);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          ) : undefined
+        }
         rowActions={(row) =>
           row.status === 'DRAFT'
             ? [
@@ -188,6 +279,12 @@ export function StockMovementsTable({
                     ]
                   : []),
                 { label: 'Export', onClick: () => exportMovement(row) },
+                ...(canCancel(row)
+                  ? [{ label: 'Cancel Movement', danger: true, onClick: () => requestCancel(row) }]
+                  : []),
+                ...(canDelete(row)
+                  ? [{ label: 'Delete', danger: true, onClick: () => requestDelete(row) }]
+                  : []),
               ]
         }
         onRowClick={(row) =>

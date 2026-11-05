@@ -2,6 +2,7 @@
 
 import { use } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/atoms/Avatar';
@@ -28,9 +29,15 @@ import {
   useStockMovements,
   type StockMovementLine,
 } from '@/hooks/inventory/useStockMovements';
-import { canReverse, useMovementActions } from '@/hooks/inventory/useMovementActions';
+import {
+  canCancel,
+  canDelete,
+  canReverse,
+  useMovementActions,
+} from '@/hooks/inventory/useMovementActions';
 import { Button } from '@/components/atoms/Button';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
+import { useAdjustmentReasons } from '@/hooks/inventory/useAdjustmentReasons';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
 import { useInventoryUnits } from '@/hooks/inventory/useInventoryUnits';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
@@ -46,6 +53,7 @@ type LineRow = StockMovementLine & {
 
 /** How a line changes the item's total stock. */
 function lineChange(m: StockMovement, line: StockMovementLine): number {
+  if (m.kind || m.status === 'CANCELLED') return 0; // a price adjustment, or stock put back
   if (m.type === 'STOCK_IN') return line.quantity;
   if (m.type === 'STOCK_OUT') return -line.quantity;
   if (m.type === 'ADJUSTMENT') return line.quantity; // already signed
@@ -68,7 +76,12 @@ export default function StockMovementDetailsPage({
   const { categories } = useInventoryCategories();
   const { warehouses } = useInventoryWarehouses();
 
-  const { exportMovement, requestReverse, modals } = useMovementActions();
+  const router = useRouter();
+  const { reasons } = useAdjustmentReasons();
+  const { exportMovement, requestReverse, requestDelete, requestCancel, modals } =
+    useMovementActions({
+      onDeleted: () => router.push(base),
+    });
 
   const movement = movements.find((m) => m.id === id);
 
@@ -140,6 +153,16 @@ export default function StockMovementDetailsPage({
           </div>
         );
       },
+    },
+    {
+      key: 'variant',
+      label: 'Variant',
+      width: '120px',
+      render: (row) => (
+        <span className={row.variant ? 'font-medium text-gray-900' : 'text-gray-400'}>
+          {row.variant || '—'}
+        </span>
+      ),
     },
     {
       key: 'unit',
@@ -228,6 +251,16 @@ export default function StockMovementDetailsPage({
             <Button variant="outline" onClick={() => exportMovement(movement)}>
               Export
             </Button>
+            {canCancel(movement) && (
+              <Button variant="outline" onClick={() => requestCancel(movement)}>
+                Cancel Movement
+              </Button>
+            )}
+            {canDelete(movement) && (
+              <Button variant="danger" onClick={() => requestDelete(movement)}>
+                Delete
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -268,7 +301,12 @@ export default function StockMovementDetailsPage({
             {movement.type === 'ADJUSTMENT' && (
               <DetailField
                 label="Reason"
-                value={optionLabel(ADJUSTMENT_REASONS, movement.reason) ?? '—'}
+                value={
+                  reasons.find((r) => r.code === movement.reason)?.name ??
+                  optionLabel(ADJUSTMENT_REASONS, movement.reason) ??
+                  movement.reason ??
+                  '—'
+                }
               />
             )}
             <DetailField

@@ -1,5 +1,6 @@
 'use client';
 
+import { pageContent, pageHeader } from '@/lib/layout';
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -13,6 +14,7 @@ import {
   type InventoryLocationType,
   type InventoryWarehouse,
 } from '@/hooks/inventory/useInventoryWarehouses';
+import { WarehouseManagePanel } from '@/components/organisms/inventory/WarehouseManagePanel';
 import { WarehouseModal } from '@/components/organisms/inventory/WarehouseModal';
 import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
 import { useToast } from '@/hooks/useToast';
@@ -33,6 +35,7 @@ export default function InventoryWarehousesPage() {
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<InventoryWarehouse | null>(null);
+  const [manageTarget, setManageTarget] = useState<InventoryWarehouse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InventoryWarehouse | null>(null);
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -92,9 +95,12 @@ export default function InventoryWarehousesPage() {
     {
       key: 'actions',
       label: 'Actions',
-      width: 'minmax(160px, auto)',
+      width: 'minmax(230px, auto)',
       render: (row) => (
         <div className="flex items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
+          <TableButton variant="green" onClick={() => setManageTarget(row)}>
+            Manage
+          </TableButton>
           <TableButton variant="blue" onClick={() => setEditTarget(row)}>
             Edit
           </TableButton>
@@ -119,32 +125,35 @@ export default function InventoryWarehousesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="shrink-0">
-        <h2 className="text-base font-semibold text-gray-900">Warehouses</h2>
+    <>
+      <div className={`${pageHeader} shrink-0`}>
+        <h1 className="text-xl font-semibold text-gray-900">Warehouses</h1>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        isLoading={isLoading}
-        emptyMessage="No warehouses found"
-        searchPlaceholder="Search warehouses..."
-        searchValue={search}
-        onSearch={(q) => {
-          setSearch(q);
-          setPage(1);
-        }}
-        onRowClick={(row) =>
-          router.push(`/${tenantSlug}/operations/inventory/settings/warehouses/${row.id}`)
-        }
-        actionButton={{ label: 'Add Warehouse', onClick: () => setModalOpen(true) }}
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        noInternalScroll
-      />
+      <div className={`${pageContent} flex flex-col`}>
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={isLoading}
+          emptyMessage="No warehouses found"
+          searchPlaceholder="Search warehouses..."
+          searchValue={search}
+          onSearch={(q) => {
+            setSearch(q);
+            setPage(1);
+          }}
+          onRowClick={(row) =>
+            router.push(`/${tenantSlug}/operations/inventory/warehouses/${row.id}`)
+          }
+          actionButton={{ label: 'Add Warehouse', onClick: () => setModalOpen(true) }}
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          noInternalScroll
+        />
+      </div>
 
+      <WarehouseManagePanel warehouse={manageTarget} onClose={() => setManageTarget(null)} />
       <WarehouseModal
         isOpen={modalOpen || !!editTarget}
         onClose={() => {
@@ -159,6 +168,6 @@ export default function InventoryWarehousesPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
       />
-    </div>
+    </>
   );
 }

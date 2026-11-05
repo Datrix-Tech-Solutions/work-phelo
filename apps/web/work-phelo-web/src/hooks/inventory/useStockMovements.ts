@@ -1,5 +1,8 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCancelledMovementStore } from '@/hooks/inventory/useCancelledMovements';
+import { useDeletedMovementStore } from '@/hooks/inventory/useDeletedMovements';
+import { revaluationToMovement, useRevaluationStore } from '@/hooks/inventory/useStockRevaluations';
 import { useReversedMovementStore } from '@/hooks/inventory/useReversedMovements';
 import { inventoryApi, inventoryKeys, toDecimal, toNumber } from '@/hooks/inventory/inventoryApi';
 
@@ -12,6 +15,8 @@ export interface StockMovementLine {
   itemId: string;
   quantity: number;
   unitCost: number | null;
+  /** The item variant this line is for. */
+  variant?: string | null;
 }
 
 export interface StockMovement {
@@ -20,6 +25,8 @@ export interface StockMovement {
   /** ISO date of the movement. */
   date: string;
   type: StockMovementType;
+  /** A price adjustment: it revalues stock on hand and changes no quantity. Browser-only. */
+  kind?: 'REVALUATION';
   lines: StockMovementLine[];
   /** Source warehouse; null when stock comes from outside (e.g. a supplier). */
   fromWarehouseId: string | null;
@@ -73,6 +80,8 @@ interface ApiStockMovement {
   /** Shared by movements saved together (several items on one form); null for single saves. */
   batchId: string | null;
   adjustmentReason: string | null;
+  /** Name of the item variant the movement was for, if any. */
+  variant: string | null;
 }
 
 export function getMovementQuantity(m: StockMovement): number {
@@ -110,7 +119,7 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
         m.reference ?? `${REFERENCE_PREFIX[type]}-${(m.batchId ?? m.id).slice(0, 8).toUpperCase()}`,
       date: m.date,
       type,
-      lines: [{ itemId: m.itemId, quantity, unitCost: toNumber(m.unitCost) }],
+      lines: [{ itemId: m.itemId, quantity, unitCost: toNumber(m.unitCost), variant: m.variant }],
       fromWarehouseId: null,
       toWarehouseId: null,
       source: null,
@@ -179,12 +188,19 @@ export function useStockMovements() {
   });
   // The service returns newest first.
   const reversedIds = useReversedMovementStore((s) => s.ids);
+  const cancelledIds = useCancelledMovementStore((s) => s.ids);
+  const deletedIds = useDeletedMovementStore((s) => s.ids);
+  const revaluations = useRevaluationStore((s) => s.entries);
   const movements = useMemo(
     () =>
-      toMovements(data ?? []).map((m) =>
-        reversedIds.includes(m.id) ? { ...m, status: 'REVERSED' as const } : m,
-      ),
-    [data, reversedIds],
+      [
+        ...revaluations.map(revaluationToMovement),
+        ...toMovements(data ?? []).map((m) => {
+          if (cancelledIds.includes(m.id)) return { ...m, status: 'CANCELLED' as const };
+          return reversedIds.includes(m.id) ? { ...m, status: 'REVERSED' as const } : m;
+        }),
+      ].filter((m) => !deletedIds.includes(m.id)),
+    [data, reversedIds, cancelledIds, revaluations, deletedIds],
   );
   return { movements, isLoading };
 }
@@ -201,10 +217,11 @@ function postMovement(movement: NewStockMovement) {
   const lines = movement.lines.map((l) => ({
     itemId: l.itemId,
     quantity: toDecimal(Math.abs(l.quantity)),
+    variant: l.variant || null,
   }));
   if (movement.type === 'STOCK_IN') {
     if (!movement.toWarehouseId) throw new Error('Choose a warehouse to receive the stock.');
-    return inventoryApi.post('/stock-in-batches', {
+    return inventoryApi.post<{ batchId: string }>('/stock-in-batches', {
       ...common,
       locationId: movement.toWarehouseId,
       dateReceived: movement.date,
@@ -215,7 +232,7 @@ function postMovement(movement: NewStockMovement) {
   if (movement.type === 'STOCK_OUT') {
     if (!movement.fromWarehouseId) throw new Error('Choose a warehouse to issue stock from.');
     if (!movement.purpose) throw new Error('Choose a purpose for this issue.');
-    return inventoryApi.post('/stock-out-batches', {
+    return inventoryApi.post<{ batchId: string }>('/stock-out-batches', {
       ...common,
       locationId: movement.fromWarehouseId,
       date: movement.date,
@@ -227,7 +244,7 @@ function postMovement(movement: NewStockMovement) {
   if (movement.type === 'TRANSFER') {
     if (!movement.fromWarehouseId || !movement.toWarehouseId)
       throw new Error('Choose the warehouses to transfer between.');
-    return inventoryApi.post('/stock-transfer-batches', {
+    return inventoryApi.post<{ batchId: string }>('/stock-transfer-batches', {
       ...common,
       sourceLocationId: movement.fromWarehouseId,
       destinationLocationId: movement.toWarehouseId,
@@ -240,7 +257,7 @@ function postMovement(movement: NewStockMovement) {
   const locationId = decrease ? movement.fromWarehouseId : movement.toWarehouseId;
   if (!locationId) throw new Error('Choose a warehouse to adjust.');
   if (!movement.reason) throw new Error('Choose a reason for this adjustment.');
-  return inventoryApi.post('/stock-adjustment-batches', {
+  return inventoryApi.post<{ batchId: string }>('/stock-adjustment-batches', {
     ...common,
     locationId,
     type: decrease ? 'DECREASE' : 'INCREASE',
@@ -259,7 +276,78 @@ export function useCreateStockMovement() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: inventoryKeys.movements });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.balances });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.variantBalances });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.variants });
     },
   });
   return { createMovement: m.mutateAsync, isPending: m.isPending };
+}
+
+/** The movement that puts back the stock a movement changed. */
+function counterMovement(m: StockMovement): NewStockMovement {
+  const date = new Date().toISOString().slice(0, 10);
+  const base = {
+    date,
+    notes: `Stock returned from ${m.reference}`,
+    source: null,
+    reason: null,
+    purpose: null,
+    fromWarehouseId: null,
+    toWarehouseId: null,
+  };
+  const lines = m.lines.map((l) => ({ ...l, quantity: Math.abs(l.quantity) }));
+  if (m.type === 'STOCK_IN') {
+    return {
+      ...base,
+      type: 'STOCK_OUT',
+      purpose: 'OTHER',
+      fromWarehouseId: m.toWarehouseId,
+      lines,
+    };
+  }
+  if (m.type === 'STOCK_OUT') {
+    return { ...base, type: 'STOCK_IN', toWarehouseId: m.fromWarehouseId, lines };
+  }
+  if (m.type === 'TRANSFER') {
+    return {
+      ...base,
+      type: 'TRANSFER',
+      fromWarehouseId: m.toWarehouseId,
+      toWarehouseId: m.fromWarehouseId,
+      lines,
+    };
+  }
+  // An adjustment is undone by the opposite one; decreases carry negative quantities.
+  const wasDecrease = m.lines.some((l) => l.quantity < 0);
+  return {
+    ...base,
+    type: 'ADJUSTMENT',
+    reason: 'DATA_CORRECTION',
+    fromWarehouseId: wasDecrease ? null : m.toWarehouseId,
+    toWarehouseId: wasDecrease ? m.fromWarehouseId : null,
+    lines: lines.map((l) => ({ ...l, quantity: wasDecrease ? l.quantity : -l.quantity })),
+  };
+}
+
+/**
+ * Puts back the stock a posted movement changed, by posting the opposite movement. Resolves to the
+ * id of that opposite movement (so it can be hidden from the lists), or null when the movement
+ * changed no stock. Rejects, changing nothing, if the stock can't be put back, e.g. goods
+ * received earlier have since been issued.
+ */
+export function useReturnMovementStock() {
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: async (movement: StockMovement) => {
+      if (movement.kind) return null;
+      const { batchId } = await postMovement(counterMovement(movement));
+      return batchId;
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.movements });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.balances });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.variantBalances });
+    },
+  });
+  return { returnStock: m.mutateAsync, isPending: m.isPending };
 }

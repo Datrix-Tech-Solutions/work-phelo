@@ -8,6 +8,10 @@ import {
   LocationsController,
   ItemsController,
   StockController,
+  PartiesController,
+  SubcategoriesController,
+  VariantsController,
+  AdjustmentReasonsController,
 } from './inventory.controller';
 
 @Module({
@@ -19,6 +23,10 @@ import {
     LocationsController,
     ItemsController,
     StockController,
+    PartiesController,
+    SubcategoriesController,
+    VariantsController,
+    AdjustmentReasonsController,
   ],
 })
 export class InventoryModule {}

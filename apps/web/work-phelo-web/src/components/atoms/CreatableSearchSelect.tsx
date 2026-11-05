@@ -19,11 +19,15 @@ interface CreatableSearchSelectProps {
   value?: string;
   onChange?: (value: string) => void;
   error?: string;
+  /** Greys the control out and ignores input. */
+  disabled?: boolean;
 }
 
 function ChevronDown({ open }: { open: boolean }) {
   return (
-    <Icons.ChevronDown className={cn('transition-transform duration-150', open && 'rotate-180')} />
+    <Icons.ChevronDown
+      className={cn('w-4 h-4 transition-transform duration-150', open && 'rotate-180')}
+    />
   );
 }
 
@@ -34,6 +38,7 @@ export function CreatableSearchSelect({
   value = '',
   onChange,
   error,
+  disabled = false,
 }: CreatableSearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -182,13 +187,19 @@ export function CreatableSearchSelect({
 
       <div
         className={cn(
-          'flex items-center border rounded-input bg-white px-4 transition-colors',
-          open ? 'border-brand ring-1 ring-brand/20' : error ? 'border-red-500' : 'border-gray-300',
+          'flex items-center border rounded-input px-4 transition-colors',
+          disabled && 'opacity-60 cursor-not-allowed',
+          open
+            ? 'bg-transparent border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+            : error
+              ? 'bg-transparent border-red-500'
+              : 'bg-transparent border-(--input-border,var(--color-gray-400))',
         )}
       >
         <input
           ref={inputRef}
           type="text"
+          disabled={disabled}
           value={inputDisplay}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={handleFocus}
@@ -201,11 +212,11 @@ export function CreatableSearchSelect({
           aria-activedescendant={
             open && highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined
           }
-          className="flex-1 py-3 text-sm bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 min-w-0"
+          className="flex-1 py-2 text-sm bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 min-w-0"
         />
 
         <div className="flex items-center gap-1 shrink-0 ml-2">
-          {value && !open && (
+          {value && !open && !disabled && (
             <button
               type="button"
               onClick={handleClear}
@@ -217,6 +228,7 @@ export function CreatableSearchSelect({
           <button
             type="button"
             onClick={handleChevronClick}
+            disabled={disabled}
             className="text-gray-400 hover:text-gray-600 transition-colors p-0.5"
           >
             <ChevronDown open={open} />

@@ -9,7 +9,17 @@ import { AppModule } from './app.module';
 import { configureApplication } from './app.setup';
 import { PrismaService } from './prisma/prisma.service';
 import { InventoryService } from './inventory.service';
-import { StockOutPurpose, StockAdjustmentReason } from '../prisma/generated/client';
+import { StockOutPurpose } from '../prisma/generated/client';
+
+const ADJUSTMENT_REASONS = [
+  'DAMAGE',
+  'LOSS',
+  'THEFT',
+  'PHYSICAL_COUNT_DIFFERENCE',
+  'DATA_CORRECTION',
+  'EXPIRED_GOODS',
+  'COMPANY_SPECIFIC_REASON',
+];
 
 describe('Inventory HTTP authorization and validation', () => {
   let app: INestApplication<Server>;
@@ -35,6 +45,19 @@ describe('Inventory HTTP authorization and validation', () => {
     movements: jest.fn().mockResolvedValue([]),
     adjust: jest.fn().mockResolvedValue({ movement: { id } }),
     balances: jest.fn().mockResolvedValue([]),
+    variantBalances: jest.fn().mockResolvedValue([]),
+    listParties: jest.fn().mockResolvedValue([]),
+    createParty: jest.fn().mockResolvedValue({ id }),
+    updateParty: jest.fn().mockResolvedValue({ id }),
+    listSubcategories: jest.fn().mockResolvedValue([]),
+    createSubcategory: jest.fn().mockResolvedValue({ id }),
+    updateSubcategory: jest.fn().mockResolvedValue({ id }),
+    listVariants: jest.fn().mockResolvedValue([]),
+    createVariant: jest.fn().mockResolvedValue({ id }),
+    updateVariant: jest.fn().mockResolvedValue({ id }),
+    listReasons: jest.fn().mockResolvedValue([]),
+    createReason: jest.fn().mockResolvedValue({ id }),
+    updateReason: jest.fn().mockResolvedValue({ id }),
   };
   function headers(permission: string | string[], tenantId = 'tenant-a', enabled = true) {
     const token = jwt.sign({ sub: 'user-a', tenantId }, secret);
@@ -346,7 +369,7 @@ describe('Inventory HTTP authorization and validation', () => {
       .expect(403);
     expect(service.adjust).not.toHaveBeenCalled();
   });
-  it.each(Object.values(StockAdjustmentReason))('accepts adjustment reason %s', async (reason) => {
+  it.each(ADJUSTMENT_REASONS)('accepts adjustment reason %s', async (reason) => {
     for (const type of ['INCREASE', 'DECREASE']) {
       await request(app.getHttpServer())
         .post('/api/stock-adjustments')
@@ -363,7 +386,8 @@ describe('Inventory HTTP authorization and validation', () => {
   it.each([
     { reason: undefined },
     { reason: null },
-    { reason: 'INVALID' },
+    { reason: '' },
+    { reason: 'X'.repeat(101) },
     { type: undefined },
     { type: 'STOCK_IN' },
     { type: null },
@@ -589,7 +613,7 @@ describe('Inventory HTTP authorization and validation', () => {
         body: {
           locationId: id,
           type: 'DECREASE',
-          reason: StockAdjustmentReason.DAMAGE,
+          reason: 'DAMAGE',
           date: '2026-11-04',
           lines,
         },
@@ -677,6 +701,158 @@ describe('Inventory HTTP authorization and validation', () => {
         .post('/api/stock-out-batches')
         .set(headers('operations.inventory.stock-out:CREATE'))
         .send({ ...batches[1].body, lines: [line] })
+        .expect(400);
+    });
+  });
+
+  describe('customers, suppliers, subcategories, variants and adjustment reasons', () => {
+    it('lists parties for people who can receive or issue stock, filtered by kind', async () => {
+      await request(app.getHttpServer()).get('/api/parties').expect(401);
+      await request(app.getHttpServer()).get('/api/parties').set(headers('')).expect(403);
+      await request(app.getHttpServer())
+        .get('/api/parties?kind=SUPPLIER')
+        .set(headers('operations.inventory.stock-in:CREATE', 'tenant-b'))
+        .expect(200);
+      expect(service.listParties).toHaveBeenLastCalledWith('tenant-b', 'SUPPLIER');
+      await request(app.getHttpServer())
+        .get('/api/parties?kind=OTHER')
+        .set(headers('operations.inventory.parties:VIEW'))
+        .expect(400);
+    });
+    it('creates a party with a kind and rejects a missing name or kind', async () => {
+      const body = { kind: 'CUSTOMER', name: ' Acme ', email: 'a@acme.test' };
+      await request(app.getHttpServer())
+        .post('/api/parties')
+        .set(headers('operations.inventory.stock-in:CREATE'))
+        .send(body)
+        .expect(403);
+      await request(app.getHttpServer())
+        .post('/api/parties')
+        .set(headers('operations.inventory.parties:CREATE', 'tenant-b'))
+        .send(body)
+        .expect(201);
+      expect(service.createParty).toHaveBeenLastCalledWith(
+        'tenant-b',
+        expect.objectContaining({ kind: 'CUSTOMER', name: 'Acme' }),
+      );
+      for (const bad of [{ name: 'x' }, { kind: 'CUSTOMER' }, { kind: 'BOTH', name: 'x' }]) {
+        await request(app.getHttpServer())
+          .post('/api/parties')
+          .set(headers('operations.inventory.parties:CREATE'))
+          .send(bad)
+          .expect(400);
+      }
+    });
+    it('does not let a party change kind', async () => {
+      await request(app.getHttpServer())
+        .patch('/api/parties/' + id)
+        .set(headers('operations.inventory.parties:EDIT'))
+        .send({ kind: 'SUPPLIER' })
+        .expect(400);
+    });
+    it('manages subcategories under category permissions', async () => {
+      await request(app.getHttpServer())
+        .post('/api/subcategories')
+        .set(headers('operations.inventory.items:VIEW'))
+        .send({ categoryId: id, name: 'Laptops' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .post('/api/subcategories')
+        .set(headers('operations.inventory.categories:CREATE', 'tenant-b'))
+        .send({ categoryId: id, name: 'Laptops' })
+        .expect(201);
+      expect(service.createSubcategory).toHaveBeenLastCalledWith(
+        'tenant-b',
+        expect.objectContaining({ categoryId: id, name: 'Laptops' }),
+      );
+      await request(app.getHttpServer())
+        .post('/api/subcategories')
+        .set(headers('operations.inventory.categories:CREATE'))
+        .send({ name: 'No category' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/api/subcategories?categoryId=' + id)
+        .set(headers('operations.inventory.items:VIEW', 'tenant-b'))
+        .expect(200);
+      expect(service.listSubcategories).toHaveBeenLastCalledWith('tenant-b', id);
+    });
+    it('manages item variants under item permissions', async () => {
+      await request(app.getHttpServer())
+        .post('/api/variants')
+        .set(headers('operations.inventory.items:VIEW'))
+        .send({ itemId: id, name: 'Red' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .post('/api/variants')
+        .set(headers('operations.inventory.items:CREATE', 'tenant-b'))
+        .send({ itemId: id, name: 'Red' })
+        .expect(201);
+      expect(service.createVariant).toHaveBeenLastCalledWith(
+        'tenant-b',
+        expect.objectContaining({ itemId: id, name: 'Red' }),
+      );
+      await request(app.getHttpServer())
+        .post('/api/variants')
+        .set(headers('operations.inventory.items:CREATE'))
+        .send({ name: 'Red' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/api/variant-balances')
+        .set(headers('operations.inventory.items:VIEW', 'tenant-b'))
+        .expect(200);
+      expect(service.variantBalances).toHaveBeenLastCalledWith('tenant-b');
+    });
+    it('accepts a variant name on stock lines and rejects an empty or oversized one', async () => {
+      const body = {
+        locationId: id,
+        dateReceived: '2026-11-05',
+        lines: [{ itemId: id, quantity: '2', variant: 'Red' }],
+      };
+      await request(app.getHttpServer())
+        .post('/api/stock-in-batches')
+        .set(headers('operations.inventory.stock-in:CREATE', 'tenant-b'))
+        .send(body)
+        .expect(201);
+      expect(service.stockInBatch).toHaveBeenLastCalledWith(
+        'tenant-b',
+        'user-a',
+        expect.objectContaining({
+          lines: [expect.objectContaining({ itemId: id, variant: 'Red' })],
+        }),
+      );
+      for (const variant of ['', 'V'.repeat(101)]) {
+        await request(app.getHttpServer())
+          .post('/api/stock-in-batches')
+          .set(headers('operations.inventory.stock-in:CREATE'))
+          .send({ ...body, lines: [{ itemId: id, quantity: '2', variant }] })
+          .expect(400);
+      }
+    });
+    it('manages adjustment reasons under adjustment permissions', async () => {
+      await request(app.getHttpServer()).get('/api/adjustment-reasons').expect(401);
+      await request(app.getHttpServer())
+        .get('/api/adjustment-reasons')
+        .set(headers('operations.inventory.adjustments:CREATE', 'tenant-b'))
+        .expect(200);
+      expect(service.listReasons).toHaveBeenLastCalledWith('tenant-b');
+      await request(app.getHttpServer())
+        .post('/api/adjustment-reasons')
+        .set(headers('operations.inventory.adjustments:VIEW'))
+        .send({ name: 'Water damage' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .post('/api/adjustment-reasons')
+        .set(headers('operations.inventory.adjustments:CREATE', 'tenant-b'))
+        .send({ name: 'Water damage' })
+        .expect(201);
+      expect(service.createReason).toHaveBeenLastCalledWith(
+        'tenant-b',
+        expect.objectContaining({ name: 'Water damage' }),
+      );
+      await request(app.getHttpServer())
+        .post('/api/adjustment-reasons')
+        .set(headers('operations.inventory.adjustments:CREATE'))
+        .send({ name: '' })
         .expect(400);
     });
   });

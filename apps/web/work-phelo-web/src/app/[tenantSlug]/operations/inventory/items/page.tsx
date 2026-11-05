@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Avatar } from '@/components/atoms/Avatar';
 import { Badge } from '@/components/atoms/Badge';
@@ -20,21 +21,12 @@ import {
   useInventoryItems,
   useDeleteInventoryItem,
   getStockStatus,
+  STOCK_STATUS_BADGE,
   type InventoryItem,
-  type InventoryStockStatus,
 } from '@/hooks/inventory/useInventoryItems';
 import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
-
-const STATUS_BADGE: Record<
-  InventoryStockStatus,
-  { label: string; variant: 'success' | 'warning' | 'danger' }
-> = {
-  IN_STOCK: { label: 'In Stock', variant: 'success' },
-  LOW_STOCK: { label: 'Low Stock', variant: 'warning' },
-  OUT_OF_STOCK: { label: 'Out of Stock', variant: 'danger' },
-};
 
 const formatNumber = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 
@@ -49,6 +41,8 @@ export default function InventoryItemsPage() {
   const [reorderTarget, setReorderTarget] = useState<InventoryItem | null>(null);
   const [editTarget, setEditTarget] = useState<InventoryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const toast = useToast();
   const { items, isLoading } = useInventoryItems();
   const { deleteItem } = useDeleteInventoryItem();
@@ -117,9 +111,9 @@ export default function InventoryItemsPage() {
       render: (row) => (
         <div className="flex flex-col leading-tight">
           <span className="text-sm font-bold text-gray-900">{formatNumber(shownStock(row))}</span>
-          {warehouseFilter && (
+          {/* {warehouseFilter && (
             <span className="text-xs text-gray-500">of {formatNumber(row.currentStock)}</span>
-          )}
+          )} */}
         </div>
       ),
     },
@@ -149,7 +143,7 @@ export default function InventoryItemsPage() {
       label: 'Status',
       width: '100px',
       render: (row) => {
-        const { label, variant } = STATUS_BADGE[getStockStatus(row)];
+        const { label, variant } = STOCK_STATUS_BADGE[getStockStatus(row)];
         return <Badge variant={variant} label={label} />;
       },
     },
@@ -183,6 +177,7 @@ export default function InventoryItemsPage() {
             { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
           ]}
           data={rows}
+          onRowClick={(row) => router.push(`/${tenantSlug}/operations/inventory/items/${row.id}`)}
           isLoading={isLoading}
           emptyMessage="No inventory items found"
           searchPlaceholder="Search by item, SKU or category..."
@@ -225,7 +220,7 @@ export default function InventoryItemsPage() {
                   allLabel="All Statuses"
                   showAllOption
                   clearable={false}
-                  options={Object.entries(STATUS_BADGE).map(([value, { label }]) => ({
+                  options={Object.entries(STOCK_STATUS_BADGE).map(([value, { label }]) => ({
                     value,
                     label,
                   }))}
