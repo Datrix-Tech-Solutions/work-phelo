@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TableButton } from '@/components/atoms/TableButton';
@@ -32,6 +33,8 @@ export function PartiesPage({ kind }: { kind: PartyKind }) {
   const [editTarget, setEditTarget] = useState<InventoryParty | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InventoryParty | null>(null);
   const toast = useToast();
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { parties, isLoading, deleteParty, isPending } = useInventoryParties(kind);
 
   const term = search.trim().toLowerCase();
@@ -133,6 +136,9 @@ export function PartiesPage({ kind }: { kind: PartyKind }) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/operations/inventory/suppliers-customers/${row.id}`)
+        }
         noInternalScroll
       />
 

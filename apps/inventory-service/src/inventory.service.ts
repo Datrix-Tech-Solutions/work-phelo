@@ -25,6 +25,7 @@ import {
   UnitDto,
   UpdateUnitDto,
   StockInDto,
+  AssignVariantDto,
   StockInBatchDto,
   StockOutBatchDto,
   StockTransferBatchDto,
@@ -873,6 +874,53 @@ export class InventoryService {
         { ...header, itemId: line.itemId, quantity: line.quantity, variant: line.variant },
         batchId,
       ),
+    );
+  }
+  /**
+   * Counts stock an item held without a variant as one of its variants. The item's total doesn't
+   * change; the history shows the stock leaving "no variant" and arriving under the variant.
+   */
+  assignVariant(tenantId: string, userId: string, dto: AssignVariantDto) {
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const quantity = new StockDecimal(dto.quantity);
+        if (!quantity.gt(0)) throw new BadRequestException('Quantity must be greater than zero');
+        const item = await this.lockItem(tx, tenantId, dto.itemId);
+        if (item.status !== 'ACTIVE')
+          throw new ConflictException('Inactive items cannot adjust stock');
+        await this.requireLocations(tx, tenantId, [dto.locationId]);
+        const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, false);
+        if (!variant) throw new BadRequestException('Choose a variant');
+        const held = await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+        const tagged = await tx.variantBalance.aggregate({
+          where: { tenantId, itemId: item.id, locationId: dto.locationId },
+          _sum: { quantity: true },
+        });
+        const untagged = held.quantity.minus(tagged._sum.quantity ?? 0);
+        if (untagged.lt(quantity))
+          throw new ConflictException('Insufficient stock without a variant');
+        await this.addVariantStock(tx, tenantId, item.id, dto.locationId, variant.id, quantity);
+        const batchId = randomUUID();
+        const row = (type: 'ADJUSTMENT_DECREASE' | 'ADJUSTMENT_INCREASE', variantId?: string) => ({
+          tenantId,
+          itemId: item.id,
+          locationId: dto.locationId,
+          unitOfMeasureId: item.unitOfMeasureId,
+          variantId,
+          type,
+          quantity,
+          adjustmentReason: 'VARIANT_ASSIGNMENT',
+          date: new Date(),
+          notes: dto.notes,
+          createdBy: userId,
+          batchId,
+          unitCost: null,
+          totalCost: null,
+        });
+        await tx.stockMovement.create({ data: row('ADJUSTMENT_DECREASE') });
+        await tx.stockMovement.create({ data: row('ADJUSTMENT_INCREASE', variant.id) });
+        return { batchId, variant: variant.name, quantity };
+      }),
     );
   }
   async balances(tenantId: string, status?: StockBalanceStatus) {

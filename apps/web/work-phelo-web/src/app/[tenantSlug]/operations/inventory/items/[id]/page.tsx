@@ -1,23 +1,33 @@
 'use client';
 
-import { use, useMemo } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Boxes, ChevronRight, Layers } from 'lucide-react';
 import { Avatar } from '@/components/atoms/Avatar';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
+import { EditItemValueModal } from '@/components/organisms/inventory/EditItemValueModal';
+import { EditReorderLevelModal } from '@/components/organisms/inventory/EditReorderLevelModal';
+import { ItemPanel } from '@/components/organisms/inventory/ItemPanel';
+import { AssignVariantModal } from '@/components/organisms/inventory/AssignVariantModal';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
 import {
   STOCK_STATUS_BADGE,
   getStockStatus,
+  useDeleteInventoryItem,
   useInventoryItems,
 } from '@/hooks/inventory/useInventoryItems';
 import { useItemVariants, useVariantBalances } from '@/hooks/inventory/useItemVariants';
 import { useInventoryUnits } from '@/hooks/inventory/useInventoryUnits';
 import { useStockMovements } from '@/hooks/inventory/useStockMovements';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { formatInventoryValue } from '@/lib/inventoryCurrency';
 import { variantStock } from '@/lib/inventoryVariants';
 import { compactCardGrid, pageContent, pageHeader } from '@/lib/layout';
@@ -42,6 +52,14 @@ export default function InventoryItemDetailsPage({
   const item = items.find((i) => i.id === id);
   const { variants } = useItemVariants();
   const { balances } = useVariantBalances();
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [valueOpen, setValueOpen] = useState(false);
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const toast = useToast();
+  const router = useRouter();
+  const { deleteItem } = useDeleteInventoryItem();
 
   // Stock per variant comes from the movements that name one; whatever the item holds beyond
   // those is shown as "No variant", so the rows always add up to the item's total stock.
@@ -97,9 +115,30 @@ export default function InventoryItemDetailsPage({
           <span className="text-gray-700 font-medium">{item.name}</span>
         </nav>
 
-        <div className="flex items-center gap-3">
-          <Avatar name={item.name} avatarUrl={item.imageUrl} size="sm" />
-          <h2 className="text-lg font-bold text-gray-900">{item.name}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Avatar name={item.name} avatarUrl={item.imageUrl} size="sm" />
+            <h2 className="text-lg font-bold text-gray-900">{item.name}</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {variantRows.some((r) => r.name === 'No variant' && r.stock > 0) && (
+              <Button size="xs" variant="outline" onClick={() => setAssignOpen(true)}>
+                Assign to Variant
+              </Button>
+            )}
+            <Button size="xs" variant="outline" onClick={() => setEditOpen(true)}>
+              Edit
+            </Button>
+            <Button size="xs" variant="outline" onClick={() => setValueOpen(true)}>
+              Edit Value
+            </Button>
+            <Button size="xs" variant="outline" onClick={() => setReorderOpen(true)}>
+              Edit Reorder Level
+            </Button>
+            <Button size="xs" variant="danger" onClick={() => setDeleteOpen(true)}>
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -169,6 +208,33 @@ export default function InventoryItemDetailsPage({
           <h3 className="text-base font-semibold text-gray-900">Stock Movements</h3>
           <StockMovementsTable movements={itemMovements} typeFilter showVariant />
         </div>
+        <ItemPanel isOpen={editOpen} onClose={() => setEditOpen(false)} item={item} />
+        <EditItemValueModal
+          key={`value-${valueOpen}`}
+          item={valueOpen ? item : null}
+          onClose={() => setValueOpen(false)}
+        />
+        <EditReorderLevelModal
+          key={`reorder-${reorderOpen}`}
+          item={reorderOpen ? item : null}
+          onClose={() => setReorderOpen(false)}
+        />
+        <DeleteInventoryRecordModal
+          kind="Item"
+          name={deleteOpen ? item.name : null}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={async () => {
+            try {
+              await deleteItem(item.id);
+            } catch (err) {
+              toast.error(extractError(err, 'Could not deactivate item'));
+              return;
+            }
+            toast.success('Item deactivated');
+            router.push(base);
+          }}
+        />
+        <AssignVariantModal itemId={id} isOpen={assignOpen} onClose={() => setAssignOpen(false)} />
       </div>
     </>
   );

@@ -100,13 +100,13 @@ export default function InventoryWarehouseDetailsPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold text-gray-900">{warehouse.name}</h1>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => setManageOpen(true)}>
+            <Button size="xs" variant="outline" onClick={() => setManageOpen(true)}>
               Manage
             </Button>
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
+            <Button size="xs" variant="outline" onClick={() => setEditOpen(true)}>
               Edit
             </Button>
-            <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+            <Button size="xs" variant="danger" onClick={() => setDeleteOpen(true)}>
               Delete
             </Button>
           </div>

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { PartiesPage } from '@/components/organisms/inventory/PartiesPage';
 import { pageContent, pageHeader, pagePx } from '@/lib/layout';
@@ -11,7 +12,17 @@ const TABS = [
 ] as const;
 
 export default function InventorySuppliersCustomersPage() {
-  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('SUPPLIER');
+  return (
+    <Suspense>
+      <SuppliersCustomers />
+    </Suspense>
+  );
+}
+
+function SuppliersCustomers() {
+  // Coming back from a details page lands on the tab it was opened from (?tab=CUSTOMER).
+  const initial = useSearchParams().get('tab') === 'CUSTOMER' ? 'CUSTOMER' : 'SUPPLIER';
+  const [tab, setTab] = useState<(typeof TABS)[number]['key']>(initial);
 
   return (
     <>

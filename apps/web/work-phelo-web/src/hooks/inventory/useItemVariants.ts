@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { inventoryApi, inventoryKeys, toNumber } from '@/hooks/inventory/inventoryApi';
+import { inventoryApi, inventoryKeys, toDecimal, toNumber } from '@/hooks/inventory/inventoryApi';
 
 export interface ItemVariant {
   id: string;
@@ -78,4 +78,22 @@ export function useVariantBalances() {
     [data],
   );
   return { balances, isLoading };
+}
+
+/** Counts stock an item held without a variant as one of its variants (the total is unchanged). */
+export function useAssignVariant() {
+  const queryClient = useQueryClient();
+  const assign = useMutation({
+    mutationFn: (body: { itemId: string; locationId: string; variant: string; quantity: number }) =>
+      inventoryApi.post('/variant-balances/assign', {
+        ...body,
+        quantity: toDecimal(body.quantity),
+      }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: inventoryKeys.variantBalances }),
+        queryClient.invalidateQueries({ queryKey: inventoryKeys.movements }),
+      ]),
+  });
+  return { assignVariant: assign.mutateAsync, isPending: assign.isPending };
 }
