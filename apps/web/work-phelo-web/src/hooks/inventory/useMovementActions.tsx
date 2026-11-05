@@ -9,27 +9,39 @@ import { MOVEMENT_STATUS_BADGE, MOVEMENT_TYPE_LABEL } from '@/lib/inventoryMovem
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
 import { useInventoryUnits } from '@/hooks/inventory/useInventoryUnits';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
+import { useCancelledMovementStore } from '@/hooks/inventory/useCancelledMovements';
+import { useDeletedMovementStore } from '@/hooks/inventory/useDeletedMovements';
 import { useReversedMovementStore } from '@/hooks/inventory/useReversedMovements';
 import { useStockMovementDrafts } from '@/hooks/inventory/useStockMovementDrafts';
-import type { StockMovement } from '@/hooks/inventory/useStockMovements';
+import { useReturnMovementStock, type StockMovement } from '@/hooks/inventory/useStockMovements';
+import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
 
 /** Only a posted movement can be reversed — not a draft, and not one already reversed. */
-export const canReverse = (m: StockMovement) => m.status === 'COMPLETED';
+export const canReverse = (m: StockMovement) => m.status === 'COMPLETED' && !m.kind;
+
+/** Only a completed movement can be deleted or cancelled; a draft has its own delete. */
+export const canDelete = (m: StockMovement) => m.status === 'COMPLETED';
+export const canCancel = canDelete;
 
 /**
  * Reverse, export and delete-draft for a stock movement, shared by the table and details page.
  * Render `modals` once alongside whatever triggers these. Reverse and draft delete are
  * front-end only: the inventory service has no endpoint for either.
  */
-export function useMovementActions() {
+export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {}) {
   const toast = useToast();
   const { items } = useInventoryItems();
   const { units } = useInventoryUnits();
   const { warehouses } = useInventoryWarehouses();
+  const markCancelled = useCancelledMovementStore((s) => s.markCancelled);
+  const { returnStock, isPending: isReturning } = useReturnMovementStock();
+  const markDeleted = useDeletedMovementStore((s) => s.markDeleted);
   const markReversed = useReversedMovementStore((s) => s.markReversed);
   const { deleteDraft } = useStockMovementDrafts();
   const [reverseTarget, setReverseTarget] = useState<StockMovement | null>(null);
+  const [deleteMovementTarget, setDeleteMovementTarget] = useState<StockMovement | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<StockMovement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StockMovement | null>(null);
 
   const exportMovement = (m: StockMovement) => {
@@ -99,6 +111,75 @@ export function useMovementActions() {
           </div>
         }
       />
+      <Modal
+        isOpen={cancelTarget !== null}
+        onClose={() => setCancelTarget(null)}
+        title="Cancel Stock Movement"
+        description={`Cancel ${cancelTarget?.reference ?? 'this movement'}? The stock it changed is put back and the movement stays in the list as Cancelled.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setCancelTarget(null)}>
+              Keep Movement
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isReturning}
+              loadingText="Cancelling..."
+              onClick={async () => {
+                if (!cancelTarget) return;
+                const target = cancelTarget;
+                try {
+                  const returnId = await returnStock(target);
+                  if (returnId) markDeleted(returnId);
+                  markCancelled(target.id);
+                } catch (err) {
+                  toast.error(extractError(err, 'Could not put the stock back'));
+                  return;
+                }
+                toast.success('Stock movement cancelled');
+                setCancelTarget(null);
+              }}
+            >
+              Cancel Movement
+            </Button>
+          </div>
+        }
+      />
+      <Modal
+        isOpen={deleteMovementTarget !== null}
+        onClose={() => setDeleteMovementTarget(null)}
+        title="Delete Stock Movement"
+        description={`Delete ${deleteMovementTarget?.reference ?? 'this movement'}? The stock it changed is put back and the movement is removed from the list.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setDeleteMovementTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isReturning}
+              loadingText="Deleting..."
+              onClick={async () => {
+                if (!deleteMovementTarget) return;
+                const target = deleteMovementTarget;
+                try {
+                  const returnId = await returnStock(target);
+                  if (returnId) markDeleted(returnId);
+                  markDeleted(target.id);
+                } catch (err) {
+                  toast.error(extractError(err, 'Could not put the stock back'));
+                  return;
+                }
+                toast.success('Stock movement deleted');
+                setDeleteMovementTarget(null);
+                onDeleted?.();
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        }
+      />
       <DeleteInventoryRecordModal
         kind="Draft"
         name={deleteTarget?.reference ?? null}
@@ -116,6 +197,8 @@ export function useMovementActions() {
   return {
     exportMovement,
     requestReverse: setReverseTarget,
+    requestDelete: setDeleteMovementTarget,
+    requestCancel: setCancelTarget,
     requestDeleteDraft: setDeleteTarget,
     modals,
   };

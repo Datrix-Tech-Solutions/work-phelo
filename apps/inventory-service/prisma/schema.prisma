@@ -45,14 +45,9 @@ enum StockMovementType {
   @@schema("inventory")
 }
 
-enum StockAdjustmentReason {
-  DAMAGE
-  LOSS
-  THEFT
-  PHYSICAL_COUNT_DIFFERENCE
-  DATA_CORRECTION
-  EXPIRED_GOODS
-  OTHER
+enum PartyKind {
+  CUSTOMER
+  SUPPLIER
 
   @@schema("inventory")
 }
@@ -70,15 +65,16 @@ enum StockOutPurpose {
 }
 
 model InventoryCategory {
-  id          String                       @id @default(uuid())
-  tenantId    String
-  name        String
-  description String?
-  icon        String?
-  status      InventoryConfigurationStatus @default(ACTIVE)
-  createdAt   DateTime                     @default(now())
-  updatedAt   DateTime                     @updatedAt
-  items       InventoryItem[]
+  id            String                       @id @default(uuid())
+  tenantId      String
+  name          String
+  description   String?
+  icon          String?
+  status        InventoryConfigurationStatus @default(ACTIVE)
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+  items         InventoryItem[]
+  subcategories InventorySubcategory[]
 
   @@unique([tenantId, name])
   @@unique([tenantId, id])
@@ -103,17 +99,18 @@ model UnitOfMeasure {
 }
 
 model StockLocation {
-  id        String                       @id @default(uuid())
-  tenantId  String
-  name      String
-  code      String
-  address   String?
-  status    InventoryConfigurationStatus @default(ACTIVE)
-  type      StockLocationType
-  createdAt DateTime                     @default(now())
-  updatedAt DateTime                     @updatedAt
-  balances  StockBalance[]
-  movements StockMovement[]
+  id              String                       @id @default(uuid())
+  tenantId        String
+  name            String
+  code            String
+  address         String?
+  status          InventoryConfigurationStatus @default(ACTIVE)
+  type            StockLocationType
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  balances        StockBalance[]
+  movements       StockMovement[]
+  variantBalances VariantBalance[]
 
   @@unique([tenantId, name])
   @@unique([tenantId, code])
@@ -122,27 +119,32 @@ model StockLocation {
 }
 
 model InventoryItem {
-  id              String              @id @default(uuid())
+  id              String                @id @default(uuid())
   tenantId        String
   name            String
   sku             String
   categoryId      String
+  subcategoryId   String?
   unitOfMeasureId String
   description     String?
-  costPrice       Decimal?            @db.Decimal(18, 4)
-  sellingPrice    Decimal?            @db.Decimal(18, 4)
-  reorderLevel    Decimal?            @db.Decimal(18, 4)
-  status          InventoryItemStatus @default(ACTIVE)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  category        InventoryCategory   @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
-  unitOfMeasure   UnitOfMeasure       @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
+  costPrice       Decimal?              @db.Decimal(18, 4)
+  sellingPrice    Decimal?              @db.Decimal(18, 4)
+  reorderLevel    Decimal?              @db.Decimal(18, 4)
+  status          InventoryItemStatus   @default(ACTIVE)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  category        InventoryCategory     @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  subcategory     InventorySubcategory? @relation(fields: [tenantId, subcategoryId], references: [tenantId, id], onDelete: Restrict)
+  unitOfMeasure   UnitOfMeasure         @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
   balances        StockBalance[]
   movements       StockMovement[]
+  variants        ItemVariant[]
+  variantBalances VariantBalance[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, id])
   @@index([tenantId, categoryId])
+  @@index([tenantId, subcategoryId])
   @@index([tenantId, unitOfMeasureId])
   @@schema("inventory")
 }
@@ -164,15 +166,15 @@ model StockBalance {
 }
 
 model StockMovement {
-  id               String                 @id @default(uuid())
+  id               String            @id @default(uuid())
   tenantId         String
   itemId           String
   locationId       String
   unitOfMeasureId  String
-  type             StockMovementType      @default(STOCK_IN)
-  quantity         Decimal                @db.Decimal(18, 4)
-  unitCost         Decimal?               @db.Decimal(18, 4)
-  totalCost        Decimal?               @db.Decimal(36, 8)
+  type             StockMovementType @default(STOCK_IN)
+  quantity         Decimal           @db.Decimal(18, 4)
+  unitCost         Decimal?          @db.Decimal(18, 4)
+  totalCost        Decimal?          @db.Decimal(36, 8)
   date             DateTime
   source           String?
   supplier         String?
@@ -182,12 +184,14 @@ model StockMovement {
   purpose          StockOutPurpose?
   transferId       String?
   batchId          String?
-  adjustmentReason StockAdjustmentReason?
+  adjustmentReason String?
+  variantId        String?
   createdBy        String
-  createdAt        DateTime               @default(now())
-  item             InventoryItem          @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
-  location         StockLocation          @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
-  unitOfMeasure    UnitOfMeasure          @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
+  createdAt        DateTime          @default(now())
+  item             InventoryItem     @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  variant          ItemVariant?      @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  location         StockLocation     @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  unitOfMeasure    UnitOfMeasure     @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, createdAt, id])
   @@index([tenantId, itemId])
@@ -195,5 +199,95 @@ model StockMovement {
   @@index([tenantId, unitOfMeasureId])
   @@index([tenantId, transferId])
   @@index([tenantId, batchId])
+  @@index([tenantId, variantId])
+  @@schema("inventory")
+}
+
+model InventoryParty {
+  id            String                       @id @default(uuid())
+  tenantId      String
+  kind          PartyKind
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  status        InventoryConfigurationStatus @default(ACTIVE)
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+
+  @@unique([tenantId, kind, name])
+  @@unique([tenantId, id])
+  @@schema("inventory")
+}
+
+model InventorySubcategory {
+  id         String                       @id @default(uuid())
+  tenantId   String
+  categoryId String
+  name       String
+  status     InventoryConfigurationStatus @default(ACTIVE)
+  createdAt  DateTime                     @default(now())
+  updatedAt  DateTime                     @updatedAt
+  category   InventoryCategory            @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  items      InventoryItem[]
+
+  @@unique([tenantId, categoryId, name])
+  @@unique([tenantId, id])
+  @@schema("inventory")
+}
+
+model ItemVariant {
+  id        String                       @id @default(uuid())
+  tenantId  String
+  itemId    String
+  name      String
+  status    InventoryConfigurationStatus @default(ACTIVE)
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
+  item      InventoryItem                @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  balances  VariantBalance[]
+  movements StockMovement[]
+
+  @@unique([tenantId, itemId, name])
+  @@unique([tenantId, id])
+  @@schema("inventory")
+}
+
+// Stock of one variant at one location. StockBalance stays the item's total there; this splits
+// the part of it that was received, moved or adjusted under a variant.
+model VariantBalance {
+  id         String        @id @default(uuid())
+  tenantId   String
+  itemId     String
+  locationId String
+  variantId  String
+  quantity   Decimal       @db.Decimal(18, 4)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  item       InventoryItem @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  location   StockLocation @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  variant    ItemVariant   @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, itemId, locationId, variantId])
+  @@index([tenantId, locationId])
+  @@index([tenantId, variantId])
+  @@schema("inventory")
+}
+
+// Reasons offered for stock adjustments. The six built-in ones are created for a company the first
+// time its reasons are used; companies add their own. A movement stores the reason's code.
+model AdjustmentReason {
+  id        String                       @id @default(uuid())
+  tenantId  String
+  code      String
+  name      String
+  isSystem  Boolean                      @default(false)
+  status    InventoryConfigurationStatus @default(ACTIVE)
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
   @@schema("inventory")
 }

@@ -407,6 +407,11 @@ export const RESOURCES = [
     description: 'Inventory units of measure',
   },
   {
+    name: 'operations.inventory.parties',
+    module: 'OPERATIONS',
+    description: 'Inventory customers and suppliers',
+  },
+  {
     name: 'operations.inventory.locations',
     module: 'OPERATIONS',
     description: 'Inventory warehouses and stock locations',

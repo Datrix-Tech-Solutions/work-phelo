@@ -12,7 +12,7 @@ export interface DraftFormValues {
   toWarehouseId: string;
   purpose: string;
   reason: string;
-  adjustmentType: 'INCREASE' | 'DECREASE';
+  adjustmentType: 'INCREASE' | 'DECREASE' | 'PRICE';
   notes: string;
 }
 
@@ -20,6 +20,7 @@ export interface DraftLine {
   itemId: string;
   quantity: number;
   unitCost: number;
+  variant?: string;
 }
 
 export interface StockMovementDraft {
@@ -77,6 +78,7 @@ export function draftToMovement(d: StockMovementDraft): StockMovement {
       itemId: l.itemId,
       quantity: decrease ? -l.quantity : l.quantity,
       unitCost: l.unitCost,
+      variant: l.variant || null,
     })),
     fromWarehouseId: type === 'STOCK_OUT' || type === 'TRANSFER' || decrease ? warehouse : null,
     toWarehouseId:

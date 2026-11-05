@@ -20,6 +20,11 @@ export const inventoryKeys = {
   items: ['inventory', 'items'] as const,
   balances: ['inventory', 'stock-balances'] as const,
   movements: ['inventory', 'stock-movements'] as const,
+  parties: ['inventory', 'parties'] as const,
+  subcategories: ['inventory', 'subcategories'] as const,
+  variants: ['inventory', 'variants'] as const,
+  variantBalances: ['inventory', 'variant-balances'] as const,
+  adjustmentReasons: ['inventory', 'adjustment-reasons'] as const,
 };
 
 /** The service returns decimals as strings; the UI works in numbers. */

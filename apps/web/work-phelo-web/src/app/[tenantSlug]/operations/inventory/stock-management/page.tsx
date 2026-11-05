@@ -39,6 +39,7 @@ export default function StockManagementPage() {
           movements={[...draftMovements, ...movements]}
           isLoading={isLoading}
           onDraftClick={openDraft}
+          typeFilter
           actionButton={{ label: 'Record Movement', onClick: () => setTypePickerOpen(true) }}
         />
       </div>

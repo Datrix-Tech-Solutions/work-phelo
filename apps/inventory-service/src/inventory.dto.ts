@@ -16,13 +16,13 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { PartialType, PickType, ApiProperty } from '@nestjs/swagger';
+import { OmitType, PartialType, PickType, ApiProperty } from '@nestjs/swagger';
 import {
   InventoryItemStatus,
   InventoryConfigurationStatus,
   StockLocationType,
   StockOutPurpose,
-  StockAdjustmentReason,
+  PartyKind,
 } from '../prisma/generated/client';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -111,6 +111,10 @@ export class ItemDto extends NameDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   categoryId!: string;
+  @ApiProperty({ format: 'uuid', required: false, nullable: true, type: String })
+  @IsOptional()
+  @IsUUID()
+  subcategoryId?: string | null;
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   unitOfMeasureId!: string;
@@ -160,6 +164,19 @@ export class StockInDto {
   @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
   @Matches(/^(?=.*[1-9])\d{1,14}(\.\d{1,4})?$/)
   quantity!: string;
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    maxLength: 100,
+    description:
+      "Name of one of the item's variants. Stock in creates the variant if the item doesn't have it yet; every other movement needs an existing one.",
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  variant?: string | null;
   @ApiProperty({ example: '2026-11-02', description: 'ISO date or date-time received' })
   @IsDateString({ strict: true })
   dateReceived!: string;
@@ -196,6 +213,7 @@ export class StockOutDto extends PickType(StockInDto, [
   'itemId',
   'locationId',
   'quantity',
+  'variant',
   'reference',
   'notes',
 ] as const) {
@@ -235,6 +253,7 @@ export class StockAdjustmentDto extends PickType(StockInDto, [
   'itemId',
   'locationId',
   'quantity',
+  'variant',
   'reference',
   'notes',
 ] as const) {
@@ -242,9 +261,14 @@ export class StockAdjustmentDto extends PickType(StockInDto, [
   @IsEnum(StockAdjustmentType)
   type!: StockAdjustmentType;
 
-  @ApiProperty({ enum: StockAdjustmentReason })
-  @IsEnum(StockAdjustmentReason)
-  reason!: StockAdjustmentReason;
+  @ApiProperty({
+    description: 'Code of one of the company adjustment reasons (see GET /adjustment-reasons)',
+    maxLength: 100,
+  })
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  reason!: string;
 
   @ApiProperty({ example: '2026-11-03', description: 'ISO adjustment date or date-time' })
   @IsDateString({ strict: true })
@@ -254,6 +278,7 @@ export class StockAdjustmentDto extends PickType(StockInDto, [
 export class StockTransferDto extends PickType(StockInDto, [
   'itemId',
   'quantity',
+  'variant',
   'reference',
   'notes',
 ] as const) {
@@ -287,6 +312,7 @@ const batchLines = (line: new () => object) =>
 export class StockInLineDto extends PickType(StockInDto, [
   'itemId',
   'quantity',
+  'variant',
   'unitCost',
 ] as const) {}
 export class StockInBatchDto extends PickType(StockInDto, [
@@ -301,7 +327,11 @@ export class StockInBatchDto extends PickType(StockInDto, [
   lines!: StockInLineDto[];
 }
 
-export class StockLineDto extends PickType(StockInDto, ['itemId', 'quantity'] as const) {}
+export class StockLineDto extends PickType(StockInDto, [
+  'itemId',
+  'quantity',
+  'variant',
+] as const) {}
 export class StockOutBatchDto extends PickType(StockOutDto, [
   'locationId',
   'date',
@@ -336,3 +366,80 @@ export class StockAdjustmentBatchDto extends PickType(StockAdjustmentDto, [
   @batchLines(StockLineDto)
   lines!: StockLineDto[];
 }
+
+export class PartyDto extends NameDto {
+  @ApiProperty({ enum: PartyKind })
+  @IsEnum(PartyKind)
+  kind!: PartyKind;
+
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(150)
+  contactPerson?: string | null;
+
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(50)
+  phone?: string | null;
+
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(150)
+  email?: string | null;
+
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(4000)
+  address?: string | null;
+
+  @ApiProperty({ required: false, default: 'ACTIVE', enum: InventoryConfigurationStatus })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsEnum(InventoryConfigurationStatus)
+  status?: InventoryConfigurationStatus;
+}
+export class UpdatePartyDto extends PartialType(OmitType(PartyDto, ['kind'] as const), {
+  skipNullProperties: false,
+}) {}
+export class PartyQueryDto {
+  @ApiProperty({ required: false, enum: PartyKind })
+  @IsOptional()
+  @IsEnum(PartyKind)
+  kind?: PartyKind;
+}
+
+export class SubcategoryDto extends ConfigurationDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  categoryId!: string;
+}
+export class UpdateSubcategoryDto extends PartialType(ConfigurationDto) {}
+export class SubcategoryQueryDto {
+  @ApiProperty({ required: false, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+}
+
+export class VariantDto extends ConfigurationDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+}
+export class UpdateVariantDto extends PartialType(ConfigurationDto) {}
+export class VariantQueryDto {
+  @ApiProperty({ required: false, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+}
+
+export class AdjustmentReasonDto extends ConfigurationDto {}
+export class UpdateAdjustmentReasonDto extends PartialType(ConfigurationDto) {}

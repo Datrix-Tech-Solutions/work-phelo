@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
+import { Plus, Trash2 } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { ImageUploadField } from '@/components/atoms/ImageUploadField';
+import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { StatusRadioGroup } from '@/components/atoms/StatusRadioGroup';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -16,6 +18,8 @@ import {
   type InventoryItem,
 } from '@/hooks/inventory/useInventoryItems';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
+import { useSubcategories } from '@/hooks/inventory/useCategorySubcategories';
+import { useItemVariants } from '@/hooks/inventory/useItemVariants';
 import { useInventoryUnits } from '@/hooks/inventory/useInventoryUnits';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
@@ -25,6 +29,8 @@ interface ItemFormValues {
   name: string;
   sku: string;
   categoryId: string;
+  subcategory: string;
+  variants: { name: string }[];
   unitId: string;
   description: string;
   costPrice: string;
@@ -38,6 +44,8 @@ const FORM_DEFAULTS: ItemFormValues = {
   name: '',
   sku: '',
   categoryId: '',
+  subcategory: '',
+  variants: [],
   unitId: '',
   description: '',
   costPrice: '',
@@ -67,6 +75,8 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
   const { updateItem } = useUpdateInventoryItem();
   const { categories } = useInventoryCategories();
   const { units } = useInventoryUnits();
+  const { subcategories: allSubcategories, createSubcategory } = useSubcategories();
+  const { variants: allVariants, createVariant, deleteVariant } = useItemVariants();
   // Display-only for now: the inventory service stores no currency on an item.
   const [currency, setCurrency] = useState('GHS');
 
@@ -88,6 +98,10 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
             name: item.name,
             sku: item.sku,
             categoryId: item.categoryId,
+            subcategory: allSubcategories.find((s) => s.id === item.subcategoryId)?.name ?? '',
+            variants: allVariants
+              .filter((v) => v.itemId === item.id)
+              .map((v) => ({ name: v.name })),
             unitId: item.unitId,
             description: item.description ?? '',
             costPrice: item.costPrice?.toString() ?? '',
@@ -98,7 +112,24 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
           }
         : FORM_DEFAULTS,
     );
+    // Only reset when the panel opens on an item, not each time the lists reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, item, reset]);
+
+  const {
+    fields: variantFields,
+    append: addVariant,
+    remove: removeVariant,
+  } = useFieldArray({ control, name: 'variants' });
+
+  const categoryId = useWatch({ control, name: 'categoryId' });
+  const subcategoryOptions = useMemo(
+    () =>
+      allSubcategories
+        .filter((s) => s.categoryId === categoryId && s.status === 'ACTIVE')
+        .map((s) => ({ value: s.name, label: s.name })),
+    [allSubcategories, categoryId],
+  );
 
   const status = useWatch({ control, name: 'status' });
   const imageUrl = useWatch({ control, name: 'imageUrl' });
@@ -139,11 +170,43 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
       }),
   });
 
+  // The subcategory picked or typed in the form: an existing one of the category, or a new one
+  // created now so it can be picked again.
+  const resolveSubcategory = async (data: ItemFormValues) => {
+    const name = data.subcategory.trim();
+    if (!name) return null;
+    const existing = allSubcategories.find(
+      (s) => s.categoryId === data.categoryId && s.name.toLowerCase() === name.toLowerCase(),
+    );
+    return existing ? existing.id : (await createSubcategory(data.categoryId, name)).id;
+  };
+
+  // Makes the item's variants match the list in the form. A variant that has stock history can't
+  // be removed; it is kept and reported.
+  const syncVariants = async (itemId: string, names: string[]) => {
+    const saved = allVariants.filter((v) => v.itemId === itemId);
+    const wanted = [...new Set(names)];
+    const kept: string[] = [];
+    for (const v of saved) {
+      if (wanted.includes(v.name)) continue;
+      try {
+        await deleteVariant(v.id);
+      } catch {
+        kept.push(v.name);
+      }
+    }
+    for (const name of wanted) {
+      if (!saved.some((v) => v.name === name)) await createVariant(itemId, name);
+    }
+    if (kept.length) toast.error(`Could not remove ${kept.join(', ')}: it has stock history`);
+  };
+
   const save = async (data: ItemFormValues) => {
     const values = {
       name: data.name.trim(),
       sku: data.sku.trim(),
       categoryId: data.categoryId,
+      subcategoryId: await resolveSubcategory(data),
       unitId: data.unitId,
       description: data.description.trim() || null,
       costPrice: optionalNumber(data.costPrice),
@@ -152,13 +215,16 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
       status: data.status,
       imageUrl: data.imageUrl,
     };
+    const variantNames = data.variants.map((r) => r.name.trim()).filter(Boolean);
     if (item) {
       await updateItem(item.id, values);
+      await syncVariants(item.id, variantNames);
       toast.success('Item updated successfully');
       handleClose();
       return;
     }
-    await createItem(values);
+    const created = await createItem(values);
+    await syncVariants(created.id, variantNames);
     toast.success('Item created successfully');
     entry.finishSave(
       { title: 'Item Added!', message: `${values.name} has been added.` },
@@ -211,7 +277,7 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
                   placeholder="e.g. A4 Paper"
                 />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="w-full sm:w-56 shrink-0">
                 <FormField
                   label="SKU"
                   registration={register('sku', {
@@ -237,14 +303,35 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
                       placeholder="Select category"
                       options={categoryOptions}
                       value={field.value}
-                      onChange={field.onChange}
+                      onChange={(v) => {
+                        field.onChange(v);
+                        // Subcategories belong to a category, so a new category clears the pick.
+                        setValue('subcategory', '');
+                      }}
                       error={fieldState.error?.message}
-                      size="md"
                     />
                   )}
                 />
               </div>
               <div className="flex-1 min-w-0">
+                <Controller
+                  control={control}
+                  name="subcategory"
+                  render={({ field }) => (
+                    <CreatableSearchSelect
+                      label="Subcategory"
+                      placeholder={
+                        categoryId ? 'Select or add subcategory' : 'Select a category first'
+                      }
+                      options={subcategoryOptions}
+                      disabled={!categoryId}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              </div>
+              <div className="w-full sm:w-40 shrink-0">
                 <Controller
                   control={control}
                   name="unitId"
@@ -257,7 +344,6 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
                       value={field.value}
                       onChange={field.onChange}
                       error={fieldState.error?.message}
-                      size="md"
                     />
                   )}
                 />
@@ -274,6 +360,38 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
               error={errors.description}
               placeholder="Optional details about this item."
             />
+
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-bold text-gray-900">Variants</span>
+              {variantFields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <FormField
+                      label=""
+                      registration={register(`variants.${index}.name`, {
+                        maxLength: { value: 100, message: 'Name cannot exceed 100 characters' },
+                      })}
+                      error={errors.variants?.[index]?.name}
+                      placeholder="e.g. Red, Large"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Remove variant"
+                    title="Remove variant"
+                    onClick={() => removeVariant(index)}
+                    className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))}
+              <div>
+                <Button variant="outline" onClick={() => addVariant({ name: '' })}>
+                  <Plus size={16} /> Add Variant
+                </Button>
+              </div>
+            </div>
           </div>
         </FormSection>
 

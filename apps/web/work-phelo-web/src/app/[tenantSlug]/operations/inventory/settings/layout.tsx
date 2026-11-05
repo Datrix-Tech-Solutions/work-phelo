@@ -12,7 +12,6 @@ export default function InventorySettingsLayout({ children }: { children: React.
   const tabs = [
     { key: 'categories', label: 'Categories', href: `${base}/categories` },
     { key: 'units-of-measure', label: 'Units of Measure', href: `${base}/units-of-measure` },
-    { key: 'warehouses', label: 'Warehouses', href: `${base}/warehouses` },
   ];
 
   return (

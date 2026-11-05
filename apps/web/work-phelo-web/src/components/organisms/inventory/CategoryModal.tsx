@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useFieldArray, useForm, useWatch } from 'react-hook-form';
+import { Plus, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CategoryIconPicker } from '@/components/atoms/CategoryIconPicker';
@@ -12,6 +13,7 @@ import {
   useUpdateInventoryCategory,
   type InventoryCategory,
 } from '@/hooks/inventory/useInventoryCategories';
+import { useCategorySubcategories } from '@/hooks/inventory/useCategorySubcategories';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
 import { useToast } from '@/hooks/useToast';
 import { DEFAULT_CATEGORY_ICON, type CategoryIconKey } from '@/lib/inventoryCategoryIcons';
@@ -22,6 +24,7 @@ interface CategoryFormValues {
   status: 'ACTIVE' | 'INACTIVE';
   description: string;
   icon: CategoryIconKey;
+  subcategories: { name: string }[];
 }
 
 const FORM_DEFAULTS: CategoryFormValues = {
@@ -29,6 +32,7 @@ const FORM_DEFAULTS: CategoryFormValues = {
   status: 'ACTIVE',
   description: '',
   icon: DEFAULT_CATEGORY_ICON,
+  subcategories: [],
 };
 
 interface CategoryModalProps {
@@ -43,6 +47,11 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
   const isEditing = !!category;
   const { createCategory, isPending } = useCreateInventoryCategory();
   const { updateCategory } = useUpdateInventoryCategory();
+  const {
+    subcategories: savedSubcategories,
+    createSubcategory,
+    deleteSubcategory,
+  } = useCategorySubcategories(category?.id);
 
   const {
     register,
@@ -64,10 +73,19 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
             status: category.status,
             description: category.description ?? '',
             icon: category.icon,
+            subcategories: savedSubcategories.map((s) => ({ name: s.name })),
           }
         : FORM_DEFAULTS,
     );
+    // Only reset when the modal opens on a category, not each time subcategories are saved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, category, reset]);
+
+  const {
+    fields: subFields,
+    append: addSub,
+    remove: removeSub,
+  } = useFieldArray({ control, name: 'subcategories' });
 
   const status = useWatch({ control, name: 'status' });
   const icon = useWatch({ control, name: 'icon' });
@@ -90,6 +108,31 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
       }),
   });
 
+  // Makes the category's subcategories match the list in the form: adds new names and removes the
+  // ones taken out. One that items still use can't be removed; it is kept and reported.
+  const syncSubcategories = async (
+    categoryId: string,
+    names: string[],
+    saved: { id: string; name: string }[],
+  ) => {
+    const wanted = [...new Set(names)];
+    const kept: string[] = [];
+    for (const s of saved) {
+      if (wanted.includes(s.name)) continue;
+      try {
+        await deleteSubcategory(s.id);
+      } catch {
+        kept.push(s.name);
+      }
+    }
+    for (const name of wanted) {
+      if (!saved.some((s) => s.name === name)) await createSubcategory(categoryId, name);
+    }
+    if (kept.length) {
+      toast.error(`Could not remove ${kept.join(', ')}: still used by items`);
+    }
+  };
+
   const save = async (data: CategoryFormValues) => {
     const values = {
       name: data.name.trim(),
@@ -97,13 +140,16 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
       icon: data.icon,
       status: data.status,
     };
+    const subs = data.subcategories.map((r) => r.name.trim()).filter(Boolean);
     if (category) {
       await updateCategory(category.id, values);
+      await syncSubcategories(category.id, subs, savedSubcategories);
       toast.success('Category updated successfully');
       handleClose();
       return;
     }
-    await createCategory(values);
+    const created = await createCategory(values);
+    await syncSubcategories(created.id, subs, []);
     toast.success('Category created successfully');
     entry.finishSave(
       { title: 'Category Added!', message: `${data.name.trim()} has been added.` },
@@ -170,6 +216,38 @@ export function CategoryModal({ isOpen, onClose, category }: CategoryModalProps)
           error={errors.description}
           placeholder="e.g. Computers, phones and accessories."
         />
+
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-bold text-gray-900">Subcategories</span>
+          {subFields.map((field, index) => (
+            <div key={field.id} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <FormField
+                  label=""
+                  registration={register(`subcategories.${index}.name`, {
+                    maxLength: { value: 100, message: 'Name cannot exceed 100 characters' },
+                  })}
+                  error={errors.subcategories?.[index]?.name}
+                  placeholder="e.g. Laptops"
+                />
+              </div>
+              <button
+                type="button"
+                aria-label="Remove subcategory"
+                title="Remove subcategory"
+                onClick={() => removeSub(index)}
+                className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          ))}
+          <div>
+            <Button variant="outline" onClick={() => addSub({ name: '' })}>
+              <Plus size={16} /> Add Subcategory
+            </Button>
+          </div>
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-bold text-gray-900">Icon</span>
