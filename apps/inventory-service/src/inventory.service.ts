@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma, StockMovementType } from '../prisma/generated/client';
+import { PartyKind, Prisma, StockMovementType } from '../prisma/generated/client';
 import { PrismaService } from './prisma/prisma.service';
 import {
   ItemDto,
@@ -14,9 +14,18 @@ import {
   UpdateLocationDto,
   CategoryDto,
   UpdateCategoryDto,
+  PartyDto,
+  UpdatePartyDto,
+  SubcategoryDto,
+  UpdateSubcategoryDto,
+  VariantDto,
+  UpdateVariantDto,
+  AdjustmentReasonDto,
+  UpdateAdjustmentReasonDto,
   UnitDto,
   UpdateUnitDto,
   StockInDto,
+  AssignVariantDto,
   StockInBatchDto,
   StockOutBatchDto,
   StockTransferBatchDto,
@@ -27,6 +36,24 @@ import {
   StockAdjustmentType,
   StockBalanceStatus,
 } from './inventory.dto';
+
+// The reasons every company starts with; others are added by the company. A movement stores the code.
+const DEFAULT_ADJUSTMENT_REASONS = [
+  { code: 'DAMAGE', name: 'Damage' },
+  { code: 'LOSS', name: 'Loss' },
+  { code: 'THEFT', name: 'Theft' },
+  { code: 'PHYSICAL_COUNT_DIFFERENCE', name: 'Physical Count Difference' },
+  { code: 'DATA_CORRECTION', name: 'Data Correction' },
+  { code: 'EXPIRED_GOODS', name: 'Expired Goods' },
+];
+
+const reasonCode = (name: string) =>
+  name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 100) || 'REASON';
 
 // Two Decimal(18,4) inputs can produce 36 significant digits.
 const StockDecimal = Prisma.Decimal.clone({ precision: 40 });
@@ -179,7 +206,18 @@ export class InventoryService {
     tx: Prisma.TransactionClient,
     tenantId: string,
     dto: { categoryId?: string; unitOfMeasureId?: string },
+    subcategory?: { id: string; categoryId: string },
   ) {
+    if (subcategory) {
+      const found = await tx.inventorySubcategory.findFirst({
+        where: { tenantId, id: subcategory.id },
+        select: { categoryId: true, status: true },
+      });
+      if (!found) throw new NotFoundException('Subcategory not found');
+      if (found.categoryId !== subcategory.categoryId)
+        throw new ConflictException('Subcategory belongs to a different category');
+      if (found.status !== 'ACTIVE') throw new ConflictException('Subcategory is inactive');
+    }
     if (dto.categoryId) {
       const category = await tx.inventoryCategory.findFirst({
         where: { tenantId, id: dto.categoryId },
@@ -200,7 +238,12 @@ export class InventoryService {
   createItem(tenantId: string, dto: ItemDto) {
     return this.write(() =>
       this.prisma.$transaction(async (tx) => {
-        await this.references(tx, tenantId, dto);
+        await this.references(
+          tx,
+          tenantId,
+          dto,
+          dto.subcategoryId ? { id: dto.subcategoryId, categoryId: dto.categoryId } : undefined,
+        );
         return tx.inventoryItem.create({ data: { ...dto, tenantId } });
       }),
     );
@@ -216,11 +259,27 @@ export class InventoryService {
     return this.write(() =>
       this.prisma.$transaction(async (tx) => {
         const item = await this.lockItem(tx, tenantId, id);
-        await this.references(tx, tenantId, {
-          categoryId: dto.categoryId !== item.categoryId ? dto.categoryId : undefined,
-          unitOfMeasureId:
-            dto.unitOfMeasureId !== item.unitOfMeasureId ? dto.unitOfMeasureId : undefined,
-        });
+        // A subcategory belongs to one category: changing the category drops the old subcategory
+        // unless a new one is sent.
+        const categoryId = dto.categoryId ?? item.categoryId;
+        const subcategoryId =
+          dto.subcategoryId !== undefined
+            ? dto.subcategoryId
+            : categoryId !== item.categoryId
+              ? null
+              : item.subcategoryId;
+        await this.references(
+          tx,
+          tenantId,
+          {
+            categoryId: dto.categoryId !== item.categoryId ? dto.categoryId : undefined,
+            unitOfMeasureId:
+              dto.unitOfMeasureId !== item.unitOfMeasureId ? dto.unitOfMeasureId : undefined,
+          },
+          subcategoryId && subcategoryId !== item.subcategoryId
+            ? { id: subcategoryId, categoryId }
+            : undefined,
+        );
         if (
           dto.unitOfMeasureId &&
           dto.unitOfMeasureId !== item.unitOfMeasureId &&
@@ -233,7 +292,10 @@ export class InventoryService {
             'Unit cannot change after stock has been recorded; unit conversion is not supported',
           );
         }
-        return tx.inventoryItem.update({ where: { tenantId_id: { tenantId, id } }, data: dto });
+        return tx.inventoryItem.update({
+          where: { tenantId_id: { tenantId, id } },
+          data: { ...dto, subcategoryId },
+        });
       }),
     );
   }
@@ -259,6 +321,223 @@ export class InventoryService {
       ),
     );
   }
+  // ---- Customers and suppliers ----
+  listParties(tenantId: string, kind?: PartyKind) {
+    return this.prisma.inventoryParty.findMany({
+      where: { tenantId, ...(kind ? { kind } : {}) },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+  }
+  async getParty(tenantId: string, id: string) {
+    const record = await this.prisma.inventoryParty.findFirst({ where: { id, tenantId } });
+    if (!record) throw new NotFoundException('Inventory record not found');
+    return record;
+  }
+  createParty(tenantId: string, dto: PartyDto) {
+    return this.write(() => this.prisma.inventoryParty.create({ data: { ...dto, tenantId } }));
+  }
+  async updateParty(tenantId: string, id: string, dto: UpdatePartyDto) {
+    await this.getParty(tenantId, id);
+    return this.write(() =>
+      this.prisma.inventoryParty.update({ where: { tenantId_id: { tenantId, id } }, data: dto }),
+    );
+  }
+  async deleteParty(tenantId: string, id: string) {
+    await this.getParty(tenantId, id);
+    await this.write(() =>
+      this.prisma.inventoryParty.delete({ where: { tenantId_id: { tenantId, id } } }),
+    );
+  }
+
+  // ---- Subcategories ----
+  async listSubcategories(tenantId: string, categoryId?: string) {
+    const rows = await this.prisma.inventorySubcategory.findMany({
+      where: { tenantId, ...(categoryId ? { categoryId } : {}) },
+      include: { _count: { select: { items: true } } },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+    return rows.map(({ _count, ...row }) => ({ ...row, itemCount: _count.items }));
+  }
+  async getSubcategory(tenantId: string, id: string) {
+    const record = await this.prisma.inventorySubcategory.findFirst({ where: { id, tenantId } });
+    if (!record) throw new NotFoundException('Subcategory not found');
+    return record;
+  }
+  async createSubcategory(tenantId: string, dto: SubcategoryDto) {
+    await this.getCategory(tenantId, dto.categoryId);
+    return this.write(() =>
+      this.prisma.inventorySubcategory.create({ data: { ...dto, tenantId } }),
+    );
+  }
+  async updateSubcategory(tenantId: string, id: string, dto: UpdateSubcategoryDto) {
+    await this.getSubcategory(tenantId, id);
+    return this.write(() =>
+      this.prisma.inventorySubcategory.update({
+        where: { tenantId_id: { tenantId, id } },
+        data: dto,
+      }),
+    );
+  }
+  async deleteSubcategory(tenantId: string, id: string) {
+    await this.getSubcategory(tenantId, id);
+    await this.write(() =>
+      this.prisma.inventorySubcategory.delete({ where: { tenantId_id: { tenantId, id } } }),
+    );
+  }
+
+  // ---- Item variants ----
+  listVariants(tenantId: string, itemId?: string) {
+    return this.prisma.itemVariant.findMany({
+      where: { tenantId, ...(itemId ? { itemId } : {}) },
+      orderBy: [{ itemId: 'asc' }, { name: 'asc' }],
+    });
+  }
+  async getVariant(tenantId: string, id: string) {
+    const record = await this.prisma.itemVariant.findFirst({ where: { id, tenantId } });
+    if (!record) throw new NotFoundException('Variant not found');
+    return record;
+  }
+  async createVariant(tenantId: string, dto: VariantDto) {
+    await this.getItem(tenantId, dto.itemId);
+    return this.write(() => this.prisma.itemVariant.create({ data: { ...dto, tenantId } }));
+  }
+  async updateVariant(tenantId: string, id: string, dto: UpdateVariantDto) {
+    await this.getVariant(tenantId, id);
+    return this.write(() =>
+      this.prisma.itemVariant.update({ where: { tenantId_id: { tenantId, id } }, data: dto }),
+    );
+  }
+  async deleteVariant(tenantId: string, id: string) {
+    await this.getVariant(tenantId, id);
+    await this.write(() =>
+      this.prisma.itemVariant.delete({ where: { tenantId_id: { tenantId, id } } }),
+    );
+  }
+
+  // ---- Adjustment reasons ----
+  private ensureDefaultReasons(client: Prisma.TransactionClient | PrismaService, tenantId: string) {
+    return client.adjustmentReason.createMany({
+      data: DEFAULT_ADJUSTMENT_REASONS.map((r) => ({ ...r, tenantId, isSystem: true })),
+      skipDuplicates: true,
+    });
+  }
+  async listReasons(tenantId: string) {
+    await this.ensureDefaultReasons(this.prisma, tenantId);
+    return this.prisma.adjustmentReason.findMany({
+      where: { tenantId },
+      orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
+    });
+  }
+  private async getReason(tenantId: string, id: string) {
+    const record = await this.prisma.adjustmentReason.findFirst({ where: { id, tenantId } });
+    if (!record) throw new NotFoundException('Adjustment reason not found');
+    return record;
+  }
+  async createReason(tenantId: string, dto: AdjustmentReasonDto) {
+    await this.ensureDefaultReasons(this.prisma, tenantId);
+    return this.write(() =>
+      this.prisma.adjustmentReason.create({
+        data: { tenantId, name: dto.name, code: reasonCode(dto.name), status: dto.status },
+      }),
+    );
+  }
+  async updateReason(tenantId: string, id: string, dto: UpdateAdjustmentReasonDto) {
+    const reason = await this.getReason(tenantId, id);
+    if (reason.isSystem && dto.name !== undefined && dto.name !== reason.name)
+      throw new ConflictException('Built-in reasons cannot be renamed');
+    return this.write(() => this.prisma.adjustmentReason.update({ where: { id }, data: dto }));
+  }
+  async deleteReason(tenantId: string, id: string) {
+    const reason = await this.getReason(tenantId, id);
+    if (reason.isSystem) throw new ConflictException('Built-in reasons cannot be deleted');
+    const used = await this.prisma.stockMovement.findFirst({
+      where: { tenantId, adjustmentReason: reason.code },
+      select: { id: true },
+    });
+    if (used) throw new ConflictException('Reason is used by stock adjustments');
+    await this.write(() => this.prisma.adjustmentReason.delete({ where: { id } }));
+  }
+  /** An adjustment's reason must be one of the company's active reasons. */
+  private async requireReason(tx: Prisma.TransactionClient, tenantId: string, code: string) {
+    let reason = await tx.adjustmentReason.findFirst({ where: { tenantId, code } });
+    if (!reason && DEFAULT_ADJUSTMENT_REASONS.some((r) => r.code === code)) {
+      await this.ensureDefaultReasons(tx, tenantId);
+      reason = await tx.adjustmentReason.findFirst({ where: { tenantId, code } });
+    }
+    if (!reason) throw new BadRequestException('Unknown adjustment reason');
+    if (reason.status !== 'ACTIVE') throw new ConflictException('Adjustment reason is inactive');
+  }
+
+  /**
+   * The item's variant a movement line names. Only stock in may create one that doesn't exist yet.
+   * Called with the item already locked, so two lines can't create the same variant at once.
+   */
+  private async resolveVariant(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    name: string | null | undefined,
+    create: boolean,
+  ) {
+    const trimmed = name?.trim();
+    if (!trimmed) return null;
+    let variant = await tx.itemVariant.findFirst({ where: { tenantId, itemId, name: trimmed } });
+    if (!variant) {
+      if (!create) throw new NotFoundException('Variant not found for this item');
+      variant = await tx.itemVariant.create({ data: { tenantId, itemId, name: trimmed } });
+    }
+    if (variant.status !== 'ACTIVE') throw new ConflictException('Variant is inactive');
+    return variant;
+  }
+  private variantWhere(tenantId: string, itemId: string, locationId: string, variantId: string) {
+    return { tenantId_itemId_locationId_variantId: { tenantId, itemId, locationId, variantId } };
+  }
+  /** Stock arriving at a location under a variant (the item's total is updated separately). */
+  private addVariantStock(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    locationId: string,
+    variantId: string | undefined,
+    quantity: Prisma.Decimal,
+  ) {
+    if (!variantId) return Promise.resolve(null);
+    return tx.variantBalance.upsert({
+      where: this.variantWhere(tenantId, itemId, locationId, variantId),
+      create: { tenantId, itemId, locationId, variantId, quantity },
+      update: { quantity: { increment: quantity } },
+    });
+  }
+  /**
+   * Stock leaving a location. With a variant it must come out of that variant's stock; without
+   * one it may only take what no variant accounts for, so a variant's count never overstates.
+   * The item's total balance has already been checked and locked by sourceBalance.
+   */
+  private async takeStock(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    locationId: string,
+    variantId: string | undefined,
+    quantity: Prisma.Decimal,
+    total: Prisma.Decimal,
+  ) {
+    if (variantId) {
+      const where = this.variantWhere(tenantId, itemId, locationId, variantId);
+      const held = await tx.variantBalance.findUnique({ where });
+      if (!held || held.quantity.lt(quantity))
+        throw new ConflictException('Insufficient stock of this variant');
+      await tx.variantBalance.update({ where, data: { quantity: { decrement: quantity } } });
+      return;
+    }
+    const tagged = await tx.variantBalance.aggregate({
+      where: { tenantId, itemId, locationId },
+      _sum: { quantity: true },
+    });
+    const taggedQuantity = tagged._sum.quantity;
+    if (taggedQuantity && total.minus(taggedQuantity).lt(quantity))
+      throw new ConflictException('Insufficient stock without a variant; choose a variant');
+  }
   private async stockInTx(
     tx: Prisma.TransactionClient,
     tenantId: string,
@@ -277,6 +556,7 @@ export class InventoryService {
     });
     if (!location) throw new NotFoundException('Stock location not found');
     if (location.status !== 'ACTIVE') throw new ConflictException('Stock location is inactive');
+    const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, true);
     const unitCost = dto.unitCost == null ? null : new StockDecimal(dto.unitCost);
     const movement = await tx.stockMovement.create({
       data: {
@@ -284,6 +564,7 @@ export class InventoryService {
         itemId: item.id,
         locationId: location.id,
         unitOfMeasureId: item.unitOfMeasureId,
+        variantId: variant?.id,
         type: 'STOCK_IN',
         quantity,
         unitCost,
@@ -304,6 +585,7 @@ export class InventoryService {
       create: { tenantId, itemId: item.id, locationId: location.id, quantity },
       update: { quantity: { increment: quantity } },
     });
+    await this.addVariantStock(tx, tenantId, item.id, location.id, variant?.id, quantity);
     return { movement, balance };
   }
   stockIn(tenantId: string, userId: string, dto: StockInDto) {
@@ -318,7 +600,13 @@ export class InventoryService {
         tx,
         tenantId,
         userId,
-        { ...header, itemId: line.itemId, quantity: line.quantity, unitCost: line.unitCost },
+        {
+          ...header,
+          itemId: line.itemId,
+          quantity: line.quantity,
+          variant: line.variant,
+          unitCost: line.unitCost,
+        },
         batchId,
       ),
     );
@@ -359,13 +647,24 @@ export class InventoryService {
     const item = await this.lockItem(tx, tenantId, dto.itemId);
     if (item.status !== 'ACTIVE') throw new ConflictException('Inactive items cannot issue stock');
     await this.requireLocations(tx, tenantId, [dto.locationId]);
-    await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+    const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, false);
+    const held = await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+    await this.takeStock(
+      tx,
+      tenantId,
+      item.id,
+      dto.locationId,
+      variant?.id,
+      quantity,
+      held.quantity,
+    );
     const movement = await tx.stockMovement.create({
       data: {
         tenantId,
         itemId: item.id,
         locationId: dto.locationId,
         unitOfMeasureId: item.unitOfMeasureId,
+        variantId: variant?.id,
         type: 'STOCK_OUT',
         quantity,
         unitCost: null,
@@ -399,7 +698,7 @@ export class InventoryService {
         tx,
         tenantId,
         userId,
-        { ...header, itemId: line.itemId, quantity: line.quantity },
+        { ...header, itemId: line.itemId, quantity: line.quantity, variant: line.variant },
         batchId,
       ),
     );
@@ -419,7 +718,25 @@ export class InventoryService {
     if (item.status !== 'ACTIVE')
       throw new ConflictException('Inactive items cannot transfer stock');
     await this.requireLocations(tx, tenantId, [dto.sourceLocationId, dto.destinationLocationId]);
-    await this.sourceBalance(tx, tenantId, item.id, dto.sourceLocationId, quantity);
+    const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, false);
+    const held = await this.sourceBalance(tx, tenantId, item.id, dto.sourceLocationId, quantity);
+    await this.takeStock(
+      tx,
+      tenantId,
+      item.id,
+      dto.sourceLocationId,
+      variant?.id,
+      quantity,
+      held.quantity,
+    );
+    await this.addVariantStock(
+      tx,
+      tenantId,
+      item.id,
+      dto.destinationLocationId,
+      variant?.id,
+      quantity,
+    );
     const sourceBalance = await tx.stockBalance.update({
       where: {
         tenantId_itemId_locationId: {
@@ -446,6 +763,7 @@ export class InventoryService {
       tenantId,
       itemId: item.id,
       unitOfMeasureId: item.unitOfMeasureId,
+      variantId: variant?.id,
       quantity,
       unitCost: null,
       totalCost: null,
@@ -476,7 +794,7 @@ export class InventoryService {
         tx,
         tenantId,
         userId,
-        { ...header, itemId: line.itemId, quantity: line.quantity },
+        { ...header, itemId: line.itemId, quantity: line.quantity, variant: line.variant },
         batchId,
       ),
     );
@@ -494,13 +812,29 @@ export class InventoryService {
     const item = await this.lockItem(tx, tenantId, dto.itemId);
     if (item.status !== 'ACTIVE') throw new ConflictException('Inactive items cannot adjust stock');
     await this.requireLocations(tx, tenantId, [dto.locationId]);
-    if (decrease) await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+    await this.requireReason(tx, tenantId, dto.reason);
+    const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, false);
+    if (decrease) {
+      const held = await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+      await this.takeStock(
+        tx,
+        tenantId,
+        item.id,
+        dto.locationId,
+        variant?.id,
+        quantity,
+        held.quantity,
+      );
+    } else {
+      await this.addVariantStock(tx, tenantId, item.id, dto.locationId, variant?.id, quantity);
+    }
     const movement = await tx.stockMovement.create({
       data: {
         tenantId,
         itemId: item.id,
         locationId: dto.locationId,
         unitOfMeasureId: item.unitOfMeasureId,
+        variantId: variant?.id,
         type: decrease ? 'ADJUSTMENT_DECREASE' : 'ADJUSTMENT_INCREASE',
         quantity,
         adjustmentReason: dto.reason,
@@ -537,9 +871,56 @@ export class InventoryService {
         tx,
         tenantId,
         userId,
-        { ...header, itemId: line.itemId, quantity: line.quantity },
+        { ...header, itemId: line.itemId, quantity: line.quantity, variant: line.variant },
         batchId,
       ),
+    );
+  }
+  /**
+   * Counts stock an item held without a variant as one of its variants. The item's total doesn't
+   * change; the history shows the stock leaving "no variant" and arriving under the variant.
+   */
+  assignVariant(tenantId: string, userId: string, dto: AssignVariantDto) {
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const quantity = new StockDecimal(dto.quantity);
+        if (!quantity.gt(0)) throw new BadRequestException('Quantity must be greater than zero');
+        const item = await this.lockItem(tx, tenantId, dto.itemId);
+        if (item.status !== 'ACTIVE')
+          throw new ConflictException('Inactive items cannot adjust stock');
+        await this.requireLocations(tx, tenantId, [dto.locationId]);
+        const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, false);
+        if (!variant) throw new BadRequestException('Choose a variant');
+        const held = await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
+        const tagged = await tx.variantBalance.aggregate({
+          where: { tenantId, itemId: item.id, locationId: dto.locationId },
+          _sum: { quantity: true },
+        });
+        const untagged = held.quantity.minus(tagged._sum.quantity ?? 0);
+        if (untagged.lt(quantity))
+          throw new ConflictException('Insufficient stock without a variant');
+        await this.addVariantStock(tx, tenantId, item.id, dto.locationId, variant.id, quantity);
+        const batchId = randomUUID();
+        const row = (type: 'ADJUSTMENT_DECREASE' | 'ADJUSTMENT_INCREASE', variantId?: string) => ({
+          tenantId,
+          itemId: item.id,
+          locationId: dto.locationId,
+          unitOfMeasureId: item.unitOfMeasureId,
+          variantId,
+          type,
+          quantity,
+          adjustmentReason: 'VARIANT_ASSIGNMENT',
+          date: new Date(),
+          notes: dto.notes,
+          createdBy: userId,
+          batchId,
+          unitCost: null,
+          totalCost: null,
+        });
+        await tx.stockMovement.create({ data: row('ADJUSTMENT_DECREASE') });
+        await tx.stockMovement.create({ data: row('ADJUSTMENT_INCREASE', variant.id) });
+        return { batchId, variant: variant.name, quantity };
+      }),
     );
   }
   async balances(tenantId: string, status?: StockBalanceStatus) {
@@ -573,10 +954,21 @@ export class InventoryService {
       return balances.filter((row) => row.isOutOfStock);
     return balances;
   }
-  movements(tenantId: string, types?: StockMovementType[]) {
-    return this.prisma.stockMovement.findMany({
+  async movements(tenantId: string, types?: StockMovementType[]) {
+    const rows = await this.prisma.stockMovement.findMany({
       where: { tenantId, ...(types ? { type: { in: types } } : {}) },
+      include: { variant: { select: { name: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
+    return rows.map(({ variant, ...row }) => ({ ...row, variant: variant?.name ?? null }));
+  }
+  /** Stock held under each variant at each location. */
+  async variantBalances(tenantId: string) {
+    const rows = await this.prisma.variantBalance.findMany({
+      where: { tenantId },
+      include: { variant: { select: { name: true } } },
+      orderBy: [{ itemId: 'asc' }, { locationId: 'asc' }, { variantId: 'asc' }],
+    });
+    return rows.map(({ variant, ...row }) => ({ ...row, variant: variant.name }));
   }
 }

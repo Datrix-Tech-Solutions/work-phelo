@@ -31,6 +31,7 @@ import {
   ItemDto,
   UpdateItemDto,
   StockInDto,
+  AssignVariantDto,
   StockInBatchDto,
   StockOutBatchDto,
   StockTransferBatchDto,
@@ -39,6 +40,17 @@ import {
   StockTransferDto,
   StockAdjustmentDto,
   StockBalanceQueryDto,
+  PartyDto,
+  UpdatePartyDto,
+  PartyQueryDto,
+  SubcategoryDto,
+  UpdateSubcategoryDto,
+  SubcategoryQueryDto,
+  VariantDto,
+  UpdateVariantDto,
+  VariantQueryDto,
+  AdjustmentReasonDto,
+  UpdateAdjustmentReasonDto,
 } from './inventory.dto';
 
 type UserRequest = { user: RequestUser };
@@ -229,6 +241,16 @@ export class StockController {
   transferBatch(@Req() req: UserRequest, @Body() dto: StockTransferBatchDto) {
     return this.service.transferBatch(req.user.tenantId, req.user.id, dto);
   }
+  @Get('variant-balances')
+  @RequirePermissions('operations.inventory.items:VIEW')
+  variantBalances(@Req() req: UserRequest) {
+    return this.service.variantBalances(req.user.tenantId);
+  }
+  @Post('variant-balances/assign')
+  @RequirePermissions('operations.inventory.adjustments:CREATE')
+  assignVariant(@Req() req: UserRequest, @Body() dto: AssignVariantDto) {
+    return this.service.assignVariant(req.user.tenantId, req.user.id, dto);
+  }
   @Get('stock-balances')
   @RequirePermissions('operations.inventory.items:VIEW')
   balances(@Req() req: UserRequest, @Query() query: StockBalanceQueryDto) {
@@ -264,5 +286,153 @@ export class StockController {
     if (permissions.has('operations.inventory.adjustments:VIEW'))
       types.push('ADJUSTMENT_INCREASE', 'ADJUSTMENT_DECREASE');
     return this.service.movements(req.user.tenantId, types);
+  }
+}
+
+@ApiTags('Inventory - Customers and suppliers')
+@ApiBearerAuth('access-token')
+@Controller('parties')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class PartiesController {
+  constructor(private readonly service: InventoryService) {}
+  @Get()
+  @RequireAnyPermission(
+    'operations.inventory.parties:VIEW',
+    'operations.inventory.stock-in:CREATE',
+    'operations.inventory.stock-out:CREATE',
+  )
+  list(@Req() req: UserRequest, @Query() query: PartyQueryDto) {
+    return this.service.listParties(req.user.tenantId, query.kind);
+  }
+  @Post()
+  @RequirePermissions('operations.inventory.parties:CREATE')
+  create(@Req() req: UserRequest, @Body() dto: PartyDto) {
+    return this.service.createParty(req.user.tenantId, dto);
+  }
+  @Get(':id')
+  @RequirePermissions('operations.inventory.parties:VIEW')
+  get(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getParty(req.user.tenantId, id);
+  }
+  @Patch(':id')
+  @RequirePermissions('operations.inventory.parties:EDIT')
+  update(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePartyDto,
+  ) {
+    return this.service.updateParty(req.user.tenantId, id, dto);
+  }
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermissions('operations.inventory.parties:DELETE')
+  delete(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deleteParty(req.user.tenantId, id);
+  }
+}
+
+@ApiTags('Inventory - Subcategories')
+@ApiBearerAuth('access-token')
+@Controller('subcategories')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class SubcategoriesController {
+  constructor(private readonly service: InventoryService) {}
+  @Get()
+  @RequireAnyPermission('operations.inventory.categories:VIEW', 'operations.inventory.items:VIEW')
+  list(@Req() req: UserRequest, @Query() query: SubcategoryQueryDto) {
+    return this.service.listSubcategories(req.user.tenantId, query.categoryId);
+  }
+  @Post()
+  @RequirePermissions('operations.inventory.categories:CREATE')
+  create(@Req() req: UserRequest, @Body() dto: SubcategoryDto) {
+    return this.service.createSubcategory(req.user.tenantId, dto);
+  }
+  @Patch(':id')
+  @RequirePermissions('operations.inventory.categories:EDIT')
+  update(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSubcategoryDto,
+  ) {
+    return this.service.updateSubcategory(req.user.tenantId, id, dto);
+  }
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermissions('operations.inventory.categories:DELETE')
+  delete(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deleteSubcategory(req.user.tenantId, id);
+  }
+}
+
+@ApiTags('Inventory - Item variants')
+@ApiBearerAuth('access-token')
+@Controller('variants')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class VariantsController {
+  constructor(private readonly service: InventoryService) {}
+  @Get()
+  @RequirePermissions('operations.inventory.items:VIEW')
+  list(@Req() req: UserRequest, @Query() query: VariantQueryDto) {
+    return this.service.listVariants(req.user.tenantId, query.itemId);
+  }
+  @Post()
+  @RequirePermissions('operations.inventory.items:CREATE')
+  create(@Req() req: UserRequest, @Body() dto: VariantDto) {
+    return this.service.createVariant(req.user.tenantId, dto);
+  }
+  @Patch(':id')
+  @RequirePermissions('operations.inventory.items:EDIT')
+  update(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateVariantDto,
+  ) {
+    return this.service.updateVariant(req.user.tenantId, id, dto);
+  }
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermissions('operations.inventory.items:EDIT')
+  delete(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deleteVariant(req.user.tenantId, id);
+  }
+}
+
+@ApiTags('Inventory - Adjustment reasons')
+@ApiBearerAuth('access-token')
+@Controller('adjustment-reasons')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class AdjustmentReasonsController {
+  constructor(private readonly service: InventoryService) {}
+  @Get()
+  @RequireAnyPermission(
+    'operations.inventory.adjustments:VIEW',
+    'operations.inventory.adjustments:CREATE',
+  )
+  list(@Req() req: UserRequest) {
+    return this.service.listReasons(req.user.tenantId);
+  }
+  @Post()
+  @RequirePermissions('operations.inventory.adjustments:CREATE')
+  create(@Req() req: UserRequest, @Body() dto: AdjustmentReasonDto) {
+    return this.service.createReason(req.user.tenantId, dto);
+  }
+  @Patch(':id')
+  @RequirePermissions('operations.inventory.adjustments:EDIT')
+  update(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAdjustmentReasonDto,
+  ) {
+    return this.service.updateReason(req.user.tenantId, id, dto);
+  }
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermissions('operations.inventory.adjustments:DELETE')
+  delete(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deleteReason(req.user.tenantId, id);
   }
 }

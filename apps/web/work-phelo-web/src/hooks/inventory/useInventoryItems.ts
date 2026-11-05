@@ -11,6 +11,7 @@ export interface InventoryItem {
   name: string;
   sku: string;
   categoryId: string;
+  subcategoryId: string | null;
   unitId: string;
   description: string | null;
   /** Purchase cost per unit. */
@@ -33,6 +34,7 @@ interface ApiItem {
   name: string;
   sku: string;
   categoryId: string;
+  subcategoryId: string | null;
   unitOfMeasureId: string;
   description: string | null;
   costPrice: string | null;
@@ -46,6 +48,7 @@ function toPayload(item: NewInventoryItem) {
     name: item.name,
     sku: item.sku,
     categoryId: item.categoryId,
+    subcategoryId: item.subcategoryId,
     unitOfMeasureId: item.unitId,
     description: item.description,
     costPrice: toDecimal(item.costPrice),
@@ -54,6 +57,15 @@ function toPayload(item: NewInventoryItem) {
     status: item.status,
   };
 }
+
+export const STOCK_STATUS_BADGE: Record<
+  InventoryStockStatus,
+  { label: string; variant: 'success' | 'warning' | 'danger' }
+> = {
+  IN_STOCK: { label: 'In Stock', variant: 'success' },
+  LOW_STOCK: { label: 'Low Stock', variant: 'warning' },
+  OUT_OF_STOCK: { label: 'Out of Stock', variant: 'danger' },
+};
 
 export function getStockStatus(item: InventoryItem): InventoryStockStatus {
   if (item.currentStock <= 0) return 'OUT_OF_STOCK';
@@ -83,6 +95,7 @@ export function useInventoryItems() {
           name: i.name,
           sku: i.sku,
           categoryId: i.categoryId,
+          subcategoryId: i.subcategoryId,
           unitId: i.unitOfMeasureId,
           description: i.description,
           costPrice: toNumber(i.costPrice),

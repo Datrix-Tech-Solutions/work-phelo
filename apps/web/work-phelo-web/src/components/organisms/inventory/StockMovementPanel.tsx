@@ -2,25 +2,31 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Tag, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
+import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { useItemVariantsMap, useVariantBalances } from '@/hooks/inventory/useItemVariants';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { useInventoryParties } from '@/hooks/inventory/useInventoryParties';
 import { useStockPositions } from '@/hooks/inventory/useStockBalances';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 import { useCreateStockMovement } from '@/hooks/inventory/useStockMovements';
+import { variantStockAt } from '@/lib/inventoryVariants';
 import { useMultiEntryPanel } from '@/hooks/useMultiEntryPanel';
-import { ADJUSTMENT_REASONS, STOCK_OUT_PURPOSES } from '@/lib/inventoryMovement';
+import { useAdjustmentReasons } from '@/hooks/inventory/useAdjustmentReasons';
+import { STOCK_OUT_PURPOSES } from '@/lib/inventoryMovement';
 import {
   useStockMovementDrafts,
   type DraftFormValues,
   type StockMovementDraft,
 } from '@/hooks/inventory/useStockMovementDrafts';
+import { useRevaluationStore } from '@/hooks/inventory/useStockRevaluations';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -28,6 +34,7 @@ type PanelFormValues = DraftFormValues;
 interface LineRow {
   key: string;
   itemId: string;
+  variant: string;
   quantity: number;
   unitCost: number;
 }
@@ -36,11 +43,13 @@ let rowCounter = 0;
 const newLine = (): LineRow => ({
   key: `stock-in-line-${++rowCounter}`,
   itemId: '',
+  variant: '',
   quantity: 0,
   unitCost: 0,
 });
 
-const LINE_GRID = 'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_30px]';
+const LINE_GRID =
+  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_1fr_1fr_1fr_30px]';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankForm = (): PanelFormValues => ({
@@ -55,8 +64,8 @@ const blankForm = (): PanelFormValues => ({
   notes: '',
 });
 
-const lineTotal = (l: LineRow) =>
-  Math.round((l.quantity * l.unitCost + Number.EPSILON) * 100) / 100;
+const lineTotal = (l: LineRow, quantity = l.quantity) =>
+  Math.round((quantity * l.unitCost + Number.EPSILON) * 100) / 100;
 const formatValue = (n: number) =>
   n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -81,6 +90,15 @@ const ADJUSTMENT_TYPE_OPTIONS = [
     accent: 'accent-red-600',
     selectedClass: 'border-red-300 bg-red-50',
   },
+  {
+    value: 'PRICE',
+    label: 'Price Adjustment',
+    hint: '(Revalue stock on hand)',
+    Icon: Tag,
+    iconClass: 'text-blue-600',
+    accent: 'accent-blue-600',
+    selectedClass: 'border-blue-300 bg-blue-50',
+  },
 ] as const;
 
 const COPY = {
@@ -89,7 +107,7 @@ const COPY = {
     description: 'Record stock received into a warehouse.',
     dateLabel: 'Date Received',
     partyLabel: 'Supplier',
-    partyPlaceholder: 'e.g. Supplier Company Limited',
+    partyPlaceholder: 'Select or add supplier',
     notesPlaceholder: 'Optional notes about this delivery',
     save: 'Save Stock In',
     toast: 'Stock received successfully',
@@ -125,7 +143,7 @@ const COPY = {
     description: 'Record stock issued from a warehouse.',
     dateLabel: 'Date Issued',
     partyLabel: 'Customer',
-    partyPlaceholder: 'e.g. Customer Company Limited',
+    partyPlaceholder: 'Select or add customer',
     notesPlaceholder: 'Optional notes about this issue',
     save: 'Save Stock Out',
     toast: 'Stock issued successfully',
@@ -149,13 +167,33 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   const copy = COPY[type];
   const toast = useToast();
   const { items } = useInventoryItems();
+  const variantsByItem = useItemVariantsMap();
+  const { balances: variantBalances } = useVariantBalances();
   const { warehouses } = useInventoryWarehouses();
   const { positions } = useStockPositions();
+  // Stock in is received from a supplier and stock out is issued to a customer: suggest the ones
+  // set up in Settings, though a name that isn't there yet can still be typed.
+  const { parties, createParty } = useInventoryParties(isOut ? 'CUSTOMER' : 'SUPPLIER');
+  const partyOptions = useMemo(
+    () =>
+      parties.filter((p) => p.status === 'ACTIVE').map((p) => ({ value: p.name, label: p.name })),
+    [parties],
+  );
+  const { reasons, createReason } = useAdjustmentReasons();
+  // Reasons are listed (and held in the form) by their name; saving maps one back to its code,
+  // creating the reason first if the name is new.
+  const reasonOptions = useMemo(
+    () =>
+      reasons.filter((r) => r.status === 'ACTIVE').map((r) => ({ value: r.name, label: r.name })),
+    [reasons],
+  );
   const { createMovement, isPending } = useCreateStockMovement();
   const { saveDraft, deleteDraft } = useStockMovementDrafts();
   // The page remounts the panel per draft (keyed by draft id), so the lines start from the draft.
   const [lines, setLines] = useState<LineRow[]>(() =>
-    draft?.lines.length ? draft.lines.map((l) => ({ ...l, key: newLine().key })) : [newLine()],
+    draft?.lines.length
+      ? draft.lines.map((l) => ({ ...l, variant: l.variant ?? '', key: newLine().key }))
+      : [newLine()],
   );
   const [showLineErrors, setShowLineErrors] = useState(false);
 
@@ -173,6 +211,9 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   const adjustmentType = useWatch({ control, name: 'adjustmentType' });
   // Stock out, transfers and adjustments that reduce stock draw on what is on hand.
   const drawsStock = isOut || isTransfer || (isAdjustment && adjustmentType === 'DECREASE');
+  // A price adjustment revalues what a warehouse holds: only items on hand there, at that quantity.
+  const isRevaluation = isAdjustment && adjustmentType === 'PRICE';
+  const onHandOnly = drawsStock || isRevaluation;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -190,15 +231,15 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
         .filter(
           (i) =>
             i.status === 'ACTIVE' &&
-            (!drawsStock || (!!sourceWarehouseId && stockAt(i.id, sourceWarehouseId) > 0)),
+            (!onHandOnly || (!!sourceWarehouseId && stockAt(i.id, sourceWarehouseId) > 0)),
         )
         .map((i) => ({
           value: i.id,
           label: i.name,
-          sublabel: drawsStock ? `${i.sku} · ${stockAt(i.id, sourceWarehouseId)} in stock` : i.sku,
+          sublabel: onHandOnly ? `${i.sku} · ${stockAt(i.id, sourceWarehouseId)} in stock` : i.sku,
         })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, drawsStock, positions, sourceWarehouseId],
+    [items, onHandOnly, positions, sourceWarehouseId],
   );
   const warehouseOptions = useMemo(
     () =>
@@ -208,17 +249,19 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
     [warehouses],
   );
 
-  const grandTotal = lines.reduce((sum, l) => sum + lineTotal(l), 0);
+  // A revaluation covers all the stock on hand; other movements use the quantity entered.
+  const qtyOf = (l: LineRow) => (isRevaluation ? stockAt(l.itemId, sourceWarehouseId) : l.quantity);
+  const grandTotal = lines.reduce((sum, l) => sum + lineTotal(l, qtyOf(l)), 0);
 
   const updateLine = (key: string, patch: Partial<LineRow>) =>
     setLines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
-  // Picking an item fills in its price, which can still be changed: the selling price when
+  // Picking an item fills in its price (read-only in the form): the selling price when
   // stock goes out to a customer, the purchase cost otherwise.
   const pickItem = (key: string, itemId: string) => {
     const item = items.find((i) => i.id === itemId);
     const price = (isOut ? item?.sellingPrice : item?.costPrice) ?? 0;
-    updateLine(key, { itemId, unitCost: price });
+    updateLine(key, { itemId, variant: '', unitCost: price });
   };
 
   const handleClose = () => {
@@ -239,31 +282,78 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   });
 
   // Stock leaving a warehouse can't exceed what that warehouse holds.
+  // What a line can take out: the chosen variant's stock in the warehouse (never more than the
+  // item holds there), or the item's stock there when no variant is chosen.
+  const maxFor = (l: LineRow) => {
+    const itemStock = stockAt(l.itemId, sourceWarehouseId);
+    if (!l.variant) return itemStock;
+    const ofVariant = variantStockAt(variantBalances, l.itemId, sourceWarehouseId, l.variant);
+    return Math.max(0, Math.min(ofVariant, itemStock));
+  };
+
   const stockError = (l: LineRow) => {
     if (!drawsStock || !l.itemId || !sourceWarehouseId) return undefined;
     const available = stockAt(l.itemId, sourceWarehouseId);
     if (available <= 0) return 'Not in stock at this warehouse';
-    return l.quantity > available ? `Only ${available} in stock` : undefined;
+    if (l.variant) {
+      const max = maxFor(l);
+      const requested = lines
+        .filter((x) => x.itemId === l.itemId && x.variant === l.variant)
+        .reduce((n, x) => n + x.quantity, 0);
+      if (max <= 0) return 'None of this variant in stock';
+      if (requested > max) return `Only ${max} of this variant`;
+    }
+    // Lines for the same item (e.g. different variants) draw on the same stock together.
+    const requested = lines
+      .filter((x) => x.itemId === l.itemId)
+      .reduce((n, x) => n + x.quantity, 0);
+    return requested > available ? `Only ${available} in stock` : undefined;
   };
 
   // Changing the source warehouse drops items the new one doesn't hold.
   const changeSourceWarehouse = (warehouseId: string) => {
-    if (!drawsStock) return;
+    if (!onHandOnly) return;
     setLines((rows) =>
       rows.map((l) =>
         l.itemId && stockAt(l.itemId, warehouseId) <= 0
-          ? { ...l, itemId: '', quantity: 0, unitCost: 0 }
+          ? { ...l, itemId: '', variant: '', quantity: 0, unitCost: 0 }
           : l,
       ),
     );
   };
 
   const save = async (data: PanelFormValues) => {
-    if (lines.some((l) => !l.itemId || l.quantity <= 0 || stockError(l))) {
+    if (lines.some((l) => !l.itemId || qtyOf(l) <= 0 || stockError(l))) {
       setShowLineErrors(true);
       return;
     }
+    if (isRevaluation) {
+      useRevaluationStore.getState().add({
+        reference: data.reference.trim(),
+        date: data.date,
+        warehouseId: data.warehouseId,
+        notes: data.notes.trim() || null,
+        lines: lines.map((l) => ({
+          itemId: l.itemId,
+          variant: l.variant || null,
+          quantity: qtyOf(l),
+          unitCost: l.unitCost,
+        })),
+      });
+      if (draft) deleteDraft(draft.id);
+      toast.success('Price adjustment recorded');
+      entry.finishSave({ title: copy.promptTitle, message: copy.promptMessage }, handleClose);
+      return;
+    }
     const decrease = isAdjustment && data.adjustmentType === 'DECREASE';
+    let reasonCode: string | null = null;
+    if (isAdjustment) {
+      const reasonText = data.reason.trim();
+      const known = reasons.find(
+        (r) => r.name.toLowerCase() === reasonText.toLowerCase() || r.code === reasonText,
+      );
+      reasonCode = known ? known.code : (await createReason(reasonText)).code;
+    }
     await createMovement({
       type,
       date: data.date,
@@ -271,16 +361,31 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
       // Adjustment quantities are signed: negative when stock is reduced.
       lines: lines.map((l) => ({
         itemId: l.itemId,
+        variant: l.variant || null,
         quantity: decrease ? -l.quantity : l.quantity,
         unitCost: l.unitCost,
       })),
       fromWarehouseId: isOut || isTransfer || decrease ? data.warehouseId : null,
       toWarehouseId: isTransfer ? data.toWarehouseId : isOut || decrease ? null : data.warehouseId,
       source: isTransfer || isAdjustment ? null : data.party.trim() || null,
-      reason: isAdjustment ? data.reason : null,
+      reason: reasonCode,
       purpose: isOut ? data.purpose : null,
       notes: data.notes.trim() || null,
     });
+    // A supplier or customer typed in the form is kept in the list so it can be picked again.
+    const partyName = data.party.trim();
+    if (!isTransfer && !isAdjustment && partyName) {
+      if (!parties.some((p) => p.name.toLowerCase() === partyName.toLowerCase())) {
+        createParty({
+          name: partyName,
+          contactPerson: null,
+          phone: null,
+          email: null,
+          address: null,
+          status: 'ACTIVE',
+        }).catch(() => {});
+      }
+    }
     if (draft) deleteDraft(draft.id);
     toast.success(copy.toast);
     entry.finishSave({ title: copy.promptTitle, message: copy.promptMessage }, handleClose);
@@ -292,7 +397,12 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
       id: draft?.id,
       type,
       form: getValues(),
-      lines: lines.map(({ itemId, quantity, unitCost }) => ({ itemId, quantity, unitCost })),
+      lines: lines.map(({ itemId, variant, quantity, unitCost }) => ({
+        itemId,
+        variant,
+        quantity,
+        unitCost,
+      })),
     });
     toast.success('Draft saved');
     handleClose();
@@ -393,28 +503,30 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                   )}
                 />
               </div>
-              <div className="flex-1 min-w-0">
-                <Controller
-                  control={control}
-                  name="reason"
-                  rules={{ required: 'Select a reason' }}
-                  render={({ field, fieldState }) => (
-                    <SearchSelect
-                      label="Reason"
-                      placeholder="Select reason"
-                      options={ADJUSTMENT_REASONS}
-                      value={field.value}
-                      onChange={field.onChange}
-                      error={fieldState.error?.message}
-                    />
-                  )}
-                />
-              </div>
+              {!isRevaluation && (
+                <div className="flex-1 min-w-0">
+                  <Controller
+                    control={control}
+                    name="reason"
+                    rules={{ required: 'Select a reason' }}
+                    render={({ field, fieldState }) => (
+                      <CreatableSearchSelect
+                        label="Reason"
+                        placeholder="Select or add reason"
+                        options={reasonOptions}
+                        value={field.value}
+                        onChange={field.onChange}
+                        error={fieldState.error?.message}
+                      />
+                    )}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-4">
               <span className="text-sm font-bold text-gray-900">Adjustment Type</span>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {ADJUSTMENT_TYPE_OPTIONS.map((o) => {
                   const selected = adjustmentType === o.value;
                   return (
@@ -486,16 +598,25 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
         ) : (
           <div className="flex flex-col gap-4 sm:flex-row">
             <div className="flex-1 min-w-0">
-              <FormField
-                label={copy.partyLabel}
-                registration={register('party', {
+              <Controller
+                control={control}
+                name="party"
+                rules={{
                   maxLength: {
                     value: 150,
                     message: `${copy.partyLabel} cannot exceed 150 characters`,
                   },
-                })}
-                error={errors.party}
-                placeholder={copy.partyPlaceholder}
+                }}
+                render={({ field, fieldState }) => (
+                  <CreatableSearchSelect
+                    label={copy.partyLabel}
+                    placeholder={copy.partyPlaceholder}
+                    options={partyOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={fieldState.error?.message}
+                  />
+                )}
               />
             </div>
             <div className="flex-1 min-w-0">
@@ -555,7 +676,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
 
           <div className="rounded-xl border border-gray-200 overflow-hidden">
             <div className={cn(LINE_GRID, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
-              {['Item', 'Qty', 'Unit Cost', 'Total'].map((h) => (
+              {['Item', 'Variant', 'Qty', 'Unit Cost', 'Total'].map((h) => (
                 <span key={h} className="text-xs font-bold text-gray-900">
                   {h}
                 </span>
@@ -568,46 +689,83 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                 <div key={line.key} className={cn(LINE_GRID, 'items-start px-2.5 py-2')}>
                   <SearchSelect
                     placeholder={
-                      drawsStock && !sourceWarehouseId ? 'Select a warehouse first' : 'Select item…'
+                      onHandOnly && !sourceWarehouseId ? 'Select a warehouse first' : 'Select item…'
                     }
-                    disabled={drawsStock && !sourceWarehouseId}
+                    disabled={onHandOnly && !sourceWarehouseId}
                     options={itemOptions}
                     value={line.itemId}
                     onChange={(v) => pickItem(line.key, v)}
                     error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
                   />
+                  {type === 'STOCK_IN' ? (
+                    // Receiving stock can name a variant the item doesn't have yet; it is added
+                    // to the item's variants on save.
+                    <CreatableSearchSelect
+                      placeholder={line.itemId ? 'Select or add variant' : 'Select item first'}
+                      disabled={!line.itemId}
+                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                        value: v,
+                        label: v,
+                      }))}
+                      value={line.variant}
+                      onChange={(v) => updateLine(line.key, { variant: v })}
+                    />
+                  ) : (
+                    <SearchSelect
+                      placeholder={
+                        !line.itemId
+                          ? 'Select item first'
+                          : variantsByItem[line.itemId]?.length
+                            ? 'Select variant'
+                            : 'No variants'
+                      }
+                      disabled={!line.itemId || !variantsByItem[line.itemId]?.length}
+                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                        value: v,
+                        label: v,
+                      }))}
+                      value={line.variant}
+                      onChange={(v) => updateLine(line.key, { variant: v })}
+                    />
+                  )}
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <NumberField
                       ariaLabel="Quantity"
                       className="w-full py-2"
                       placeholder="0"
                       decimals={4}
-                      value={line.quantity}
+                      value={isRevaluation ? qtyOf(line) : line.quantity}
                       onChange={(v) => updateLine(line.key, { quantity: v })}
+                      disabled={isRevaluation}
                       error={
-                        line.quantity <= 0
-                          ? showLineErrors
-                            ? 'Enter a quantity'
+                        isRevaluation
+                          ? line.itemId && qtyOf(line) <= 0
+                            ? 'Not in stock at this warehouse'
                             : undefined
-                          : stockError(line)
+                          : line.quantity <= 0
+                            ? showLineErrors
+                              ? 'Enter a quantity'
+                              : undefined
+                            : stockError(line)
                       }
                     />
                     {drawsStock && line.itemId && sourceWarehouseId && !stockError(line) && (
-                      <span className="text-xs text-gray-500">
-                        Max: {stockAt(line.itemId, sourceWarehouseId)}
-                      </span>
+                      <span className="text-xs text-gray-500">Max: {maxFor(line)}</span>
                     )}
                   </div>
                   <NumberField
                     ariaLabel="Unit cost"
                     className="w-full py-2"
                     value={line.unitCost}
-                    onChange={(v) => updateLine(line.key, { unitCost: v })}
+                    onChange={(v) => {
+                      if (isRevaluation) updateLine(line.key, { unitCost: v });
+                    }}
+                    disabled={!isRevaluation}
                   />
                   <NumberField
                     ariaLabel="Total"
                     className="w-full py-2"
-                    value={lineTotal(line)}
+                    value={lineTotal(line, qtyOf(line))}
                     onChange={() => {}}
                     disabled
                   />
