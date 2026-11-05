@@ -46,6 +46,7 @@ describe('Inventory HTTP authorization and validation', () => {
     adjust: jest.fn().mockResolvedValue({ movement: { id } }),
     balances: jest.fn().mockResolvedValue([]),
     variantBalances: jest.fn().mockResolvedValue([]),
+    assignVariant: jest.fn().mockResolvedValue({ batchId: id }),
     listParties: jest.fn().mockResolvedValue([]),
     createParty: jest.fn().mockResolvedValue({ id }),
     updateParty: jest.fn().mockResolvedValue({ id }),
@@ -801,6 +802,22 @@ describe('Inventory HTTP authorization and validation', () => {
         .set(headers('operations.inventory.items:VIEW', 'tenant-b'))
         .expect(200);
       expect(service.variantBalances).toHaveBeenLastCalledWith('tenant-b');
+      const assign = { itemId: id, locationId: id, quantity: '2', variant: 'Red' };
+      await request(app.getHttpServer())
+        .post('/api/variant-balances/assign')
+        .set(headers('operations.inventory.items:VIEW', 'tenant-b'))
+        .send(assign)
+        .expect(403);
+      await request(app.getHttpServer())
+        .post('/api/variant-balances/assign')
+        .set(headers('operations.inventory.adjustments:CREATE', 'tenant-b'))
+        .send({ ...assign, variant: '' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .post('/api/variant-balances/assign')
+        .set(headers('operations.inventory.adjustments:CREATE', 'tenant-b'))
+        .send(assign)
+        .expect(201);
     });
     it('accepts a variant name on stock lines and rejects an empty or oversized one', async () => {
       const body = {

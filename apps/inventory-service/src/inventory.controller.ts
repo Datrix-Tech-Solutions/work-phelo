@@ -31,6 +31,7 @@ import {
   ItemDto,
   UpdateItemDto,
   StockInDto,
+  AssignVariantDto,
   StockInBatchDto,
   StockOutBatchDto,
   StockTransferBatchDto,
@@ -244,6 +245,11 @@ export class StockController {
   @RequirePermissions('operations.inventory.items:VIEW')
   variantBalances(@Req() req: UserRequest) {
     return this.service.variantBalances(req.user.tenantId);
+  }
+  @Post('variant-balances/assign')
+  @RequirePermissions('operations.inventory.adjustments:CREATE')
+  assignVariant(@Req() req: UserRequest, @Body() dto: AssignVariantDto) {
+    return this.service.assignVariant(req.user.tenantId, req.user.id, dto);
   }
   @Get('stock-balances')
   @RequirePermissions('operations.inventory.items:VIEW')

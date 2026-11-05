@@ -1,0 +1,322 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
+import { NumberField } from '@/components/atoms/NumberField';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { FormField } from '@/components/molecules/shared/FormField';
+import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
+
+interface FormValues {
+  reference: string;
+  orderDate: string;
+  expectedDate: string;
+  warehouseId: string;
+  notes: string;
+}
+
+interface LineRow {
+  key: string;
+  itemId: string;
+  quantity: number;
+  unitCost: number;
+}
+
+let rowCounter = 0;
+const newLine = (): LineRow => ({
+  key: `po-line-${++rowCounter}`,
+  itemId: '',
+  quantity: 0,
+  unitCost: 0,
+});
+
+const LINE_GRID = 'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_30px]';
+
+const today = () => new Date().toISOString().slice(0, 10);
+const blankForm = (): FormValues => ({
+  reference: '',
+  orderDate: today(),
+  expectedDate: '',
+  warehouseId: '',
+  notes: '',
+});
+
+const lineTotal = (l: LineRow) =>
+  Math.round((l.quantity * l.unitCost + Number.EPSILON) * 100) / 100;
+const formatValue = (n: number) =>
+  n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export type OrderKind = 'PURCHASE' | 'SALES';
+
+const COPY = {
+  PURCHASE: {
+    title: 'Purchase Order',
+    description: "Order stock from this supplier. Purchase orders aren't saved yet.",
+    partyLabel: 'Supplier',
+    warehouseLabel: 'Deliver To',
+    dateLabel: 'Expected Delivery',
+    priceLabel: 'Unit Cost',
+    notesPlaceholder: 'Optional notes about this order',
+    save: 'Create Purchase Order',
+  },
+  SALES: {
+    title: 'Sales Order',
+    description: "Sell stock to this customer. Sales orders aren't saved yet.",
+    partyLabel: 'Customer',
+    warehouseLabel: 'Ship From',
+    dateLabel: 'Expected Delivery',
+    priceLabel: 'Unit Price',
+    notesPlaceholder: 'Optional notes about this order',
+    save: 'Create Sales Order',
+  },
+} as const;
+
+interface OrderPanelProps {
+  kind: OrderKind;
+  isOpen: boolean;
+  onClose: () => void;
+  /** The supplier or customer the order is for. */
+  partyName: string;
+}
+
+/**
+ * A purchase order to a supplier or a sales order for a customer, laid out like Stock In. It
+ * isn't saved anywhere yet: saving only checks the form and closes the panel.
+ */
+export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps) {
+  const copy = COPY[kind];
+  const { items } = useInventoryItems();
+  const { warehouses } = useInventoryWarehouses();
+  const [lines, setLines] = useState<LineRow[]>([newLine()]);
+  const [showLineErrors, setShowLineErrors] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    control,
+    formState: { errors },
+  } = useForm<FormValues>({ defaultValues: blankForm() });
+
+  const itemOptions = useMemo(
+    () =>
+      items
+        .filter((i) => i.status === 'ACTIVE')
+        .map((i) => ({ value: i.id, label: i.name, sublabel: i.sku })),
+    [items],
+  );
+  const warehouseOptions = useMemo(
+    () =>
+      warehouses
+        .filter((w) => w.status === 'ACTIVE')
+        .map((w) => ({ value: w.id, label: w.name, sublabel: w.code })),
+    [warehouses],
+  );
+
+  const grandTotal = lines.reduce((sum, l) => sum + lineTotal(l), 0);
+  const updateLine = (key: string, patch: Partial<LineRow>) =>
+    setLines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  // Picking an item fills in its price (read-only, as on Stock In and Out): the purchase cost
+  // for a purchase order, the selling price for a sales order.
+  const pickItem = (key: string, itemId: string) => {
+    const item = items.find((i) => i.id === itemId);
+    const price = (kind === 'SALES' ? item?.sellingPrice : item?.costPrice) ?? 0;
+    updateLine(key, { itemId, unitCost: price });
+  };
+
+  const handleClose = () => {
+    reset(blankForm());
+    setLines([newLine()]);
+    setShowLineErrors(false);
+    onClose();
+  };
+
+  const onSubmit = () => {
+    setShowLineErrors(true);
+    if (lines.some((l) => !l.itemId || l.quantity <= 0)) return;
+    handleClose();
+  };
+
+  return (
+    <SidePanel
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={copy.title}
+      description={copy.description}
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit(onSubmit)}>{copy.save}</Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-4 mt-2">
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="flex-1 min-w-0">
+            <FormField
+              label="Reference"
+              registration={register('reference', {
+                maxLength: { value: 64, message: 'Reference cannot exceed 64 characters' },
+              })}
+              error={errors.reference}
+              placeholder="Auto-generated if left blank"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <Controller
+              control={control}
+              name="orderDate"
+              rules={{ required: 'Date is required' }}
+              render={({ field, fieldState }) => (
+                <DatePicker
+                  label="Order Date"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message}
+                />
+              )}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="flex-1 min-w-0">
+            <SearchSelect
+              label={copy.partyLabel}
+              options={[{ value: partyName, label: partyName }]}
+              value={partyName}
+              onChange={() => {}}
+              disabled
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <Controller
+              control={control}
+              name="warehouseId"
+              rules={{ required: 'Select a warehouse' }}
+              render={({ field, fieldState }) => (
+                <SearchSelect
+                  label={copy.warehouseLabel}
+                  placeholder="Select warehouse"
+                  options={warehouseOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message}
+                />
+              )}
+            />
+          </div>
+        </div>
+
+        <Controller
+          control={control}
+          name="expectedDate"
+          render={({ field }) => (
+            <DatePicker label={copy.dateLabel} value={field.value} onChange={field.onChange} />
+          )}
+        />
+
+        <FormField
+          label="Notes"
+          type="textarea"
+          rows={2}
+          registration={register('notes', {
+            maxLength: { value: 500, message: 'Notes cannot exceed 500 characters' },
+          })}
+          error={errors.notes}
+          placeholder={copy.notesPlaceholder}
+        />
+
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-bold text-gray-900">Items</span>
+
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <div className={cn(LINE_GRID, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
+              {['Item', 'Qty', copy.priceLabel, 'Total'].map((h) => (
+                <span key={h} className="text-xs font-bold text-gray-900">
+                  {h}
+                </span>
+              ))}
+              <span aria-hidden />
+            </div>
+
+            <div className="divide-y divide-gray-200">
+              {lines.map((line) => (
+                <div key={line.key} className={cn(LINE_GRID, 'items-start px-2.5 py-2')}>
+                  <SearchSelect
+                    placeholder="Select item…"
+                    options={itemOptions}
+                    value={line.itemId}
+                    onChange={(v) => pickItem(line.key, v)}
+                    error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
+                  />
+                  <NumberField
+                    ariaLabel="Quantity"
+                    className="w-full py-2"
+                    placeholder="0"
+                    decimals={4}
+                    value={line.quantity}
+                    onChange={(v) => updateLine(line.key, { quantity: v })}
+                    error={showLineErrors && line.quantity <= 0 ? 'Enter a quantity' : undefined}
+                  />
+                  <NumberField
+                    ariaLabel={copy.priceLabel}
+                    className="w-full py-2"
+                    value={line.unitCost}
+                    onChange={() => {}}
+                    disabled
+                  />
+                  <NumberField
+                    ariaLabel="Total"
+                    className="w-full py-2"
+                    value={lineTotal(line)}
+                    onChange={() => {}}
+                    disabled
+                  />
+                  <div className="flex h-9.5 items-center">
+                    {lines.length > 1 ? (
+                      <button
+                        type="button"
+                        aria-label="Remove line"
+                        title="Remove line"
+                        onClick={() => setLines((rows) => rows.filter((r) => r.key !== line.key))}
+                        className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    ) : (
+                      <span className="block w-7.5" aria-hidden />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLines((r) => [...r, newLine()])}
+            >
+              Add Item
+            </Button>
+            <div className="text-sm text-gray-600">
+              Total{' '}
+              <span className="ml-2 font-semibold text-gray-900">{formatValue(grandTotal)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </SidePanel>
+  );
+}

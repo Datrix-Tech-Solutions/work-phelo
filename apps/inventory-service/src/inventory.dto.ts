@@ -275,6 +275,19 @@ export class StockAdjustmentDto extends PickType(StockInDto, [
   date!: string;
 }
 
+export class AssignVariantDto extends PickType(StockInDto, [
+  'itemId',
+  'locationId',
+  'quantity',
+  'notes',
+] as const) {
+  @ApiProperty({ maxLength: 100, description: 'Name of an existing variant of the item' })
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  variant!: string;
+}
+
 export class StockTransferDto extends PickType(StockInDto, [
   'itemId',
   'quantity',

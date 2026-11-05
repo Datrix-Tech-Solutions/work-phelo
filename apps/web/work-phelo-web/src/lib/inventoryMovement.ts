@@ -34,6 +34,7 @@ export const ADJUSTMENT_REASONS = [
   { value: 'PHYSICAL_COUNT_DIFFERENCE', label: 'Physical Count Difference' },
   { value: 'DATA_CORRECTION', label: 'Data Correction' },
   { value: 'EXPIRED_GOODS', label: 'Expired Goods' },
+  { value: 'VARIANT_ASSIGNMENT', label: 'Variant Assignment' },
   { value: 'OTHER', label: 'Other' },
 ];
 
@@ -44,6 +45,7 @@ export const STOCK_OUT_PURPOSES = [
   { value: 'PROJECT_USE', label: 'Project Use' },
   { value: 'EMPLOYEE_ISSUE', label: 'Employee Issue' },
   { value: 'DAMAGE', label: 'Damage' },
+  { value: 'VARIANT_ASSIGNMENT', label: 'Variant Assignment' },
   { value: 'OTHER', label: 'Other' },
 ];
 

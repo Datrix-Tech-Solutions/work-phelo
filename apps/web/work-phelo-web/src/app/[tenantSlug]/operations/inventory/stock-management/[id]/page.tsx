@@ -244,20 +244,20 @@ export default function StockMovementDetailsPage({
           <h1 className="text-xl font-semibold text-gray-900">{movement.reference}</h1>
           <div className="flex items-center gap-3">
             {canReverse(movement) && (
-              <Button variant="danger" onClick={() => requestReverse(movement)}>
+              <Button size="xs" variant="danger" onClick={() => requestReverse(movement)}>
                 Reverse Transaction
               </Button>
             )}
-            <Button variant="outline" onClick={() => exportMovement(movement)}>
+            <Button size="xs" variant="outline" onClick={() => exportMovement(movement)}>
               Export
             </Button>
             {canCancel(movement) && (
-              <Button variant="outline" onClick={() => requestCancel(movement)}>
+              <Button size="xs" variant="outline" onClick={() => requestCancel(movement)}>
                 Cancel Movement
               </Button>
             )}
             {canDelete(movement) && (
-              <Button variant="danger" onClick={() => requestDelete(movement)}>
+              <Button size="xs" variant="danger" onClick={() => requestDelete(movement)}>
                 Delete
               </Button>
             )}
