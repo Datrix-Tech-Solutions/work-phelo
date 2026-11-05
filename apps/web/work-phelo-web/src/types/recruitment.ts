@@ -19,7 +19,13 @@ export interface VacancyDetails {
   skills?: { items: string[]; required: boolean };
   languages?: { items: string[]; required: boolean };
   certificates?: { items: string[]; required: boolean };
-  documents?: { resume: boolean; coverLetter: boolean; portfolio: boolean; github: boolean };
+  documents?: {
+    resume: boolean;
+    coverLetter: boolean;
+    portfolio: boolean;
+    github: boolean;
+    reference?: boolean;
+  };
 }
 
 export interface RecruitmentVacancyQuestion {
@@ -172,6 +178,7 @@ export interface JobOpeningFormValues {
   requireCoverLetter: boolean;
   requestPortfolio: boolean;
   requestGithub: boolean;
+  requestReference: boolean;
   questions: JobOpeningQuestionRow[];
 }
 
@@ -265,6 +272,7 @@ export interface RecruitmentCandidateDetail extends RecruitmentCandidate {
   coverLetterFileName: string | null;
   portfolioUrl: string | null;
   githubUrl: string | null;
+  reference?: string | null;
   answers: RecruitmentCandidateAnswer[];
 }
 

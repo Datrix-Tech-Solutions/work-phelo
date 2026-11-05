@@ -150,6 +150,11 @@ export class RecruitmentDocumentRequirementsDto {
   @IsOptional()
   @IsBoolean()
   github?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  reference?: boolean;
 }
 
 export class RecruitmentVacancyDetailsDto {

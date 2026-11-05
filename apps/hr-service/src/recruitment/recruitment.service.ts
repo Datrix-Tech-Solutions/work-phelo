@@ -910,6 +910,7 @@ export class RecruitmentService {
         coverLetterFileName: true,
         portfolioUrl: true,
         githubUrl: true,
+        reference: true,
         managedDocuments: ACTIVE_RECRUITMENT_DOCUMENTS,
       },
     });
@@ -1518,6 +1519,7 @@ export class RecruitmentService {
           coverLetterFileName: this.optionalTrim(dto.coverLetterFileName),
           portfolioUrl: this.optionalTrim(dto.portfolioUrl),
           githubUrl: this.optionalTrim(dto.githubUrl),
+          reference: this.optionalTrim(dto.reference),
           languages: this.cleanList(dto.languages ?? []),
           certificates: this.cleanList(dto.certificates ?? []),
           ...this.professionalInfoData({
@@ -1981,6 +1983,7 @@ export class RecruitmentService {
     coverLetterFileName?: string;
     portfolioUrl?: string;
     githubUrl?: string;
+    reference?: string;
     languages?: string[];
     certificates?: string[];
     educationHistory?: Array<{
@@ -2078,6 +2081,9 @@ export class RecruitmentService {
         : {}),
       ...(dto.githubUrl !== undefined
         ? { githubUrl: this.optionalTrim(dto.githubUrl) }
+        : {}),
+      ...(dto.reference !== undefined
+        ? { reference: this.optionalTrim(dto.reference) }
         : {}),
     };
   }
@@ -2670,6 +2676,7 @@ export class RecruitmentService {
     coverLetterFileName: string | null;
     portfolioUrl: string | null;
     githubUrl: string | null;
+    reference?: string | null;
     managedDocuments?: Array<{
       id: string;
       type: string;
@@ -2697,6 +2704,7 @@ export class RecruitmentService {
         : null,
       portfolioUrl: candidate.portfolioUrl,
       githubUrl: candidate.githubUrl,
+      reference: candidate.reference ?? null,
       managedDocuments: candidate.managedDocuments ?? [],
       legacyDocuments: [
         ...(candidate.resumeUrl
@@ -2849,6 +2857,7 @@ export class RecruitmentService {
         coverLetter?: boolean;
         portfolio?: boolean;
         github?: boolean;
+        reference?: boolean;
       };
     } | null,
   ): VacancyDetails | null {
@@ -2908,6 +2917,7 @@ export class RecruitmentService {
         coverLetter: input.documents.coverLetter ?? false,
         portfolio: input.documents.portfolio ?? false,
         github: input.documents.github ?? false,
+        reference: input.documents.reference ?? false,
       };
     }
 
