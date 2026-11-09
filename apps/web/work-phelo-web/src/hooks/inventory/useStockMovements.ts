@@ -17,6 +17,11 @@ export interface StockMovementLine {
   unitCost: number | null;
   /** The item variant this line is for. */
   variant?: string | null;
+  /** Stock in only: the batch / lot the stock belongs to. */
+  lotNumber?: string | null;
+  /** Stock in only, perishable items: YYYY-MM-DD. */
+  manufactureDate?: string | null;
+  expiryDate?: string | null;
 }
 
 export interface StockMovement {
@@ -82,6 +87,10 @@ interface ApiStockMovement {
   adjustmentReason: string | null;
   /** Name of the item variant the movement was for, if any. */
   variant: string | null;
+  lotNumber: string | null;
+  /** Date-only values arrive as ISO date-times at midnight UTC. */
+  manufactureDate: string | null;
+  expiryDate: string | null;
 }
 
 export function getMovementQuantity(m: StockMovement): number {
@@ -119,7 +128,17 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
         m.reference ?? `${REFERENCE_PREFIX[type]}-${(m.batchId ?? m.id).slice(0, 8).toUpperCase()}`,
       date: m.date,
       type,
-      lines: [{ itemId: m.itemId, quantity, unitCost: toNumber(m.unitCost), variant: m.variant }],
+      lines: [
+        {
+          itemId: m.itemId,
+          quantity,
+          unitCost: toNumber(m.unitCost),
+          variant: m.variant,
+          lotNumber: m.lotNumber,
+          manufactureDate: m.manufactureDate?.slice(0, 10) ?? null,
+          expiryDate: m.expiryDate?.slice(0, 10) ?? null,
+        },
+      ],
       fromWarehouseId: null,
       toWarehouseId: null,
       source: null,
@@ -226,7 +245,13 @@ function postMovement(movement: NewStockMovement) {
       locationId: movement.toWarehouseId,
       dateReceived: movement.date,
       source: movement.source,
-      lines: movement.lines.map((l, i) => ({ ...lines[i], unitCost: toDecimal(l.unitCost) })),
+      lines: movement.lines.map((l, i) => ({
+        ...lines[i],
+        unitCost: toDecimal(l.unitCost),
+        lotNumber: l.lotNumber?.trim() || null,
+        manufactureDate: l.manufactureDate || null,
+        expiryDate: l.expiryDate || null,
+      })),
     });
   }
   if (movement.type === 'STOCK_OUT') {

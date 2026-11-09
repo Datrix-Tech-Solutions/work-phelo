@@ -15,6 +15,8 @@ import { EditItemValueModal } from '@/components/organisms/inventory/EditItemVal
 import { EditReorderLevelModal } from '@/components/organisms/inventory/EditReorderLevelModal';
 import { ItemPanel } from '@/components/organisms/inventory/ItemPanel';
 import { AssignVariantModal } from '@/components/organisms/inventory/AssignVariantModal';
+import { ItemBatchesTable } from '@/components/organisms/inventory/ItemBatchesTable';
+import { TabBar } from '@/components/molecules/shared/TabBar';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
 import {
@@ -52,6 +54,7 @@ export default function InventoryItemDetailsPage({
   const item = items.find((i) => i.id === id);
   const { variants } = useItemVariants();
   const { balances } = useVariantBalances();
+  const [tab, setTab] = useState('movements');
   const [assignOpen, setAssignOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [valueOpen, setValueOpen] = useState(false);
@@ -205,8 +208,20 @@ export default function InventoryItemDetailsPage({
         )}
 
         <div className="flex flex-col gap-2">
-          <h3 className="text-base font-semibold text-gray-900">Stock Movements</h3>
-          <StockMovementsTable movements={itemMovements} typeFilter showVariant />
+          <TabBar
+            tabs={[
+              { key: 'movements', label: 'Stock Movements' },
+              { key: 'batches', label: 'Batches' },
+            ]}
+            activeTab={tab}
+            onTabChange={setTab}
+            className="px-0 [--tab-first-pl:0px]"
+          />
+          {tab === 'batches' ? (
+            <ItemBatchesTable itemId={id} />
+          ) : (
+            <StockMovementsTable movements={itemMovements} typeFilter showVariant />
+          )}
         </div>
         <ItemPanel isOpen={editOpen} onClose={() => setEditOpen(false)} item={item} />
         <EditItemValueModal

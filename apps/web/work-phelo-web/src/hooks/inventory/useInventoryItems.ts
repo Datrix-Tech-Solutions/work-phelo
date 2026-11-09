@@ -18,6 +18,8 @@ export interface InventoryItem {
   costPrice: number | null;
   sellingPrice: number | null;
   reorderLevel: number | null;
+  /** Perishable stock needs an expiry date when it is received. */
+  isPerishable: boolean;
   status: 'ACTIVE' | 'INACTIVE';
   /** Data URL or remote URL, or null when no image is set. Stored in this browser only. */
   imageUrl: string | null;
@@ -40,6 +42,7 @@ interface ApiItem {
   costPrice: string | null;
   sellingPrice: string | null;
   reorderLevel: string | null;
+  isPerishable: boolean;
   status: 'ACTIVE' | 'INACTIVE';
 }
 
@@ -54,6 +57,7 @@ function toPayload(item: NewInventoryItem) {
     costPrice: toDecimal(item.costPrice),
     sellingPrice: toDecimal(item.sellingPrice),
     reorderLevel: toDecimal(item.reorderLevel),
+    isPerishable: item.isPerishable,
     status: item.status,
   };
 }
@@ -101,6 +105,7 @@ export function useInventoryItems() {
           costPrice: toNumber(i.costPrice),
           sellingPrice: toNumber(i.sellingPrice),
           reorderLevel: toNumber(i.reorderLevel),
+          isPerishable: i.isPerishable,
           status: i.status,
           imageUrl: images[i.id] ?? null,
           currentStock: byLocation ? [...byLocation.values()].reduce((a, b) => a + b, 0) : 0,

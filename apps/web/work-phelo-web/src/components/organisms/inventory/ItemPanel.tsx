@@ -10,6 +10,7 @@ import { ImageUploadField } from '@/components/atoms/ImageUploadField';
 import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { StatusRadioGroup } from '@/components/atoms/StatusRadioGroup';
+import { Toggle } from '@/components/atoms/Toggle';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import {
@@ -38,6 +39,7 @@ interface ItemFormValues {
   reorderLevel: string;
   status: 'ACTIVE' | 'INACTIVE';
   imageUrl: string | null;
+  isPerishable: boolean;
 }
 
 const FORM_DEFAULTS: ItemFormValues = {
@@ -53,6 +55,7 @@ const FORM_DEFAULTS: ItemFormValues = {
   reorderLevel: '',
   status: 'ACTIVE',
   imageUrl: null,
+  isPerishable: false,
 };
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -109,6 +112,7 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
             reorderLevel: item.reorderLevel?.toString() ?? '',
             status: item.status,
             imageUrl: item.imageUrl,
+            isPerishable: item.isPerishable,
           }
         : FORM_DEFAULTS,
     );
@@ -133,6 +137,7 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
 
   const status = useWatch({ control, name: 'status' });
   const imageUrl = useWatch({ control, name: 'imageUrl' });
+  const isPerishable = useWatch({ control, name: 'isPerishable' });
   const costPrice = useWatch({ control, name: 'costPrice' });
   const sellingPrice = useWatch({ control, name: 'sellingPrice' });
 
@@ -214,6 +219,7 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
       reorderLevel: optionalNumber(data.reorderLevel),
       status: data.status,
       imageUrl: data.imageUrl,
+      isPerishable: data.isPerishable,
     };
     const variantNames = data.variants.map((r) => r.name.trim()).filter(Boolean);
     if (item) {
@@ -360,6 +366,19 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
               error={errors.description}
               placeholder="Optional details about this item."
             />
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-gray-900">Perishable</span>
+                <span className="text-xs text-gray-500">
+                  {isPerishable ? 'Perishable goods' : 'Non-perishable goods'}
+                </span>
+              </div>
+              <Toggle
+                enabled={isPerishable}
+                onChange={(v) => setValue('isPerishable', v, { shouldDirty: true })}
+              />
+            </div>
 
             <div className="flex flex-col gap-2">
               <span className="text-sm font-bold text-gray-900">Variants</span>
