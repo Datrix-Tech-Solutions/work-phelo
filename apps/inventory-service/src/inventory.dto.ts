@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsDecimal,
   IsEnum,
@@ -26,6 +27,8 @@ import {
 } from '../prisma/generated/client';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+// A calendar date with no time, e.g. 2026-11-09.
+const DATE_ONLY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const decimal = ({ value }: { value: unknown }) =>
   typeof value === 'number' ? String(value) : value;
 
@@ -145,6 +148,16 @@ export class ItemDto extends NameDto {
   @Matches(/^\d{1,14}(\.\d{1,4})?$/)
   reorderLevel?: string | null;
 
+  @ApiProperty({
+    required: false,
+    default: false,
+    description:
+      'Perishable items must carry an expiry date on every stock in line; non-perishable items take no manufacturing or expiry date.',
+  })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsBoolean()
+  isPerishable?: boolean;
+
   @ApiProperty({ required: false, enum: InventoryItemStatus, default: 'ACTIVE' })
   @ValidateIf((_o, value) => value !== undefined)
   @IsEnum(InventoryItemStatus)
@@ -180,6 +193,39 @@ export class StockInDto {
   @ApiProperty({ example: '2026-11-02', description: 'ISO date or date-time received' })
   @IsDateString({ strict: true })
   dateReceived!: string;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    maxLength: 100,
+    description: 'Batch or lot number of the stock received. Optional.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  lotNumber?: string | null;
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    example: '2026-10-01',
+    description: 'Perishable items only. Date the goods were made (YYYY-MM-DD).',
+  })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: 'manufactureDate must be a date in YYYY-MM-DD format' })
+  manufactureDate?: string | null;
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    example: '2027-10-01',
+    description: 'Required for perishable items, not allowed for others (YYYY-MM-DD).',
+  })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: 'expiryDate must be a date in YYYY-MM-DD format' })
+  expiryDate?: string | null;
 
   @ApiProperty({ required: false, nullable: true, type: String, example: '12.5000' })
   @IsOptional()
@@ -327,6 +373,9 @@ export class StockInLineDto extends PickType(StockInDto, [
   'quantity',
   'variant',
   'unitCost',
+  'lotNumber',
+  'manufactureDate',
+  'expiryDate',
 ] as const) {}
 export class StockInBatchDto extends PickType(StockInDto, [
   'locationId',

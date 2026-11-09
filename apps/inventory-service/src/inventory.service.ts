@@ -538,6 +538,32 @@ export class InventoryService {
     if (taggedQuantity && total.minus(taggedQuantity).lt(quantity))
       throw new ConflictException('Insufficient stock without a variant; choose a variant');
   }
+  /**
+   * Batch/lot details of a stock in line. The lot number is always optional. A perishable item
+   * needs an expiry date (the manufacturing date is optional); any other item takes neither date.
+   */
+  private lotDetails(
+    isPerishable: boolean,
+    dto: Pick<StockInDto, 'lotNumber' | 'manufactureDate' | 'expiryDate'>,
+  ) {
+    const manufactureDate = dto.manufactureDate || null;
+    const expiryDate = dto.expiryDate || null;
+    if (isPerishable) {
+      if (!expiryDate)
+        throw new BadRequestException('Expiry date is required for perishable items');
+      if (manufactureDate && expiryDate < manufactureDate)
+        throw new BadRequestException('Expiry date cannot be before the manufacturing date');
+    } else if (manufactureDate || expiryDate) {
+      throw new BadRequestException(
+        'Manufacturing and expiry dates apply to perishable items only',
+      );
+    }
+    return {
+      lotNumber: dto.lotNumber || null,
+      manufactureDate: manufactureDate ? new Date(manufactureDate) : null,
+      expiryDate: expiryDate ? new Date(expiryDate) : null,
+    };
+  }
   private async stockInTx(
     tx: Prisma.TransactionClient,
     tenantId: string,
@@ -557,6 +583,7 @@ export class InventoryService {
     if (!location) throw new NotFoundException('Stock location not found');
     if (location.status !== 'ACTIVE') throw new ConflictException('Stock location is inactive');
     const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, true);
+    const lot = this.lotDetails(item.isPerishable, dto);
     const unitCost = dto.unitCost == null ? null : new StockDecimal(dto.unitCost);
     const movement = await tx.stockMovement.create({
       data: {
@@ -574,6 +601,7 @@ export class InventoryService {
         supplier: dto.supplier,
         reference: dto.reference,
         notes: dto.notes,
+        ...lot,
         createdBy: userId,
         batchId,
       },
@@ -606,6 +634,9 @@ export class InventoryService {
           quantity: line.quantity,
           variant: line.variant,
           unitCost: line.unitCost,
+          lotNumber: line.lotNumber,
+          manufactureDate: line.manufactureDate,
+          expiryDate: line.expiryDate,
         },
         batchId,
       ),

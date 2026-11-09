@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { Input } from '@/components/atoms/Input';
 import { NumberField } from '@/components/atoms/NumberField';
 import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -37,19 +38,29 @@ interface LineRow {
   variant: string;
   quantity: number;
   unitCost: number;
+  /** Stock in only. Batch details are front-end only until the service stores them. */
+  batchNumber: string;
+  manufactureDate: string;
+  expiryDate: string;
 }
 
-let rowCounter = 0;
 const newLine = (): LineRow => ({
-  key: `stock-in-line-${++rowCounter}`,
+  // Random, not a module counter: a hot reload resets a counter while line state survives.
+  key: `line-${crypto.randomUUID()}`,
   itemId: '',
   variant: '',
   quantity: 0,
   unitCost: 0,
+  batchNumber: '',
+  manufactureDate: '',
+  expiryDate: '',
 });
 
 const LINE_GRID =
-  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_1fr_1fr_1fr_30px]';
+  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,0.7fr)_1fr_1fr_30px]';
+// Stock in adds batch and date columns to the same row.
+const STOCK_IN_LINE_GRID =
+  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.6fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_30px]';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankForm = (): PanelFormValues => ({
@@ -192,7 +203,11 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   // The page remounts the panel per draft (keyed by draft id), so the lines start from the draft.
   const [lines, setLines] = useState<LineRow[]>(() =>
     draft?.lines.length
-      ? draft.lines.map((l) => ({ ...l, variant: l.variant ?? '', key: newLine().key }))
+      ? draft.lines.map((l) => ({
+          ...newLine(),
+          ...l,
+          variant: l.variant ?? '',
+        }))
       : [newLine()],
   );
   const [showLineErrors, setShowLineErrors] = useState(false);
@@ -322,8 +337,25 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
     );
   };
 
+  // Perishable stock being received carries a manufacturing and expiry date.
+  const needsDates = (l: LineRow) =>
+    type === 'STOCK_IN' && !!items.find((i) => i.id === l.itemId)?.isPerishable;
+  const dateError = (l: LineRow) =>
+    needsDates(l) && l.manufactureDate && l.expiryDate && l.expiryDate < l.manufactureDate
+      ? 'Expiry must be after the manufacturing date'
+      : undefined;
+
+  const lineGrid = type === 'STOCK_IN' ? STOCK_IN_LINE_GRID : LINE_GRID;
+
+  // A perishable item can't be received without an expiry date.
+  const missingExpiry = (l: LineRow) => needsDates(l) && !l.expiryDate;
+
   const save = async (data: PanelFormValues) => {
-    if (lines.some((l) => !l.itemId || qtyOf(l) <= 0 || stockError(l))) {
+    if (
+      lines.some(
+        (l) => !l.itemId || qtyOf(l) <= 0 || stockError(l) || dateError(l) || missingExpiry(l),
+      )
+    ) {
       setShowLineErrors(true);
       return;
     }
@@ -364,6 +396,13 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
         variant: l.variant || null,
         quantity: decrease ? -l.quantity : l.quantity,
         unitCost: l.unitCost,
+        ...(type === 'STOCK_IN'
+          ? {
+              lotNumber: l.batchNumber.trim() || null,
+              manufactureDate: needsDates(l) ? l.manufactureDate || null : null,
+              expiryDate: needsDates(l) ? l.expiryDate || null : null,
+            }
+          : {}),
       })),
       fromWarehouseId: isOut || isTransfer || decrease ? data.warehouseId : null,
       toWarehouseId: isTransfer ? data.toWarehouseId : isOut || decrease ? null : data.warehouseId,
@@ -397,12 +436,17 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
       id: draft?.id,
       type,
       form: getValues(),
-      lines: lines.map(({ itemId, variant, quantity, unitCost }) => ({
-        itemId,
-        variant,
-        quantity,
-        unitCost,
-      })),
+      lines: lines.map(
+        ({ itemId, variant, quantity, unitCost, batchNumber, manufactureDate, expiryDate }) => ({
+          itemId,
+          variant,
+          quantity,
+          unitCost,
+          batchNumber,
+          manufactureDate,
+          expiryDate,
+        }),
+      ),
     });
     toast.success('Draft saved');
     handleClose();
@@ -675,8 +719,15 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
           <span className="text-sm font-bold text-gray-900">Items</span>
 
           <div className="rounded-xl border border-gray-200 overflow-hidden">
-            <div className={cn(LINE_GRID, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
-              {['Item', 'Variant', 'Qty', 'Unit Cost', 'Total'].map((h) => (
+            <div className={cn(lineGrid, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
+              {[
+                'Item',
+                'Variant',
+                'Qty',
+                'Unit Cost',
+                'Total',
+                ...(type === 'STOCK_IN' ? ['Batch / Lot No.', 'Mfg Date', 'Expiry Date'] : []),
+              ].map((h) => (
                 <span key={h} className="text-xs font-bold text-gray-900">
                   {h}
                 </span>
@@ -686,110 +737,155 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
 
             <div className="divide-y divide-gray-200">
               {lines.map((line) => (
-                <div key={line.key} className={cn(LINE_GRID, 'items-start px-2.5 py-2')}>
-                  <SearchSelect
-                    placeholder={
-                      onHandOnly && !sourceWarehouseId ? 'Select a warehouse first' : 'Select item…'
-                    }
-                    disabled={onHandOnly && !sourceWarehouseId}
-                    options={itemOptions}
-                    value={line.itemId}
-                    onChange={(v) => pickItem(line.key, v)}
-                    error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
-                  />
-                  {type === 'STOCK_IN' ? (
-                    // Receiving stock can name a variant the item doesn't have yet; it is added
-                    // to the item's variants on save.
-                    <CreatableSearchSelect
-                      placeholder={line.itemId ? 'Select or add variant' : 'Select item first'}
-                      disabled={!line.itemId}
-                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
-                        value: v,
-                        label: v,
-                      }))}
-                      value={line.variant}
-                      onChange={(v) => updateLine(line.key, { variant: v })}
-                    />
-                  ) : (
+                <div key={line.key} className="px-1.5 py-2">
+                  <div className={cn(lineGrid, 'items-start')}>
                     <SearchSelect
                       placeholder={
-                        !line.itemId
-                          ? 'Select item first'
-                          : variantsByItem[line.itemId]?.length
-                            ? 'Select variant'
-                            : 'No variants'
+                        onHandOnly && !sourceWarehouseId
+                          ? 'Select a warehouse first'
+                          : 'Select item…'
                       }
-                      disabled={!line.itemId || !variantsByItem[line.itemId]?.length}
-                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
-                        value: v,
-                        label: v,
-                      }))}
-                      value={line.variant}
-                      onChange={(v) => updateLine(line.key, { variant: v })}
+                      disabled={onHandOnly && !sourceWarehouseId}
+                      options={itemOptions}
+                      value={line.itemId}
+                      onChange={(v) => pickItem(line.key, v)}
+                      error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
                     />
-                  )}
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <NumberField
-                      ariaLabel="Quantity"
-                      className="w-full py-2"
-                      placeholder="0"
-                      decimals={4}
-                      value={isRevaluation ? qtyOf(line) : line.quantity}
-                      onChange={(v) => updateLine(line.key, { quantity: v })}
-                      disabled={isRevaluation}
-                      error={
-                        isRevaluation
-                          ? line.itemId && qtyOf(line) <= 0
-                            ? 'Not in stock at this warehouse'
-                            : undefined
-                          : line.quantity <= 0
-                            ? showLineErrors
-                              ? 'Enter a quantity'
-                              : undefined
-                            : stockError(line)
-                      }
-                    />
-                    {drawsStock && line.itemId && sourceWarehouseId && !stockError(line) && (
-                      <span className="text-xs text-gray-500">Max: {maxFor(line)}</span>
-                    )}
-                  </div>
-                  <NumberField
-                    ariaLabel="Unit cost"
-                    className="w-full py-2"
-                    value={line.unitCost}
-                    onChange={(v) => {
-                      if (isRevaluation) updateLine(line.key, { unitCost: v });
-                    }}
-                    disabled={!isRevaluation}
-                  />
-                  <NumberField
-                    ariaLabel="Total"
-                    className="w-full py-2"
-                    value={lineTotal(line, qtyOf(line))}
-                    onChange={() => {}}
-                    disabled
-                  />
-                  <div className="flex h-9.5 items-center">
-                    {lines.length > 1 ? (
-                      <button
-                        type="button"
-                        aria-label="Remove line"
-                        title="Remove line"
-                        onClick={() => setLines((rows) => rows.filter((r) => r.key !== line.key))}
-                        className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                    {type === 'STOCK_IN' ? (
+                      // Receiving stock can name a variant the item doesn't have yet; it is added
+                      // to the item's variants on save.
+                      <CreatableSearchSelect
+                        placeholder={line.itemId ? 'Select or add variant' : 'Select item first'}
+                        disabled={!line.itemId}
+                        options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                          value: v,
+                          label: v,
+                        }))}
+                        value={line.variant}
+                        onChange={(v) => updateLine(line.key, { variant: v })}
+                      />
                     ) : (
-                      <span className="block w-7.5" aria-hidden />
+                      <SearchSelect
+                        placeholder={
+                          !line.itemId
+                            ? 'Select item first'
+                            : variantsByItem[line.itemId]?.length
+                              ? 'Select variant'
+                              : 'No variants'
+                        }
+                        disabled={!line.itemId || !variantsByItem[line.itemId]?.length}
+                        options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                          value: v,
+                          label: v,
+                        }))}
+                        value={line.variant}
+                        onChange={(v) => updateLine(line.key, { variant: v })}
+                      />
                     )}
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <NumberField
+                        ariaLabel="Quantity"
+                        className="w-full py-2"
+                        placeholder="0"
+                        decimals={4}
+                        value={isRevaluation ? qtyOf(line) : line.quantity}
+                        onChange={(v) => updateLine(line.key, { quantity: v })}
+                        disabled={isRevaluation}
+                        error={
+                          isRevaluation
+                            ? line.itemId && qtyOf(line) <= 0
+                              ? 'Not in stock at this warehouse'
+                              : undefined
+                            : line.quantity <= 0
+                              ? showLineErrors
+                                ? 'Enter a quantity'
+                                : undefined
+                              : stockError(line)
+                        }
+                      />
+                      {drawsStock && line.itemId && sourceWarehouseId && !stockError(line) && (
+                        <span className="text-xs text-gray-500">Max: {maxFor(line)}</span>
+                      )}
+                    </div>
+                    <NumberField
+                      ariaLabel="Unit cost"
+                      className="w-full py-2"
+                      value={line.unitCost}
+                      onChange={(v) => {
+                        if (isRevaluation) updateLine(line.key, { unitCost: v });
+                      }}
+                      disabled={!isRevaluation}
+                    />
+                    <NumberField
+                      ariaLabel="Total"
+                      className="w-full py-2"
+                      value={lineTotal(line, qtyOf(line))}
+                      onChange={() => {}}
+                      disabled
+                    />
+                    {type === 'STOCK_IN' && (
+                      <>
+                        <Input
+                          aria-label="Batch / Lot No."
+                          placeholder="Optional"
+                          maxLength={64}
+                          disabled={!line.itemId}
+                          value={line.batchNumber}
+                          onChange={(e) => updateLine(line.key, { batchNumber: e.target.value })}
+                        />
+                        {needsDates(line) ? (
+                          <DatePicker
+                            size="sm"
+                            placeholder="Mfg date"
+                            disableFuture
+                            maxDate={line.expiryDate || undefined}
+                            value={line.manufactureDate}
+                            onChange={(v) => updateLine(line.key, { manufactureDate: v })}
+                          />
+                        ) : (
+                          <span aria-hidden />
+                        )}
+                        {needsDates(line) ? (
+                          <DatePicker
+                            size="sm"
+                            placeholder="Expiry date"
+                            minDate={line.manufactureDate || undefined}
+                            value={line.expiryDate}
+                            onChange={(v) => updateLine(line.key, { expiryDate: v })}
+                            error={
+                              dateError(line) ??
+                              (showLineErrors && missingExpiry(line)
+                                ? 'Expiry date is required'
+                                : undefined)
+                            }
+                          />
+                        ) : (
+                          <span aria-hidden />
+                        )}
+                      </>
+                    )}
+                    <div className="flex h-9.5 items-center">
+                      {lines.length > 1 ? (
+                        <button
+                          type="button"
+                          aria-label="Remove line"
+                          title="Remove line"
+                          onClick={() => setLines((rows) => rows.filter((r) => r.key !== line.key))}
+                          className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      ) : (
+                        <span className="block w-7.5" aria-hidden />
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-2">
             <Button
               type="button"
               variant="outline"

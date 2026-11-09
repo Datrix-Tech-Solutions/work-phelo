@@ -130,6 +130,7 @@ model InventoryItem {
   costPrice       Decimal?              @db.Decimal(18, 4)
   sellingPrice    Decimal?              @db.Decimal(18, 4)
   reorderLevel    Decimal?              @db.Decimal(18, 4)
+  isPerishable    Boolean               @default(false)
   status          InventoryItemStatus   @default(ACTIVE)
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -186,6 +187,9 @@ model StockMovement {
   batchId          String?
   adjustmentReason String?
   variantId        String?
+  lotNumber        String?
+  manufactureDate  DateTime?         @db.Date
+  expiryDate       DateTime?         @db.Date
   createdBy        String
   createdAt        DateTime          @default(now())
   item             InventoryItem     @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
@@ -200,6 +204,7 @@ model StockMovement {
   @@index([tenantId, transferId])
   @@index([tenantId, batchId])
   @@index([tenantId, variantId])
+  @@index([tenantId, itemId, lotNumber])
   @@schema("inventory")
 }
 

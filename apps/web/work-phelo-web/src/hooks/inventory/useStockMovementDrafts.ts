@@ -21,6 +21,9 @@ export interface DraftLine {
   quantity: number;
   unitCost: number;
   variant?: string;
+  batchNumber?: string;
+  manufactureDate?: string;
+  expiryDate?: string;
 }
 
 export interface StockMovementDraft {
