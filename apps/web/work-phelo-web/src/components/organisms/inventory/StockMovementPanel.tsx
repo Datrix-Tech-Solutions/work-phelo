@@ -13,6 +13,7 @@ import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect'
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useItemVariantsMap, useVariantBalances } from '@/hooks/inventory/useItemVariants';
+import { useStockLots } from '@/hooks/inventory/useStockLots';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
 import { useInventoryParties } from '@/hooks/inventory/useInventoryParties';
 import { useStockPositions } from '@/hooks/inventory/useStockBalances';
@@ -38,10 +39,12 @@ interface LineRow {
   variant: string;
   quantity: number;
   unitCost: number;
-  /** Stock in only. Batch details are front-end only until the service stores them. */
+  /** Stock in only: the batch / lot being received. */
   batchNumber: string;
   manufactureDate: string;
   expiryDate: string;
+  /** Stock out only: the batch to issue from; blank lets the service pick, earliest expiry first. */
+  lotId: string;
 }
 
 const newLine = (): LineRow => ({
@@ -54,10 +57,14 @@ const newLine = (): LineRow => ({
   batchNumber: '',
   manufactureDate: '',
   expiryDate: '',
+  lotId: '',
 });
 
 const LINE_GRID =
   'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,0.7fr)_1fr_1fr_30px]';
+// Lines that draw on or add to a batch (stock out, transfers, adjustments) get a batch picker.
+const BATCH_LINE_GRID =
+  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.8fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,0.7fr)_1fr_1fr_30px]';
 // Stock in adds batch and date columns to the same row.
 const STOCK_IN_LINE_GRID =
   'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.6fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_30px]';
@@ -178,6 +185,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   const copy = COPY[type];
   const toast = useToast();
   const { items } = useInventoryItems();
+  const { lots } = useStockLots();
   const variantsByItem = useItemVariantsMap();
   const { balances: variantBalances } = useVariantBalances();
   const { warehouses } = useInventoryWarehouses();
@@ -229,6 +237,8 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   // A price adjustment revalues what a warehouse holds: only items on hand there, at that quantity.
   const isRevaluation = isAdjustment && adjustmentType === 'PRICE';
   const onHandOnly = drawsStock || isRevaluation;
+  // A price adjustment revalues stock and doesn't move any batch.
+  const showBatch = isOut || isTransfer || (isAdjustment && !isRevaluation);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -276,7 +286,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   const pickItem = (key: string, itemId: string) => {
     const item = items.find((i) => i.id === itemId);
     const price = (isOut ? item?.sellingPrice : item?.costPrice) ?? 0;
-    updateLine(key, { itemId, variant: '', unitCost: price });
+    updateLine(key, { itemId, variant: '', lotId: '', unitCost: price });
   };
 
   const handleClose = () => {
@@ -301,15 +311,40 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   // item holds there), or the item's stock there when no variant is chosen.
   const maxFor = (l: LineRow) => {
     const itemStock = stockAt(l.itemId, sourceWarehouseId);
-    if (!l.variant) return itemStock;
-    const ofVariant = variantStockAt(variantBalances, l.itemId, sourceWarehouseId, l.variant);
-    return Math.max(0, Math.min(ofVariant, itemStock));
+    const ofVariant = l.variant
+      ? Math.max(
+          0,
+          Math.min(
+            variantStockAt(variantBalances, l.itemId, sourceWarehouseId, l.variant),
+            itemStock,
+          ),
+        )
+      : itemStock;
+    const lot = lots.find((x) => x.id === l.lotId);
+    return lot ? Math.min(ofVariant, lot.remainingQuantity) : ofVariant;
   };
+
+  // Batches of a line's item still holding stock at the source warehouse (and under its variant).
+  // An increase can top up any batch at the warehouse, even a used-up one.
+  const addsStock = isAdjustment && adjustmentType === 'INCREASE';
+  const lotsFor = (l: LineRow) =>
+    lots.filter(
+      (x) =>
+        x.itemId === l.itemId &&
+        x.warehouseId === sourceWarehouseId &&
+        (x.remainingQuantity > 0 || addsStock) &&
+        (x.variant ?? '') === l.variant,
+    );
 
   const stockError = (l: LineRow) => {
     if (!drawsStock || !l.itemId || !sourceWarehouseId) return undefined;
     const available = stockAt(l.itemId, sourceWarehouseId);
     if (available <= 0) return 'Not in stock at this warehouse';
+    const lot = lots.find((x) => x.id === l.lotId);
+    if (lot) {
+      const requested = lines.filter((x) => x.lotId === lot.id).reduce((n, x) => n + x.quantity, 0);
+      if (requested > lot.remainingQuantity) return `Only ${lot.remainingQuantity} in this batch`;
+    }
     if (l.variant) {
       const max = maxFor(l);
       const requested = lines
@@ -327,12 +362,16 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
 
   // Changing the source warehouse drops items the new one doesn't hold.
   const changeSourceWarehouse = (warehouseId: string) => {
-    if (!onHandOnly) return;
+    if (!onHandOnly) {
+      // Batches belong to a warehouse, so a new one clears the picks.
+      setLines((rows) => rows.map((l) => ({ ...l, lotId: '' })));
+      return;
+    }
     setLines((rows) =>
       rows.map((l) =>
         l.itemId && stockAt(l.itemId, warehouseId) <= 0
-          ? { ...l, itemId: '', variant: '', quantity: 0, unitCost: 0 }
-          : l,
+          ? { ...l, itemId: '', variant: '', lotId: '', quantity: 0, unitCost: 0 }
+          : { ...l, lotId: '' },
       ),
     );
   };
@@ -345,7 +384,8 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
       ? 'Expiry must be after the manufacturing date'
       : undefined;
 
-  const lineGrid = type === 'STOCK_IN' ? STOCK_IN_LINE_GRID : LINE_GRID;
+  const lineGrid =
+    type === 'STOCK_IN' ? STOCK_IN_LINE_GRID : showBatch ? BATCH_LINE_GRID : LINE_GRID;
 
   // A perishable item can't be received without an expiry date.
   const missingExpiry = (l: LineRow) => needsDates(l) && !l.expiryDate;
@@ -396,6 +436,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
         variant: l.variant || null,
         quantity: decrease ? -l.quantity : l.quantity,
         unitCost: l.unitCost,
+        ...(showBatch ? { lotId: l.lotId || null } : {}),
         ...(type === 'STOCK_IN'
           ? {
               lotNumber: l.batchNumber.trim() || null,
@@ -437,7 +478,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
       type,
       form: getValues(),
       lines: lines.map(
-        ({ itemId, variant, quantity, unitCost, batchNumber, manufactureDate, expiryDate }) => ({
+        ({
           itemId,
           variant,
           quantity,
@@ -445,6 +486,16 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
           batchNumber,
           manufactureDate,
           expiryDate,
+          lotId,
+        }) => ({
+          itemId,
+          variant,
+          quantity,
+          unitCost,
+          batchNumber,
+          manufactureDate,
+          expiryDate,
+          lotId,
         }),
       ),
     });
@@ -723,6 +774,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
               {[
                 'Item',
                 'Variant',
+                ...(showBatch ? ['Batch'] : []),
                 'Qty',
                 'Unit Cost',
                 'Total',
@@ -779,7 +831,28 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                           label: v,
                         }))}
                         value={line.variant}
-                        onChange={(v) => updateLine(line.key, { variant: v })}
+                        onChange={(v) => updateLine(line.key, { variant: v, lotId: '' })}
+                      />
+                    )}
+                    {showBatch && (
+                      <SearchSelect
+                        placeholder={
+                          !line.itemId
+                            ? 'Select item first'
+                            : lotsFor(line).length
+                              ? addsStock
+                                ? 'No batch'
+                                : 'Auto (earliest expiry)'
+                              : 'No batches'
+                        }
+                        disabled={!line.itemId || !sourceWarehouseId || !lotsFor(line).length}
+                        options={lotsFor(line).map((x) => ({
+                          value: x.id,
+                          label: x.lotNumber || 'No batch no.',
+                          sublabel: `${x.remainingQuantity} left${x.expiryDate ? ` · exp ${x.expiryDate}` : ''}`,
+                        }))}
+                        value={line.lotId}
+                        onChange={(v) => updateLine(line.key, { lotId: v })}
                       />
                     )}
                     <div className="flex min-w-0 flex-col gap-0.5">

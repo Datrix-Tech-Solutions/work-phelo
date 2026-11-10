@@ -40,6 +40,7 @@ import {
   StockTransferDto,
   StockAdjustmentDto,
   StockBalanceQueryDto,
+  StockLotQueryDto,
   PartyDto,
   UpdatePartyDto,
   PartyQueryDto,
@@ -265,6 +266,15 @@ export class StockController {
   @RequirePermissions('operations.inventory.adjustments:CREATE')
   adjustBatch(@Req() req: UserRequest, @Body() dto: StockAdjustmentBatchDto) {
     return this.service.adjustBatch(req.user.tenantId, req.user.id, dto);
+  }
+  @Get('stock-lots')
+  @RequireAnyPermission(
+    'operations.inventory.items:VIEW',
+    'operations.inventory.stock-in:VIEW',
+    'operations.inventory.stock-out:VIEW',
+  )
+  lots(@Req() req: UserRequest, @Query() query: StockLotQueryDto) {
+    return this.service.lots(req.user.tenantId, query.itemId);
   }
   @Get('stock-movements')
   @RequireAnyPermission(

@@ -22,6 +22,10 @@ export interface StockMovementLine {
   /** Stock in only, perishable items: YYYY-MM-DD. */
   manufactureDate?: string | null;
   expiryDate?: string | null;
+  /** The batch / lot this line concerns: the one a stock in created, or a stock out drew on. */
+  lotId?: string | null;
+  /** Transfers only: the batch / lot the stock became at the destination. */
+  toLotId?: string | null;
 }
 
 export interface StockMovement {
@@ -91,6 +95,7 @@ interface ApiStockMovement {
   /** Date-only values arrive as ISO date-times at midnight UTC. */
   manufactureDate: string | null;
   expiryDate: string | null;
+  lotId: string | null;
 }
 
 export function getMovementQuantity(m: StockMovement): number {
@@ -137,6 +142,7 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
           lotNumber: m.lotNumber,
           manufactureDate: m.manufactureDate?.slice(0, 10) ?? null,
           expiryDate: m.expiryDate?.slice(0, 10) ?? null,
+          lotId: m.lotId,
         },
       ],
       fromWarehouseId: null,
@@ -150,8 +156,16 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
     if (type === 'TRANSFER' && m.transferId) {
       const existing = transfers.get(m.transferId);
       const merged: StockMovement = existing ?? { ...base, id: m.transferId };
-      if (m.type === 'TRANSFER_OUT') merged.fromWarehouseId = m.locationId;
-      else merged.toWarehouseId = m.locationId;
+      // The out row names the batch taken from the source, the in row the one it became.
+      const line = merged.lines[0];
+      if (m.type === 'TRANSFER_OUT') {
+        merged.fromWarehouseId = m.locationId;
+        line.lotId = m.lotId;
+      } else {
+        merged.toWarehouseId = m.locationId;
+        line.toLotId = m.lotId;
+        if (!existing) line.lotId = null;
+      }
       if (!existing) {
         transfers.set(m.transferId, merged);
         result.push(merged);
@@ -238,6 +252,8 @@ function postMovement(movement: NewStockMovement) {
     quantity: toDecimal(Math.abs(l.quantity)),
     variant: l.variant || null,
   }));
+  // A line can name the batch to draw on; otherwise the service picks, earliest expiry first.
+  const lotLines = lines.map((l, i) => ({ ...l, lotId: movement.lines[i].lotId || null }));
   if (movement.type === 'STOCK_IN') {
     if (!movement.toWarehouseId) throw new Error('Choose a warehouse to receive the stock.');
     return inventoryApi.post<{ batchId: string }>('/stock-in-batches', {
@@ -248,9 +264,14 @@ function postMovement(movement: NewStockMovement) {
       lines: movement.lines.map((l, i) => ({
         ...lines[i],
         unitCost: toDecimal(l.unitCost),
-        lotNumber: l.lotNumber?.trim() || null,
-        manufactureDate: l.manufactureDate || null,
-        expiryDate: l.expiryDate || null,
+        // Stock coming back (a reversed issue) is added to the batch it left; new stock names its own.
+        ...(l.lotId
+          ? { lotId: l.lotId }
+          : {
+              lotNumber: l.lotNumber?.trim() || null,
+              manufactureDate: l.manufactureDate || null,
+              expiryDate: l.expiryDate || null,
+            }),
       })),
     });
   }
@@ -263,7 +284,7 @@ function postMovement(movement: NewStockMovement) {
       date: movement.date,
       purpose: movement.purpose,
       recipient: movement.source,
-      lines,
+      lines: lotLines,
     });
   }
   if (movement.type === 'TRANSFER') {
@@ -274,7 +295,7 @@ function postMovement(movement: NewStockMovement) {
       sourceLocationId: movement.fromWarehouseId,
       destinationLocationId: movement.toWarehouseId,
       date: movement.date,
-      lines,
+      lines: lotLines,
     });
   }
   // One adjustment is all increases or all decreases (the form has a single type).
@@ -288,7 +309,7 @@ function postMovement(movement: NewStockMovement) {
     type: decrease ? 'DECREASE' : 'INCREASE',
     reason: movement.reason,
     date: movement.date,
-    lines,
+    lines: lotLines,
   });
 }
 
@@ -302,6 +323,7 @@ export function useCreateStockMovement() {
       queryClient.invalidateQueries({ queryKey: inventoryKeys.movements });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.balances });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.variantBalances });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.lots });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.variants });
     },
   });
@@ -339,7 +361,8 @@ function counterMovement(m: StockMovement): NewStockMovement {
       type: 'TRANSFER',
       fromWarehouseId: m.toWarehouseId,
       toWarehouseId: m.fromWarehouseId,
-      lines,
+      // Back from the batch the stock became at the destination.
+      lines: lines.map((l) => ({ ...l, lotId: l.toLotId ?? null })),
     };
   }
   // An adjustment is undone by the opposite one; decreases carry negative quantities.
@@ -372,6 +395,7 @@ export function useReturnMovementStock() {
       queryClient.invalidateQueries({ queryKey: inventoryKeys.movements });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.balances });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.variantBalances });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.lots });
     },
   });
   return { returnStock: m.mutateAsync, isPending: m.isPending };

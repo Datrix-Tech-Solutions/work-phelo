@@ -110,6 +110,7 @@ model StockLocation {
   updatedAt       DateTime                     @updatedAt
   balances        StockBalance[]
   movements       StockMovement[]
+  lots            StockLot[]
   variantBalances VariantBalance[]
 
   @@unique([tenantId, name])
@@ -141,6 +142,7 @@ model InventoryItem {
   movements       StockMovement[]
   variants        ItemVariant[]
   variantBalances VariantBalance[]
+  lots            StockLot[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, id])
@@ -190,10 +192,12 @@ model StockMovement {
   lotNumber        String?
   manufactureDate  DateTime?         @db.Date
   expiryDate       DateTime?         @db.Date
+  lotId            String?
   createdBy        String
   createdAt        DateTime          @default(now())
   item             InventoryItem     @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
   variant          ItemVariant?      @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  lot              StockLot?         @relation(fields: [tenantId, lotId], references: [tenantId, id], onDelete: Restrict)
   location         StockLocation     @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
   unitOfMeasure    UnitOfMeasure     @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
 
@@ -205,6 +209,7 @@ model StockMovement {
   @@index([tenantId, batchId])
   @@index([tenantId, variantId])
   @@index([tenantId, itemId, lotNumber])
+  @@index([tenantId, lotId])
   @@schema("inventory")
 }
 
@@ -253,6 +258,7 @@ model ItemVariant {
   item      InventoryItem                @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
   balances  VariantBalance[]
   movements StockMovement[]
+  lots      StockLot[]
 
   @@unique([tenantId, itemId, name])
   @@unique([tenantId, id])
@@ -294,5 +300,31 @@ model AdjustmentReason {
 
   @@unique([tenantId, code])
   @@unique([tenantId, name])
+  @@schema("inventory")
+}
+
+// A batch/lot received by a stock in line that names a batch number or an expiry date. Stock in
+// sets remainingQuantity to what was received; stock out draws it down.
+model StockLot {
+  id                String          @id @default(uuid())
+  tenantId          String
+  itemId            String
+  locationId        String
+  variantId         String?
+  lotNumber         String?
+  manufactureDate   DateTime?       @db.Date
+  expiryDate        DateTime?       @db.Date
+  receivedQuantity  Decimal         @db.Decimal(18, 4)
+  remainingQuantity Decimal         @db.Decimal(18, 4)
+  createdAt         DateTime        @default(now())
+  item              InventoryItem   @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  location          StockLocation   @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  variant           ItemVariant?    @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  movements         StockMovement[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, itemId, locationId])
+  @@index([tenantId, locationId])
+  @@index([tenantId, variantId])
   @@schema("inventory")
 }

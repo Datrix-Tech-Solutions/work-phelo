@@ -26,6 +26,13 @@ import {
   PartyKind,
 } from '../prisma/generated/client';
 
+const lotIdField = (description: string) =>
+  applyDecorators(
+    ApiProperty({ required: false, nullable: true, format: 'uuid', type: String, description }),
+    IsOptional(),
+    IsUUID(),
+  );
+
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 // A calendar date with no time, e.g. 2026-11-09.
 const DATE_ONLY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -226,6 +233,10 @@ export class StockInDto {
   @IsOptional()
   @Matches(DATE_ONLY, { message: 'expiryDate must be a date in YYYY-MM-DD format' })
   expiryDate?: string | null;
+  @lotIdField(
+    'Receive into this existing batch/lot (same item, location and variant) instead of starting a new one. Cannot be combined with a lot number or dates.',
+  )
+  lotId?: string | null;
 
   @ApiProperty({ required: false, nullable: true, type: String, example: '12.5000' })
   @IsOptional()
@@ -271,6 +282,11 @@ export class StockOutDto extends PickType(StockInDto, [
   @IsEnum(StockOutPurpose)
   purpose!: StockOutPurpose;
 
+  @lotIdField(
+    'Issue from this batch/lot. Without one, stock is taken from the batches at the location, earliest expiry first, then from stock that has no batch.',
+  )
+  lotId?: string | null;
+
   @ApiProperty({ required: false, nullable: true, type: String })
   @IsOptional()
   @IsString()
@@ -286,6 +302,13 @@ export enum StockAdjustmentType {
 export enum StockBalanceStatus {
   LOW_STOCK = 'LOW_STOCK',
   OUT_OF_STOCK = 'OUT_OF_STOCK',
+}
+
+export class StockLotQueryDto {
+  @ApiProperty({ required: false, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
 }
 
 export class StockBalanceQueryDto {
@@ -319,6 +342,11 @@ export class StockAdjustmentDto extends PickType(StockInDto, [
   @ApiProperty({ example: '2026-11-03', description: 'ISO adjustment date or date-time' })
   @IsDateString({ strict: true })
   date!: string;
+
+  @lotIdField(
+    'A decrease draws on this batch/lot (without one: earliest expiry first, then stock with no batch). An increase adds to this existing batch; without one it adds unbatched stock.',
+  )
+  lotId?: string | null;
 }
 
 export class AssignVariantDto extends PickType(StockInDto, [
@@ -352,6 +380,11 @@ export class StockTransferDto extends PickType(StockInDto, [
   @ApiProperty({ example: '2026-11-02', description: 'ISO transfer date or date-time' })
   @IsDateString({ strict: true })
   date!: string;
+
+  @lotIdField(
+    'Move this batch/lot from the source. Without one, batches are drawn earliest expiry first, then stock with no batch. The batch continues at the destination with the same number and dates.',
+  )
+  lotId?: string | null;
 }
 
 // Batches: several items saved together as one movement. Every line is applied in one database
@@ -376,6 +409,7 @@ export class StockInLineDto extends PickType(StockInDto, [
   'lotNumber',
   'manufactureDate',
   'expiryDate',
+  'lotId',
 ] as const) {}
 export class StockInBatchDto extends PickType(StockInDto, [
   'locationId',
@@ -394,6 +428,24 @@ export class StockLineDto extends PickType(StockInDto, [
   'quantity',
   'variant',
 ] as const) {}
+export class StockTransferLineDto extends PickType(StockTransferDto, [
+  'itemId',
+  'quantity',
+  'variant',
+  'lotId',
+] as const) {}
+export class StockAdjustmentLineDto extends PickType(StockAdjustmentDto, [
+  'itemId',
+  'quantity',
+  'variant',
+  'lotId',
+] as const) {}
+export class StockOutLineDto extends PickType(StockOutDto, [
+  'itemId',
+  'quantity',
+  'variant',
+  'lotId',
+] as const) {}
 export class StockOutBatchDto extends PickType(StockOutDto, [
   'locationId',
   'date',
@@ -402,8 +454,8 @@ export class StockOutBatchDto extends PickType(StockOutDto, [
   'reference',
   'notes',
 ] as const) {
-  @batchLines(StockLineDto)
-  lines!: StockLineDto[];
+  @batchLines(StockOutLineDto)
+  lines!: StockOutLineDto[];
 }
 
 export class StockTransferBatchDto extends PickType(StockTransferDto, [
@@ -413,8 +465,8 @@ export class StockTransferBatchDto extends PickType(StockTransferDto, [
   'reference',
   'notes',
 ] as const) {
-  @batchLines(StockLineDto)
-  lines!: StockLineDto[];
+  @batchLines(StockTransferLineDto)
+  lines!: StockTransferLineDto[];
 }
 
 export class StockAdjustmentBatchDto extends PickType(StockAdjustmentDto, [
@@ -425,8 +477,8 @@ export class StockAdjustmentBatchDto extends PickType(StockAdjustmentDto, [
   'reference',
   'notes',
 ] as const) {
-  @batchLines(StockLineDto)
-  lines!: StockLineDto[];
+  @batchLines(StockAdjustmentLineDto)
+  lines!: StockAdjustmentLineDto[];
 }
 
 export class PartyDto extends NameDto {
