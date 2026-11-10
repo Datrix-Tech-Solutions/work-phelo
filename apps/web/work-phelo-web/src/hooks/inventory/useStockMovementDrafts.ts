@@ -24,6 +24,7 @@ export interface DraftLine {
   batchNumber?: string;
   manufactureDate?: string;
   expiryDate?: string;
+  lotId?: string;
 }
 
 export interface StockMovementDraft {

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { PartyKind, Prisma, StockMovementType } from '../prisma/generated/client';
+import { PartyKind, Prisma, StockLot, StockMovementType } from '../prisma/generated/client';
 import { PrismaService } from './prisma/prisma.service';
 import {
   ItemDto,
@@ -54,6 +54,12 @@ const reasonCode = (name: string) =>
     .replace(/[^A-Z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 100) || 'REASON';
+
+/** Part of a line's quantity and the lot it comes from; null for stock that has no lot. */
+interface LotPart {
+  lot: StockLot | null;
+  quantity: Prisma.Decimal;
+}
 
 // Two Decimal(18,4) inputs can produce 36 significant digits.
 const StockDecimal = Prisma.Decimal.clone({ precision: 40 });
@@ -583,7 +589,49 @@ export class InventoryService {
     if (!location) throw new NotFoundException('Stock location not found');
     if (location.status !== 'ACTIVE') throw new ConflictException('Stock location is inactive');
     const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, true);
-    const lot = this.lotDetails(item.isPerishable, dto);
+    let lot: ReturnType<InventoryService['lotDetails']>;
+    let lotId: string | null;
+    if (dto.lotId) {
+      // Adding to a batch that already exists: it keeps its own number and dates.
+      if (dto.lotNumber || dto.manufactureDate || dto.expiryDate)
+        throw new BadRequestException(
+          'A batch to add to cannot be combined with a lot number or dates',
+        );
+      const existing = await this.requireLot(
+        tx,
+        tenantId,
+        item.id,
+        location.id,
+        variant?.id ?? null,
+        dto.lotId,
+      );
+      await tx.stockLot.update({
+        where: { id: existing.id },
+        data: {
+          receivedQuantity: { increment: quantity },
+          remainingQuantity: { increment: quantity },
+        },
+      });
+      lot = { lotNumber: null, manufactureDate: null, expiryDate: null };
+      lotId = existing.id;
+    } else {
+      lot = this.lotDetails(item.isPerishable, dto);
+      // A line that names a batch or an expiry date starts a lot that stock out can draw on.
+      lotId = lot.lotNumber || lot.expiryDate ? randomUUID() : null;
+    }
+    if (lotId && !dto.lotId)
+      await tx.stockLot.create({
+        data: {
+          id: lotId,
+          tenantId,
+          itemId: item.id,
+          locationId: location.id,
+          variantId: variant?.id,
+          ...lot,
+          receivedQuantity: quantity,
+          remainingQuantity: quantity,
+        },
+      });
     const unitCost = dto.unitCost == null ? null : new StockDecimal(dto.unitCost);
     const movement = await tx.stockMovement.create({
       data: {
@@ -602,6 +650,7 @@ export class InventoryService {
         reference: dto.reference,
         notes: dto.notes,
         ...lot,
+        lotId,
         createdBy: userId,
         batchId,
       },
@@ -637,6 +686,7 @@ export class InventoryService {
           lotNumber: line.lotNumber,
           manufactureDate: line.manufactureDate,
           expiryDate: line.expiryDate,
+          lotId: line.lotId,
         },
         batchId,
       ),
@@ -666,6 +716,133 @@ export class InventoryService {
       throw new ConflictException('Insufficient stock');
     return balance;
   }
+  /**
+   * Splits stock leaving a location across its lots. With a lotId everything comes from that lot.
+   * Without one, lots are drawn on earliest expiry first (no expiry last), oldest first; whatever
+   * the lots don't hold is stock that has no batch. The item is already locked by the caller, so
+   * its lots cannot change underneath this.
+   */
+  private async allocateLots(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    locationId: string,
+    variantId: string | null,
+    quantity: Prisma.Decimal,
+    lotId: string | null,
+  ): Promise<LotPart[]> {
+    if (lotId) {
+      const lot = await tx.stockLot.findFirst({ where: { tenantId, id: lotId } });
+      if (!lot || lot.itemId !== itemId || lot.locationId !== locationId)
+        throw new NotFoundException('Batch not found at this location');
+      if ((lot.variantId ?? null) !== variantId)
+        throw new ConflictException('Batch belongs to a different variant');
+      if (lot.remainingQuantity.lt(quantity))
+        throw new ConflictException(`Only ${lot.remainingQuantity.toString()} left in this batch`);
+      await tx.stockLot.update({
+        where: { id: lot.id },
+        data: { remainingQuantity: { decrement: quantity } },
+      });
+      return [{ lot, quantity }];
+    }
+    const lots = await tx.stockLot.findMany({
+      where: { tenantId, itemId, locationId, variantId, remainingQuantity: { gt: 0 } },
+      orderBy: [
+        { expiryDate: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
+    });
+    const parts: LotPart[] = [];
+    let left: Prisma.Decimal = quantity;
+    for (const lot of lots) {
+      if (left.lte(0)) break;
+      const take = Prisma.Decimal.min(lot.remainingQuantity, left);
+      await tx.stockLot.update({
+        where: { id: lot.id },
+        data: { remainingQuantity: { decrement: take } },
+      });
+      parts.push({ lot, quantity: take });
+      left = left.minus(take);
+    }
+    if (left.gt(0)) parts.push({ lot: null, quantity: left });
+    return parts;
+  }
+  /** Unit and total cost of a movement valued at one of the item's prices; null when it has none. */
+  private valued(price: Prisma.Decimal | null, quantity: Prisma.Decimal) {
+    return price === null
+      ? { unitCost: null, totalCost: null }
+      : { unitCost: price, totalCost: new StockDecimal(quantity).mul(price) };
+  }
+  private groupId(batchId: string | null, parts: number) {
+    return batchId ?? (parts > 1 ? randomUUID() : null);
+  }
+  /**
+   * Adds stock to the lot at a location that matches this lot's number and dates (same item and
+   * variant), or starts one. Used when a batch moves between locations.
+   */
+  private async receiveIntoLot(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    locationId: string,
+    variantId: string | null,
+    source: Pick<StockLot, 'lotNumber' | 'manufactureDate' | 'expiryDate'>,
+    quantity: Prisma.Decimal,
+  ) {
+    const same = await tx.stockLot.findFirst({
+      where: {
+        tenantId,
+        itemId,
+        locationId,
+        variantId,
+        lotNumber: source.lotNumber,
+        manufactureDate: source.manufactureDate,
+        expiryDate: source.expiryDate,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (same) {
+      await tx.stockLot.update({
+        where: { id: same.id },
+        data: {
+          receivedQuantity: { increment: quantity },
+          remainingQuantity: { increment: quantity },
+        },
+      });
+      return same.id;
+    }
+    const created = await tx.stockLot.create({
+      data: {
+        tenantId,
+        itemId,
+        locationId,
+        variantId,
+        lotNumber: source.lotNumber,
+        manufactureDate: source.manufactureDate,
+        expiryDate: source.expiryDate,
+        receivedQuantity: quantity,
+        remainingQuantity: quantity,
+      },
+    });
+    return created.id;
+  }
+  /** An existing lot of this item at this location and variant, to add stock back into. */
+  private async requireLot(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    locationId: string,
+    variantId: string | null,
+    lotId: string,
+  ) {
+    const lot = await tx.stockLot.findFirst({ where: { tenantId, id: lotId } });
+    if (!lot || lot.itemId !== itemId || lot.locationId !== locationId)
+      throw new NotFoundException('Batch not found at this location');
+    if ((lot.variantId ?? null) !== variantId)
+      throw new ConflictException('Batch belongs to a different variant');
+    return lot;
+  }
   private async stockOutTx(
     tx: Prisma.TransactionClient,
     tenantId: string,
@@ -689,33 +866,51 @@ export class InventoryService {
       quantity,
       held.quantity,
     );
-    const movement = await tx.stockMovement.create({
-      data: {
-        tenantId,
-        itemId: item.id,
-        locationId: dto.locationId,
-        unitOfMeasureId: item.unitOfMeasureId,
-        variantId: variant?.id,
-        type: 'STOCK_OUT',
-        quantity,
-        unitCost: null,
-        totalCost: null,
-        date: new Date(dto.date),
-        purpose: dto.purpose,
-        recipient: dto.recipient,
-        reference: dto.reference,
-        notes: dto.notes,
-        createdBy: userId,
-        batchId,
-      },
-    });
+    const allocations = await this.allocateLots(
+      tx,
+      tenantId,
+      item.id,
+      dto.locationId,
+      variant?.id ?? null,
+      quantity,
+      dto.lotId ?? null,
+    );
+    // One row per batch drawn on, so each batch's history shows what left it. Rows of a split line
+    // share a batchId so they still read back as one movement.
+    const groupId = this.groupId(batchId, allocations.length);
+    const movements = [];
+    for (const part of allocations) {
+      movements.push(
+        await tx.stockMovement.create({
+          data: {
+            tenantId,
+            itemId: item.id,
+            locationId: dto.locationId,
+            unitOfMeasureId: item.unitOfMeasureId,
+            variantId: variant?.id,
+            type: 'STOCK_OUT',
+            quantity: part.quantity,
+            // Valued at the item's selling price when issued.
+            ...this.valued(item.sellingPrice, part.quantity),
+            date: new Date(dto.date),
+            purpose: dto.purpose,
+            recipient: dto.recipient,
+            reference: dto.reference,
+            notes: dto.notes,
+            lotId: part.lot?.id ?? null,
+            createdBy: userId,
+            batchId: groupId,
+          },
+        }),
+      );
+    }
     const balance = await tx.stockBalance.update({
       where: {
         tenantId_itemId_locationId: { tenantId, itemId: item.id, locationId: dto.locationId },
       },
       data: { quantity: { decrement: quantity } },
     });
-    return { movement, balance };
+    return { movement: movements[0], movements, balance };
   }
   stockOut(tenantId: string, userId: string, dto: StockOutDto) {
     return this.write(() =>
@@ -729,7 +924,13 @@ export class InventoryService {
         tx,
         tenantId,
         userId,
-        { ...header, itemId: line.itemId, quantity: line.quantity, variant: line.variant },
+        {
+          ...header,
+          itemId: line.itemId,
+          quantity: line.quantity,
+          variant: line.variant,
+          lotId: line.lotId,
+        },
         batchId,
       ),
     );
@@ -789,29 +990,69 @@ export class InventoryService {
       create: { tenantId, itemId: item.id, locationId: dto.destinationLocationId, quantity },
       update: { quantity: { increment: quantity } },
     });
-    const transferId = randomUUID();
-    const data = {
+    const allocations = await this.allocateLots(
+      tx,
       tenantId,
-      itemId: item.id,
-      unitOfMeasureId: item.unitOfMeasureId,
-      variantId: variant?.id,
+      item.id,
+      dto.sourceLocationId,
+      variant?.id ?? null,
       quantity,
-      unitCost: null,
-      totalCost: null,
-      transferId,
-      date: new Date(dto.date),
-      reference: dto.reference,
-      notes: dto.notes,
-      createdBy: userId,
-      batchId,
-    };
-    const out = await tx.stockMovement.create({
-      data: { ...data, type: 'TRANSFER_OUT', locationId: dto.sourceLocationId },
-    });
-    const incoming = await tx.stockMovement.create({
-      data: { ...data, type: 'TRANSFER_IN', locationId: dto.destinationLocationId },
-    });
-    return { transferId, movements: [out, incoming], sourceBalance, destinationBalance };
+      dto.lotId ?? null,
+    );
+    // Each batch moved is its own transfer, and carries its number and dates to the destination.
+    // Parts of a split line share a batchId so they still read back as one movement.
+    const groupId = this.groupId(batchId, allocations.length);
+    const movements = [];
+    let transferId = '';
+    for (const part of allocations) {
+      const partId = randomUUID();
+      transferId ||= partId;
+      const destinationLotId = part.lot
+        ? await this.receiveIntoLot(
+            tx,
+            tenantId,
+            item.id,
+            dto.destinationLocationId,
+            variant?.id ?? null,
+            part.lot,
+            part.quantity,
+          )
+        : null;
+      const data = {
+        tenantId,
+        itemId: item.id,
+        unitOfMeasureId: item.unitOfMeasureId,
+        variantId: variant?.id,
+        quantity: part.quantity,
+        // Valued at the item's cost price when moved.
+        ...this.valued(item.costPrice, part.quantity),
+        transferId: partId,
+        date: new Date(dto.date),
+        reference: dto.reference,
+        notes: dto.notes,
+        createdBy: userId,
+        batchId: groupId,
+      };
+      movements.push(
+        await tx.stockMovement.create({
+          data: {
+            ...data,
+            type: 'TRANSFER_OUT',
+            locationId: dto.sourceLocationId,
+            lotId: part.lot?.id ?? null,
+          },
+        }),
+        await tx.stockMovement.create({
+          data: {
+            ...data,
+            type: 'TRANSFER_IN',
+            locationId: dto.destinationLocationId,
+            lotId: destinationLotId,
+          },
+        }),
+      );
+    }
+    return { transferId, movements, sourceBalance, destinationBalance };
   }
   transfer(tenantId: string, userId: string, dto: StockTransferDto) {
     return this.write(() =>
@@ -825,7 +1066,13 @@ export class InventoryService {
         tx,
         tenantId,
         userId,
-        { ...header, itemId: line.itemId, quantity: line.quantity, variant: line.variant },
+        {
+          ...header,
+          itemId: line.itemId,
+          quantity: line.quantity,
+          variant: line.variant,
+          lotId: line.lotId,
+        },
         batchId,
       ),
     );
@@ -845,6 +1092,7 @@ export class InventoryService {
     await this.requireLocations(tx, tenantId, [dto.locationId]);
     await this.requireReason(tx, tenantId, dto.reason);
     const variant = await this.resolveVariant(tx, tenantId, item.id, dto.variant, false);
+    let allocations: LotPart[];
     if (decrease) {
       const held = await this.sourceBalance(tx, tenantId, item.id, dto.locationId, quantity);
       await this.takeStock(
@@ -856,28 +1104,64 @@ export class InventoryService {
         quantity,
         held.quantity,
       );
+      allocations = await this.allocateLots(
+        tx,
+        tenantId,
+        item.id,
+        dto.locationId,
+        variant?.id ?? null,
+        quantity,
+        dto.lotId ?? null,
+      );
     } else {
       await this.addVariantStock(tx, tenantId, item.id, dto.locationId, variant?.id, quantity);
+      // An increase can add to an existing batch; otherwise it adds stock that has no batch.
+      let lot: StockLot | null = null;
+      if (dto.lotId) {
+        lot = await this.requireLot(
+          tx,
+          tenantId,
+          item.id,
+          dto.locationId,
+          variant?.id ?? null,
+          dto.lotId,
+        );
+        await tx.stockLot.update({
+          where: { id: lot.id },
+          data: {
+            receivedQuantity: { increment: quantity },
+            remainingQuantity: { increment: quantity },
+          },
+        });
+      }
+      allocations = [{ lot, quantity }];
     }
-    const movement = await tx.stockMovement.create({
-      data: {
-        tenantId,
-        itemId: item.id,
-        locationId: dto.locationId,
-        unitOfMeasureId: item.unitOfMeasureId,
-        variantId: variant?.id,
-        type: decrease ? 'ADJUSTMENT_DECREASE' : 'ADJUSTMENT_INCREASE',
-        quantity,
-        adjustmentReason: dto.reason,
-        date: new Date(dto.date),
-        reference: dto.reference,
-        notes: dto.notes,
-        createdBy: userId,
-        batchId,
-        unitCost: null,
-        totalCost: null,
-      },
-    });
+    const groupId = this.groupId(batchId, allocations.length);
+    const movements = [];
+    for (const part of allocations) {
+      movements.push(
+        await tx.stockMovement.create({
+          data: {
+            tenantId,
+            itemId: item.id,
+            locationId: dto.locationId,
+            unitOfMeasureId: item.unitOfMeasureId,
+            variantId: variant?.id,
+            type: decrease ? 'ADJUSTMENT_DECREASE' : 'ADJUSTMENT_INCREASE',
+            quantity: part.quantity,
+            adjustmentReason: dto.reason,
+            date: new Date(dto.date),
+            reference: dto.reference,
+            notes: dto.notes,
+            lotId: part.lot?.id ?? null,
+            createdBy: userId,
+            batchId: groupId,
+            // Valued at the item's cost price when adjusted.
+            ...this.valued(item.costPrice, part.quantity),
+          },
+        }),
+      );
+    }
     const where = {
       tenantId_itemId_locationId: { tenantId, itemId: item.id, locationId: dto.locationId },
     };
@@ -888,7 +1172,7 @@ export class InventoryService {
           create: { tenantId, itemId: item.id, locationId: dto.locationId, quantity },
           update: { quantity: { increment: quantity } },
         });
-    return { movement, balance };
+    return { movement: movements[0], movements, balance };
   }
   adjust(tenantId: string, userId: string, dto: StockAdjustmentDto) {
     return this.write(() =>
@@ -902,7 +1186,13 @@ export class InventoryService {
         tx,
         tenantId,
         userId,
-        { ...header, itemId: line.itemId, quantity: line.quantity, variant: line.variant },
+        {
+          ...header,
+          itemId: line.itemId,
+          quantity: line.quantity,
+          variant: line.variant,
+          lotId: line.lotId,
+        },
         batchId,
       ),
     );
@@ -945,8 +1235,8 @@ export class InventoryService {
           notes: dto.notes,
           createdBy: userId,
           batchId,
-          unitCost: null,
-          totalCost: null,
+          // Valued at the item's cost price, like any adjustment.
+          ...this.valued(item.costPrice, quantity),
         });
         await tx.stockMovement.create({ data: row('ADJUSTMENT_DECREASE') });
         await tx.stockMovement.create({ data: row('ADJUSTMENT_INCREASE', variant.id) });
@@ -990,6 +1280,19 @@ export class InventoryService {
       where: { tenantId, ...(types ? { type: { in: types } } : {}) },
       include: { variant: { select: { name: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    return rows.map(({ variant, ...row }) => ({ ...row, variant: variant?.name ?? null }));
+  }
+  /** Batches/lots received, with how much of each is left. */
+  async lots(tenantId: string, itemId?: string) {
+    const rows = await this.prisma.stockLot.findMany({
+      where: { tenantId, ...(itemId ? { itemId } : {}) },
+      include: { variant: { select: { name: true } } },
+      orderBy: [
+        { expiryDate: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'desc' },
+        { id: 'asc' },
+      ],
     });
     return rows.map(({ variant, ...row }) => ({ ...row, variant: variant?.name ?? null }));
   }
