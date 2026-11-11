@@ -52,6 +52,15 @@ enum PartyKind {
   @@schema("inventory")
 }
 
+enum PurchaseOrderStatus {
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+
+  @@schema("inventory")
+}
+
 enum StockOutPurpose {
   INTERNAL_USE
   SALE
@@ -112,6 +121,7 @@ model StockLocation {
   movements       StockMovement[]
   lots            StockLot[]
   variantBalances VariantBalance[]
+  purchaseOrders  PurchaseOrder[]
 
   @@unique([tenantId, name])
   @@unique([tenantId, code])
@@ -120,29 +130,31 @@ model StockLocation {
 }
 
 model InventoryItem {
-  id              String                @id @default(uuid())
-  tenantId        String
-  name            String
-  sku             String
-  categoryId      String
-  subcategoryId   String?
-  unitOfMeasureId String
-  description     String?
-  costPrice       Decimal?              @db.Decimal(18, 4)
-  sellingPrice    Decimal?              @db.Decimal(18, 4)
-  reorderLevel    Decimal?              @db.Decimal(18, 4)
-  isPerishable    Boolean               @default(false)
-  status          InventoryItemStatus   @default(ACTIVE)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  category        InventoryCategory     @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
-  subcategory     InventorySubcategory? @relation(fields: [tenantId, subcategoryId], references: [tenantId, id], onDelete: Restrict)
-  unitOfMeasure   UnitOfMeasure         @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
-  balances        StockBalance[]
-  movements       StockMovement[]
-  variants        ItemVariant[]
-  variantBalances VariantBalance[]
-  lots            StockLot[]
+  id                 String                @id @default(uuid())
+  tenantId           String
+  name               String
+  sku                String
+  categoryId         String
+  subcategoryId      String?
+  unitOfMeasureId    String
+  description        String?
+  costPrice          Decimal?              @db.Decimal(18, 4)
+  sellingPrice       Decimal?              @db.Decimal(18, 4)
+  reorderLevel       Decimal?              @db.Decimal(18, 4)
+  maxStock           Decimal?              @db.Decimal(18, 4)
+  isPerishable       Boolean               @default(false)
+  status             InventoryItemStatus   @default(ACTIVE)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  category           InventoryCategory     @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  subcategory        InventorySubcategory? @relation(fields: [tenantId, subcategoryId], references: [tenantId, id], onDelete: Restrict)
+  unitOfMeasure      UnitOfMeasure         @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
+  balances           StockBalance[]
+  movements          StockMovement[]
+  variants           ItemVariant[]
+  variantBalances    VariantBalance[]
+  lots               StockLot[]
+  purchaseOrderLines PurchaseOrderLine[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, id])
@@ -169,37 +181,39 @@ model StockBalance {
 }
 
 model StockMovement {
-  id               String            @id @default(uuid())
-  tenantId         String
-  itemId           String
-  locationId       String
-  unitOfMeasureId  String
-  type             StockMovementType @default(STOCK_IN)
-  quantity         Decimal           @db.Decimal(18, 4)
-  unitCost         Decimal?          @db.Decimal(18, 4)
-  totalCost        Decimal?          @db.Decimal(36, 8)
-  date             DateTime
-  source           String?
-  supplier         String?
-  reference        String?
-  notes            String?
-  recipient        String?
-  purpose          StockOutPurpose?
-  transferId       String?
-  batchId          String?
-  adjustmentReason String?
-  variantId        String?
-  lotNumber        String?
-  manufactureDate  DateTime?         @db.Date
-  expiryDate       DateTime?         @db.Date
-  lotId            String?
-  createdBy        String
-  createdAt        DateTime          @default(now())
-  item             InventoryItem     @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
-  variant          ItemVariant?      @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
-  lot              StockLot?         @relation(fields: [tenantId, lotId], references: [tenantId, id], onDelete: Restrict)
-  location         StockLocation     @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
-  unitOfMeasure    UnitOfMeasure     @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
+  id                  String             @id @default(uuid())
+  tenantId            String
+  itemId              String
+  locationId          String
+  unitOfMeasureId     String
+  type                StockMovementType  @default(STOCK_IN)
+  quantity            Decimal            @db.Decimal(18, 4)
+  unitCost            Decimal?           @db.Decimal(18, 4)
+  totalCost           Decimal?           @db.Decimal(36, 8)
+  date                DateTime
+  source              String?
+  supplier            String?
+  reference           String?
+  notes               String?
+  recipient           String?
+  purpose             StockOutPurpose?
+  transferId          String?
+  batchId             String?
+  adjustmentReason    String?
+  variantId           String?
+  lotNumber           String?
+  manufactureDate     DateTime?          @db.Date
+  expiryDate          DateTime?          @db.Date
+  lotId               String?
+  purchaseOrderLineId String?
+  createdBy           String
+  createdAt           DateTime           @default(now())
+  item                InventoryItem      @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  variant             ItemVariant?       @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  lot                 StockLot?          @relation(fields: [tenantId, lotId], references: [tenantId, id], onDelete: Restrict)
+  purchaseOrderLine   PurchaseOrderLine? @relation(fields: [tenantId, purchaseOrderLineId], references: [tenantId, id], onDelete: Restrict)
+  location            StockLocation      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  unitOfMeasure       UnitOfMeasure      @relation(fields: [tenantId, unitOfMeasureId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, createdAt, id])
   @@index([tenantId, itemId])
@@ -210,21 +224,23 @@ model StockMovement {
   @@index([tenantId, variantId])
   @@index([tenantId, itemId, lotNumber])
   @@index([tenantId, lotId])
+  @@index([tenantId, purchaseOrderLineId])
   @@schema("inventory")
 }
 
 model InventoryParty {
-  id            String                       @id @default(uuid())
-  tenantId      String
-  kind          PartyKind
-  name          String
-  contactPerson String?
-  phone         String?
-  email         String?
-  address       String?
-  status        InventoryConfigurationStatus @default(ACTIVE)
-  createdAt     DateTime                     @default(now())
-  updatedAt     DateTime                     @updatedAt
+  id             String                       @id @default(uuid())
+  tenantId       String
+  kind           PartyKind
+  name           String
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?
+  status         InventoryConfigurationStatus @default(ACTIVE)
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+  purchaseOrders PurchaseOrder[]
 
   @@unique([tenantId, kind, name])
   @@unique([tenantId, id])
@@ -326,5 +342,56 @@ model StockLot {
   @@index([tenantId, itemId, locationId])
   @@index([tenantId, locationId])
   @@index([tenantId, variantId])
+  @@schema("inventory")
+}
+
+// An order placed with a supplier. Nothing is in stock until it is received: each receipt posts a
+// stock in (StockMovement rows pointing at the order line) for the warehouse named here.
+model PurchaseOrder {
+  id           String              @id @default(uuid())
+  tenantId     String
+  reference    String
+  orderDate    DateTime            @db.Date
+  expectedDate DateTime?           @db.Date
+  supplierId   String
+  locationId   String
+  paymentTerms String?
+  notes        String?
+  status       PurchaseOrderStatus @default(ORDERED)
+  createdBy    String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  supplier     InventoryParty      @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  location     StockLocation       @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  lines        PurchaseOrderLine[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, reference])
+  @@index([tenantId, createdAt, id])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, locationId])
+  @@schema("inventory")
+}
+
+// receivedQuantity counts the units ordered that have arrived and is what the supplier is paid
+// for. extraQuantity is free stock on top (a bonus): it is stocked and valued at the unit cost but
+// not paid for.
+model PurchaseOrderLine {
+  id               String          @id @default(uuid())
+  tenantId         String
+  purchaseOrderId  String
+  itemId           String
+  variantName      String?
+  orderedQuantity  Decimal         @db.Decimal(18, 4)
+  unitCost         Decimal         @db.Decimal(18, 4)
+  receivedQuantity Decimal         @default(0) @db.Decimal(18, 4)
+  extraQuantity    Decimal         @default(0) @db.Decimal(18, 4)
+  purchaseOrder    PurchaseOrder   @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Cascade)
+  item             InventoryItem   @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
+  movements        StockMovement[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, purchaseOrderId])
+  @@index([tenantId, itemId])
   @@schema("inventory")
 }

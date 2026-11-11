@@ -31,6 +31,8 @@ import {
   ItemDto,
   UpdateItemDto,
   StockInDto,
+  PurchaseOrderDto,
+  ReceivePurchaseOrderDto,
   AssignVariantDto,
   StockInBatchDto,
   StockOutBatchDto,
@@ -444,5 +446,45 @@ export class AdjustmentReasonsController {
   @RequirePermissions('operations.inventory.adjustments:DELETE')
   delete(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.deleteReason(req.user.tenantId, id);
+  }
+}
+
+@ApiTags('Inventory - Purchase orders')
+@ApiBearerAuth('access-token')
+@Controller('purchase-orders')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class PurchaseOrdersController {
+  constructor(private readonly service: InventoryService) {}
+  @Get()
+  @RequirePermissions('operations.inventory.stock-in:VIEW')
+  list(@Req() req: UserRequest) {
+    return this.service.listPurchaseOrders(req.user.tenantId);
+  }
+  @Get(':id')
+  @RequirePermissions('operations.inventory.stock-in:VIEW')
+  get(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getPurchaseOrder(req.user.tenantId, id);
+  }
+  @Post()
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  create(@Req() req: UserRequest, @Body() dto: PurchaseOrderDto) {
+    return this.service.createPurchaseOrder(req.user.tenantId, req.user.id, dto);
+  }
+  @Post(':id/receive')
+  @HttpCode(201)
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  receive(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReceivePurchaseOrderDto,
+  ) {
+    return this.service.receivePurchaseOrder(req.user.tenantId, req.user.id, id, dto);
+  }
+  @Post(':id/cancel')
+  @HttpCode(200)
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  cancel(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.cancelPurchaseOrder(req.user.tenantId, id);
   }
 }

@@ -146,6 +146,7 @@ export default function InventoryPartyDetailsPage({
         isOpen={orderOpen}
         onClose={() => setOrderOpen(false)}
         partyName={party.name}
+        partyId={party.id}
       />
       <PartyModal
         kind={kind}

@@ -37,6 +37,7 @@ interface ItemFormValues {
   costPrice: string;
   sellingPrice: string;
   reorderLevel: string;
+  maxStock: string;
   status: 'ACTIVE' | 'INACTIVE';
   imageUrl: string | null;
   isPerishable: boolean;
@@ -53,6 +54,7 @@ const FORM_DEFAULTS: ItemFormValues = {
   costPrice: '',
   sellingPrice: '',
   reorderLevel: '',
+  maxStock: '',
   status: 'ACTIVE',
   imageUrl: null,
   isPerishable: false,
@@ -110,6 +112,7 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
             costPrice: item.costPrice?.toString() ?? '',
             sellingPrice: item.sellingPrice?.toString() ?? '',
             reorderLevel: item.reorderLevel?.toString() ?? '',
+            maxStock: item.maxStock?.toString() ?? '',
             status: item.status,
             imageUrl: item.imageUrl,
             isPerishable: item.isPerishable,
@@ -217,6 +220,7 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
       costPrice: optionalNumber(data.costPrice),
       sellingPrice: optionalNumber(data.sellingPrice),
       reorderLevel: optionalNumber(data.reorderLevel),
+      maxStock: optionalNumber(data.maxStock),
       status: data.status,
       imageUrl: data.imageUrl,
       isPerishable: data.isPerishable,
@@ -449,6 +453,24 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
                   registration={register('reorderLevel', { validate: nonNegative })}
                   error={errors.reorderLevel}
                   placeholder="0"
+                />
+              </div>
+              <div className="w-full sm:w-48 shrink-0">
+                <FormField
+                  label="Maximum Stock"
+                  type="number"
+                  step="any"
+                  registration={register('maxStock', {
+                    validate: (v, form) =>
+                      nonNegative(v) === true
+                        ? v.trim() === '' ||
+                          form.reorderLevel.trim() === '' ||
+                          Number(v) >= Number(form.reorderLevel) ||
+                          'Must be at least the reorder level'
+                        : nonNegative(v),
+                  })}
+                  error={errors.maxStock}
+                  placeholder="Optional"
                 />
               </div>
               <StatusRadioGroup value={status} onChange={(v) => setValue('status', v)} />

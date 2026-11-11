@@ -65,9 +65,9 @@ const LINE_GRID =
 // Lines that draw on or add to a batch (stock out, transfers, adjustments) get a batch picker.
 const BATCH_LINE_GRID =
   'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.8fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,0.7fr)_1fr_1fr_30px]';
-// Stock in adds batch and date columns to the same row.
+// Stock in puts batch and dates on a second row under each line.
 const STOCK_IN_LINE_GRID =
-  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.6fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_30px]';
+  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1fr)_30px]';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankForm = (): PanelFormValues => ({
@@ -778,7 +778,6 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                 'Qty',
                 'Unit Cost',
                 'Total',
-                ...(type === 'STOCK_IN' ? ['Batch / Lot No.', 'Mfg Date', 'Expiry Date'] : []),
               ].map((h) => (
                 <span key={h} className="text-xs font-bold text-gray-900">
                   {h}
@@ -896,47 +895,6 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                       onChange={() => {}}
                       disabled
                     />
-                    {type === 'STOCK_IN' && (
-                      <>
-                        <Input
-                          aria-label="Batch / Lot No."
-                          placeholder="Optional"
-                          maxLength={64}
-                          disabled={!line.itemId}
-                          value={line.batchNumber}
-                          onChange={(e) => updateLine(line.key, { batchNumber: e.target.value })}
-                        />
-                        {needsDates(line) ? (
-                          <DatePicker
-                            size="sm"
-                            placeholder="Mfg date"
-                            disableFuture
-                            maxDate={line.expiryDate || undefined}
-                            value={line.manufactureDate}
-                            onChange={(v) => updateLine(line.key, { manufactureDate: v })}
-                          />
-                        ) : (
-                          <span aria-hidden />
-                        )}
-                        {needsDates(line) ? (
-                          <DatePicker
-                            size="sm"
-                            placeholder="Expiry date"
-                            minDate={line.manufactureDate || undefined}
-                            value={line.expiryDate}
-                            onChange={(v) => updateLine(line.key, { expiryDate: v })}
-                            error={
-                              dateError(line) ??
-                              (showLineErrors && missingExpiry(line)
-                                ? 'Expiry date is required'
-                                : undefined)
-                            }
-                          />
-                        ) : (
-                          <span aria-hidden />
-                        )}
-                      </>
-                    )}
                     <div className="flex h-9.5 items-center">
                       {lines.length > 1 ? (
                         <button
@@ -953,6 +911,54 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                       )}
                     </div>
                   </div>
+                  {type === 'STOCK_IN' && (
+                    <div className={cn(lineGrid, 'items-start mt-2')}>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-semibold text-gray-600">Batch / Lot No.</span>
+                        <Input
+                          aria-label="Batch / Lot No."
+                          placeholder="Optional"
+                          maxLength={64}
+                          disabled={!line.itemId}
+                          value={line.batchNumber}
+                          onChange={(e) => updateLine(line.key, { batchNumber: e.target.value })}
+                        />
+                      </label>
+                      {needsDates(line) ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-gray-600">Mfg Date</span>
+                          <DatePicker
+                            size="sm"
+                            placeholder="Mfg date"
+                            disableFuture
+                            maxDate={line.expiryDate || undefined}
+                            value={line.manufactureDate}
+                            onChange={(v) => updateLine(line.key, { manufactureDate: v })}
+                          />
+                        </div>
+                      ) : (
+                        <span aria-hidden />
+                      )}
+                      {needsDates(line) && (
+                        <div className="flex flex-col gap-1 sm:col-span-2">
+                          <span className="text-xs font-semibold text-gray-600">Expiry Date</span>
+                          <DatePicker
+                            size="sm"
+                            placeholder="Expiry date"
+                            minDate={line.manufactureDate || undefined}
+                            value={line.expiryDate}
+                            onChange={(v) => updateLine(line.key, { expiryDate: v })}
+                            error={
+                              dateError(line) ??
+                              (showLineErrors && missingExpiry(line)
+                                ? 'Expiry date is required'
+                                : undefined)
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

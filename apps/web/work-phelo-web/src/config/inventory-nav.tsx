@@ -5,6 +5,7 @@ import {
   Handshake,
   LayoutDashboard,
   Package,
+  ShoppingCart,
   Settings,
   Users,
   Warehouse,
@@ -13,6 +14,7 @@ import {
 /* ── Icons ── */
 const InventoryIcon = () => <Package className="w-5 h-5" />;
 const StockIcon = () => <ArrowLeftRight className="w-5 h-5" />;
+const PurchaseIcon = () => <ShoppingCart className="w-5 h-5" />;
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
 const WarehouseIcon = () => <Warehouse className="w-5 h-5" />;
 const PartnersIcon = () => <Handshake className="w-5 h-5" />;
@@ -52,6 +54,14 @@ export const INVENTORY_NAV_GROUPS: NavGroup[] = [
         label: 'Stock Management',
         icon: <StockIcon />,
         href: 'stock-management',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'purchase-orders',
+        label: 'Purchase Orders',
+        icon: <PurchaseIcon />,
+        href: 'purchase-orders',
         enabled: true,
         active: true,
       },

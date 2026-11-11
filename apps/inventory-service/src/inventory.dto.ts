@@ -155,6 +155,13 @@ export class ItemDto extends NameDto {
   @Matches(/^\d{1,14}(\.\d{1,4})?$/)
   reorderLevel?: string | null;
 
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(/^\d{1,14}(\.\d{1,4})?$/)
+  maxStock?: string | null;
+
   @ApiProperty({
     required: false,
     default: false,
@@ -557,3 +564,135 @@ export class VariantQueryDto {
 
 export class AdjustmentReasonDto extends ConfigurationDto {}
 export class UpdateAdjustmentReasonDto extends PartialType(ConfigurationDto) {}
+
+const POSITIVE_QUANTITY = /^(?=.*[1-9])\d{1,14}(\.\d{1,4})?$/;
+const QUANTITY = /^\d{1,14}(\.\d{1,4})?$/;
+
+export class PurchaseOrderLineDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  itemId!: string;
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    maxLength: 100,
+    description:
+      "Name of a variant of the item. Receiving the order adds it if the item doesn't have it yet.",
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  variant?: string | null;
+  @ApiProperty({ type: String, example: '100' })
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(POSITIVE_QUANTITY)
+  quantity!: string;
+  @ApiProperty({
+    type: String,
+    example: '1.0000',
+    description: 'Price per unit the supplier is paid.',
+  })
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(QUANTITY)
+  unitCost!: string;
+}
+
+export class PurchaseOrderDto {
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    maxLength: 64,
+    description: 'Generated when left out.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 64)
+  reference?: string | null;
+  @ApiProperty({ example: '2026-11-11' })
+  @Matches(DATE_ONLY, { message: 'orderDate must be a date in YYYY-MM-DD format' })
+  orderDate!: string;
+  @ApiProperty({ required: false, nullable: true, type: String, example: '2026-11-20' })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: 'expectedDate must be a date in YYYY-MM-DD format' })
+  expectedDate?: string | null;
+  @ApiProperty({ format: 'uuid', description: 'A supplier.' })
+  @IsUUID()
+  supplierId!: string;
+  @ApiProperty({ format: 'uuid', description: 'The warehouse the order is delivered to.' })
+  @IsUUID()
+  locationId!: string;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 100, example: 'Net 30' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  paymentTerms?: string | null;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string | null;
+  @batchLines(PurchaseOrderLineDto)
+  lines!: PurchaseOrderLineDto[];
+}
+
+export class ReceiveLineDto {
+  @ApiProperty({ format: 'uuid', description: 'A line of the purchase order.' })
+  @IsUUID()
+  lineId!: string;
+  @ApiProperty({
+    type: String,
+    example: '100',
+    description:
+      'Units of the ordered quantity that arrived. Paid for. Cannot exceed what is still outstanding.',
+  })
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(QUANTITY)
+  receivedQuantity!: string;
+  @ApiProperty({
+    required: false,
+    type: String,
+    example: '50',
+    description:
+      'Free units on top of the order. Stocked and valued at the unit cost but not paid for.',
+  })
+  @IsOptional()
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(QUANTITY)
+  extraQuantity?: string;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 100 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  lotNumber?: string | null;
+  @ApiProperty({ required: false, nullable: true, type: String, example: '2026-10-01' })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: 'manufactureDate must be a date in YYYY-MM-DD format' })
+  manufactureDate?: string | null;
+  @ApiProperty({ required: false, nullable: true, type: String, example: '2027-10-01' })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: 'expiryDate must be a date in YYYY-MM-DD format' })
+  expiryDate?: string | null;
+}
+
+export class ReceivePurchaseOrderDto {
+  @ApiProperty({ example: '2026-11-15' })
+  @IsDateString({ strict: true })
+  dateReceived!: string;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string | null;
+  @batchLines(ReceiveLineDto)
+  lines!: ReceiveLineDto[];
+}
