@@ -12,7 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequestUser } from '@work-phelo/types';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { ModuleGuard } from './auth/guards/module.guard';
@@ -29,6 +29,8 @@ import {
   LocationDto,
   UpdateLocationDto,
   ItemDto,
+  BulkImportItemsDto,
+  SupplierPaymentDto,
   UpdateItemDto,
   StockInDto,
   PurchaseOrderDto,
@@ -196,6 +198,16 @@ export class ItemsController {
   @RequirePermissions('operations.inventory.items:CREATE')
   create(@Req() req: UserRequest, @Body() dto: ItemDto) {
     return this.service.createItem(req.user.tenantId, dto);
+  }
+  @Post('bulk-import')
+  @RequirePermissions('operations.inventory.items:CREATE')
+  @ApiOperation({
+    summary: 'Create items from spreadsheet rows',
+    description:
+      'Categories, subcategories and units of measure are matched by name and created when missing. Each row succeeds or fails on its own; an existing SKU is skipped.',
+  })
+  bulkImport(@Req() req: UserRequest, @Body() dto: BulkImportItemsDto) {
+    return this.service.bulkImportItems(req.user.tenantId, dto);
   }
   @Patch(':id')
   @RequirePermissions('operations.inventory.items:EDIT')
@@ -486,5 +498,25 @@ export class PurchaseOrdersController {
   @RequirePermissions('operations.inventory.stock-in:CREATE')
   cancel(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.cancelPurchaseOrder(req.user.tenantId, id);
+  }
+  @Post(':id/close')
+  @HttpCode(200)
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  close(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.closePurchaseOrder(req.user.tenantId, id);
+  }
+}
+
+@ApiTags('Inventory - Purchase orders')
+@ApiBearerAuth('access-token')
+@Controller('supplier-payments')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class SupplierPaymentsController {
+  constructor(private readonly service: InventoryService) {}
+  @Post()
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  create(@Req() req: UserRequest, @Body() dto: SupplierPaymentDto) {
+    return this.service.createSupplierPayment(req.user.tenantId, req.user.id, dto);
   }
 }

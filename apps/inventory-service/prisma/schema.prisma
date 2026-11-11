@@ -57,6 +57,17 @@ enum PurchaseOrderStatus {
   PARTIALLY_RECEIVED
   RECEIVED
   CANCELLED
+  CLOSED
+
+  @@schema("inventory")
+}
+
+enum SupplierPaymentMethod {
+  CASH
+  BANK_TRANSFER
+  MOBILE_MONEY
+  CHEQUE
+  OTHER
 
   @@schema("inventory")
 }
@@ -241,6 +252,7 @@ model InventoryParty {
   createdAt      DateTime                     @default(now())
   updatedAt      DateTime                     @updatedAt
   purchaseOrders PurchaseOrder[]
+  payments       SupplierPayment[]
 
   @@unique([tenantId, kind, name])
   @@unique([tenantId, id])
@@ -364,6 +376,7 @@ model PurchaseOrder {
   supplier     InventoryParty      @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
   location     StockLocation       @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
   lines        PurchaseOrderLine[]
+  payments     PurchaseOrderPayment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, reference])
@@ -393,5 +406,41 @@ model PurchaseOrderLine {
   @@unique([tenantId, id])
   @@index([tenantId, purchaseOrderId])
   @@index([tenantId, itemId])
+  @@schema("inventory")
+}
+
+// Money paid to a supplier. One payment can settle several orders: each order's share is a
+// PurchaseOrderPayment, and an order's amount paid is the sum of its shares.
+model SupplierPayment {
+  id          String                    @id @default(uuid())
+  tenantId    String
+  supplierId  String
+  reference   String?
+  paymentDate DateTime                  @db.Date
+  method      SupplierPaymentMethod
+  amount      Decimal                   @db.Decimal(18, 4)
+  notes       String?
+  createdBy   String
+  createdAt   DateTime                  @default(now())
+  supplier    InventoryParty            @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  allocations PurchaseOrderPayment[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, supplierId])
+  @@schema("inventory")
+}
+
+model PurchaseOrderPayment {
+  id              String          @id @default(uuid())
+  tenantId        String
+  paymentId       String
+  purchaseOrderId String
+  amount          Decimal         @db.Decimal(18, 4)
+  payment         SupplierPayment @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder   @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, paymentId, purchaseOrderId])
+  @@index([tenantId, purchaseOrderId])
   @@schema("inventory")
 }

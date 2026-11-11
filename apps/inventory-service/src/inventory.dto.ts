@@ -24,6 +24,7 @@ import {
   StockLocationType,
   StockOutPurpose,
   PartyKind,
+  SupplierPaymentMethod,
 } from '../prisma/generated/client';
 
 const lotIdField = (description: string) =>
@@ -695,4 +696,145 @@ export class ReceivePurchaseOrderDto {
   notes?: string | null;
   @batchLines(ReceiveLineDto)
   lines!: ReceiveLineDto[];
+}
+
+const DECIMAL_FIELD = (description?: string) =>
+  applyDecorators(
+    ApiProperty({ required: false, nullable: true, type: String, example: '12.5000', description }),
+    IsOptional(),
+    Transform(decimal),
+    IsDecimal({ decimal_digits: '0,4', force_decimal: false }),
+    Matches(/^\d{1,14}(\.\d{1,4})?$/),
+  );
+
+/** One spreadsheet row. Category, subcategory and unit are given by name; missing ones are created. */
+export class BulkImportItemRowDto extends NameDto {
+  @ApiProperty({ example: 'PAPER-001' })
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  sku!: string;
+  @ApiProperty({ example: 'Stationery' })
+  @Transform(trim)
+  @IsString()
+  @Length(1, 150)
+  category!: string;
+  @ApiProperty({ required: false, nullable: true, type: String, example: 'Paper' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 150)
+  subcategory?: string | null;
+  @ApiProperty({ example: 'Box' })
+  @Transform(trim)
+  @IsString()
+  @Length(1, 150)
+  unit!: string;
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    maxLength: 10,
+    description:
+      'Symbol for a unit that has to be created. Defaults to the start of the unit name.',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 10)
+  unitSymbol?: string | null;
+  @ApiProperty({ required: false, nullable: true, type: String })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(4000)
+  description?: string | null;
+  @DECIMAL_FIELD()
+  costPrice?: string | null;
+  @DECIMAL_FIELD()
+  sellingPrice?: string | null;
+  @DECIMAL_FIELD()
+  reorderLevel?: string | null;
+  @DECIMAL_FIELD()
+  maxStock?: string | null;
+  @ApiProperty({
+    required: false,
+    type: [String],
+    maxItems: 50,
+    description: 'Names of variants to add to the new item. Repeated names are added once.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? value.map((v: unknown) => trim({ value: v })) : value,
+  )
+  @IsString({ each: true })
+  @Length(1, 100, { each: true })
+  variants?: string[];
+  @ApiProperty({ required: false, default: false })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsBoolean()
+  isPerishable?: boolean;
+  @ApiProperty({ required: false, enum: InventoryItemStatus, default: 'ACTIVE' })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsEnum(InventoryItemStatus)
+  status?: InventoryItemStatus;
+}
+
+export class BulkImportItemsDto {
+  @ApiProperty({ type: [BulkImportItemRowDto], maxItems: 1000 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(1000)
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportItemRowDto)
+  rows!: BulkImportItemRowDto[];
+}
+
+const MONEY = /^(?=.*[1-9])\d{1,14}(\.\d{1,4})?$/;
+
+export class PaymentAllocationDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  purchaseOrderId!: string;
+  @ApiProperty({ type: String, example: '100.00', description: 'Paid toward this order.' })
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(MONEY)
+  amount!: string;
+}
+
+export class SupplierPaymentDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  supplierId!: string;
+  @ApiProperty({ example: '2026-11-15' })
+  @IsDateString({ strict: true })
+  paymentDate!: string;
+  @ApiProperty({ enum: SupplierPaymentMethod })
+  @IsEnum(SupplierPaymentMethod)
+  method!: SupplierPaymentMethod;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 100 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @Length(1, 100)
+  reference?: string | null;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 500 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  notes?: string | null;
+  @ApiProperty({
+    type: [PaymentAllocationDto],
+    description: 'How much of the payment goes to each order. One payment can settle several.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => PaymentAllocationDto)
+  allocations!: PaymentAllocationDto[];
 }

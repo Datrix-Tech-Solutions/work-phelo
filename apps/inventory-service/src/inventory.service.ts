@@ -9,6 +9,8 @@ import { PartyKind, Prisma, StockLot, StockMovementType } from '../prisma/genera
 import { PrismaService } from './prisma/prisma.service';
 import {
   ItemDto,
+  BulkImportItemsDto,
+  SupplierPaymentDto,
   UpdateItemDto,
   LocationDto,
   UpdateLocationDto,
@@ -66,6 +68,16 @@ interface LotPart {
 
 // Two Decimal(18,4) inputs can produce 36 significant digits.
 const StockDecimal = Prisma.Decimal.clone({ precision: 40 });
+
+// What an order reports about its payments: each share, with the payment it belongs to.
+const PAYMENT_SHARES = {
+  select: {
+    id: true,
+    amount: true,
+    payment: { select: { paymentDate: true, method: true, reference: true, notes: true } },
+  },
+  orderBy: { payment: { paymentDate: 'asc' } },
+} satisfies Prisma.PurchaseOrder$paymentsArgs;
 
 @Injectable()
 export class InventoryService {
@@ -256,6 +268,156 @@ export class InventoryService {
         return tx.inventoryItem.create({ data: { ...dto, tenantId } });
       }),
     );
+  }
+  /**
+   * Creates items from spreadsheet rows. Categories, subcategories and units are matched by name
+   * (ignoring case) and created when they don't exist yet. Each row is its own transaction, so one
+   * bad row neither blocks the others nor leaves a stray category behind; a SKU that already
+   * exists is skipped.
+   */
+  async bulkImportItems(tenantId: string, dto: BulkImportItemsDto) {
+    const key = (value: string) => value.trim().toLowerCase();
+    const [categories, subcategories, units, items] = await Promise.all([
+      this.prisma.inventoryCategory.findMany({ where: { tenantId } }),
+      this.prisma.inventorySubcategory.findMany({ where: { tenantId } }),
+      this.prisma.unitOfMeasure.findMany({ where: { tenantId } }),
+      this.prisma.inventoryItem.findMany({ where: { tenantId }, select: { sku: true } }),
+    ]);
+    const categoryByName = new Map(categories.map((c) => [key(c.name), c]));
+    const subcategoryByName = new Map(
+      subcategories.map((s) => [`${s.categoryId}|${key(s.name)}`, s]),
+    );
+    const unitByName = new Map(units.map((u) => [key(u.name), u]));
+    const skus = new Set(items.map((i) => key(i.sku)));
+
+    const createdCategories: string[] = [];
+    const createdSubcategories: string[] = [];
+    const createdUnits: string[] = [];
+    const results: {
+      sku: string;
+      status: 'created' | 'skipped' | 'failed';
+      id?: string;
+      message?: string;
+    }[] = [];
+
+    for (const row of dto.rows) {
+      if (skus.has(key(row.sku))) {
+        results.push({ sku: row.sku, status: 'skipped', message: 'Already exists' });
+        continue;
+      }
+      if (row.reorderLevel != null && row.maxStock != null) {
+        if (new Prisma.Decimal(row.maxStock).lt(row.reorderLevel)) {
+          results.push({
+            sku: row.sku,
+            status: 'failed',
+            message: 'Maximum stock is below the reorder level',
+          });
+          continue;
+        }
+      }
+      try {
+        const made = await this.prisma.$transaction(async (tx) => {
+          let category = categoryByName.get(key(row.category));
+          let newCategory: typeof category;
+          if (!category) {
+            newCategory = await tx.inventoryCategory.create({
+              data: { tenantId, name: row.category },
+            });
+            category = newCategory;
+          } else if (category.status !== 'ACTIVE') {
+            throw new ConflictException(`Category "${category.name}" is inactive`);
+          }
+
+          let subcategory = row.subcategory
+            ? subcategoryByName.get(`${category.id}|${key(row.subcategory)}`)
+            : undefined;
+          let newSubcategory: typeof subcategory;
+          if (row.subcategory && !subcategory) {
+            newSubcategory = await tx.inventorySubcategory.create({
+              data: { tenantId, categoryId: category.id, name: row.subcategory },
+            });
+            subcategory = newSubcategory;
+          } else if (subcategory && subcategory.status !== 'ACTIVE') {
+            throw new ConflictException(`Subcategory "${subcategory.name}" is inactive`);
+          }
+
+          let unit = unitByName.get(key(row.unit));
+          let newUnit: typeof unit;
+          if (!unit) {
+            const id = randomUUID();
+            newUnit = await tx.unitOfMeasure.create({
+              data: {
+                id,
+                tenantId,
+                name: row.unit,
+                symbol: row.unitSymbol || row.unit.slice(0, 10),
+              },
+            });
+            unit = newUnit;
+          } else if (unit.status !== 'ACTIVE') {
+            throw new ConflictException(`Unit "${unit.name}" is inactive`);
+          }
+
+          const item = await tx.inventoryItem.create({
+            data: {
+              tenantId,
+              name: row.name,
+              sku: row.sku,
+              categoryId: category.id,
+              subcategoryId: subcategory?.id ?? null,
+              unitOfMeasureId: unit.id,
+              description: row.description ?? null,
+              costPrice: row.costPrice ?? null,
+              sellingPrice: row.sellingPrice ?? null,
+              reorderLevel: row.reorderLevel ?? null,
+              maxStock: row.maxStock ?? null,
+              isPerishable: row.isPerishable ?? false,
+              status: row.status ?? 'ACTIVE',
+            },
+          });
+          // Each variant once, ignoring case: the first spelling wins.
+          const seenVariants = new Set<string>();
+          const variants = (row.variants ?? [])
+            .map((name) => name.trim())
+            .filter((name) => name && !seenVariants.has(key(name)) && seenVariants.add(key(name)));
+          if (variants.length > 0)
+            await tx.itemVariant.createMany({
+              data: variants.map((name) => ({ tenantId, itemId: item.id, name })),
+            });
+          return { item, newCategory, newSubcategory, newUnit };
+        });
+        // Only remember what was created once the row has committed.
+        if (made.newCategory) {
+          categoryByName.set(key(made.newCategory.name), made.newCategory);
+          createdCategories.push(made.newCategory.name);
+        }
+        if (made.newSubcategory) {
+          subcategoryByName.set(
+            `${made.newSubcategory.categoryId}|${key(made.newSubcategory.name)}`,
+            made.newSubcategory,
+          );
+          createdSubcategories.push(made.newSubcategory.name);
+        }
+        if (made.newUnit) {
+          unitByName.set(key(made.newUnit.name), made.newUnit);
+          createdUnits.push(made.newUnit.name);
+        }
+        skus.add(key(row.sku));
+        results.push({ sku: row.sku, status: 'created', id: made.item.id });
+      } catch (error) {
+        results.push({ sku: row.sku, status: 'failed', message: this.importErrorMessage(error) });
+      }
+    }
+    return { results, createdCategories, createdSubcategories, createdUnits };
+  }
+  private importErrorMessage(error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') return 'Name or SKU already exists';
+      if (['P2020', 'P2000', 'P2033'].includes(error.code))
+        return 'A value is too large or too long';
+    }
+    if (error instanceof Error) return error.message;
+    return 'Could not import this row';
   }
   private async lockItem(tx: Prisma.TransactionClient, tenantId: string, id: string) {
     // All stock mutations and UOM edits lock the item first, in the same order.
@@ -717,14 +879,22 @@ export class InventoryService {
   listPurchaseOrders(tenantId: string) {
     return this.prisma.purchaseOrder.findMany({
       where: { tenantId },
-      include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+      include: {
+        lines: { orderBy: { id: 'asc' } },
+        supplier: { select: { name: true } },
+        payments: PAYMENT_SHARES,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   }
   async getPurchaseOrder(tenantId: string, id: string) {
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { tenantId, id },
-      include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+      include: {
+        lines: { orderBy: { id: 'asc' } },
+        supplier: { select: { name: true } },
+        payments: PAYMENT_SHARES,
+      },
     });
     if (!order) throw new NotFoundException('Purchase order not found');
     return order;
@@ -808,6 +978,7 @@ export class InventoryService {
         async (tx) => {
           const order = await this.lockPurchaseOrder(tx, tenantId, id);
           if (order.status === 'CANCELLED') throw new ConflictException('The order is cancelled');
+          if (order.status === 'CLOSED') throw new ConflictException('The order is closed');
           if (order.status === 'RECEIVED')
             throw new ConflictException('The order has already been received in full');
           const batchId = randomUUID();
@@ -893,6 +1064,96 @@ export class InventoryService {
           include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
         });
       }),
+    );
+  }
+  /** Closes an order that was only partly delivered: the rest is no longer expected. */
+  closePurchaseOrder(tenantId: string, id: string) {
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const order = await this.lockPurchaseOrder(tx, tenantId, id);
+        if (order.status === 'CLOSED') throw new ConflictException('The order is already closed');
+        if (order.status === 'CANCELLED') throw new ConflictException('The order is cancelled');
+        if (order.status === 'RECEIVED')
+          throw new ConflictException('The order has been received in full');
+        if (order.status === 'ORDERED')
+          throw new ConflictException('Nothing has been received on this order: cancel it instead');
+        return tx.purchaseOrder.update({
+          where: { id: order.id },
+          data: { status: 'CLOSED' },
+          include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+        });
+      }),
+    );
+  }
+  /**
+   * Records a payment to a supplier and shares it out over the orders it settles. An order can be
+   * paid up to what is owed on it so far (units received at their unit cost, less earlier
+   * payments); nothing can be paid ahead of delivery.
+   */
+  createSupplierPayment(tenantId: string, userId: string, dto: SupplierPaymentDto) {
+    const ids = dto.allocations.map((a) => a.purchaseOrderId);
+    if (new Set(ids).size !== ids.length)
+      throw new BadRequestException('An order can only appear once in a payment');
+    return this.write(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const supplier = await tx.inventoryParty.findFirst({
+            where: { tenantId, id: dto.supplierId },
+            select: { kind: true },
+          });
+          if (!supplier || supplier.kind !== 'SUPPLIER')
+            throw new NotFoundException('Supplier not found');
+          // Locked in a fixed order, so two payments over the same orders cannot deadlock.
+          const sorted = [...ids].sort();
+          await tx.$queryRaw`SELECT "id" FROM "inventory"."PurchaseOrder" WHERE "tenantId" = ${tenantId} AND "id" IN (${Prisma.join(sorted)}) ORDER BY "id" FOR UPDATE`;
+          const orders = await tx.purchaseOrder.findMany({
+            where: { tenantId, id: { in: ids } },
+            include: { lines: true, payments: { select: { amount: true } } },
+          });
+          if (orders.length !== ids.length) throw new NotFoundException('Purchase order not found');
+          let total = new StockDecimal(0);
+          for (const allocation of dto.allocations) {
+            const order = orders.find((o) => o.id === allocation.purchaseOrderId)!;
+            if (order.supplierId !== dto.supplierId)
+              throw new ConflictException(`${order.reference} is not an order from this supplier`);
+            if (order.status === 'CANCELLED')
+              throw new ConflictException(`${order.reference} is cancelled`);
+            const owed = order.lines
+              .reduce(
+                (sum, l) => sum.plus(l.receivedQuantity.times(l.unitCost)),
+                new StockDecimal(0),
+              )
+              .minus(order.payments.reduce((sum, p) => sum.plus(p.amount), new StockDecimal(0)));
+            const amount = new StockDecimal(allocation.amount);
+            if (amount.gt(owed))
+              throw new ConflictException(
+                `${order.reference}: payment is more than the ${owed.toFixed(2)} owed on it`,
+              );
+            total = total.plus(amount);
+          }
+          return tx.supplierPayment.create({
+            data: {
+              tenantId,
+              supplierId: dto.supplierId,
+              reference: dto.reference ?? null,
+              paymentDate: new Date(dto.paymentDate),
+              method: dto.method,
+              amount: total,
+              notes: dto.notes ?? null,
+              createdBy: userId,
+              // The share rows take tenantId from the payment.
+              allocations: {
+                create: dto.allocations.map((a) => ({
+                  purchaseOrderId: a.purchaseOrderId,
+                  amount: a.amount,
+                })),
+              },
+            },
+            include: { allocations: true },
+          });
+        },
+        { timeout: 30_000, maxWait: 10_000 },
+      ),
     );
   }
   private async requireLocations(tx: Prisma.TransactionClient, tenantId: string, ids: string[]) {

@@ -82,7 +82,9 @@ export function StockMovementsTable({
   };
 
   const fromLabel = (m: StockMovement) => warehouseName(m.fromWarehouseId) ?? m.source ?? '—';
-  const toLabel = (m: StockMovement) => warehouseName(m.toWarehouseId) ?? '—';
+  // A stock out goes to a customer rather than a warehouse; the service keeps the name as the recipient.
+  const toLabel = (m: StockMovement) =>
+    warehouseName(m.toWarehouseId) ?? (m.type === 'STOCK_OUT' ? m.source : null) ?? '—';
 
   const term = search.trim().toLowerCase();
   // With a variant chosen, each movement keeps only that variant's lines, so the Variant, QTY and

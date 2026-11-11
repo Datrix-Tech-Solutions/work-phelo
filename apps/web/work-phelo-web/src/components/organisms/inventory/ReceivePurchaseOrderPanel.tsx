@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
@@ -23,8 +22,7 @@ interface LineState {
   expiryDate: string;
 }
 
-const LINE_GRID =
-  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.8fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)]';
+const FIELD_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-6';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const formatNumber = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -184,48 +182,37 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
 
           <div className="flex flex-col gap-2">
             <span className="text-sm font-bold text-gray-900">Items</span>
-            <div className="overflow-hidden rounded-xl border border-gray-200">
-              <div className={cn(LINE_GRID, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
-                {[
-                  'Item',
-                  'Ordered',
-                  'Received So Far',
-                  'Qty Received',
-                  'Extra',
-                  'Amount to Pay',
-                ].map((h) => (
-                  <span key={h} className="text-xs font-bold text-gray-900">
-                    {h}
-                  </span>
-                ))}
-              </div>
-              <div className="divide-y divide-gray-200">
-                {lines.map((l) => {
-                  const s = state[l.id];
-                  const item = itemOf(l.itemId);
-                  const perishable = !!item?.isPerishable;
-                  return (
-                    <div key={l.id} className="px-2.5 py-2">
-                      <div className={cn(LINE_GRID, 'items-start')}>
-                        <div className="min-w-0 py-2">
-                          <span className="block truncate text-sm font-semibold text-gray-900">
-                            {item?.name ?? 'Item'}
-                          </span>
-                          {l.variant && (
-                            <span className="block truncate text-xs text-gray-500">
-                              {l.variant}
-                            </span>
-                          )}
-                        </div>
-                        <span className="py-2 text-sm font-semibold text-gray-500">
-                          {formatNumber(l.orderedQuantity)}
+            <div className="flex flex-col gap-3">
+              {lines.map((l) => {
+                const s = state[l.id];
+                const item = itemOf(l.itemId);
+                const perishable = !!item?.isPerishable;
+                return (
+                  <div
+                    key={l.id}
+                    className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="block truncate text-sm font-bold text-gray-900">
+                          {item?.name ?? 'Item'}
                         </span>
-                        <span className="py-2 text-sm font-semibold text-gray-500">
-                          {formatNumber(l.receivedQuantity)}
-                        </span>
+                        {l.variant && (
+                          <span className="block truncate text-xs text-gray-500">{l.variant}</span>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-gray-500">
+                        Ordered {formatNumber(l.orderedQuantity)} · Received{' '}
+                        {formatNumber(l.receivedQuantity)} · Outstanding{' '}
+                        {formatNumber(outstanding(l))}
+                      </span>
+                    </div>
+
+                    <div className={FIELD_GRID}>
+                      <Field label="Qty Received">
                         <NumberField
                           ariaLabel="Quantity received"
-                          className="w-full py-2"
+                          className="w-full"
                           placeholder="0"
                           decimals={4}
                           value={s.received}
@@ -233,68 +220,64 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                           onChange={(v) => update(l.id, { received: v })}
                           error={lineError(l)}
                         />
+                      </Field>
+                      <Field label="Extra (free)">
                         <NumberField
                           ariaLabel="Extra quantity"
-                          className="w-full py-2"
+                          className="w-full"
                           placeholder="0"
                           decimals={4}
                           value={s.extra}
                           onChange={(v) => update(l.id, { extra: v })}
                         />
+                      </Field>
+                      <Field label="Amount to Pay">
                         <NumberField
                           ariaLabel="Amount to pay"
-                          className="w-full py-2"
+                          className="w-full"
                           value={money(s.received * l.unitCost)}
                           onChange={() => {}}
                           disabled
                         />
-                      </div>
-                      <div className={cn(LINE_GRID, 'mt-2 items-start')}>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs font-semibold text-gray-600">
-                            Batch / Lot No.
-                          </span>
-                          <Input
-                            aria-label="Batch / Lot No."
-                            placeholder="Optional"
-                            maxLength={100}
-                            value={s.lotNumber}
-                            onChange={(e) => update(l.id, { lotNumber: e.target.value })}
-                          />
-                        </label>
-                        {perishable ? (
-                          <>
-                            <div className="flex flex-col gap-1 sm:col-span-2">
-                              <span className="text-xs font-semibold text-gray-600">Mfg Date</span>
-                              <DatePicker
-                                size="sm"
-                                placeholder="Mfg date"
-                                disableFuture
-                                maxDate={s.expiryDate || undefined}
-                                value={s.manufactureDate}
-                                onChange={(v) => update(l.id, { manufactureDate: v })}
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1 sm:col-span-2">
-                              <span className="text-xs font-semibold text-gray-600">
-                                Expiry Date
-                              </span>
-                              <DatePicker
-                                size="sm"
-                                placeholder="Expiry date"
-                                minDate={s.manufactureDate || undefined}
-                                value={s.expiryDate}
-                                onChange={(v) => update(l.id, { expiryDate: v })}
-                                error={expiryError(l)}
-                              />
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
+                      </Field>
+
+                      <Field label="Batch / Lot No.">
+                        <Input
+                          aria-label="Batch / Lot No."
+                          placeholder="Optional"
+                          maxLength={100}
+                          value={s.lotNumber}
+                          onChange={(e) => update(l.id, { lotNumber: e.target.value })}
+                        />
+                      </Field>
+                      {perishable && (
+                        <>
+                          <Field label="Mfg Date">
+                            <DatePicker
+                              size="sm"
+                              placeholder="Mfg date"
+                              disableFuture
+                              maxDate={s.expiryDate || undefined}
+                              value={s.manufactureDate}
+                              onChange={(v) => update(l.id, { manufactureDate: v })}
+                            />
+                          </Field>
+                          <Field label="Expiry Date">
+                            <DatePicker
+                              size="sm"
+                              placeholder="Expiry date"
+                              minDate={s.manufactureDate || undefined}
+                              value={s.expiryDate}
+                              onChange={(v) => update(l.id, { expiryDate: v })}
+                              error={expiryError(l)}
+                            />
+                          </Field>
+                        </>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex flex-col items-end gap-1 text-sm text-gray-600">
@@ -325,6 +308,15 @@ function Summary({ label, value }: { label: string; value: string }) {
     <div className="min-w-0">
       <span className="block text-xs font-semibold text-gray-500">{label}</span>
       <span className="block truncate text-sm font-semibold text-gray-900">{value}</span>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs font-semibold text-gray-600">{label}</span>
+      {children}
     </div>
   );
 }
