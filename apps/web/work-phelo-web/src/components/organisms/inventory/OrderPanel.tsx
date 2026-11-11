@@ -46,16 +46,7 @@ const newLine = (): LineRow => ({
   unitCost: 0,
 });
 
-const PAYMENT_TERMS = [
-  'Due on receipt',
-  'Cash on delivery',
-  'Net 7',
-  'Net 15',
-  'Net 30',
-  'Net 45',
-  'Net 60',
-  'Net 90',
-].map((t) => ({ value: t, label: t }));
+const PAYMENT_TERMS = ['Due on receipt', 'Cash on delivery'].map((t) => ({ value: t, label: t }));
 
 const LINE_GRID =
   'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1fr)_30px]';

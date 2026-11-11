@@ -26,6 +26,8 @@ interface PurchaseOrdersTableProps {
   isLoading?: boolean;
   onReceive?: (order: PurchaseOrder) => void;
   onCancel?: (order: PurchaseOrder) => void;
+  /** Leave the Supplier column out, when every order is from one supplier. */
+  hideSupplier?: boolean;
   /** The primary toolbar button, e.g. "New Purchase Order". */
   actionButton?: { label: string; onClick: () => void };
 }
@@ -37,6 +39,7 @@ export function PurchaseOrdersTable({
   actionButton,
   onReceive,
   onCancel,
+  hideSupplier,
 }: PurchaseOrdersTableProps) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -65,7 +68,7 @@ export function PurchaseOrdersTable({
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const columns: Column<PurchaseOrder>[] = [
+  const allColumns: Column<PurchaseOrder>[] = [
     {
       key: 'reference',
       label: 'Reference',
@@ -152,6 +155,8 @@ export function PurchaseOrdersTable({
       },
     },
   ];
+
+  const columns = hideSupplier ? allColumns.filter((c) => c.key !== 'supplier') : allColumns;
 
   return (
     <DataTable

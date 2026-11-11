@@ -5,14 +5,18 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { TabBar } from '@/components/molecules/shared/TabBar';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
 import { OrderPanel } from '@/components/organisms/inventory/OrderPanel';
 import { PartyModal } from '@/components/organisms/inventory/PartyModal';
+import { PurchaseOrdersManager } from '@/components/organisms/inventory/PurchaseOrdersManager';
+import { SupplierOrderStats } from '@/components/organisms/inventory/SupplierOrderStats';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
 import { useInventoryParties, type PartyKind } from '@/hooks/inventory/useInventoryParties';
+import { usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
 import { useStockMovements } from '@/hooks/inventory/useStockMovements';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -33,6 +37,8 @@ export default function InventoryPartyDetailsPage({
   const suppliers = useInventoryParties('SUPPLIER');
   const customers = useInventoryParties('CUSTOMER');
   const { movements } = useStockMovements();
+  const { purchaseOrders, isLoading: ordersLoading } = usePurchaseOrders();
+  const [tab, setTab] = useState('orders');
   const [orderOpen, setOrderOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -50,6 +56,11 @@ export default function InventoryPartyDetailsPage({
     const type = party.kind === 'SUPPLIER' ? 'STOCK_IN' : 'STOCK_OUT';
     return movements.filter((m) => m.type === type && m.source?.trim().toLowerCase() === name);
   }, [movements, party]);
+
+  const supplierOrders = useMemo(
+    () => purchaseOrders.filter((o) => o.supplierId === id),
+    [purchaseOrders, id],
+  );
 
   if (!isLoading && !party) {
     return (
@@ -133,12 +144,36 @@ export default function InventoryPartyDetailsPage({
           </div>
         </CollapsibleOverview>
 
-        <div className="flex flex-col gap-2">
-          <h3 className="text-base font-semibold text-gray-900">
-            {kind === 'SUPPLIER' ? 'Stock Received' : 'Stock Issued'}
-          </h3>
-          <StockMovementsTable movements={partyMovements} showVariant />
-        </div>
+        {kind === 'SUPPLIER' ? (
+          <>
+            <SupplierOrderStats orders={supplierOrders} isLoading={ordersLoading} />
+            <div className="flex flex-col gap-2">
+              <TabBar
+                tabs={[
+                  { key: 'orders', label: 'Purchase Orders' },
+                  { key: 'received', label: 'Stock Received' },
+                ]}
+                activeTab={tab}
+                onTabChange={setTab}
+                className="px-0 [--tab-first-pl:0px]"
+              />
+              {tab === 'received' ? (
+                <StockMovementsTable movements={partyMovements} showVariant />
+              ) : (
+                <PurchaseOrdersManager
+                  purchaseOrders={supplierOrders}
+                  isLoading={ordersLoading}
+                  hideSupplier
+                />
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-base font-semibold text-gray-900">Stock Issued</h3>
+            <StockMovementsTable movements={partyMovements} showVariant />
+          </div>
+        )}
       </div>
 
       <OrderPanel
