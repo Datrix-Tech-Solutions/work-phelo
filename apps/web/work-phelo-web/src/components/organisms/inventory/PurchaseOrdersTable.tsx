@@ -8,6 +8,7 @@ import { formatInventoryValue } from '@/lib/inventoryCurrency';
 import { formatDate } from '@/lib/formatters';
 import {
   PURCHASE_ORDER_STATUS_BADGE,
+  purchaseOrderAmountOwed,
   purchaseOrderQuantity,
   purchaseOrderValue,
   canCancelOrder,
@@ -130,15 +131,24 @@ export function PurchaseOrdersTable({
       ),
     },
     {
-      key: 'value',
-      label: 'Value',
-      width: '120px',
+      key: 'amountToPay',
+      label: 'Amount to Pay',
+      width: '170px',
       className: 'text-right pr-4',
-      render: (row) => (
-        <span className="text-sm font-semibold text-gray-600">
-          {formatInventoryValue(purchaseOrderValue(row))}
-        </span>
-      ),
+      render: (row) => {
+        // What is payable so far: units received at their unit cost. Free extras are not charged.
+        const payable = purchaseOrderAmountOwed(row);
+        return (
+          <div className="flex flex-col items-end leading-tight">
+            <span className="text-[13px] font-semibold text-gray-700">
+              {payable > 0 ? formatInventoryValue(payable) : '—'}
+            </span>
+            <span className="text-[9px] font-semibold text-gray-600">
+              {formatInventoryValue(purchaseOrderValue(row))} ordered
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: 'amountPaid',
