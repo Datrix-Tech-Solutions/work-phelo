@@ -116,13 +116,13 @@ export function StockMovementsTable({
     {
       key: 'reference',
       label: 'Reference',
-      width: 'minmax(130px, 1fr)',
+      width: '120px',
       render: (row) => <span className="font-medium text-gray-900 font-mono">{row.reference}</span>,
     },
     {
       key: 'date',
       label: 'Date',
-      width: '120px',
+      width: '90px',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-500">{formatDate(row.date)}</span>
       ),
@@ -130,7 +130,7 @@ export function StockMovementsTable({
     {
       key: 'type',
       label: 'Type',
-      width: '120px',
+      width: '100px',
       render: (row) => (
         <TypeChip label={MOVEMENT_TYPE_LABEL[row.type]} color={MOVEMENT_TYPE_COLOR[row.type]} />
       ),
@@ -138,7 +138,7 @@ export function StockMovementsTable({
     {
       key: 'items',
       label: 'Items',
-      width: 'minmax(140px, 1.5fr)',
+      width: '90px',
       className: 'overflow-hidden min-w-0 pr-4',
       render: (row) => (
         <span
@@ -156,7 +156,7 @@ export function StockMovementsTable({
             label: 'Variant',
             width: 'minmax(100px, 1fr)',
             render: (row: StockMovement) => (
-              <span className="text-sm font-semibold text-gray-600">
+              <span className="text-sm font-semibold text-gray-600 block truncate">
                 {variantsLabel(row) || '—'}
               </span>
             ),
@@ -180,7 +180,7 @@ export function StockMovementsTable({
     {
       key: 'quantity',
       label: 'QTY',
-      width: '80px',
+      width: '70px',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-500">
           {formatNumber(getMovementQuantity(row))}
@@ -190,7 +190,7 @@ export function StockMovementsTable({
     {
       key: 'value',
       label: 'Value',
-      width: '150px',
+      width: '120px',
       className: 'text-right pr-4',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-600">
@@ -201,7 +201,7 @@ export function StockMovementsTable({
     {
       key: 'status',
       label: 'Status',
-      width: '120px',
+      width: '100px',
       render: (row) => {
         const { label, variant } = MOVEMENT_STATUS_BADGE[row.status];
         return <Badge variant={variant} label={label} />;
