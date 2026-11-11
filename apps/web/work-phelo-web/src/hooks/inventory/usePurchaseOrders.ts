@@ -2,7 +2,12 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryApi, inventoryKeys, toNumber } from '@/hooks/inventory/inventoryApi';
 
-export type PurchaseOrderStatus = 'ORDERED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+export type PurchaseOrderStatus =
+  | 'ORDERED'
+  | 'PARTIALLY_RECEIVED'
+  | 'RECEIVED'
+  | 'CANCELLED'
+  | 'CLOSED';
 
 export interface PurchaseOrderLine {
   id: string;
@@ -14,6 +19,27 @@ export interface PurchaseOrderLine {
   receivedQuantity: number;
   /** Free units received on top of the order: stocked and valued, but not paid for. */
   extraQuantity: number;
+}
+
+export type SupplierPaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CHEQUE' | 'OTHER';
+
+export const PAYMENT_METHOD_LABEL: Record<SupplierPaymentMethod, string> = {
+  CASH: 'Cash',
+  BANK_TRANSFER: 'Bank Transfer',
+  MOBILE_MONEY: 'Mobile Money',
+  CHEQUE: 'Cheque',
+  OTHER: 'Other',
+};
+
+export interface PurchaseOrderPayment {
+  id: string;
+  /** What this payment put toward this order. */
+  amount: number;
+  /** ISO date paid. */
+  date: string;
+  method: SupplierPaymentMethod;
+  reference: string | null;
+  notes: string | null;
 }
 
 export interface PurchaseOrder {
@@ -28,8 +54,10 @@ export interface PurchaseOrder {
   paymentTerms: string | null;
   notes: string | null;
   lines: PurchaseOrderLine[];
-  /** Payments aren't recorded yet, so this is always 0. */
+  /** Total paid to the supplier on this order so far. */
   amountPaid: number;
+  /** Each payment (or share of one) made on this order, oldest first. */
+  payments: PurchaseOrderPayment[];
   status: PurchaseOrderStatus;
 }
 
@@ -41,6 +69,7 @@ export const PURCHASE_ORDER_STATUS_BADGE: Record<
   PARTIALLY_RECEIVED: { label: 'Partially Received', variant: 'warning' },
   RECEIVED: { label: 'Received', variant: 'success' },
   CANCELLED: { label: 'Cancelled', variant: 'neutral' },
+  CLOSED: { label: 'Closed', variant: 'success' },
 };
 
 export const purchaseOrderQuantity = (po: PurchaseOrder) =>
@@ -54,6 +83,14 @@ export const purchaseOrderValue = (po: PurchaseOrder) =>
 export const purchaseOrderAmountOwed = (po: PurchaseOrder) =>
   po.lines.reduce((sum, l) => sum + l.receivedQuantity * l.unitCost, 0);
 
+/** Still owed to the supplier on this order: what was received, less what has been paid. */
+export const purchaseOrderBalance = (po: PurchaseOrder) =>
+  Math.max(0, purchaseOrderAmountOwed(po) - po.amountPaid);
+
+/** A payment can be made once something received is still unpaid. */
+export const canPay = (po: PurchaseOrder) =>
+  po.status !== 'CANCELLED' && purchaseOrderBalance(po) >= 0.01;
+
 export const isOpenOrder = (po: PurchaseOrder) =>
   po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED';
 
@@ -66,7 +103,7 @@ export function summarizePurchaseOrders(orders: PurchaseOrder[]) {
   return {
     totalOrders: orders.length,
     pendingOrders: open.length,
-    receivedOrders: live.filter((o) => o.status === 'RECEIVED').length,
+    receivedOrders: live.filter((o) => o.status === 'RECEIVED' || o.status === 'CLOSED').length,
     totalOrdered: live.reduce((sum, o) => sum + purchaseOrderValue(o), 0),
     /** Ordered but not yet delivered, at the order's unit costs. */
     pendingDeliveryValue: open.reduce(
@@ -89,6 +126,9 @@ export function summarizePurchaseOrders(orders: PurchaseOrder[]) {
 
 export const canReceive = (po: PurchaseOrder) =>
   po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED';
+
+/** Part-delivered orders can be closed: the rest of the goods is no longer expected. */
+export const canCloseOrder = (po: PurchaseOrder) => po.status === 'PARTIALLY_RECEIVED';
 
 export const canCancelOrder = (po: PurchaseOrder) =>
   po.status === 'ORDERED' &&
@@ -116,9 +156,27 @@ interface ApiPurchaseOrder {
   notes: string | null;
   status: PurchaseOrderStatus;
   lines: ApiLine[];
+  payments?: {
+    id: string;
+    amount: string;
+    payment: {
+      paymentDate: string;
+      method: SupplierPaymentMethod;
+      reference: string | null;
+      notes: string | null;
+    };
+  }[];
 }
 
 function fromApi(o: ApiPurchaseOrder): PurchaseOrder {
+  const payments = (o.payments ?? []).map((p) => ({
+    id: p.id,
+    amount: toNumber(p.amount) ?? 0,
+    date: p.payment.paymentDate.slice(0, 10),
+    method: p.payment.method,
+    reference: p.payment.reference,
+    notes: p.payment.notes,
+  }));
   return {
     id: o.id,
     reference: o.reference,
@@ -129,7 +187,8 @@ function fromApi(o: ApiPurchaseOrder): PurchaseOrder {
     warehouseId: o.locationId,
     paymentTerms: o.paymentTerms,
     notes: o.notes,
-    amountPaid: 0,
+    payments,
+    amountPaid: payments.reduce((sum, p) => sum + p.amount, 0),
     status: o.status,
     lines: o.lines.map((l) => ({
       id: l.id,
@@ -152,6 +211,16 @@ export interface NewPurchaseOrder {
   paymentTerms: string | null;
   notes: string | null;
   lines: { itemId: string; variant: string | null; quantity: number; unitCost: number }[];
+}
+
+export interface NewSupplierPayment {
+  supplierId: string;
+  paymentDate: string;
+  method: SupplierPaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  /** How much of the payment goes to each order. */
+  allocations: { purchaseOrderId: string; amount: number }[];
 }
 
 export interface PurchaseOrderReceipt {
@@ -229,6 +298,27 @@ export function usePurchaseOrders() {
     onSuccess: refresh,
   });
 
+  const pay = useMutation({
+    mutationFn: (p: NewSupplierPayment) =>
+      inventoryApi.post<{ id: string }>('/supplier-payments', {
+        supplierId: p.supplierId,
+        paymentDate: p.paymentDate,
+        method: p.method,
+        reference: p.reference,
+        notes: p.notes,
+        allocations: p.allocations.map((a) => ({
+          purchaseOrderId: a.purchaseOrderId,
+          amount: a.amount.toFixed(4),
+        })),
+      }),
+    onSettled: refresh,
+  });
+  const close = useMutation({
+    mutationFn: (id: string) =>
+      inventoryApi.post<ApiPurchaseOrder>(`/purchase-orders/${id}/close`, {}),
+    onSuccess: refresh,
+  });
+
   return {
     purchaseOrders,
     isLoading,
@@ -239,5 +329,9 @@ export function usePurchaseOrders() {
     isReceiving: receive.isPending,
     cancelPurchaseOrder: cancel.mutateAsync,
     isCancelling: cancel.isPending,
+    makeSupplierPayment: pay.mutateAsync,
+    isPaying: pay.isPending,
+    closePurchaseOrder: close.mutateAsync,
+    isClosing: close.isPending,
   };
 }

@@ -13,10 +13,11 @@ import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/Del
 import { OrderPanel } from '@/components/organisms/inventory/OrderPanel';
 import { PartyModal } from '@/components/organisms/inventory/PartyModal';
 import { PurchaseOrdersManager } from '@/components/organisms/inventory/PurchaseOrdersManager';
+import { SupplierPaymentPanel } from '@/components/organisms/inventory/SupplierPaymentPanel';
 import { SupplierOrderStats } from '@/components/organisms/inventory/SupplierOrderStats';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
 import { useInventoryParties, type PartyKind } from '@/hooks/inventory/useInventoryParties';
-import { usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
+import { canPay, usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
 import { useStockMovements } from '@/hooks/inventory/useStockMovements';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -40,6 +41,7 @@ export default function InventoryPartyDetailsPage({
   const { purchaseOrders, isLoading: ordersLoading } = usePurchaseOrders();
   const [tab, setTab] = useState('orders');
   const [orderOpen, setOrderOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -110,6 +112,17 @@ export default function InventoryPartyDetailsPage({
             <Button size="xs" variant="outline" onClick={() => setOrderOpen(true)}>
               {kind === 'SUPPLIER' ? 'Make Purchase Order' : 'Make Sales Order'}
             </Button>
+            {kind === 'SUPPLIER' && (
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={!supplierOrders.some(canPay)}
+                title={supplierOrders.some(canPay) ? undefined : 'Nothing is owed on any order yet'}
+                onClick={() => setPayOpen(true)}
+              >
+                Make Payment
+              </Button>
+            )}
             <Button size="xs" variant="outline" onClick={() => setEditOpen(true)}>
               Edit
             </Button>
@@ -183,6 +196,16 @@ export default function InventoryPartyDetailsPage({
         partyName={party.name}
         partyId={party.id}
       />
+      {kind === 'SUPPLIER' && (
+        <SupplierPaymentPanel
+          key={`pay-${payOpen}`}
+          isOpen={payOpen}
+          onClose={() => setPayOpen(false)}
+          supplierId={party.id}
+          supplierName={party.name}
+          orders={supplierOrders}
+        />
+      )}
       <PartyModal
         kind={kind}
         isOpen={editOpen}

@@ -26,6 +26,8 @@ export interface StockMovementLine {
   lotId?: string | null;
   /** Transfers only: the batch / lot the stock became at the destination. */
   toLotId?: string | null;
+  /** Stock in only: the purchase order line this was received against, if any. */
+  purchaseOrderLineId?: string | null;
 }
 
 export interface StockMovement {
@@ -96,6 +98,7 @@ interface ApiStockMovement {
   manufactureDate: string | null;
   expiryDate: string | null;
   lotId: string | null;
+  purchaseOrderLineId: string | null;
 }
 
 export function getMovementQuantity(m: StockMovement): number {
@@ -143,6 +146,7 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
           manufactureDate: m.manufactureDate?.slice(0, 10) ?? null,
           expiryDate: m.expiryDate?.slice(0, 10) ?? null,
           lotId: m.lotId,
+          purchaseOrderLineId: m.purchaseOrderLineId,
         },
       ],
       fromWarehouseId: null,

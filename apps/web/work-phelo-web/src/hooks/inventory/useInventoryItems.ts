@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryApi, inventoryKeys, toDecimal, toNumber } from '@/hooks/inventory/inventoryApi';
 import { useItemImageStore } from '@/hooks/inventory/useInventoryLocalMeta';
 import { useStockPositions } from '@/hooks/inventory/useStockBalances';
+import type { ItemImportPayloadRow } from '@/lib/inventory/itemImport';
 
 export type InventoryStockStatus = 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 
@@ -165,4 +166,34 @@ export function useDeleteInventoryItem() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: inventoryKeys.items }),
   });
   return { deleteItem: m.mutateAsync, isPending: m.isPending };
+}
+
+export interface ItemImportRowResult {
+  sku: string;
+  status: 'created' | 'skipped' | 'failed';
+  id?: string;
+  message?: string;
+}
+
+export interface ItemImportResult {
+  results: ItemImportRowResult[];
+  createdCategories: string[];
+  createdSubcategories: string[];
+  createdUnits: string[];
+}
+
+/** Creates items from spreadsheet rows; the service also creates any missing category, subcategory or unit. */
+export function useBulkImportItems() {
+  const queryClient = useQueryClient();
+  const m = useMutation({
+    mutationFn: (rows: ItemImportPayloadRow[]) =>
+      inventoryApi.post<ItemImportResult>('/items/bulk-import', { rows }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.items });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.categories });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.subcategories });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.units });
+    },
+  });
+  return { bulkImport: m.mutateAsync, isPending: m.isPending };
 }

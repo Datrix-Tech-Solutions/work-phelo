@@ -11,6 +11,7 @@ import {
   purchaseOrderQuantity,
   purchaseOrderValue,
   canCancelOrder,
+  canCloseOrder,
   canReceive,
   type PurchaseOrder,
 } from '@/hooks/inventory/usePurchaseOrders';
@@ -26,6 +27,9 @@ interface PurchaseOrdersTableProps {
   isLoading?: boolean;
   onReceive?: (order: PurchaseOrder) => void;
   onCancel?: (order: PurchaseOrder) => void;
+  onCloseOrder?: (order: PurchaseOrder) => void;
+  /** Called when a row is selected, e.g. to open the order's details page. */
+  onRowClick?: (order: PurchaseOrder) => void;
   /** Leave the Supplier column out, when every order is from one supplier. */
   hideSupplier?: boolean;
   /** The primary toolbar button, e.g. "New Purchase Order". */
@@ -39,6 +43,8 @@ export function PurchaseOrdersTable({
   actionButton,
   onReceive,
   onCancel,
+  onCloseOrder,
+  onRowClick,
   hideSupplier,
 }: PurchaseOrdersTableProps) {
   const [search, setSearch] = useState('');
@@ -78,7 +84,7 @@ export function PurchaseOrdersTable({
     {
       key: 'date',
       label: 'Date',
-      width: '100px',
+      width: '80px',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-500">{formatDate(row.date)}</span>
       ),
@@ -86,7 +92,7 @@ export function PurchaseOrdersTable({
     {
       key: 'supplier',
       label: 'Supplier',
-      width: 'minmax(140px, 1.5fr)',
+      width: 'minmax(140px, 1fr)',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-900">{supplierName(row)}</span>
       ),
@@ -94,7 +100,7 @@ export function PurchaseOrdersTable({
     {
       key: 'items',
       label: 'Items',
-      width: '140px',
+      width: '90px',
       className: 'overflow-hidden min-w-0 pr-4',
       render: (row) => (
         <span
@@ -116,7 +122,7 @@ export function PurchaseOrdersTable({
     {
       key: 'quantity',
       label: 'QTY',
-      width: '80px',
+      width: '50px',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-500">
           {formatNumber(purchaseOrderQuantity(row))}
@@ -126,7 +132,7 @@ export function PurchaseOrdersTable({
     {
       key: 'value',
       label: 'Value',
-      width: '150px',
+      width: '120px',
       className: 'text-right pr-4',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-600">
@@ -137,7 +143,7 @@ export function PurchaseOrdersTable({
     {
       key: 'amountPaid',
       label: 'Amount Paid',
-      width: '150px',
+      width: '120px',
       className: 'text-right pr-4',
       render: (row) => (
         <span className="text-sm font-semibold text-gray-600">
@@ -148,7 +154,7 @@ export function PurchaseOrdersTable({
     {
       key: 'status',
       label: 'Status',
-      width: '120px',
+      width: '150px',
       render: (row) => {
         const { label, variant } = PURCHASE_ORDER_STATUS_BADGE[row.status];
         return <Badge variant={variant} label={label} />;
@@ -162,6 +168,7 @@ export function PurchaseOrdersTable({
     <DataTable
       columns={columns}
       data={rows}
+      onRowClick={onRowClick}
       isLoading={isLoading}
       emptyMessage="No purchase orders found"
       searchPlaceholder="Search by reference, supplier or item..."
@@ -192,6 +199,9 @@ export function PurchaseOrdersTable({
       rowActions={(row) => [
         ...(canReceive(row) && onReceive
           ? [{ label: 'Receive Items', onClick: () => onReceive(row) }]
+          : []),
+        ...(canCloseOrder(row) && onCloseOrder
+          ? [{ label: 'Close Order', onClick: () => onCloseOrder(row) }]
           : []),
         ...(canCancelOrder(row) && onCancel
           ? [{ label: 'Cancel Order', danger: true, onClick: () => onCancel(row) }]

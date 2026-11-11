@@ -9,6 +9,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { EditItemValueModal } from '@/components/organisms/inventory/EditItemValueModal';
 import { EditReorderLevelModal } from '@/components/organisms/inventory/EditReorderLevelModal';
 import { ItemPanel } from '@/components/organisms/inventory/ItemPanel';
+import { ItemImportDialog } from '@/components/organisms/inventory/ItemImportDialog';
 import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
@@ -37,6 +38,7 @@ export default function InventoryItemsPage() {
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [valueTarget, setValueTarget] = useState<InventoryItem | null>(null);
   const [reorderTarget, setReorderTarget] = useState<InventoryItem | null>(null);
   const [editTarget, setEditTarget] = useState<InventoryItem | null>(null);
@@ -233,6 +235,7 @@ export default function InventoryItemsPage() {
               </div>
             </div>
           }
+          secondaryButtons={[{ label: 'Import', onClick: () => setImportOpen(true) }]}
           actionButton={{ label: 'Add Item', onClick: () => setModalOpen(true) }}
           currentPage={page}
           totalPages={totalPages}
@@ -249,6 +252,7 @@ export default function InventoryItemsPage() {
         }}
         item={editTarget}
       />
+      <ItemImportDialog isOpen={importOpen} onClose={() => setImportOpen(false)} />
       <EditItemValueModal
         key={`value-${valueTarget?.id ?? 'none'}`}
         item={valueTarget}
