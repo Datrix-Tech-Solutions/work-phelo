@@ -54,6 +54,39 @@ export const purchaseOrderValue = (po: PurchaseOrder) =>
 export const purchaseOrderAmountOwed = (po: PurchaseOrder) =>
   po.lines.reduce((sum, l) => sum + l.receivedQuantity * l.unitCost, 0);
 
+export const isOpenOrder = (po: PurchaseOrder) =>
+  po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED';
+
+/** Figures for a set of purchase orders (e.g. one supplier's). Cancelled orders are left out of
+ * every figure except the order count. */
+export function summarizePurchaseOrders(orders: PurchaseOrder[]) {
+  const live = orders.filter((o) => o.status !== 'CANCELLED');
+  const open = live.filter(isOpenOrder);
+  const dates = live.map((o) => o.date).sort();
+  return {
+    totalOrders: orders.length,
+    pendingOrders: open.length,
+    receivedOrders: live.filter((o) => o.status === 'RECEIVED').length,
+    totalOrdered: live.reduce((sum, o) => sum + purchaseOrderValue(o), 0),
+    /** Ordered but not yet delivered, at the order's unit costs. */
+    pendingDeliveryValue: open.reduce(
+      (sum, o) =>
+        sum +
+        o.lines.reduce(
+          (s, l) => s + Math.max(0, l.orderedQuantity - l.receivedQuantity) * l.unitCost,
+          0,
+        ),
+      0,
+    ),
+    /** Received but not paid for yet: units received at their unit cost, less payments. */
+    amountOwed: live.reduce(
+      (sum, o) => sum + Math.max(0, purchaseOrderAmountOwed(o) - o.amountPaid),
+      0,
+    ),
+    lastOrderDate: dates.length ? dates[dates.length - 1] : null,
+  };
+}
+
 export const canReceive = (po: PurchaseOrder) =>
   po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED';
 

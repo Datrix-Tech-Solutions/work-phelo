@@ -775,8 +775,8 @@ export class InventoryService {
               notes: dto.notes || null,
               createdBy: userId,
               lines: {
+                // tenantId is left out on purpose: a nested line takes it from the order.
                 create: dto.lines.map((l) => ({
-                  tenantId,
                   itemId: l.itemId,
                   variantName: l.variant || null,
                   orderedQuantity: new StockDecimal(l.quantity),
