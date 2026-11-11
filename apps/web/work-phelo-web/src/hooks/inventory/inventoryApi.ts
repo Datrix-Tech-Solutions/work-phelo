@@ -21,6 +21,7 @@ export const inventoryKeys = {
   balances: ['inventory', 'stock-balances'] as const,
   movements: ['inventory', 'stock-movements'] as const,
   lots: ['inventory', 'stock-lots'] as const,
+  purchaseOrders: ['inventory', 'purchase-orders'] as const,
   parties: ['inventory', 'parties'] as const,
   subcategories: ['inventory', 'subcategories'] as const,
   variants: ['inventory', 'variants'] as const,

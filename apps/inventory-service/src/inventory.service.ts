@@ -25,6 +25,9 @@ import {
   UnitDto,
   UpdateUnitDto,
   StockInDto,
+  PurchaseOrderDto,
+  ReceivePurchaseOrderDto,
+  ReceiveLineDto,
   AssignVariantDto,
   StockInBatchDto,
   StockOutBatchDto,
@@ -576,6 +579,7 @@ export class InventoryService {
     userId: string,
     dto: StockInDto,
     batchId: string | null,
+    purchaseOrderLineId: string | null = null,
   ) {
     const quantity = new StockDecimal(dto.quantity);
     if (!quantity.gt(0)) throw new BadRequestException('Quantity must be greater than zero');
@@ -651,6 +655,7 @@ export class InventoryService {
         notes: dto.notes,
         ...lot,
         lotId,
+        purchaseOrderLineId,
         createdBy: userId,
         batchId,
       },
@@ -690,6 +695,204 @@ export class InventoryService {
         },
         batchId,
       ),
+    );
+  }
+  // ---- Purchase orders ----
+  private async lockPurchaseOrder(tx: Prisma.TransactionClient, tenantId: string, id: string) {
+    await tx.$queryRaw`SELECT "id" FROM "inventory"."PurchaseOrder" WHERE "tenantId" = ${tenantId} AND "id" = ${id} FOR UPDATE`;
+    const order = await tx.purchaseOrder.findFirst({
+      where: { tenantId, id },
+      include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+    });
+    if (!order) throw new NotFoundException('Purchase order not found');
+    return order;
+  }
+  private purchaseOrderStatus(
+    lines: { orderedQuantity: Prisma.Decimal; receivedQuantity: Prisma.Decimal }[],
+  ) {
+    if (lines.every((l) => l.receivedQuantity.gte(l.orderedQuantity))) return 'RECEIVED' as const;
+    if (lines.some((l) => l.receivedQuantity.gt(0))) return 'PARTIALLY_RECEIVED' as const;
+    return 'ORDERED' as const;
+  }
+  listPurchaseOrders(tenantId: string) {
+    return this.prisma.purchaseOrder.findMany({
+      where: { tenantId },
+      include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+  }
+  async getPurchaseOrder(tenantId: string, id: string) {
+    const order = await this.prisma.purchaseOrder.findFirst({
+      where: { tenantId, id },
+      include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+    });
+    if (!order) throw new NotFoundException('Purchase order not found');
+    return order;
+  }
+  createPurchaseOrder(tenantId: string, userId: string, dto: PurchaseOrderDto) {
+    if (dto.expectedDate && dto.expectedDate < dto.orderDate)
+      throw new BadRequestException('Expected delivery cannot be before the order date');
+    const keys = dto.lines.map((l) => `${l.itemId}\u0000${(l.variant ?? '').toLowerCase()}`);
+    if (new Set(keys).size !== keys.length)
+      throw new BadRequestException('An item and variant can only appear once on an order');
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const supplier = await tx.inventoryParty.findFirst({
+          where: { tenantId, id: dto.supplierId },
+          select: { kind: true, status: true },
+        });
+        if (!supplier || supplier.kind !== 'SUPPLIER')
+          throw new NotFoundException('Supplier not found');
+        if (supplier.status !== 'ACTIVE') throw new ConflictException('Supplier is inactive');
+        const location = await tx.stockLocation.findFirst({
+          where: { tenantId, id: dto.locationId },
+          select: { status: true },
+        });
+        if (!location) throw new NotFoundException('Stock location not found');
+        if (location.status !== 'ACTIVE') throw new ConflictException('Stock location is inactive');
+        const itemIds = [...new Set(dto.lines.map((l) => l.itemId))];
+        const items = await tx.inventoryItem.findMany({
+          where: { tenantId, id: { in: itemIds } },
+          select: { status: true },
+        });
+        if (items.length !== itemIds.length)
+          throw new NotFoundException('Inventory item not found');
+        if (items.some((i) => i.status !== 'ACTIVE'))
+          throw new ConflictException('Inactive items cannot be ordered');
+        const reference =
+          dto.reference ||
+          `PO-${dto.orderDate.replace(/-/g, '')}-${randomUUID().slice(0, 4).toUpperCase()}`;
+        try {
+          return await tx.purchaseOrder.create({
+            data: {
+              tenantId,
+              reference,
+              orderDate: new Date(dto.orderDate),
+              expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
+              supplierId: dto.supplierId,
+              locationId: dto.locationId,
+              paymentTerms: dto.paymentTerms || null,
+              notes: dto.notes || null,
+              createdBy: userId,
+              lines: {
+                create: dto.lines.map((l) => ({
+                  tenantId,
+                  itemId: l.itemId,
+                  variantName: l.variant || null,
+                  orderedQuantity: new StockDecimal(l.quantity),
+                  unitCost: new StockDecimal(l.unitCost),
+                })),
+              },
+            },
+            include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+          });
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+            throw new ConflictException('Purchase order reference already exists');
+          throw error;
+        }
+      }),
+    );
+  }
+  /**
+   * Receives goods against an order and posts them as one stock in. Each line takes the units
+   * that arrived (paid for, at most what is still outstanding) plus any free extra; the stock in
+   * holds both, valued at the order's unit cost, while only the first counts toward what is owed.
+   */
+  receivePurchaseOrder(tenantId: string, userId: string, id: string, dto: ReceivePurchaseOrderDto) {
+    const ids = dto.lines.map((l) => l.lineId);
+    if (new Set(ids).size !== ids.length)
+      throw new BadRequestException('A line can only appear once in a receipt');
+    return this.write(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const order = await this.lockPurchaseOrder(tx, tenantId, id);
+          if (order.status === 'CANCELLED') throw new ConflictException('The order is cancelled');
+          if (order.status === 'RECEIVED')
+            throw new ConflictException('The order has already been received in full');
+          const batchId = randomUUID();
+          const received: {
+            line: (typeof order.lines)[number];
+            received: Prisma.Decimal;
+            extra: Prisma.Decimal;
+            input: ReceiveLineDto;
+          }[] = [];
+          for (const input of dto.lines) {
+            const line = order.lines.find((l) => l.id === input.lineId);
+            if (!line) throw new NotFoundException('Purchase order line not found');
+            const got = new StockDecimal(input.receivedQuantity);
+            const extra = new StockDecimal(input.extraQuantity ?? 0);
+            if (got.gt(line.orderedQuantity.minus(line.receivedQuantity)))
+              throw new ConflictException('Received quantity exceeds what is still outstanding');
+            if (got.plus(extra).gt(0)) received.push({ line, received: got, extra, input });
+          }
+          if (!received.length)
+            throw new BadRequestException('Enter a quantity received for at least one line');
+          received.sort((a, b) => a.line.itemId.localeCompare(b.line.itemId));
+          for (const { line, received: got, extra, input } of received) {
+            await this.stockInTx(
+              tx,
+              tenantId,
+              userId,
+              {
+                itemId: line.itemId,
+                locationId: order.locationId,
+                quantity: got.plus(extra).toString(),
+                variant: line.variantName,
+                dateReceived: dto.dateReceived,
+                supplier: order.supplier.name,
+                reference: order.reference,
+                notes: dto.notes ?? undefined,
+                unitCost: line.unitCost.toString(),
+                lotNumber: input.lotNumber,
+                manufactureDate: input.manufactureDate,
+                expiryDate: input.expiryDate,
+              },
+              batchId,
+              line.id,
+            );
+            await tx.purchaseOrderLine.update({
+              where: { id: line.id },
+              data: { receivedQuantity: { increment: got }, extraQuantity: { increment: extra } },
+            });
+            line.receivedQuantity = line.receivedQuantity.plus(got);
+          }
+          await tx.purchaseOrder.update({
+            where: { id: order.id },
+            data: { status: this.purchaseOrderStatus(order.lines) },
+          });
+          return this.getPurchaseOrderIn(tx, tenantId, id, batchId);
+        },
+        { timeout: 30_000, maxWait: 10_000 },
+      ),
+    );
+  }
+  private async getPurchaseOrderIn(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    id: string,
+    batchId: string,
+  ) {
+    const order = await tx.purchaseOrder.findFirstOrThrow({
+      where: { tenantId, id },
+      include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+    });
+    return { ...order, batchId };
+  }
+  cancelPurchaseOrder(tenantId: string, id: string) {
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const order = await this.lockPurchaseOrder(tx, tenantId, id);
+        if (order.status === 'CANCELLED')
+          throw new ConflictException('The order is already cancelled');
+        if (order.lines.some((l) => l.receivedQuantity.gt(0) || l.extraQuantity.gt(0)))
+          throw new ConflictException('An order that has received stock cannot be cancelled');
+        return tx.purchaseOrder.update({
+          where: { id: order.id },
+          data: { status: 'CANCELLED' },
+          include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+        });
+      }),
     );
   }
   private async requireLocations(tx: Prisma.TransactionClient, tenantId: string, ids: string[]) {

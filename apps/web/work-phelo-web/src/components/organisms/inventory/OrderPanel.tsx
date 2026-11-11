@@ -7,16 +7,24 @@ import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import { useItemVariantsMap } from '@/hooks/inventory/useItemVariants';
+import { useInventoryParties } from '@/hooks/inventory/useInventoryParties';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 
 interface FormValues {
   reference: string;
   orderDate: string;
   expectedDate: string;
+  paymentTerms: string;
+  partyId: string;
   warehouseId: string;
   notes: string;
 }
@@ -24,6 +32,7 @@ interface FormValues {
 interface LineRow {
   key: string;
   itemId: string;
+  variant: string;
   quantity: number;
   unitCost: number;
 }
@@ -32,17 +41,32 @@ let rowCounter = 0;
 const newLine = (): LineRow => ({
   key: `po-line-${++rowCounter}`,
   itemId: '',
+  variant: '',
   quantity: 0,
   unitCost: 0,
 });
 
-const LINE_GRID = 'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_30px]';
+const PAYMENT_TERMS = [
+  'Due on receipt',
+  'Cash on delivery',
+  'Net 7',
+  'Net 15',
+  'Net 30',
+  'Net 45',
+  'Net 60',
+  'Net 90',
+].map((t) => ({ value: t, label: t }));
+
+const LINE_GRID =
+  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1fr)_30px]';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankForm = (): FormValues => ({
   reference: '',
   orderDate: today(),
   expectedDate: '',
+  paymentTerms: '',
+  partyId: '',
   warehouseId: '',
   notes: '',
 });
@@ -57,7 +81,8 @@ export type OrderKind = 'PURCHASE' | 'SALES';
 const COPY = {
   PURCHASE: {
     title: 'Purchase Order',
-    description: "Order stock from this supplier. Purchase orders aren't saved yet.",
+    description:
+      'Order stock from this supplier. Nothing is added to stock until you receive the order.',
     partyLabel: 'Supplier',
     warehouseLabel: 'Deliver To',
     dateLabel: 'Expected Delivery',
@@ -81,18 +106,24 @@ interface OrderPanelProps {
   kind: OrderKind;
   isOpen: boolean;
   onClose: () => void;
-  /** The supplier or customer the order is for. */
-  partyName: string;
+  /** The supplier or customer the order is for. Leave out to pick one in the form. */
+  partyName?: string;
+  /** Id of that supplier or customer. */
+  partyId?: string;
 }
 
 /**
  * A purchase order to a supplier or a sales order for a customer, laid out like Stock In. It
  * isn't saved anywhere yet: saving only checks the form and closes the panel.
  */
-export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps) {
+export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderPanelProps) {
   const copy = COPY[kind];
   const { items } = useInventoryItems();
   const { warehouses } = useInventoryWarehouses();
+  const variantsByItem = useItemVariantsMap();
+  const toast = useToast();
+  const { createPurchaseOrder, isCreating } = usePurchaseOrders();
+  const { parties } = useInventoryParties(kind === 'SALES' ? 'CUSTOMER' : 'SUPPLIER');
   const [lines, setLines] = useState<LineRow[]>([newLine()]);
   const [showLineErrors, setShowLineErrors] = useState(false);
 
@@ -111,6 +142,10 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
         .map((i) => ({ value: i.id, label: i.name, sublabel: i.sku })),
     [items],
   );
+  const partyOptions = useMemo(
+    () => parties.filter((p) => p.status === 'ACTIVE').map((p) => ({ value: p.id, label: p.name })),
+    [parties],
+  );
   const warehouseOptions = useMemo(
     () =>
       warehouses
@@ -128,8 +163,11 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
   const pickItem = (key: string, itemId: string) => {
     const item = items.find((i) => i.id === itemId);
     const price = (kind === 'SALES' ? item?.sellingPrice : item?.costPrice) ?? 0;
-    updateLine(key, { itemId, unitCost: price });
+    updateLine(key, { itemId, variant: '', unitCost: price });
   };
+
+  const isPurchase = kind === 'PURCHASE';
+  const lineGrid = LINE_GRID;
 
   const handleClose = () => {
     reset(blankForm());
@@ -138,10 +176,32 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
     onClose();
   };
 
-  const onSubmit = () => {
+  const onSubmit = async (values: FormValues) => {
     setShowLineErrors(true);
     if (lines.some((l) => !l.itemId || l.quantity <= 0)) return;
-    handleClose();
+    // Sales orders aren't saved anywhere yet.
+    if (!isPurchase) return handleClose();
+    try {
+      await createPurchaseOrder({
+        reference: values.reference.trim() || null,
+        orderDate: values.orderDate,
+        expectedDate: values.expectedDate || null,
+        supplierId: partyId ?? values.partyId,
+        warehouseId: values.warehouseId,
+        paymentTerms: values.paymentTerms || null,
+        notes: values.notes.trim() || null,
+        lines: lines.map((l) => ({
+          itemId: l.itemId,
+          variant: l.variant.trim() || null,
+          quantity: l.quantity,
+          unitCost: l.unitCost,
+        })),
+      });
+      toast.success('Purchase order created');
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Could not create purchase order'));
+    }
   };
 
   return (
@@ -155,7 +215,9 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)}>{copy.save}</Button>
+          <Button onClick={handleSubmit(onSubmit)} isLoading={isCreating} loadingText="Saving...">
+            {copy.save}
+          </Button>
         </div>
       }
     >
@@ -190,13 +252,31 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
 
         <div className="flex flex-col gap-4 sm:flex-row">
           <div className="flex-1 min-w-0">
-            <SearchSelect
-              label={copy.partyLabel}
-              options={[{ value: partyName, label: partyName }]}
-              value={partyName}
-              onChange={() => {}}
-              disabled
-            />
+            {partyName ? (
+              <SearchSelect
+                label={copy.partyLabel}
+                options={[{ value: partyName, label: partyName }]}
+                value={partyName}
+                onChange={() => {}}
+                disabled
+              />
+            ) : (
+              <Controller
+                control={control}
+                name="partyId"
+                rules={{ required: `Select a ${copy.partyLabel.toLowerCase()}` }}
+                render={({ field, fieldState }) => (
+                  <SearchSelect
+                    label={copy.partyLabel}
+                    placeholder={`Select ${copy.partyLabel.toLowerCase()}`}
+                    options={partyOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={fieldState.error?.message}
+                  />
+                )}
+              />
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <Controller
@@ -217,13 +297,32 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
           </div>
         </div>
 
-        <Controller
-          control={control}
-          name="expectedDate"
-          render={({ field }) => (
-            <DatePicker label={copy.dateLabel} value={field.value} onChange={field.onChange} />
-          )}
-        />
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="flex-1 min-w-0">
+            <Controller
+              control={control}
+              name="expectedDate"
+              render={({ field }) => (
+                <DatePicker label={copy.dateLabel} value={field.value} onChange={field.onChange} />
+              )}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <Controller
+              control={control}
+              name="paymentTerms"
+              render={({ field }) => (
+                <SearchSelect
+                  label="Payment Terms"
+                  placeholder="Optional"
+                  options={PAYMENT_TERMS}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </div>
+        </div>
 
         <FormField
           label="Notes"
@@ -240,8 +339,8 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
           <span className="text-sm font-bold text-gray-900">Items</span>
 
           <div className="rounded-xl border border-gray-200 overflow-hidden">
-            <div className={cn(LINE_GRID, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
-              {['Item', 'Qty', copy.priceLabel, 'Total'].map((h) => (
+            <div className={cn(lineGrid, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
+              {['Item', 'Variant', 'Qty', copy.priceLabel, 'Total'].map((h) => (
                 <span key={h} className="text-xs font-bold text-gray-900">
                   {h}
                 </span>
@@ -251,7 +350,7 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
 
             <div className="divide-y divide-gray-200">
               {lines.map((line) => (
-                <div key={line.key} className={cn(LINE_GRID, 'items-start px-2.5 py-2')}>
+                <div key={line.key} className={cn(lineGrid, 'items-start px-2.5 py-2')}>
                   <SearchSelect
                     placeholder="Select item…"
                     options={itemOptions}
@@ -259,6 +358,36 @@ export function OrderPanel({ kind, isOpen, onClose, partyName }: OrderPanelProps
                     onChange={(v) => pickItem(line.key, v)}
                     error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
                   />
+                  {isPurchase ? (
+                    // An order can name a variant the item doesn't have yet.
+                    <CreatableSearchSelect
+                      placeholder={line.itemId ? 'Select or add variant' : 'Select item first'}
+                      disabled={!line.itemId}
+                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                        value: v,
+                        label: v,
+                      }))}
+                      value={line.variant}
+                      onChange={(v) => updateLine(line.key, { variant: v })}
+                    />
+                  ) : (
+                    <SearchSelect
+                      placeholder={
+                        !line.itemId
+                          ? 'Select item first'
+                          : variantsByItem[line.itemId]?.length
+                            ? 'Select variant'
+                            : 'No variants'
+                      }
+                      disabled={!line.itemId || !variantsByItem[line.itemId]?.length}
+                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                        value: v,
+                        label: v,
+                      }))}
+                      value={line.variant}
+                      onChange={(v) => updateLine(line.key, { variant: v })}
+                    />
+                  )}
                   <NumberField
                     ariaLabel="Quantity"
                     className="w-full py-2"

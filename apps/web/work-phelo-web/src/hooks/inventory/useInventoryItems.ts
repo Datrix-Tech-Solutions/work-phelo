@@ -18,6 +18,8 @@ export interface InventoryItem {
   costPrice: number | null;
   sellingPrice: number | null;
   reorderLevel: number | null;
+  /** Most stock the business wants to hold of this item. Optional. */
+  maxStock: number | null;
   /** Perishable stock needs an expiry date when it is received. */
   isPerishable: boolean;
   status: 'ACTIVE' | 'INACTIVE';
@@ -42,6 +44,7 @@ interface ApiItem {
   costPrice: string | null;
   sellingPrice: string | null;
   reorderLevel: string | null;
+  maxStock: string | null;
   isPerishable: boolean;
   status: 'ACTIVE' | 'INACTIVE';
 }
@@ -57,6 +60,7 @@ function toPayload(item: NewInventoryItem) {
     costPrice: toDecimal(item.costPrice),
     sellingPrice: toDecimal(item.sellingPrice),
     reorderLevel: toDecimal(item.reorderLevel),
+    maxStock: toDecimal(item.maxStock),
     isPerishable: item.isPerishable,
     status: item.status,
   };
@@ -105,6 +109,7 @@ export function useInventoryItems() {
           costPrice: toNumber(i.costPrice),
           sellingPrice: toNumber(i.sellingPrice),
           reorderLevel: toNumber(i.reorderLevel),
+          maxStock: toNumber(i.maxStock),
           isPerishable: i.isPerishable,
           status: i.status,
           imageUrl: images[i.id] ?? null,
