@@ -50,14 +50,10 @@ const newLine = (): LineRow => ({
 
 // Terms decide when the supplier can be paid: on receipt or cash on delivery, once the goods have
 // arrived; on any of the others, as soon as the invoice is recorded.
-const PAYMENT_TERMS = [
-  'Due on receipt',
-  'Cash on delivery',
-  'Payment in advance',
-  'Net 15',
-  'Net 30',
-  'Net 60',
-].map((t) => ({ value: t, label: t }));
+const PAYMENT_TERMS = ['Due on receipt', 'Cash on delivery', 'Payment in advance'].map((t) => ({
+  value: t,
+  label: t,
+}));
 
 const LINE_GRID =
   'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1fr)_30px]';

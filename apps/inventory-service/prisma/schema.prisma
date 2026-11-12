@@ -457,6 +457,8 @@ model PurchaseOrderLine {
   receivedValue    Decimal               @default(0) @db.Decimal(18, 4)
   receivedQuantity Decimal               @default(0) @db.Decimal(18, 4)
   extraQuantity    Decimal               @default(0) @db.Decimal(18, 4)
+  // Units that arrived damaged: not stocked, and not counted as received.
+  damagedQuantity  Decimal               @default(0) @db.Decimal(18, 4)
   purchaseOrder    PurchaseOrder         @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Cascade)
   item             InventoryItem         @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
   movements        StockMovement[]

@@ -80,6 +80,7 @@ const StockDecimal = Prisma.Decimal.clone({ precision: 40 });
 const PAYMENT_SHARES = {
   select: {
     id: true,
+    paymentId: true,
     amount: true,
     payment: {
       select: {
@@ -1052,25 +1053,37 @@ export class InventoryService {
             line: (typeof order.lines)[number];
             received: Prisma.Decimal;
             extra: Prisma.Decimal;
+            damaged: Prisma.Decimal;
             input: ReceiveLineDto;
           }[] = [];
+          // Lines where units only arrived damaged: nothing is stocked, the damage is recorded.
+          const damagedOnly: { line: (typeof order.lines)[number]; damaged: Prisma.Decimal }[] = [];
           for (const input of dto.lines) {
             const line = order.lines.find((l) => l.id === input.lineId);
             if (!line) throw new NotFoundException('Purchase order line not found');
             const got = new StockDecimal(input.receivedQuantity);
             const extra = new StockDecimal(input.extraQuantity ?? 0);
-            if (got.plus(extra).gt(0) && line.invoicedQuantity.lte(0))
+            const damaged = new StockDecimal(input.damagedQuantity ?? 0);
+            if (got.plus(extra).plus(damaged).gt(0) && line.invoicedQuantity.lte(0))
               throw new ConflictException('Record an invoice for this item before receiving it');
-            if (got.gt(line.invoicedQuantity.minus(line.receivedQuantity)))
+            if (got.plus(damaged).gt(line.invoicedQuantity.minus(line.receivedQuantity)))
               throw new ConflictException(
-                'Received quantity exceeds what is invoiced and not yet received',
+                'Received and damaged quantities exceed what is invoiced and not yet received',
               );
-            if (got.plus(extra).gt(0)) received.push({ line, received: got, extra, input });
+            if (got.plus(extra).gt(0))
+              received.push({ line, received: got, extra, damaged, input });
+            else if (damaged.gt(0)) damagedOnly.push({ line, damaged });
           }
-          if (!received.length)
+          if (!received.length && !damagedOnly.length)
             throw new BadRequestException('Enter a quantity received for at least one line');
           received.sort((a, b) => a.line.itemId.localeCompare(b.line.itemId));
-          for (const { line, received: got, extra, input } of received) {
+          for (const { line, damaged } of damagedOnly) {
+            await tx.purchaseOrderLine.update({
+              where: { id: line.id },
+              data: { damagedQuantity: { increment: damaged } },
+            });
+          }
+          for (const { line, received: got, extra, damaged, input } of received) {
             // Goods are received at the average price invoiced for the line.
             const unitCost = line.invoicedValue.div(line.invoicedQuantity).toDecimalPlaces(4);
             await this.stockInTx(
@@ -1099,6 +1112,7 @@ export class InventoryService {
               data: {
                 receivedQuantity: { increment: got },
                 extraQuantity: { increment: extra },
+                damagedQuantity: { increment: damaged },
                 // Only the units received are paid for; the extra is free.
                 receivedValue: { increment: got.times(unitCost) },
               },

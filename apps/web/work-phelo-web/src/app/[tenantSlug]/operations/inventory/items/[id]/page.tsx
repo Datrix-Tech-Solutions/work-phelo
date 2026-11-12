@@ -1,9 +1,10 @@
 'use client';
 
+import { InventoryBreadcrumb } from '@/components/molecules/inventory/InventoryBreadcrumb';
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Boxes, ChevronRight, Layers } from 'lucide-react';
+import { Boxes, Layers } from 'lucide-react';
 import { Avatar } from '@/components/atoms/Avatar';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
@@ -110,13 +111,7 @@ export default function InventoryItemDetailsPage({
   return (
     <>
       <div className={`${pageHeader} shrink-0 flex flex-col gap-3`}>
-        <nav className="flex items-center gap-2 text-sm text-gray-400">
-          <Link href={base} className="hover:text-gray-700 transition-colors">
-            Inventory
-          </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-gray-700 font-medium">{item.name}</span>
-        </nav>
+        <InventoryBreadcrumb root={{ label: 'Inventory', href: base }} current={item.name} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -220,7 +215,12 @@ export default function InventoryItemDetailsPage({
           {tab === 'batches' ? (
             <ItemBatchesTable itemId={id} />
           ) : (
-            <StockMovementsTable movements={itemMovements} typeFilter showVariant />
+            <StockMovementsTable
+              movements={itemMovements}
+              typeFilter
+              showVariant
+              sourceLabel={item.name}
+            />
           )}
         </div>
         <ItemPanel isOpen={editOpen} onClose={() => setEditOpen(false)} item={item} />

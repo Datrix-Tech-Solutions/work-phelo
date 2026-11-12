@@ -457,7 +457,7 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
               </div>
               <div className="w-full sm:w-48 shrink-0">
                 <FormField
-                  label="Maximum Stock"
+                  label="Maximum Stock (per warehouse)"
                   type="number"
                   step="any"
                   registration={register('maxStock', {

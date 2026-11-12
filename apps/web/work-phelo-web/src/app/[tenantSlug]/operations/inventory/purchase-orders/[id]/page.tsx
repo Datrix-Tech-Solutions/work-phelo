@@ -1,8 +1,9 @@
 'use client';
 
+import { useCrumbs } from '@/hooks/inventory/useCrumbs';
+import { InventoryBreadcrumb } from '@/components/molecules/inventory/InventoryBreadcrumb';
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
@@ -54,6 +55,7 @@ export default function PurchaseOrderDetailsPage({
 }) {
   const { tenantSlug, id } = use(params);
   const base = `/${tenantSlug}/operations/inventory`;
+  const { link } = useCrumbs();
   const { purchaseOrders, isLoading, approvePurchaseOrder, isApproving } = usePurchaseOrders();
   const { items } = useInventoryItems();
   const { warehouses } = useInventoryWarehouses();
@@ -115,6 +117,7 @@ export default function PurchaseOrderDetailsPage({
   const itemName = (itemId: string) => items.find((i) => i.id === itemId)?.name ?? 'Item';
   const warehouseName = warehouses.find((w) => w.id === order.warehouseId)?.name ?? '—';
   const extraUnits = order.lines.reduce((sum, l) => sum + l.extraQuantity, 0);
+  const damagedUnits = order.lines.reduce((sum, l) => sum + l.damagedQuantity, 0);
 
   const money = (n: number) => (
     <span className="text-sm font-semibold text-gray-600">{formatInventoryValue(n)}</span>
@@ -135,19 +138,26 @@ export default function PurchaseOrderDetailsPage({
       ),
     },
     { key: 'ordered', label: 'Ordered', width: '90px', render: (l) => quantity(l.orderedQuantity) },
-    {
-      key: 'received',
-      label: 'Received',
-      width: '90px',
-      render: (l) => quantity(l.receivedQuantity),
-    },
+
     {
       key: 'invoiced',
       label: 'Invoiced',
       width: '90px',
       render: (l) => quantity(l.invoicedQuantity),
     },
+    {
+      key: 'received',
+      label: 'Received',
+      width: '90px',
+      render: (l) => quantity(l.receivedQuantity),
+    },
     { key: 'extra', label: 'Extra', width: '80px', render: (l) => quantity(l.extraQuantity) },
+    {
+      key: 'damaged',
+      label: 'Damaged',
+      width: '90px',
+      render: (l) => quantity(l.damagedQuantity),
+    },
     {
       key: 'outstanding',
       label: 'Outstanding',
@@ -290,13 +300,11 @@ export default function PurchaseOrderDetailsPage({
   return (
     <>
       <div className={`${pageHeader} shrink-0 flex flex-col gap-3`}>
-        <nav className="flex items-center gap-2 text-sm text-gray-400">
-          <Link href={`${base}/purchase-orders`} className="hover:text-gray-700 transition-colors">
-            Purchase Orders
-          </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-gray-700 font-medium font-mono">{order.reference}</span>
-        </nav>
+        <InventoryBreadcrumb
+          root={{ label: 'Purchase Orders', href: `${base}/purchase-orders` }}
+          current={order.reference}
+          currentClassName="text-gray-700 font-medium font-mono"
+        />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -355,7 +363,7 @@ export default function PurchaseOrderDetailsPage({
               label="Supplier"
               value={
                 <Link
-                  href={`${base}/suppliers-customers/${order.supplierId}`}
+                  href={link(`${base}/suppliers-customers/${order.supplierId}`, order.reference)}
                   className="text-brand hover:underline"
                 >
                   {order.supplierName}
@@ -384,6 +392,9 @@ export default function PurchaseOrderDetailsPage({
             />
             {extraUnits > 0 && (
               <DetailField label="Free Extra Units" value={formatNumber(extraUnits)} />
+            )}
+            {damagedUnits > 0 && (
+              <DetailField label="Damaged Units" value={formatNumber(damagedUnits)} />
             )}
             <DetailField label="Created By" value={userName(order.createdBy)} />
             {order.status === 'REJECTED' ? (
@@ -430,7 +441,12 @@ export default function PurchaseOrderDetailsPage({
               noInternalScroll
             />
           ) : tab === 'receipts' ? (
-            <StockMovementsTable movements={receipts} showVariant showRecordedBy />
+            <StockMovementsTable
+              movements={receipts}
+              showVariant
+              showRecordedBy
+              sourceLabel={order.reference}
+            />
           ) : tab === 'payments' ? (
             <DataTable
               columns={paymentColumns}

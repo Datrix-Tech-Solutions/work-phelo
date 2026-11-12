@@ -31,6 +31,8 @@ export interface PurchaseOrderLine {
   receivedQuantity: number;
   /** Free units received on top of the order: stocked and valued, but not paid for. */
   extraQuantity: number;
+  /** Units that arrived damaged: not stocked and not counted as received. */
+  damagedQuantity: number;
 }
 
 export type SupplierPaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CHEQUE' | 'OTHER';
@@ -45,6 +47,8 @@ export const PAYMENT_METHOD_LABEL: Record<SupplierPaymentMethod, string> = {
 
 export interface PurchaseOrderPayment {
   id: string;
+  /** The payment this is a share of; one payment can cover several orders. */
+  paymentId: string;
   /** What this payment put toward this order. */
   amount: number;
   /** ISO date paid. */
@@ -220,6 +224,7 @@ interface ApiLine {
   receivedValue: string;
   receivedQuantity: string;
   extraQuantity: string;
+  damagedQuantity: string;
 }
 
 interface ApiPurchaseOrder {
@@ -254,6 +259,7 @@ interface ApiPurchaseOrder {
   }[];
   payments?: {
     id: string;
+    paymentId: string;
     amount: string;
     payment: {
       paymentDate: string;
@@ -269,6 +275,8 @@ interface ApiPurchaseOrder {
 function fromApi(o: ApiPurchaseOrder): PurchaseOrder {
   const payments = (o.payments ?? []).map((p) => ({
     id: p.id,
+    // An older API sends no paymentId: treat the share as its own payment.
+    paymentId: p.paymentId ?? p.id,
     amount: toNumber(p.amount) ?? 0,
     date: p.payment.paymentDate.slice(0, 10),
     method: p.payment.method,
@@ -327,6 +335,7 @@ function fromApi(o: ApiPurchaseOrder): PurchaseOrder {
       receivedValue: toNumber(l.receivedValue) ?? 0,
       receivedQuantity: toNumber(l.receivedQuantity) ?? 0,
       extraQuantity: toNumber(l.extraQuantity) ?? 0,
+      damagedQuantity: toNumber(l.damagedQuantity) ?? 0,
     })),
   };
 }
@@ -367,6 +376,7 @@ export interface PurchaseOrderReceipt {
     lineId: string;
     receivedQuantity: number;
     extraQuantity: number;
+    damagedQuantity: number;
     lotNumber: string | null;
     manufactureDate: string | null;
     expiryDate: string | null;
@@ -411,6 +421,7 @@ export function usePurchaseOrders() {
           lineId: l.lineId,
           receivedQuantity: String(l.receivedQuantity),
           extraQuantity: String(l.extraQuantity),
+          damagedQuantity: String(l.damagedQuantity),
           lotNumber: l.lotNumber,
           manufactureDate: l.manufactureDate,
           expiryDate: l.expiryDate,

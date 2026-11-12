@@ -1,5 +1,6 @@
 'use client';
 
+import { useCrumbs } from '@/hooks/inventory/useCrumbs';
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { CancelPurchaseOrderModal } from '@/components/organisms/inventory/CancelPurchaseOrderModal';
@@ -14,6 +15,8 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
 interface PurchaseOrdersManagerProps {
+  /** Name of the page this table sits on, so the page it opens can link back to it. */
+  sourceLabel?: string;
   /** The orders to list; the Purchase Orders page passes all of them, a supplier's page its own. */
   purchaseOrders: PurchaseOrder[];
   isLoading?: boolean;
@@ -27,11 +30,13 @@ interface PurchaseOrdersManagerProps {
  */
 export function PurchaseOrdersManager({
   purchaseOrders,
+  sourceLabel,
   isLoading,
   actionButton,
   hideSupplier,
 }: PurchaseOrdersManagerProps) {
   const router = useRouter();
+  const { link } = useCrumbs();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [receiveId, setReceiveId] = useState<string | null>(null);
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
@@ -65,9 +70,10 @@ export function PurchaseOrdersManager({
         onCloseOrder={setCloseTarget}
         onApprove={canApprove ? approve : undefined}
         onReject={canApprove ? setRejectTarget : undefined}
-        onRowClick={(o) =>
-          router.push(`/${tenantSlug}/operations/inventory/purchase-orders/${o.id}`)
-        }
+        onRowClick={(o) => {
+          const href = `/${tenantSlug}/operations/inventory/purchase-orders/${o.id}`;
+          router.push(sourceLabel ? link(href, sourceLabel) : href);
+        }}
       />
       <RecordInvoicePanel
         key={`invoice-${invoiceTarget?.id ?? 'none'}`}

@@ -333,6 +333,27 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
   // Batches of a line's item still holding stock at the source warehouse (and under its variant).
   // An increase can top up any batch at the warehouse, even a used-up one.
   const addsStock = isAdjustment && adjustmentType === 'INCREASE';
+  const destinationWarehouseId = useWatch({ control, name: 'toWarehouseId' });
+
+  // Warns, without blocking, when a warehouse would hold more of an item than the item's maximum
+  // stock (which is set per warehouse). Stock in, increases and transfers add to a warehouse.
+  const receivingWarehouseId = isTransfer
+    ? destinationWarehouseId
+    : type === 'STOCK_IN' || addsStock
+      ? sourceWarehouseId
+      : '';
+  const maxWarning = (l: LineRow) => {
+    if (!l.itemId || !receivingWarehouseId) return undefined;
+    const max = items.find((i) => i.id === l.itemId)?.maxStock;
+    if (max == null) return undefined;
+    const adding = lines.reduce((sum, x) => (x.itemId === l.itemId ? sum + x.quantity : sum), 0);
+    const would = stockAt(l.itemId, receivingWarehouseId) + adding;
+    if (would <= max) return undefined;
+    // const name = warehouses.find((w) => w.id === receivingWarehouseId)?.name ?? 'The warehouse';
+    const n = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    return `Maximum of ${n(max)}`;
+    // return `${name} would hold ${n(would)}, above its maximum of ${n(max)}`;
+  };
   const lotsFor = (l: LineRow) =>
     lots.filter(
       (x) =>
@@ -911,6 +932,9 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                         />
                         {drawsStock && line.itemId && sourceWarehouseId && !stockError(line) && (
                           <span className="text-xs text-gray-500">Max: {maxFor(line)}</span>
+                        )}
+                        {maxWarning(line) && (
+                          <span className="text-xs text-amber-600">{maxWarning(line)}</span>
                         )}
                       </div>
                       <NumberField
