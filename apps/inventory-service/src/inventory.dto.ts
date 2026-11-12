@@ -8,6 +8,7 @@ import {
   IsDateString,
   IsDecimal,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -837,4 +838,13 @@ export class SupplierPaymentDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentAllocationDto)
   allocations!: PaymentAllocationDto[];
+}
+
+export class RejectionDto {
+  @ApiProperty({ maxLength: 500 })
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason!: string;
 }

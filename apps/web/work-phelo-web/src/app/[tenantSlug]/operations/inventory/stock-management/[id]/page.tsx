@@ -36,6 +36,8 @@ import {
   useMovementActions,
 } from '@/hooks/inventory/useMovementActions';
 import { Button } from '@/components/atoms/Button';
+import { useMovementReview } from '@/hooks/inventory/useMovementReview';
+import { useUserNames } from '@/hooks/inventory/useUserNames';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
 import { useAdjustmentReasons } from '@/hooks/inventory/useAdjustmentReasons';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
@@ -53,7 +55,9 @@ type LineRow = StockMovementLine & {
 
 /** How a line changes the item's total stock. */
 function lineChange(m: StockMovement, line: StockMovementLine): number {
-  if (m.kind || m.status === 'CANCELLED') return 0; // a price adjustment, or stock put back
+  // A price adjustment, stock put back, or a movement not approved yet: stock is unchanged.
+  if (m.kind || m.status === 'CANCELLED' || m.status === 'PENDING' || m.status === 'REJECTED')
+    return 0;
   if (m.type === 'STOCK_IN') return line.quantity;
   if (m.type === 'STOCK_OUT') return -line.quantity;
   if (m.type === 'ADJUSTMENT') return line.quantity; // already signed
@@ -84,6 +88,8 @@ export default function StockMovementDetailsPage({
     });
 
   const movement = movements.find((m) => m.id === id);
+  const userName = useUserNames();
+  const review = useMovementReview();
 
   const warehouseName = (wid: string | null) =>
     wid ? (warehouses.find((w) => w.id === wid)?.name ?? '—') : null;
@@ -243,6 +249,21 @@ export default function StockMovementDetailsPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold text-gray-900">{movement.reference}</h1>
           <div className="flex items-center gap-3">
+            {review.canReview(movement) && (
+              <>
+                <Button
+                  size="xs"
+                  onClick={() => review.approve(movement)}
+                  isLoading={review.isApproving}
+                  loadingText="Approving..."
+                >
+                  Approve
+                </Button>
+                <Button size="xs" variant="outline" onClick={() => review.requestReject(movement)}>
+                  Reject
+                </Button>
+              </>
+            )}
             {canReverse(movement) && (
               <Button size="xs" variant="danger" onClick={() => requestReverse(movement)}>
                 Reverse Transaction
@@ -317,6 +338,25 @@ export default function StockMovementDetailsPage({
               label="Total Value"
               value={formatInventoryValue(getMovementValue(movement))}
             />
+            <DetailField
+              label="Created By"
+              value={movement.status === 'DRAFT' ? '—' : userName(movement.createdBy)}
+            />
+            {movement.status === 'REJECTED' ? (
+              <>
+                <DetailField label="Rejected By" value={userName(movement.rejectedBy)} />
+                <DetailField label="Reason" value={movement.rejectionReason || '—'} />
+              </>
+            ) : (
+              <DetailField
+                label="Approved By"
+                value={
+                  movement.status === 'PENDING' || movement.status === 'DRAFT'
+                    ? 'Awaiting approval'
+                    : userName(movement.approvedBy)
+                }
+              />
+            )}
             <DetailField label="Notes" value={movement.notes || '—'} />
           </div>
         </CollapsibleOverview>
@@ -353,6 +393,7 @@ export default function StockMovementDetailsPage({
         </div>
       </div>
       {modals}
+      {review.modals}
     </>
   );
 }

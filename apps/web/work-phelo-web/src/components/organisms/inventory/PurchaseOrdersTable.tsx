@@ -11,6 +11,7 @@ import {
   purchaseOrderAmountOwed,
   purchaseOrderQuantity,
   purchaseOrderValue,
+  canApproveOrder,
   canCancelOrder,
   canCloseOrder,
   canReceive,
@@ -29,6 +30,8 @@ interface PurchaseOrdersTableProps {
   onReceive?: (order: PurchaseOrder) => void;
   onCancel?: (order: PurchaseOrder) => void;
   onCloseOrder?: (order: PurchaseOrder) => void;
+  onApprove?: (order: PurchaseOrder) => void;
+  onReject?: (order: PurchaseOrder) => void;
   /** Called when a row is selected, e.g. to open the order's details page. */
   onRowClick?: (order: PurchaseOrder) => void;
   /** Leave the Supplier column out, when every order is from one supplier. */
@@ -45,6 +48,8 @@ export function PurchaseOrdersTable({
   onReceive,
   onCancel,
   onCloseOrder,
+  onApprove,
+  onReject,
   onRowClick,
   hideSupplier,
 }: PurchaseOrdersTableProps) {
@@ -207,6 +212,12 @@ export function PurchaseOrdersTable({
         </div>
       }
       rowActions={(row) => [
+        ...(canApproveOrder(row) && onApprove
+          ? [{ label: 'Approve', onClick: () => onApprove(row) }]
+          : []),
+        ...(canApproveOrder(row) && onReject
+          ? [{ label: 'Reject', danger: true, onClick: () => onReject(row) }]
+          : []),
         ...(canReceive(row) && onReceive
           ? [{ label: 'Receive Items', onClick: () => onReceive(row) }]
           : []),

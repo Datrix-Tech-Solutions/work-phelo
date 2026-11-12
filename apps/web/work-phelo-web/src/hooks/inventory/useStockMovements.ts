@@ -5,11 +5,19 @@ import { useDeletedMovementStore } from '@/hooks/inventory/useDeletedMovements';
 import { revaluationToMovement, useRevaluationStore } from '@/hooks/inventory/useStockRevaluations';
 import { useReversedMovementStore } from '@/hooks/inventory/useReversedMovements';
 import { inventoryApi, inventoryKeys, toDecimal, toNumber } from '@/hooks/inventory/inventoryApi';
+import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
 
 export type StockMovementType = 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'ADJUSTMENT';
 /** DRAFT movements exist in this browser only; the service has no draft stage. */
 /** REVERSED is recorded in this browser only; see useReversedMovements. */
-export type StockMovementStatus = 'DRAFT' | 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'REVERSED';
+/** PENDING and REJECTED are movements waiting for, or refused, approval: no stock has changed. */
+export type StockMovementStatus =
+  | 'DRAFT'
+  | 'PENDING'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'REVERSED'
+  | 'REJECTED';
 
 export interface StockMovementLine {
   itemId: string;
@@ -51,6 +59,12 @@ export interface StockMovement {
   /** Destination warehouse; null when stock leaves the business. */
   toWarehouseId: string | null;
   status: StockMovementStatus;
+  /** User ids: who recorded (or issued) the movement and who approved it. Unknown for drafts. */
+  createdBy?: string | null;
+  approvedBy?: string | null;
+  /** Rejected requests only. */
+  rejectedBy?: string | null;
+  rejectionReason?: string | null;
 }
 
 export type NewStockMovement = Omit<StockMovement, 'id' | 'reference' | 'status'> & {
@@ -99,6 +113,8 @@ interface ApiStockMovement {
   expiryDate: string | null;
   lotId: string | null;
   purchaseOrderLineId: string | null;
+  createdBy: string;
+  approvedBy: string | null;
 }
 
 export function getMovementQuantity(m: StockMovement): number {
@@ -156,6 +172,8 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
       reason: null,
       purpose: null,
       status: 'COMPLETED' as const,
+      createdBy: m.createdBy,
+      approvedBy: m.approvedBy,
     };
     if (type === 'TRANSFER' && m.transferId) {
       const existing = transfers.get(m.transferId);
@@ -218,11 +236,119 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
   return grouped;
 }
 
+type RequestKind = StockMovementType;
+
+interface ApiRequestLine {
+  itemId: string;
+  quantity: string;
+  variant?: string | null;
+  unitCost?: string | null;
+  lotId?: string | null;
+  lotNumber?: string | null;
+  manufactureDate?: string | null;
+  expiryDate?: string | null;
+}
+
+/** A movement waiting for approval (or rejected), as the service keeps it: the body it will post. */
+interface ApiMovementRequest {
+  id: string;
+  kind: RequestKind;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reference: string | null;
+  createdBy: string;
+  decidedBy: string | null;
+  rejectionReason: string | null;
+  payload: {
+    reference?: string | null;
+    notes?: string | null;
+    date?: string;
+    dateReceived?: string;
+    locationId?: string;
+    sourceLocationId?: string;
+    destinationLocationId?: string;
+    source?: string | null;
+    recipient?: string | null;
+    purpose?: string | null;
+    reason?: string | null;
+    type?: 'INCREASE' | 'DECREASE';
+    lines: ApiRequestLine[];
+  };
+}
+
+/** Prices a request's lines would be valued at once posted, where the request doesn't say. */
+type PriceOf = (itemId: string, kind: RequestKind) => number | null;
+
+function requestToMovement(r: ApiMovementRequest, priceOf: PriceOf): StockMovement {
+  const { payload: p, kind } = r;
+  const decrease = kind === 'ADJUSTMENT' && p.type === 'DECREASE';
+  const lines = p.lines.map((l) => ({
+    itemId: l.itemId,
+    quantity: decrease ? -(toNumber(l.quantity) ?? 0) : (toNumber(l.quantity) ?? 0),
+    unitCost: toNumber(l.unitCost) ?? priceOf(l.itemId, kind),
+    variant: l.variant ?? null,
+    lotNumber: l.lotNumber ?? null,
+    manufactureDate: l.manufactureDate ?? null,
+    expiryDate: l.expiryDate ?? null,
+    lotId: l.lotId ?? null,
+  }));
+  const reference = r.reference ?? `${REFERENCE_PREFIX[kind]}-${r.id.slice(0, 8).toUpperCase()}`;
+  return {
+    id: r.id,
+    reference,
+    date: p.dateReceived ?? p.date ?? '',
+    type: kind,
+    lines,
+    fromWarehouseId:
+      kind === 'STOCK_OUT'
+        ? (p.locationId ?? null)
+        : kind === 'TRANSFER'
+          ? (p.sourceLocationId ?? null)
+          : decrease
+            ? (p.locationId ?? null)
+            : null,
+    toWarehouseId:
+      kind === 'STOCK_IN'
+        ? (p.locationId ?? null)
+        : kind === 'TRANSFER'
+          ? (p.destinationLocationId ?? null)
+          : kind === 'ADJUSTMENT' && !decrease
+            ? (p.locationId ?? null)
+            : null,
+    source:
+      kind === 'STOCK_IN'
+        ? (p.source ?? null)
+        : kind === 'STOCK_OUT'
+          ? (p.recipient ?? null)
+          : null,
+    notes: p.notes ?? null,
+    reason: kind === 'ADJUSTMENT' ? (p.reason ?? null) : null,
+    purpose: kind === 'STOCK_OUT' ? (p.purpose ?? null) : null,
+    status: r.status === 'REJECTED' ? 'REJECTED' : 'PENDING',
+    createdBy: r.createdBy,
+    approvedBy: null,
+    rejectedBy: r.status === 'REJECTED' ? r.decidedBy : null,
+    rejectionReason: r.rejectionReason,
+  };
+}
+
 export function useStockMovements() {
   const { data, isLoading } = useQuery({
     queryKey: inventoryKeys.movements,
     queryFn: () => inventoryApi.get<ApiStockMovement[]>('/stock-movements'),
   });
+  const { data: requests, isLoading: isLoadingRequests } = useQuery({
+    queryKey: inventoryKeys.movementRequests,
+    queryFn: () => inventoryApi.get<ApiMovementRequest[]>('/stock-movement-requests'),
+  });
+  const { items } = useInventoryItems();
+  const pending = useMemo(() => {
+    const priceOf: PriceOf = (itemId, kind) => {
+      const item = items.find((i) => i.id === itemId);
+      // Issues are valued at selling price; transfers and adjustments at cost.
+      return (kind === 'STOCK_OUT' ? item?.sellingPrice : item?.costPrice) ?? null;
+    };
+    return (requests ?? []).map((r) => requestToMovement(r, priceOf));
+  }, [requests, items]);
   // The service returns newest first.
   const reversedIds = useReversedMovementStore((s) => s.ids);
   const cancelledIds = useCancelledMovementStore((s) => s.ids);
@@ -231,22 +357,38 @@ export function useStockMovements() {
   const movements = useMemo(
     () =>
       [
+        ...pending,
         ...revaluations.map(revaluationToMovement),
         ...toMovements(data ?? []).map((m) => {
           if (cancelledIds.includes(m.id)) return { ...m, status: 'CANCELLED' as const };
           return reversedIds.includes(m.id) ? { ...m, status: 'REVERSED' as const } : m;
         }),
       ].filter((m) => !deletedIds.includes(m.id)),
-    [data, reversedIds, cancelledIds, revaluations, deletedIds],
+    [data, pending, reversedIds, cancelledIds, revaluations, deletedIds],
   );
-  return { movements, isLoading };
+  return { movements, isLoading: isLoading || isLoadingRequests };
 }
+
+/** Where the service takes each kind of movement as a request for approval. */
+const REQUEST_PATH: Record<string, string> = {
+  '/stock-in-batches': '/stock-movement-requests/stock-in',
+  '/stock-out-batches': '/stock-movement-requests/stock-out',
+  '/stock-transfer-batches': '/stock-movement-requests/transfer',
+  '/stock-adjustment-batches': '/stock-movement-requests/adjustment',
+};
 
 /**
  * Posts a movement as one batch request: every item is saved together under a shared batchId, or
- * none is, so a failure part-way never leaves half a movement behind.
+ * none is, so a failure part-way never leaves half a movement behind. It changes stock at once;
+ * new movements go through submitMovement instead, so that they are approved first.
  */
 function postMovement(movement: NewStockMovement) {
+  const { path, body } = movementBody(movement);
+  return inventoryApi.post<{ batchId: string }>(path, body);
+}
+
+/** The service endpoint and body for a movement. */
+function movementBody(movement: NewStockMovement): { path: string; body: object } {
   const common = {
     reference: movement.reference?.trim() || null,
     notes: movement.notes,
@@ -260,71 +402,101 @@ function postMovement(movement: NewStockMovement) {
   const lotLines = lines.map((l, i) => ({ ...l, lotId: movement.lines[i].lotId || null }));
   if (movement.type === 'STOCK_IN') {
     if (!movement.toWarehouseId) throw new Error('Choose a warehouse to receive the stock.');
-    return inventoryApi.post<{ batchId: string }>('/stock-in-batches', {
-      ...common,
-      locationId: movement.toWarehouseId,
-      dateReceived: movement.date,
-      source: movement.source,
-      lines: movement.lines.map((l, i) => ({
-        ...lines[i],
-        unitCost: toDecimal(l.unitCost),
-        // Stock coming back (a reversed issue) is added to the batch it left; new stock names its own.
-        ...(l.lotId
-          ? { lotId: l.lotId }
-          : {
-              lotNumber: l.lotNumber?.trim() || null,
-              manufactureDate: l.manufactureDate || null,
-              expiryDate: l.expiryDate || null,
-            }),
-      })),
-    });
+    return {
+      path: '/stock-in-batches',
+      body: {
+        ...common,
+        locationId: movement.toWarehouseId,
+        dateReceived: movement.date,
+        source: movement.source,
+        lines: movement.lines.map((l, i) => ({
+          ...lines[i],
+          unitCost: toDecimal(l.unitCost),
+          // Stock coming back (a reversed issue) is added to the batch it left; new stock names its own.
+          ...(l.lotId
+            ? { lotId: l.lotId }
+            : {
+                lotNumber: l.lotNumber?.trim() || null,
+                manufactureDate: l.manufactureDate || null,
+                expiryDate: l.expiryDate || null,
+              }),
+        })),
+      },
+    };
   }
   if (movement.type === 'STOCK_OUT') {
     if (!movement.fromWarehouseId) throw new Error('Choose a warehouse to issue stock from.');
     if (!movement.purpose) throw new Error('Choose a purpose for this issue.');
-    return inventoryApi.post<{ batchId: string }>('/stock-out-batches', {
-      ...common,
-      locationId: movement.fromWarehouseId,
-      date: movement.date,
-      purpose: movement.purpose,
-      recipient: movement.source,
-      lines: lotLines,
-    });
+    return {
+      path: '/stock-out-batches',
+      body: {
+        ...common,
+        locationId: movement.fromWarehouseId,
+        date: movement.date,
+        purpose: movement.purpose,
+        recipient: movement.source,
+        lines: lotLines,
+      },
+    };
   }
   if (movement.type === 'TRANSFER') {
     if (!movement.fromWarehouseId || !movement.toWarehouseId)
       throw new Error('Choose the warehouses to transfer between.');
-    return inventoryApi.post<{ batchId: string }>('/stock-transfer-batches', {
-      ...common,
-      sourceLocationId: movement.fromWarehouseId,
-      destinationLocationId: movement.toWarehouseId,
-      date: movement.date,
-      lines: lotLines,
-    });
+    return {
+      path: '/stock-transfer-batches',
+      body: {
+        ...common,
+        sourceLocationId: movement.fromWarehouseId,
+        destinationLocationId: movement.toWarehouseId,
+        date: movement.date,
+        lines: lotLines,
+      },
+    };
   }
   // One adjustment is all increases or all decreases (the form has a single type).
   const decrease = movement.lines.some((l) => l.quantity < 0);
   const locationId = decrease ? movement.fromWarehouseId : movement.toWarehouseId;
   if (!locationId) throw new Error('Choose a warehouse to adjust.');
   if (!movement.reason) throw new Error('Choose a reason for this adjustment.');
-  return inventoryApi.post<{ batchId: string }>('/stock-adjustment-batches', {
-    ...common,
-    locationId,
-    type: decrease ? 'DECREASE' : 'INCREASE',
-    reason: movement.reason,
-    date: movement.date,
-    lines: lotLines,
-  });
+  return {
+    path: '/stock-adjustment-batches',
+    body: {
+      ...common,
+      locationId,
+      type: decrease ? 'DECREASE' : 'INCREASE',
+      reason: movement.reason,
+      date: movement.date,
+      lines: lotLines,
+    },
+  };
 }
 
+const refreshStock = (queryClient: ReturnType<typeof useQueryClient>) => {
+  for (const key of [
+    inventoryKeys.movements,
+    inventoryKeys.movementRequests,
+    inventoryKeys.balances,
+    inventoryKeys.variantBalances,
+    inventoryKeys.lots,
+    inventoryKeys.variants,
+  ])
+    queryClient.invalidateQueries({ queryKey: key });
+};
+
+/**
+ * Saves a movement for approval. Stock does not change until it is approved, so a movement can be
+ * checked before it takes effect. Resolves to the id of the request.
+ */
 export function useCreateStockMovement() {
   const queryClient = useQueryClient();
   const m = useMutation({
     mutationFn: async (movement: NewStockMovement) => {
-      await postMovement(movement);
+      const { path, body } = movementBody(movement);
+      const request = await inventoryApi.post<{ id: string }>(REQUEST_PATH[path], body);
+      return request.id;
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: inventoryKeys.movements });
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.movementRequests });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.balances });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.variantBalances });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.lots });
@@ -403,4 +575,25 @@ export function useReturnMovementStock() {
     },
   });
   return { returnStock: m.mutateAsync, isPending: m.isPending };
+}
+
+/** Approves or rejects a movement waiting for approval. Approving posts it to stock. */
+export function useMovementApproval() {
+  const queryClient = useQueryClient();
+  const approve = useMutation({
+    mutationFn: (id: string) =>
+      inventoryApi.post<{ batchId: string }>(`/stock-movement-requests/${id}/approve`, {}),
+    onSettled: () => refreshStock(queryClient),
+  });
+  const reject = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      inventoryApi.post(`/stock-movement-requests/${id}/reject`, { reason }),
+    onSettled: () => refreshStock(queryClient),
+  });
+  return {
+    approveMovement: approve.mutateAsync,
+    isApproving: approve.isPending,
+    rejectMovement: (id: string, reason: string) => reject.mutateAsync({ id, reason }),
+    isRejecting: reject.isPending,
+  };
 }

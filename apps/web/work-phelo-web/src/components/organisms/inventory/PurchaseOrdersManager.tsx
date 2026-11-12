@@ -6,7 +6,11 @@ import { CancelPurchaseOrderModal } from '@/components/organisms/inventory/Cance
 import { ClosePurchaseOrderModal } from '@/components/organisms/inventory/ClosePurchaseOrderModal';
 import { PurchaseOrdersTable } from '@/components/organisms/inventory/PurchaseOrdersTable';
 import { ReceivePurchaseOrderPanel } from '@/components/organisms/inventory/ReceivePurchaseOrderPanel';
-import type { PurchaseOrder } from '@/hooks/inventory/usePurchaseOrders';
+import { RejectPurchaseOrderModal } from '@/components/organisms/inventory/RejectPurchaseOrderModal';
+import { useCanApprove } from '@/hooks/inventory/useApprovalAccess';
+import { usePurchaseOrders, type PurchaseOrder } from '@/hooks/inventory/usePurchaseOrders';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 interface PurchaseOrdersManagerProps {
   /** The orders to list; the Purchase Orders page passes all of them, a supplier's page its own. */
@@ -31,6 +35,18 @@ export function PurchaseOrdersManager({
   const [receiveId, setReceiveId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<PurchaseOrder | null>(null);
   const [closeTarget, setCloseTarget] = useState<PurchaseOrder | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<PurchaseOrder | null>(null);
+  const toast = useToast();
+  const canApprove = useCanApprove('PURCHASE_ORDER');
+  const { approvePurchaseOrder } = usePurchaseOrders();
+  const approve = async (order: PurchaseOrder) => {
+    try {
+      await approvePurchaseOrder(order.id);
+      toast.success('Purchase order approved');
+    } catch (err) {
+      toast.error(extractError(err, 'Could not approve the order'));
+    }
+  };
   const receiveTarget = purchaseOrders.find((o) => o.id === receiveId) ?? null;
 
   return (
@@ -43,6 +59,8 @@ export function PurchaseOrdersManager({
         onReceive={(o) => setReceiveId(o.id)}
         onCancel={setCancelTarget}
         onCloseOrder={setCloseTarget}
+        onApprove={canApprove ? approve : undefined}
+        onReject={canApprove ? setRejectTarget : undefined}
         onRowClick={(o) =>
           router.push(`/${tenantSlug}/operations/inventory/purchase-orders/${o.id}`)
         }
@@ -53,6 +71,7 @@ export function PurchaseOrdersManager({
         onClose={() => setReceiveId(null)}
       />
       <ClosePurchaseOrderModal order={closeTarget} onClose={() => setCloseTarget(null)} />
+      <RejectPurchaseOrderModal order={rejectTarget} onClose={() => setRejectTarget(null)} />
       <CancelPurchaseOrderModal order={cancelTarget} onClose={() => setCancelTarget(null)} />
     </>
   );

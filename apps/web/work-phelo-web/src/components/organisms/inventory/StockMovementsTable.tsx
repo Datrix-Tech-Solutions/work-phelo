@@ -24,6 +24,8 @@ import {
   canReverse,
   useMovementActions,
 } from '@/hooks/inventory/useMovementActions';
+import { useMovementReview } from '@/hooks/inventory/useMovementReview';
+import { useUserNames } from '@/hooks/inventory/useUserNames';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 
@@ -63,6 +65,8 @@ export function StockMovementsTable({
     requestDeleteDraft,
     modals,
   } = useMovementActions();
+  const { canReview, approve, requestReject, modals: reviewModals } = useMovementReview();
+  const userName = useUserNames();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [typeValue, setTypeValue] = useState('');
@@ -111,6 +115,11 @@ export function StockMovementsTable({
   ];
   const variantsLabel = (m: StockMovement) =>
     [...new Set(m.lines.map((l) => l.variant).filter(Boolean))].join(', ');
+
+  const hasOut = movements.some((m) => m.type === 'STOCK_OUT');
+  const hasOther = movements.some((m) => m.type !== 'STOCK_OUT');
+  const recordedByLabel =
+    hasOut && hasOther ? 'Recorded / Issued By' : hasOut ? 'Issued By' : 'Recorded By';
 
   const columns: Column<StockMovement>[] = [
     {
@@ -199,9 +208,21 @@ export function StockMovementsTable({
       ),
     },
     {
+      key: 'recordedBy',
+      // Stock is issued out and recorded in; a table with both says so.
+      label: recordedByLabel,
+      width: 'minmax(110px, 1fr)',
+      className: 'overflow-hidden min-w-0 pr-4',
+      render: (row) => (
+        <span className="text-sm font-semibold text-gray-500 block truncate">
+          {row.status === 'DRAFT' ? '—' : userName(row.createdBy)}
+        </span>
+      ),
+    },
+    {
       key: 'status',
       label: 'Status',
-      width: '100px',
+      width: '120px',
       render: (row) => {
         const { label, variant } = MOVEMENT_STATUS_BADGE[row.status];
         return <Badge variant={variant} label={label} />;
@@ -271,6 +292,12 @@ export function StockMovementsTable({
                 { label: 'Delete', danger: true, onClick: () => requestDeleteDraft(row) },
               ]
             : [
+                ...(canReview(row)
+                  ? [
+                      { label: 'Approve', onClick: () => approve(row) },
+                      { label: 'Reject', danger: true, onClick: () => requestReject(row) },
+                    ]
+                  : []),
                 ...(canReverse(row)
                   ? [
                       {
@@ -301,6 +328,7 @@ export function StockMovementsTable({
         noInternalScroll
       />
       {modals}
+      {reviewModals}
     </>
   );
 }

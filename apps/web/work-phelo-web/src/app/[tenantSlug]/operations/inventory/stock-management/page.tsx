@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
 import { StockMovementTypeModal } from '@/components/organisms/inventory/StockMovementTypeModal';
 import { StockMovementPanel } from '@/components/organisms/inventory/StockMovementPanel';
@@ -11,10 +12,20 @@ import {
   type StockMovementDraft,
 } from '@/hooks/inventory/useStockMovementDrafts';
 
-export default function StockManagementPage() {
+function StockManagementInner() {
   const [typePickerOpen, setTypePickerOpen] = useState(false);
-  const [movementType, setMovementType] = useState<StockMovementType | null>(null);
+  // The dashboard's stock shortcuts arrive with ?type=STOCK_IN (or STOCK_OUT, TRANSFER, ADJUSTMENT).
+  const linkedType = useSearchParams().get('type');
+  const [movementType, setMovementType] = useState<StockMovementType | null>(
+    linkedType === 'STOCK_IN' ||
+      linkedType === 'STOCK_OUT' ||
+      linkedType === 'TRANSFER' ||
+      linkedType === 'ADJUSTMENT'
+      ? linkedType
+      : null,
+  );
   const { movements, isLoading } = useStockMovements();
+
   const { drafts, draftMovements } = useStockMovementDrafts();
   const [activeDraft, setActiveDraft] = useState<StockMovementDraft | null>(null);
   const closePanel = () => {
@@ -81,5 +92,13 @@ export default function StockManagementPage() {
         draft={activeDraft?.type === 'ADJUSTMENT' ? activeDraft : null}
       />
     </>
+  );
+}
+
+export default function StockManagementPage() {
+  return (
+    <Suspense>
+      <StockManagementInner />
+    </Suspense>
   );
 }

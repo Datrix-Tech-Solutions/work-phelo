@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -19,7 +20,7 @@ import { ModuleGuard } from './auth/guards/module.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { RequireModule } from './auth/decorators/module.decorator';
 import { RequireAnyPermission, RequirePermissions } from './auth/decorators/permissions.decorator';
-import { StockMovementType } from '../prisma/generated/client';
+import { StockMovementRequestKind, StockMovementType } from '../prisma/generated/client';
 import { InventoryService } from './inventory.service';
 import {
   CategoryDto,
@@ -31,6 +32,7 @@ import {
   ItemDto,
   BulkImportItemsDto,
   SupplierPaymentDto,
+  RejectionDto,
   UpdateItemDto,
   StockInDto,
   PurchaseOrderDto,
@@ -493,6 +495,23 @@ export class PurchaseOrdersController {
   ) {
     return this.service.receivePurchaseOrder(req.user.tenantId, req.user.id, id, dto);
   }
+  // Approving needs the resource's EDIT permission, which keeps it apart from placing an order.
+  @Post(':id/approve')
+  @HttpCode(200)
+  @RequirePermissions('operations.inventory.stock-in:EDIT')
+  approve(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.approvePurchaseOrder(req.user.tenantId, req.user.id, id);
+  }
+  @Post(':id/reject')
+  @HttpCode(200)
+  @RequirePermissions('operations.inventory.stock-in:EDIT')
+  reject(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectionDto,
+  ) {
+    return this.service.rejectPurchaseOrder(req.user.tenantId, req.user.id, id, dto.reason);
+  }
   @Post(':id/cancel')
   @HttpCode(200)
   @RequirePermissions('operations.inventory.stock-in:CREATE')
@@ -518,5 +537,95 @@ export class SupplierPaymentsController {
   @RequirePermissions('operations.inventory.stock-in:CREATE')
   create(@Req() req: UserRequest, @Body() dto: SupplierPaymentDto) {
     return this.service.createSupplierPayment(req.user.tenantId, req.user.id, dto);
+  }
+}
+
+const REQUEST_RESOURCE: Record<StockMovementRequestKind, string> = {
+  STOCK_IN: 'operations.inventory.stock-in',
+  STOCK_OUT: 'operations.inventory.stock-out',
+  TRANSFER: 'operations.inventory.transfers',
+  ADJUSTMENT: 'operations.inventory.adjustments',
+};
+
+const isAdmin = (user: RequestUser) => user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN';
+const can = (user: RequestUser, permission: string) =>
+  isAdmin(user) || new Set(user.permissions).has(permission);
+
+@ApiTags('Inventory - Stock movement approvals')
+@ApiBearerAuth('access-token')
+@Controller('stock-movement-requests')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class StockMovementRequestsController {
+  constructor(private readonly service: InventoryService) {}
+  @Get()
+  @RequireAnyPermission(
+    'operations.inventory.stock-in:VIEW',
+    'operations.inventory.stock-out:VIEW',
+    'operations.inventory.transfers:VIEW',
+    'operations.inventory.adjustments:VIEW',
+  )
+  list(@Req() req: UserRequest) {
+    const kinds = (Object.keys(REQUEST_RESOURCE) as StockMovementRequestKind[]).filter((k) =>
+      can(req.user, `${REQUEST_RESOURCE[k]}:VIEW`),
+    );
+    return this.service.listMovementRequests(
+      req.user.tenantId,
+      isAdmin(req.user) ? undefined : kinds,
+    );
+  }
+  @Post('stock-in')
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  stockIn(@Req() req: UserRequest, @Body() dto: StockInBatchDto) {
+    return this.service.submitMovementRequest(req.user.tenantId, req.user.id, 'STOCK_IN', dto);
+  }
+  @Post('stock-out')
+  @RequirePermissions('operations.inventory.stock-out:CREATE')
+  stockOut(@Req() req: UserRequest, @Body() dto: StockOutBatchDto) {
+    return this.service.submitMovementRequest(req.user.tenantId, req.user.id, 'STOCK_OUT', dto);
+  }
+  @Post('transfer')
+  @RequirePermissions('operations.inventory.transfers:CREATE')
+  transfer(@Req() req: UserRequest, @Body() dto: StockTransferBatchDto) {
+    return this.service.submitMovementRequest(req.user.tenantId, req.user.id, 'TRANSFER', dto);
+  }
+  @Post('adjustment')
+  @RequirePermissions('operations.inventory.adjustments:CREATE')
+  adjustment(@Req() req: UserRequest, @Body() dto: StockAdjustmentBatchDto) {
+    return this.service.submitMovementRequest(req.user.tenantId, req.user.id, 'ADJUSTMENT', dto);
+  }
+  // Approving needs the EDIT permission of the kind of movement, apart from creating one.
+  private async requireApprover(req: UserRequest, id: string) {
+    const request = await this.service.getMovementRequest(req.user.tenantId, id);
+    if (!can(req.user, `${REQUEST_RESOURCE[request.kind]}:EDIT`))
+      throw new ForbiddenException('You do not have permission to approve this');
+  }
+  @Post(':id/approve')
+  @HttpCode(200)
+  @RequireAnyPermission(
+    'operations.inventory.stock-in:EDIT',
+    'operations.inventory.stock-out:EDIT',
+    'operations.inventory.transfers:EDIT',
+    'operations.inventory.adjustments:EDIT',
+  )
+  async approve(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await this.requireApprover(req, id);
+    return this.service.approveMovementRequest(req.user.tenantId, req.user.id, id);
+  }
+  @Post(':id/reject')
+  @HttpCode(200)
+  @RequireAnyPermission(
+    'operations.inventory.stock-in:EDIT',
+    'operations.inventory.stock-out:EDIT',
+    'operations.inventory.transfers:EDIT',
+    'operations.inventory.adjustments:EDIT',
+  )
+  async reject(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectionDto,
+  ) {
+    await this.requireApprover(req, id);
+    return this.service.rejectMovementRequest(req.user.tenantId, req.user.id, id, dto.reason);
   }
 }
