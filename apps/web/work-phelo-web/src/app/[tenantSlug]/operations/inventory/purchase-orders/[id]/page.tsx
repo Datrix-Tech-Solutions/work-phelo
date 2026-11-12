@@ -12,13 +12,19 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
 import { SupplierPaymentPanel } from '@/components/organisms/inventory/SupplierPaymentPanel';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
+import { RejectPurchaseOrderModal } from '@/components/organisms/inventory/RejectPurchaseOrderModal';
 import { ClosePurchaseOrderModal } from '@/components/organisms/inventory/ClosePurchaseOrderModal';
 import { ReceivePurchaseOrderPanel } from '@/components/organisms/inventory/ReceivePurchaseOrderPanel';
+import { useCanApprove } from '@/hooks/inventory/useApprovalAccess';
+import { useUserNames } from '@/hooks/inventory/useUserNames';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
 import { useStockMovements } from '@/hooks/inventory/useStockMovements';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 import {
   PURCHASE_ORDER_STATUS_BADGE,
+  canApproveOrder,
   canCancelOrder,
   canCloseOrder,
   canPay,
@@ -44,17 +50,31 @@ export default function PurchaseOrderDetailsPage({
 }) {
   const { tenantSlug, id } = use(params);
   const base = `/${tenantSlug}/operations/inventory`;
-  const { purchaseOrders, isLoading } = usePurchaseOrders();
+  const { purchaseOrders, isLoading, approvePurchaseOrder, isApproving } = usePurchaseOrders();
   const { items } = useInventoryItems();
   const { warehouses } = useInventoryWarehouses();
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const toast = useToast();
+  const userName = useUserNames();
+  const canApprove = useCanApprove('PURCHASE_ORDER');
   const [tab, setTab] = useState('items');
   const { movements } = useStockMovements();
 
   const order = purchaseOrders.find((o) => o.id === id);
+
+  const approve = async () => {
+    if (!order) return;
+    try {
+      await approvePurchaseOrder(order.id);
+      toast.success('Purchase order approved');
+    } catch (err) {
+      toast.error(extractError(err, 'Could not approve the order'));
+    }
+  };
 
   // Stock ins posted when items were received against this order's lines.
   const receipts = useMemo(() => {
@@ -208,6 +228,21 @@ export default function PurchaseOrderDetailsPage({
             <Badge variant={variant} label={label} />
           </div>
           <div className="flex items-center gap-3">
+            {canApprove && canApproveOrder(order) && (
+              <>
+                <Button
+                  size="xs"
+                  onClick={approve}
+                  isLoading={isApproving}
+                  loadingText="Approving..."
+                >
+                  Approve
+                </Button>
+                <Button size="xs" variant="outline" onClick={() => setRejectOpen(true)}>
+                  Reject
+                </Button>
+              </>
+            )}
             {canReceive(order) && (
               <Button size="xs" variant="outline" onClick={() => setReceiveOpen(true)}>
                 Receive Items
@@ -269,6 +304,22 @@ export default function PurchaseOrderDetailsPage({
             {extraUnits > 0 && (
               <DetailField label="Free Extra Units" value={formatNumber(extraUnits)} />
             )}
+            <DetailField label="Created By" value={userName(order.createdBy)} />
+            {order.status === 'REJECTED' ? (
+              <>
+                <DetailField label="Rejected By" value={userName(order.rejectedBy)} />
+                <DetailField label="Reason" value={order.rejectionReason || '—'} />
+              </>
+            ) : (
+              <DetailField
+                label="Approved By"
+                value={
+                  order.status === 'PENDING_APPROVAL'
+                    ? 'Awaiting approval'
+                    : userName(order.approvedBy)
+                }
+              />
+            )}
             <DetailField label="Notes" value={order.notes || '—'} />
           </div>
         </CollapsibleOverview>
@@ -328,6 +379,10 @@ export default function PurchaseOrderDetailsPage({
       <ClosePurchaseOrderModal
         order={closeOpen ? order : null}
         onClose={() => setCloseOpen(false)}
+      />
+      <RejectPurchaseOrderModal
+        order={rejectOpen ? order : null}
+        onClose={() => setRejectOpen(false)}
       />
       <CancelPurchaseOrderModal
         order={cancelOpen ? order : null}

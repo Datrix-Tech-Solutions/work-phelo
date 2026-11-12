@@ -5,7 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { PartyKind, Prisma, StockLot, StockMovementType } from '../prisma/generated/client';
+import {
+  PartyKind,
+  Prisma,
+  StockLot,
+  StockMovementRequestKind,
+  StockMovementType,
+} from '../prisma/generated/client';
 import { PrismaService } from './prisma/prisma.service';
 import {
   ItemDto,
@@ -478,6 +484,7 @@ export class InventoryService {
   private batch<L extends { itemId: string }, R>(
     lines: L[],
     apply: (tx: Prisma.TransactionClient, line: L, batchId: string) => Promise<R>,
+    after?: (tx: Prisma.TransactionClient, batchId: string) => Promise<void>,
   ) {
     const batchId = randomUUID();
     const ordered = [...lines].sort((a, b) => a.itemId.localeCompare(b.itemId));
@@ -486,6 +493,8 @@ export class InventoryService {
         async (tx) => {
           const results: R[] = [];
           for (const line of ordered) results.push(await apply(tx, line, batchId));
+          // Runs in the same transaction, so it commits or rolls back with the movement.
+          if (after) await after(tx, batchId);
           return { batchId, results };
         },
         { timeout: 30_000, maxWait: 10_000 },
@@ -837,26 +846,34 @@ export class InventoryService {
       this.prisma.$transaction((tx) => this.stockInTx(tx, tenantId, userId, dto, null)),
     );
   }
-  stockInBatch(tenantId: string, userId: string, dto: StockInBatchDto) {
+  stockInBatch(
+    tenantId: string,
+    userId: string,
+    dto: StockInBatchDto,
+    after?: (tx: Prisma.TransactionClient, batchId: string) => Promise<void>,
+  ) {
     const { lines, ...header } = dto;
-    return this.batch(lines, (tx, line, batchId) =>
-      this.stockInTx(
-        tx,
-        tenantId,
-        userId,
-        {
-          ...header,
-          itemId: line.itemId,
-          quantity: line.quantity,
-          variant: line.variant,
-          unitCost: line.unitCost,
-          lotNumber: line.lotNumber,
-          manufactureDate: line.manufactureDate,
-          expiryDate: line.expiryDate,
-          lotId: line.lotId,
-        },
-        batchId,
-      ),
+    return this.batch(
+      lines,
+      (tx, line, batchId) =>
+        this.stockInTx(
+          tx,
+          tenantId,
+          userId,
+          {
+            ...header,
+            itemId: line.itemId,
+            quantity: line.quantity,
+            variant: line.variant,
+            unitCost: line.unitCost,
+            lotNumber: line.lotNumber,
+            manufactureDate: line.manufactureDate,
+            expiryDate: line.expiryDate,
+            lotId: line.lotId,
+          },
+          batchId,
+        ),
+      after,
     );
   }
   // ---- Purchase orders ----
@@ -943,6 +960,8 @@ export class InventoryService {
               locationId: dto.locationId,
               paymentTerms: dto.paymentTerms || null,
               notes: dto.notes || null,
+              // An order is placed for approval; nothing can be received against it until then.
+              status: 'PENDING_APPROVAL',
               createdBy: userId,
               lines: {
                 // tenantId is left out on purpose: a nested line takes it from the order.
@@ -979,6 +998,9 @@ export class InventoryService {
           const order = await this.lockPurchaseOrder(tx, tenantId, id);
           if (order.status === 'CANCELLED') throw new ConflictException('The order is cancelled');
           if (order.status === 'CLOSED') throw new ConflictException('The order is closed');
+          if (order.status === 'PENDING_APPROVAL')
+            throw new ConflictException('The order must be approved before it can be received');
+          if (order.status === 'REJECTED') throw new ConflictException('The order was rejected');
           if (order.status === 'RECEIVED')
             throw new ConflictException('The order has already been received in full');
           const batchId = randomUUID();
@@ -1056,11 +1078,47 @@ export class InventoryService {
         const order = await this.lockPurchaseOrder(tx, tenantId, id);
         if (order.status === 'CANCELLED')
           throw new ConflictException('The order is already cancelled');
+        if (order.status === 'REJECTED') throw new ConflictException('The order was rejected');
         if (order.lines.some((l) => l.receivedQuantity.gt(0) || l.extraQuantity.gt(0)))
           throw new ConflictException('An order that has received stock cannot be cancelled');
         return tx.purchaseOrder.update({
           where: { id: order.id },
           data: { status: 'CANCELLED' },
+          include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+        });
+      }),
+    );
+  }
+  /** Approves an order waiting for approval, so goods can be received against it. */
+  approvePurchaseOrder(tenantId: string, userId: string, id: string) {
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const order = await this.lockPurchaseOrder(tx, tenantId, id);
+        if (order.status !== 'PENDING_APPROVAL')
+          throw new ConflictException('Only an order waiting for approval can be approved');
+        return tx.purchaseOrder.update({
+          where: { id: order.id },
+          data: { status: 'ORDERED', approvedBy: userId, approvedAt: new Date() },
+          include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+        });
+      }),
+    );
+  }
+  /** Declines an order waiting for approval; it can no longer be received. */
+  rejectPurchaseOrder(tenantId: string, userId: string, id: string, reason: string) {
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const order = await this.lockPurchaseOrder(tx, tenantId, id);
+        if (order.status !== 'PENDING_APPROVAL')
+          throw new ConflictException('Only an order waiting for approval can be rejected');
+        return tx.purchaseOrder.update({
+          where: { id: order.id },
+          data: {
+            status: 'REJECTED',
+            rejectedBy: userId,
+            rejectedAt: new Date(),
+            rejectionReason: reason,
+          },
           include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
         });
       }),
@@ -1075,6 +1133,8 @@ export class InventoryService {
         if (order.status === 'CANCELLED') throw new ConflictException('The order is cancelled');
         if (order.status === 'RECEIVED')
           throw new ConflictException('The order has been received in full');
+        if (order.status === 'PENDING_APPROVAL' || order.status === 'REJECTED')
+          throw new ConflictException('The order has not been approved');
         if (order.status === 'ORDERED')
           throw new ConflictException('Nothing has been received on this order: cancel it instead');
         return tx.purchaseOrder.update({
@@ -1381,22 +1441,30 @@ export class InventoryService {
       this.prisma.$transaction((tx) => this.stockOutTx(tx, tenantId, userId, dto, null)),
     );
   }
-  stockOutBatch(tenantId: string, userId: string, dto: StockOutBatchDto) {
+  stockOutBatch(
+    tenantId: string,
+    userId: string,
+    dto: StockOutBatchDto,
+    after?: (tx: Prisma.TransactionClient, batchId: string) => Promise<void>,
+  ) {
     const { lines, ...header } = dto;
-    return this.batch(lines, (tx, line, batchId) =>
-      this.stockOutTx(
-        tx,
-        tenantId,
-        userId,
-        {
-          ...header,
-          itemId: line.itemId,
-          quantity: line.quantity,
-          variant: line.variant,
-          lotId: line.lotId,
-        },
-        batchId,
-      ),
+    return this.batch(
+      lines,
+      (tx, line, batchId) =>
+        this.stockOutTx(
+          tx,
+          tenantId,
+          userId,
+          {
+            ...header,
+            itemId: line.itemId,
+            quantity: line.quantity,
+            variant: line.variant,
+            lotId: line.lotId,
+          },
+          batchId,
+        ),
+      after,
     );
   }
   private async transferTx(
@@ -1523,22 +1591,30 @@ export class InventoryService {
       this.prisma.$transaction((tx) => this.transferTx(tx, tenantId, userId, dto, null)),
     );
   }
-  transferBatch(tenantId: string, userId: string, dto: StockTransferBatchDto) {
+  transferBatch(
+    tenantId: string,
+    userId: string,
+    dto: StockTransferBatchDto,
+    after?: (tx: Prisma.TransactionClient, batchId: string) => Promise<void>,
+  ) {
     const { lines, ...header } = dto;
-    return this.batch(lines, (tx, line, batchId) =>
-      this.transferTx(
-        tx,
-        tenantId,
-        userId,
-        {
-          ...header,
-          itemId: line.itemId,
-          quantity: line.quantity,
-          variant: line.variant,
-          lotId: line.lotId,
-        },
-        batchId,
-      ),
+    return this.batch(
+      lines,
+      (tx, line, batchId) =>
+        this.transferTx(
+          tx,
+          tenantId,
+          userId,
+          {
+            ...header,
+            itemId: line.itemId,
+            quantity: line.quantity,
+            variant: line.variant,
+            lotId: line.lotId,
+          },
+          batchId,
+        ),
+      after,
     );
   }
   private async adjustTx(
@@ -1643,22 +1719,30 @@ export class InventoryService {
       this.prisma.$transaction((tx) => this.adjustTx(tx, tenantId, userId, dto, null)),
     );
   }
-  adjustBatch(tenantId: string, userId: string, dto: StockAdjustmentBatchDto) {
+  adjustBatch(
+    tenantId: string,
+    userId: string,
+    dto: StockAdjustmentBatchDto,
+    after?: (tx: Prisma.TransactionClient, batchId: string) => Promise<void>,
+  ) {
     const { lines, ...header } = dto;
-    return this.batch(lines, (tx, line, batchId) =>
-      this.adjustTx(
-        tx,
-        tenantId,
-        userId,
-        {
-          ...header,
-          itemId: line.itemId,
-          quantity: line.quantity,
-          variant: line.variant,
-          lotId: line.lotId,
-        },
-        batchId,
-      ),
+    return this.batch(
+      lines,
+      (tx, line, batchId) =>
+        this.adjustTx(
+          tx,
+          tenantId,
+          userId,
+          {
+            ...header,
+            itemId: line.itemId,
+            quantity: line.quantity,
+            variant: line.variant,
+            lotId: line.lotId,
+          },
+          batchId,
+        ),
+      after,
     );
   }
   /**
@@ -1738,6 +1822,92 @@ export class InventoryService {
     if (status === StockBalanceStatus.OUT_OF_STOCK)
       return balances.filter((row) => row.isOutOfStock);
     return balances;
+  }
+  // ---- Movement approvals ----
+  /** Saves a movement for approval. Nothing is checked against stock until it is approved. */
+  submitMovementRequest(
+    tenantId: string,
+    userId: string,
+    kind: StockMovementRequestKind,
+    payload: StockInBatchDto | StockOutBatchDto | StockTransferBatchDto | StockAdjustmentBatchDto,
+  ) {
+    return this.write(() =>
+      this.prisma.stockMovementRequest.create({
+        data: {
+          tenantId,
+          kind,
+          reference: payload.reference?.trim() || null,
+          payload: JSON.parse(JSON.stringify(payload)) as Prisma.InputJsonValue,
+          createdBy: userId,
+        },
+      }),
+    );
+  }
+  /** Requests still waiting, and those that were rejected; approved ones are real movements. */
+  listMovementRequests(tenantId: string, kinds?: StockMovementRequestKind[]) {
+    return this.prisma.stockMovementRequest.findMany({
+      where: {
+        tenantId,
+        status: { in: ['PENDING', 'REJECTED'] },
+        ...(kinds ? { kind: { in: kinds } } : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+  }
+  async getMovementRequest(tenantId: string, id: string) {
+    const request = await this.prisma.stockMovementRequest.findFirst({ where: { tenantId, id } });
+    if (!request) throw new NotFoundException('Request not found');
+    return request;
+  }
+  /**
+   * Applies a pending request: the movement is posted as the person who made it, stamped with who
+   * approved it. The post and the approval commit together, so a request can never post twice;
+   * if the stock is no longer there the whole approval fails and the request stays pending.
+   */
+  async approveMovementRequest(tenantId: string, approverId: string, id: string) {
+    const request = await this.getMovementRequest(tenantId, id);
+    if (request.status !== 'PENDING')
+      throw new ConflictException('Only a request waiting for approval can be approved');
+    const after = async (tx: Prisma.TransactionClient, batchId: string) => {
+      const claimed = await tx.stockMovementRequest.updateMany({
+        where: { tenantId, id, status: 'PENDING' },
+        data: { status: 'APPROVED', decidedBy: approverId, decidedAt: new Date(), batchId },
+      });
+      if (claimed.count !== 1)
+        throw new ConflictException('This request has already been approved or rejected');
+      await tx.stockMovement.updateMany({
+        where: { tenantId, batchId },
+        data: { approvedBy: approverId },
+      });
+    };
+    const payload = request.payload as unknown;
+    const by = request.createdBy;
+    switch (request.kind) {
+      case 'STOCK_IN':
+        return this.stockInBatch(tenantId, by, payload as StockInBatchDto, after);
+      case 'STOCK_OUT':
+        return this.stockOutBatch(tenantId, by, payload as StockOutBatchDto, after);
+      case 'TRANSFER':
+        return this.transferBatch(tenantId, by, payload as StockTransferBatchDto, after);
+      case 'ADJUSTMENT':
+        return this.adjustBatch(tenantId, by, payload as StockAdjustmentBatchDto, after);
+    }
+  }
+  async rejectMovementRequest(tenantId: string, userId: string, id: string, reason: string) {
+    const rejected = await this.prisma.stockMovementRequest.updateMany({
+      where: { tenantId, id, status: 'PENDING' },
+      data: {
+        status: 'REJECTED',
+        decidedBy: userId,
+        decidedAt: new Date(),
+        rejectionReason: reason,
+      },
+    });
+    if (rejected.count !== 1) {
+      await this.getMovementRequest(tenantId, id);
+      throw new ConflictException('Only a request waiting for approval can be rejected');
+    }
+    return this.getMovementRequest(tenantId, id);
   }
   async movements(tenantId: string, types?: StockMovementType[]) {
     const rows = await this.prisma.stockMovement.findMany({

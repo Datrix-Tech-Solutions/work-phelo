@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Avatar } from '@/components/atoms/Avatar';
 import { Badge } from '@/components/atoms/Badge';
@@ -31,14 +31,16 @@ const PAGE_SIZE = 10;
 
 const formatNumber = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 
-export default function InventoryItemsPage() {
+function InventoryItemsInner() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  // The dashboard's "Add Item" shortcut arrives with ?new=1.
+  const [modalOpen, setModalOpen] = useState(useSearchParams().get('new') === '1');
   const [importOpen, setImportOpen] = useState(false);
+
   const [valueTarget, setValueTarget] = useState<InventoryItem | null>(null);
   const [reorderTarget, setReorderTarget] = useState<InventoryItem | null>(null);
   const [editTarget, setEditTarget] = useState<InventoryItem | null>(null);
@@ -270,5 +272,13 @@ export default function InventoryItemsPage() {
         onConfirm={handleDelete}
       />
     </>
+  );
+}
+
+export default function InventoryItemsPage() {
+  return (
+    <Suspense>
+      <InventoryItemsInner />
+    </Suspense>
   );
 }

@@ -7,7 +7,10 @@ export type PurchaseOrderStatus =
   | 'PARTIALLY_RECEIVED'
   | 'RECEIVED'
   | 'CANCELLED'
-  | 'CLOSED';
+  | 'CLOSED'
+  /** Placed, waiting for someone to approve it; nothing can be received yet. */
+  | 'PENDING_APPROVAL'
+  | 'REJECTED';
 
 export interface PurchaseOrderLine {
   id: string;
@@ -59,6 +62,12 @@ export interface PurchaseOrder {
   /** Each payment (or share of one) made on this order, oldest first. */
   payments: PurchaseOrderPayment[];
   status: PurchaseOrderStatus;
+  /** User ids; approvedBy is empty for orders placed before approvals existed. */
+  createdBy: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  rejectedBy: string | null;
+  rejectionReason: string | null;
 }
 
 export const PURCHASE_ORDER_STATUS_BADGE: Record<
@@ -70,6 +79,8 @@ export const PURCHASE_ORDER_STATUS_BADGE: Record<
   RECEIVED: { label: 'Received', variant: 'success' },
   CANCELLED: { label: 'Cancelled', variant: 'neutral' },
   CLOSED: { label: 'Closed', variant: 'success' },
+  PENDING_APPROVAL: { label: 'Pending Approval', variant: 'warning' },
+  REJECTED: { label: 'Rejected', variant: 'danger' },
 };
 
 export const purchaseOrderQuantity = (po: PurchaseOrder) =>
@@ -97,7 +108,10 @@ export const isOpenOrder = (po: PurchaseOrder) =>
 /** Figures for a set of purchase orders (e.g. one supplier's). Cancelled orders are left out of
  * every figure except the order count. */
 export function summarizePurchaseOrders(orders: PurchaseOrder[]) {
-  const live = orders.filter((o) => o.status !== 'CANCELLED');
+  // Cancelled, rejected and not-yet-approved orders commit the business to nothing.
+  const live = orders.filter(
+    (o) => o.status !== 'CANCELLED' && o.status !== 'REJECTED' && o.status !== 'PENDING_APPROVAL',
+  );
   const open = live.filter(isOpenOrder);
   const dates = live.map((o) => o.date).sort();
   return {
@@ -130,8 +144,11 @@ export const canReceive = (po: PurchaseOrder) =>
 /** Part-delivered orders can be closed: the rest of the goods is no longer expected. */
 export const canCloseOrder = (po: PurchaseOrder) => po.status === 'PARTIALLY_RECEIVED';
 
+/** An order waiting for approval can be approved or rejected. */
+export const canApproveOrder = (po: PurchaseOrder) => po.status === 'PENDING_APPROVAL';
+
 export const canCancelOrder = (po: PurchaseOrder) =>
-  po.status === 'ORDERED' &&
+  (po.status === 'PENDING_APPROVAL' || po.status === 'ORDERED') &&
   po.lines.every((l) => l.receivedQuantity === 0 && l.extraQuantity === 0);
 
 interface ApiLine {
@@ -155,6 +172,11 @@ interface ApiPurchaseOrder {
   paymentTerms: string | null;
   notes: string | null;
   status: PurchaseOrderStatus;
+  createdBy: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  rejectedBy: string | null;
+  rejectionReason: string | null;
   lines: ApiLine[];
   payments?: {
     id: string;
@@ -190,6 +212,11 @@ function fromApi(o: ApiPurchaseOrder): PurchaseOrder {
     payments,
     amountPaid: payments.reduce((sum, p) => sum + p.amount, 0),
     status: o.status,
+    createdBy: o.createdBy,
+    approvedBy: o.approvedBy,
+    approvedAt: o.approvedAt,
+    rejectedBy: o.rejectedBy,
+    rejectionReason: o.rejectionReason,
     lines: o.lines.map((l) => ({
       id: l.id,
       itemId: l.itemId,
@@ -313,6 +340,16 @@ export function usePurchaseOrders() {
       }),
     onSettled: refresh,
   });
+  const approve = useMutation({
+    mutationFn: (id: string) =>
+      inventoryApi.post<ApiPurchaseOrder>(`/purchase-orders/${id}/approve`, {}),
+    onSettled: refresh,
+  });
+  const reject = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      inventoryApi.post<ApiPurchaseOrder>(`/purchase-orders/${id}/reject`, { reason }),
+    onSettled: refresh,
+  });
   const close = useMutation({
     mutationFn: (id: string) =>
       inventoryApi.post<ApiPurchaseOrder>(`/purchase-orders/${id}/close`, {}),
@@ -331,6 +368,10 @@ export function usePurchaseOrders() {
     isCancelling: cancel.isPending,
     makeSupplierPayment: pay.mutateAsync,
     isPaying: pay.isPending,
+    approvePurchaseOrder: approve.mutateAsync,
+    isApproving: approve.isPending,
+    rejectPurchaseOrder: (id: string, reason: string) => reject.mutateAsync({ id, reason }),
+    isRejecting: reject.isPending,
     closePurchaseOrder: close.mutateAsync,
     isClosing: close.isPending,
   };

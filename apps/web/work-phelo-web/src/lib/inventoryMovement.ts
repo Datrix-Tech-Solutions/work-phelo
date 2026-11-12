@@ -20,10 +20,11 @@ export const MOVEMENT_STATUS_BADGE: Record<
   { label: string; variant: 'success' | 'warning' | 'neutral' | 'info' | 'danger' }
 > = {
   DRAFT: { label: 'Draft', variant: 'info' },
-  PENDING: { label: 'Pending', variant: 'warning' },
+  PENDING: { label: 'Pending Approval', variant: 'warning' },
   COMPLETED: { label: 'Completed', variant: 'success' },
   CANCELLED: { label: 'Cancelled', variant: 'neutral' },
   REVERSED: { label: 'Reversed', variant: 'danger' },
+  REJECTED: { label: 'Rejected', variant: 'danger' },
 };
 
 // Values are the inventory service's reason and purpose codes.

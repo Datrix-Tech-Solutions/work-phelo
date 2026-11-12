@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { OrderPanel } from '@/components/organisms/inventory/OrderPanel';
 import { PurchaseOrdersManager } from '@/components/organisms/inventory/PurchaseOrdersManager';
 import { usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
 import { pageContent, pageHeader } from '@/lib/layout';
 
-export default function PurchaseOrdersPage() {
+function PurchaseOrdersInner() {
   const { purchaseOrders, isLoading } = usePurchaseOrders();
-  const [formOpen, setFormOpen] = useState(false);
+  // The dashboard's "New Purchase Order" shortcut arrives with ?new=1.
+  const [formOpen, setFormOpen] = useState(useSearchParams().get('new') === '1');
 
   return (
     <>
@@ -26,5 +28,13 @@ export default function PurchaseOrdersPage() {
 
       <OrderPanel kind="PURCHASE" isOpen={formOpen} onClose={() => setFormOpen(false)} />
     </>
+  );
+}
+
+export default function PurchaseOrdersPage() {
+  return (
+    <Suspense>
+      <PurchaseOrdersInner />
+    </Suspense>
   );
 }

@@ -42,7 +42,7 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
     widget = await item('Widget', 'W');
     milk = await item('Milk', 'M', true);
   });
-  const order = (lines: { itemId: string; quantity: string; unitCost: string }[], extra = {}) =>
+  const place = (lines: { itemId: string; quantity: string; unitCost: string }[], extra = {}) =>
     service.createPurchaseOrder(tenant, 'user-a', {
       orderDate: '2026-11-11',
       supplierId: supplier,
@@ -50,10 +50,29 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
       lines,
       ...extra,
     });
+  // Most tests need an order that can be received, so this places one and approves it.
+  const order = async (
+    lines: { itemId: string; quantity: string; unitCost: string }[],
+    extra = {},
+  ) => {
+    const placed = await place(lines, extra);
+    return service.approvePurchaseOrder(tenant, 'user-b', placed.id);
+  };
   const receive = (id: string, lines: object[], dateReceived = '2026-11-15') =>
     service.receivePurchaseOrder(tenant, 'user-a', id, { dateReceived, lines } as never);
   const stock = async (itemId: string) =>
     (await prisma.stockBalance.findFirst({ where: { tenantId: tenant, itemId } }))?.quantity;
+
+  it('places an order for approval, which cannot be received until approved', async () => {
+    const po = await place([{ itemId: widget, quantity: '10', unitCost: '1' }]);
+    expect(po.status).toBe('PENDING_APPROVAL');
+    await expect(
+      receive(po.id, [{ lineId: po.lines[0].id, receivedQuantity: '10', extraQuantity: '0' }]),
+    ).rejects.toThrow('approved');
+    const approved = await service.approvePurchaseOrder(tenant, 'user-b', po.id);
+    expect(approved).toMatchObject({ status: 'ORDERED', approvedBy: 'user-b' });
+    expect(approved.approvedAt).toBeInstanceOf(Date);
+  });
 
   it('creates an order without touching stock and generates a reference', async () => {
     const po = await order([{ itemId: widget, quantity: '100', unitCost: '1' }]);

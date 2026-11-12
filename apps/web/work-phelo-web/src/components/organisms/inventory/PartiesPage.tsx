@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TableButton } from '@/components/atoms/TableButton';
@@ -29,7 +29,9 @@ export function PartiesPage({ kind }: { kind: PartyKind }) {
   const { plural, noun } = TITLE[kind];
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [modalOpen, setModalOpen] = useState(false);
+  // The dashboard's "Add Supplier / Customer" shortcuts arrive with ?new=1.
+  const [modalOpen, setModalOpen] = useState(useSearchParams().get('new') === '1');
+
   const [editTarget, setEditTarget] = useState<InventoryParty | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InventoryParty | null>(null);
   const toast = useToast();

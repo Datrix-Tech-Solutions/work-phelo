@@ -12,6 +12,8 @@ import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { ApprovePromptModal } from '@/components/organisms/inventory/ApprovePromptModal';
+import { useCanApprove } from '@/hooks/inventory/useApprovalAccess';
 import { usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -113,7 +115,11 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
   const { warehouses } = useInventoryWarehouses();
   const variantsByItem = useItemVariantsMap();
   const toast = useToast();
-  const { createPurchaseOrder, isCreating } = usePurchaseOrders();
+  const { createPurchaseOrder, isCreating, approvePurchaseOrder, isApproving } =
+    usePurchaseOrders();
+  const canApprove = useCanApprove('PURCHASE_ORDER');
+  // The order just placed, while the person who can approve it decides whether to do so now.
+  const [justPlaced, setJustPlaced] = useState<{ id: string; reference: string } | null>(null);
   const { parties } = useInventoryParties(kind === 'SALES' ? 'CUSTOMER' : 'SUPPLIER');
   const [lines, setLines] = useState<LineRow[]>([newLine()]);
   const [showLineErrors, setShowLineErrors] = useState(false);
@@ -173,7 +179,7 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
     // Sales orders aren't saved anywhere yet.
     if (!isPurchase) return handleClose();
     try {
-      await createPurchaseOrder({
+      const placed = await createPurchaseOrder({
         reference: values.reference.trim() || null,
         orderDate: values.orderDate,
         expectedDate: values.expectedDate || null,
@@ -188,255 +194,287 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
           unitCost: l.unitCost,
         })),
       });
-      toast.success('Purchase order created');
       handleClose();
+      if (canApprove) {
+        setJustPlaced({ id: placed.id, reference: placed.reference });
+      } else {
+        toast.success('Purchase order created and sent for approval');
+      }
     } catch (err) {
       toast.error(extractError(err, 'Could not create purchase order'));
     }
   };
 
-  return (
-    <SidePanel
-      isOpen={isOpen}
-      onClose={handleClose}
-      title={copy.title}
-      description={copy.description}
-      footer={
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit(onSubmit)} isLoading={isCreating} loadingText="Saving...">
-            {copy.save}
-          </Button>
-        </div>
-      }
-    >
-      <div className="flex flex-col gap-4 mt-2">
-        <div className="flex flex-col gap-4 sm:flex-row">
-          <div className="flex-1 min-w-0">
-            <FormField
-              label="Reference"
-              registration={register('reference', {
-                maxLength: { value: 64, message: 'Reference cannot exceed 64 characters' },
-              })}
-              error={errors.reference}
-              placeholder="Auto-generated if left blank"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <Controller
-              control={control}
-              name="orderDate"
-              rules={{ required: 'Date is required' }}
-              render={({ field, fieldState }) => (
-                <DatePicker
-                  label="Order Date"
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={fieldState.error?.message}
-                />
-              )}
-            />
-          </div>
-        </div>
+  const approveNow = async () => {
+    if (!justPlaced) return;
+    try {
+      await approvePurchaseOrder(justPlaced.id);
+      toast.success('Purchase order approved');
+    } catch (err) {
+      toast.error(extractError(err, 'Could not approve the order'));
+    }
+    setJustPlaced(null);
+  };
 
-        <div className="flex flex-col gap-4 sm:flex-row">
-          <div className="flex-1 min-w-0">
-            {partyName ? (
-              <SearchSelect
-                label={copy.partyLabel}
-                options={[{ value: partyName, label: partyName }]}
-                value={partyName}
-                onChange={() => {}}
-                disabled
+  return (
+    <>
+      <SidePanel
+        isOpen={isOpen}
+        onClose={handleClose}
+        title={copy.title}
+        description={copy.description}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit(onSubmit)} isLoading={isCreating} loadingText="Saving...">
+              {copy.save}
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4 mt-2">
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <div className="flex-1 min-w-0">
+              <FormField
+                label="Reference"
+                registration={register('reference', {
+                  maxLength: { value: 64, message: 'Reference cannot exceed 64 characters' },
+                })}
+                error={errors.reference}
+                placeholder="Auto-generated if left blank"
               />
-            ) : (
+            </div>
+            <div className="flex-1 min-w-0">
               <Controller
                 control={control}
-                name="partyId"
-                rules={{ required: `Select a ${copy.partyLabel.toLowerCase()}` }}
+                name="orderDate"
+                rules={{ required: 'Date is required' }}
                 render={({ field, fieldState }) => (
-                  <SearchSelect
-                    label={copy.partyLabel}
-                    placeholder={`Select ${copy.partyLabel.toLowerCase()}`}
-                    options={partyOptions}
+                  <DatePicker
+                    label="Order Date"
                     value={field.value}
                     onChange={field.onChange}
                     error={fieldState.error?.message}
                   />
                 )}
               />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <Controller
-              control={control}
-              name="warehouseId"
-              rules={{ required: 'Select a warehouse' }}
-              render={({ field, fieldState }) => (
-                <SearchSelect
-                  label={copy.warehouseLabel}
-                  placeholder="Select warehouse"
-                  options={warehouseOptions}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={fieldState.error?.message}
-                />
-              )}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4 sm:flex-row">
-          <div className="flex-1 min-w-0">
-            <Controller
-              control={control}
-              name="expectedDate"
-              render={({ field }) => (
-                <DatePicker label={copy.dateLabel} value={field.value} onChange={field.onChange} />
-              )}
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <Controller
-              control={control}
-              name="paymentTerms"
-              render={({ field }) => (
-                <SearchSelect
-                  label="Payment Terms"
-                  placeholder="Optional"
-                  options={PAYMENT_TERMS}
-                  value={field.value}
-                  onChange={field.onChange}
-                />
-              )}
-            />
-          </div>
-        </div>
-
-        <FormField
-          label="Notes"
-          type="textarea"
-          rows={2}
-          registration={register('notes', {
-            maxLength: { value: 500, message: 'Notes cannot exceed 500 characters' },
-          })}
-          error={errors.notes}
-          placeholder={copy.notesPlaceholder}
-        />
-
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-bold text-gray-900">Items</span>
-
-          <div className="rounded-xl border border-gray-200 overflow-hidden">
-            <div className={cn(lineGrid, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
-              {['Item', 'Variant', 'Qty', copy.priceLabel, 'Total'].map((h) => (
-                <span key={h} className="text-xs font-bold text-gray-900">
-                  {h}
-                </span>
-              ))}
-              <span aria-hidden />
             </div>
+          </div>
 
-            <div className="divide-y divide-gray-200">
-              {lines.map((line) => (
-                <div key={line.key} className={cn(lineGrid, 'items-start px-2.5 py-2')}>
-                  <SearchSelect
-                    placeholder="Select item…"
-                    options={itemOptions}
-                    value={line.itemId}
-                    onChange={(v) => pickItem(line.key, v)}
-                    error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
-                  />
-                  {isPurchase ? (
-                    // An order can name a variant the item doesn't have yet.
-                    <CreatableSearchSelect
-                      placeholder={line.itemId ? 'Select or add variant' : 'Select item first'}
-                      disabled={!line.itemId}
-                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
-                        value: v,
-                        label: v,
-                      }))}
-                      value={line.variant}
-                      onChange={(v) => updateLine(line.key, { variant: v })}
-                    />
-                  ) : (
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <div className="flex-1 min-w-0">
+              {partyName ? (
+                <SearchSelect
+                  label={copy.partyLabel}
+                  options={[{ value: partyName, label: partyName }]}
+                  value={partyName}
+                  onChange={() => {}}
+                  disabled
+                />
+              ) : (
+                <Controller
+                  control={control}
+                  name="partyId"
+                  rules={{ required: `Select a ${copy.partyLabel.toLowerCase()}` }}
+                  render={({ field, fieldState }) => (
                     <SearchSelect
-                      placeholder={
-                        !line.itemId
-                          ? 'Select item first'
-                          : variantsByItem[line.itemId]?.length
-                            ? 'Select variant'
-                            : 'No variants'
-                      }
-                      disabled={!line.itemId || !variantsByItem[line.itemId]?.length}
-                      options={(variantsByItem[line.itemId] ?? []).map((v) => ({
-                        value: v,
-                        label: v,
-                      }))}
-                      value={line.variant}
-                      onChange={(v) => updateLine(line.key, { variant: v })}
+                      label={copy.partyLabel}
+                      placeholder={`Select ${copy.partyLabel.toLowerCase()}`}
+                      options={partyOptions}
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={fieldState.error?.message}
                     />
                   )}
-                  <NumberField
-                    ariaLabel="Quantity"
-                    className="w-full py-2"
-                    placeholder="0"
-                    decimals={4}
-                    value={line.quantity}
-                    onChange={(v) => updateLine(line.key, { quantity: v })}
-                    error={showLineErrors && line.quantity <= 0 ? 'Enter a quantity' : undefined}
+                />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <Controller
+                control={control}
+                name="warehouseId"
+                rules={{ required: 'Select a warehouse' }}
+                render={({ field, fieldState }) => (
+                  <SearchSelect
+                    label={copy.warehouseLabel}
+                    placeholder="Select warehouse"
+                    options={warehouseOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={fieldState.error?.message}
                   />
-                  <NumberField
-                    ariaLabel={copy.priceLabel}
-                    className="w-full py-2"
-                    value={line.unitCost}
-                    onChange={() => {}}
-                    disabled
-                  />
-                  <NumberField
-                    ariaLabel="Total"
-                    className="w-full py-2"
-                    value={lineTotal(line)}
-                    onChange={() => {}}
-                    disabled
-                  />
-                  <div className="flex h-9.5 items-center">
-                    {lines.length > 1 ? (
-                      <button
-                        type="button"
-                        aria-label="Remove line"
-                        title="Remove line"
-                        onClick={() => setLines((rows) => rows.filter((r) => r.key !== line.key))}
-                        className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    ) : (
-                      <span className="block w-7.5" aria-hidden />
-                    )}
-                  </div>
-                </div>
-              ))}
+                )}
+              />
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setLines((r) => [...r, newLine()])}
-            >
-              Add Item
-            </Button>
-            <div className="text-sm text-gray-600">
-              Total{' '}
-              <span className="ml-2 font-semibold text-gray-900">{formatValue(grandTotal)}</span>
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <div className="flex-1 min-w-0">
+              <Controller
+                control={control}
+                name="expectedDate"
+                render={({ field }) => (
+                  <DatePicker
+                    label={copy.dateLabel}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <Controller
+                control={control}
+                name="paymentTerms"
+                render={({ field }) => (
+                  <SearchSelect
+                    label="Payment Terms"
+                    placeholder="Optional"
+                    options={PAYMENT_TERMS}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </div>
+          </div>
+
+          <FormField
+            label="Notes"
+            type="textarea"
+            rows={2}
+            registration={register('notes', {
+              maxLength: { value: 500, message: 'Notes cannot exceed 500 characters' },
+            })}
+            error={errors.notes}
+            placeholder={copy.notesPlaceholder}
+          />
+
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-bold text-gray-900">Items</span>
+
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className={cn(lineGrid, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
+                {['Item', 'Variant', 'Qty', copy.priceLabel, 'Total'].map((h) => (
+                  <span key={h} className="text-xs font-bold text-gray-900">
+                    {h}
+                  </span>
+                ))}
+                <span aria-hidden />
+              </div>
+
+              <div className="divide-y divide-gray-200">
+                {lines.map((line) => (
+                  <div key={line.key} className={cn(lineGrid, 'items-start px-2.5 py-2')}>
+                    <SearchSelect
+                      placeholder="Select item…"
+                      options={itemOptions}
+                      value={line.itemId}
+                      onChange={(v) => pickItem(line.key, v)}
+                      error={showLineErrors && !line.itemId ? 'Select an item' : undefined}
+                    />
+                    {isPurchase ? (
+                      // An order can name a variant the item doesn't have yet.
+                      <CreatableSearchSelect
+                        placeholder={line.itemId ? 'Select or add variant' : 'Select item first'}
+                        disabled={!line.itemId}
+                        options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                          value: v,
+                          label: v,
+                        }))}
+                        value={line.variant}
+                        onChange={(v) => updateLine(line.key, { variant: v })}
+                      />
+                    ) : (
+                      <SearchSelect
+                        placeholder={
+                          !line.itemId
+                            ? 'Select item first'
+                            : variantsByItem[line.itemId]?.length
+                              ? 'Select variant'
+                              : 'No variants'
+                        }
+                        disabled={!line.itemId || !variantsByItem[line.itemId]?.length}
+                        options={(variantsByItem[line.itemId] ?? []).map((v) => ({
+                          value: v,
+                          label: v,
+                        }))}
+                        value={line.variant}
+                        onChange={(v) => updateLine(line.key, { variant: v })}
+                      />
+                    )}
+                    <NumberField
+                      ariaLabel="Quantity"
+                      className="w-full py-2"
+                      placeholder="0"
+                      decimals={4}
+                      value={line.quantity}
+                      onChange={(v) => updateLine(line.key, { quantity: v })}
+                      error={showLineErrors && line.quantity <= 0 ? 'Enter a quantity' : undefined}
+                    />
+                    <NumberField
+                      ariaLabel={copy.priceLabel}
+                      className="w-full py-2"
+                      value={line.unitCost}
+                      onChange={() => {}}
+                      disabled
+                    />
+                    <NumberField
+                      ariaLabel="Total"
+                      className="w-full py-2"
+                      value={lineTotal(line)}
+                      onChange={() => {}}
+                      disabled
+                    />
+                    <div className="flex h-9.5 items-center">
+                      {lines.length > 1 ? (
+                        <button
+                          type="button"
+                          aria-label="Remove line"
+                          title="Remove line"
+                          onClick={() => setLines((rows) => rows.filter((r) => r.key !== line.key))}
+                          className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      ) : (
+                        <span className="block w-7.5" aria-hidden />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLines((r) => [...r, newLine()])}
+              >
+                Add Item
+              </Button>
+              <div className="text-sm text-gray-600">
+                Total{' '}
+                <span className="ml-2 font-semibold text-gray-900">{formatValue(grandTotal)}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </SidePanel>
+      </SidePanel>
+      <ApprovePromptModal
+        isOpen={justPlaced !== null}
+        title="Purchase Order Created"
+        description={`${justPlaced?.reference ?? 'The order'} is waiting for approval. Goods can only be received once it is approved. Approve it now?`}
+        isApproving={isApproving}
+        onApprove={approveNow}
+        onLater={() => {
+          toast.success('Purchase order created, waiting for approval');
+          setJustPlaced(null);
+        }}
+      />
+    </>
   );
 }

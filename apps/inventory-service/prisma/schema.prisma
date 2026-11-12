@@ -58,6 +58,25 @@ enum PurchaseOrderStatus {
   RECEIVED
   CANCELLED
   CLOSED
+  PENDING_APPROVAL
+  REJECTED
+
+  @@schema("inventory")
+}
+
+enum StockMovementRequestKind {
+  STOCK_IN
+  STOCK_OUT
+  TRANSFER
+  ADJUSTMENT
+
+  @@schema("inventory")
+}
+
+enum StockMovementRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 
   @@schema("inventory")
 }
@@ -218,6 +237,8 @@ model StockMovement {
   lotId               String?
   purchaseOrderLineId String?
   createdBy           String
+  // Who approved the request this movement was posted from; null for movements posted directly.
+  approvedBy          String?
   createdAt           DateTime           @default(now())
   item                InventoryItem      @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict)
   variant             ItemVariant?       @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
@@ -360,23 +381,29 @@ model StockLot {
 // An order placed with a supplier. Nothing is in stock until it is received: each receipt posts a
 // stock in (StockMovement rows pointing at the order line) for the warehouse named here.
 model PurchaseOrder {
-  id           String              @id @default(uuid())
-  tenantId     String
-  reference    String
-  orderDate    DateTime            @db.Date
-  expectedDate DateTime?           @db.Date
-  supplierId   String
-  locationId   String
-  paymentTerms String?
-  notes        String?
-  status       PurchaseOrderStatus @default(ORDERED)
-  createdBy    String
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  supplier     InventoryParty      @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
-  location     StockLocation       @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
-  lines        PurchaseOrderLine[]
-  payments     PurchaseOrderPayment[]
+  id              String                 @id @default(uuid())
+  tenantId        String
+  reference       String
+  orderDate       DateTime               @db.Date
+  expectedDate    DateTime?              @db.Date
+  supplierId      String
+  locationId      String
+  paymentTerms    String?
+  notes           String?
+  status          PurchaseOrderStatus    @default(ORDERED)
+  createdBy       String
+  // Orders placed before approvals existed have no approver.
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectedBy      String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  supplier        InventoryParty         @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  location        StockLocation          @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  lines           PurchaseOrderLine[]
+  payments        PurchaseOrderPayment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, reference])
@@ -412,17 +439,17 @@ model PurchaseOrderLine {
 // Money paid to a supplier. One payment can settle several orders: each order's share is a
 // PurchaseOrderPayment, and an order's amount paid is the sum of its shares.
 model SupplierPayment {
-  id          String                    @id @default(uuid())
+  id          String                 @id @default(uuid())
   tenantId    String
   supplierId  String
   reference   String?
-  paymentDate DateTime                  @db.Date
+  paymentDate DateTime               @db.Date
   method      SupplierPaymentMethod
-  amount      Decimal                   @db.Decimal(18, 4)
+  amount      Decimal                @db.Decimal(18, 4)
   notes       String?
   createdBy   String
-  createdAt   DateTime                  @default(now())
-  supplier    InventoryParty            @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  createdAt   DateTime               @default(now())
+  supplier    InventoryParty         @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
   allocations PurchaseOrderPayment[]
 
   @@unique([tenantId, id])
@@ -442,5 +469,28 @@ model PurchaseOrderPayment {
   @@unique([tenantId, id])
   @@unique([tenantId, paymentId, purchaseOrderId])
   @@index([tenantId, purchaseOrderId])
+  @@schema("inventory")
+}
+
+// A stock movement waiting for approval. The movement is described by the same body the batch
+// endpoints take (payload); stock only changes when the request is approved and that body is
+// applied, so a pending or rejected request never touches balances.
+model StockMovementRequest {
+  id              String                     @id @default(uuid())
+  tenantId        String
+  kind            StockMovementRequestKind
+  reference       String?
+  payload         Json
+  status          StockMovementRequestStatus @default(PENDING)
+  createdBy       String
+  createdAt       DateTime                   @default(now())
+  decidedBy       String?
+  decidedAt       DateTime?
+  rejectionReason String?
+  // The batchId of the movement rows posted on approval.
+  batchId         String?
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, createdAt])
   @@schema("inventory")
 }
