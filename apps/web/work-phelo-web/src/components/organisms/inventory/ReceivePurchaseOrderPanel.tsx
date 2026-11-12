@@ -11,12 +11,15 @@ import { formatDate } from '@/lib/formatters';
 import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { useStockPositions } from '@/hooks/inventory/useStockBalances';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 import { usePurchaseOrders, type PurchaseOrder } from '@/hooks/inventory/usePurchaseOrders';
 
 interface LineState {
   received: number;
   extra: number;
+  /** Units that arrived damaged: not stocked, and not counted as received. */
+  damaged: number;
   lotNumber: string;
   manufactureDate: string;
   expiryDate: string;
@@ -55,6 +58,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
         {
           received: Math.max(0, l.invoicedQuantity - l.receivedQuantity),
           extra: 0,
+          damaged: 0,
           lotNumber: '',
           manufactureDate: '',
           expiryDate: '',
@@ -64,6 +68,24 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
   );
 
   const itemOf = (id: string) => items.find((i) => i.id === id);
+  const { positions } = useStockPositions();
+  // Warns, without blocking, when the order's warehouse would hold more of an item than the item's
+  // maximum stock (set per warehouse). Every line of the same item counts toward it.
+  const maxWarning = (l: PurchaseOrder['lines'][number]) => {
+    if (!order) return undefined;
+    const max = itemOf(l.itemId)?.maxStock;
+    if (max == null) return undefined;
+    const adding = (order.lines ?? []).reduce(
+      (sum, x) =>
+        x.itemId === l.itemId
+          ? sum + (state[x.id]?.received ?? 0) + (state[x.id]?.extra ?? 0)
+          : sum,
+      0,
+    );
+    const would = (positions.get(l.itemId)?.get(order.warehouseId) ?? 0) + adding;
+    if (would <= max) return undefined;
+    return `Warehouse would hold ${formatNumber(would)}, above its maximum of ${formatNumber(max)}`;
+  };
   const outstanding = (l: PurchaseOrder['lines'][number]) =>
     Math.max(0, l.invoicedQuantity - l.receivedQuantity);
   const update = (id: string, patch: Partial<LineState>) =>
@@ -71,10 +93,12 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
 
   const lines = useMemo(() => order?.lines ?? [], [order]);
   const taking = (id: string) => (state[id]?.received ?? 0) + (state[id]?.extra ?? 0) > 0;
+  // A line with units that only arrived damaged is also recorded.
+  const hasEntry = (id: string) => taking(id) || (state[id]?.damaged ?? 0) > 0;
 
   const lineError = (l: PurchaseOrder['lines'][number]) => {
     const s = state[l.id];
-    if (s.received > outstanding(l))
+    if (s.received + s.damaged > outstanding(l))
       return `Only ${formatNumber(outstanding(l))} invoiced and not received`;
     return undefined;
   };
@@ -106,7 +130,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
     setShowErrors(true);
     if (!dateReceived) return;
     if (lines.some((l) => lineError(l) || expiryError(l))) return;
-    const receiving = lines.filter((l) => taking(l.id));
+    const receiving = lines.filter((l) => hasEntry(l.id));
     if (!receiving.length) {
       toast.error('Enter a quantity received for at least one item');
       return;
@@ -122,6 +146,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
             lineId: l.id,
             receivedQuantity: s.received,
             extraQuantity: s.extra,
+            damagedQuantity: s.damaged,
             lotNumber: s.lotNumber.trim() || null,
             manufactureDate: perishable ? s.manufactureDate || null : null,
             expiryDate: perishable ? s.expiryDate || null : null,
@@ -140,7 +165,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
       isOpen={order !== null}
       onClose={onClose}
       title={order ? `Receive ${order.reference}` : 'Receive Purchase Order'}
-      description="Enter what arrived, up to what the supplier invoiced. Prices come from the invoice. Extra items are free. Both are added to stock."
+      description="Enter what arrived, up to what the supplier invoiced. Prices come from the invoice. Extra items are free. Received and extra items are added to stock; damaged items are not."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose} disabled={isReceiving}>
@@ -236,6 +261,16 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                           onChange={(v) => update(l.id, { extra: v })}
                         />
                       </Field>
+                      <Field label="Damaged">
+                        <NumberField
+                          ariaLabel="Damaged quantity"
+                          className="w-full"
+                          placeholder="0"
+                          decimals={4}
+                          value={s.damaged}
+                          onChange={(v) => update(l.id, { damaged: v })}
+                        />
+                      </Field>
                       <Field label="Unit Cost">
                         <NumberField
                           ariaLabel="Unit cost"
@@ -289,6 +324,9 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                         </>
                       )}
                     </div>
+                    {maxWarning(l) && (
+                      <span className="text-xs font-semibold text-amber-600">{maxWarning(l)}</span>
+                    )}
                   </div>
                 );
               })}

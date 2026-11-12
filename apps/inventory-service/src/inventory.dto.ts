@@ -662,6 +662,18 @@ export class ReceiveLineDto {
   @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
   @Matches(QUANTITY)
   extraQuantity?: string;
+  @ApiProperty({
+    required: false,
+    type: String,
+    example: '2',
+    description:
+      'Units that arrived damaged. Not added to stock and not counted as received, so they stay outstanding. Together with the received units it cannot exceed what is invoiced and not yet received.',
+  })
+  @IsOptional()
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(QUANTITY)
+  damagedQuantity?: string;
   @ApiProperty({ required: false, nullable: true, type: String, maxLength: 100 })
   @IsOptional()
   @Transform(trim)

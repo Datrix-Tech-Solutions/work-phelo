@@ -1,5 +1,6 @@
 'use client';
 
+import { useCrumbs } from '@/hooks/inventory/useCrumbs';
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -23,11 +24,14 @@ interface WarehouseItemsTableProps {
   warehouseId: string;
   /** All inventory items; the table keeps those with stock in this warehouse. */
   items: InventoryItem[];
+  /** Name of the page this table sits on, so the page it opens can link back to it. */
+  sourceLabel?: string;
 }
 
 /** Items held in one warehouse, with the quantity and value held there. */
-export function WarehouseItemsTable({ warehouseId, items }: WarehouseItemsTableProps) {
+export function WarehouseItemsTable({ warehouseId, items, sourceLabel }: WarehouseItemsTableProps) {
   const router = useRouter();
+  const { link } = useCrumbs();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { categories } = useInventoryCategories();
   const { units } = useInventoryUnits();
@@ -124,7 +128,10 @@ export function WarehouseItemsTable({ warehouseId, items }: WarehouseItemsTableP
         setSearch(q);
         setPage(1);
       }}
-      onRowClick={(row) => router.push(`/${tenantSlug}/operations/inventory/items/${row.id}`)}
+      onRowClick={(row) => {
+        const href = `/${tenantSlug}/operations/inventory/items/${row.id}`;
+        router.push(sourceLabel ? link(href, sourceLabel) : href);
+      }}
       currentPage={page}
       totalPages={totalPages}
       onPageChange={setPage}

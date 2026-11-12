@@ -1,5 +1,6 @@
 'use client';
 
+import { useCrumbs } from '@/hooks/inventory/useCrumbs';
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -35,6 +36,8 @@ const formatNumber = (n: number) => n.toLocaleString(undefined, { maximumFractio
 
 interface StockMovementsTableProps {
   movements: StockMovement[];
+  /** Name of the page this table sits on, so the page it opens can link back to it. */
+  sourceLabel?: string;
   isLoading?: boolean;
   /** The primary toolbar button, e.g. "Record Movement". */
   actionButton?: { label: string; onClick: () => void };
@@ -51,6 +54,7 @@ interface StockMovementsTableProps {
 /** Searchable, paged table of stock movements — shared by Stock Management and warehouse details. */
 export function StockMovementsTable({
   movements,
+  sourceLabel,
   isLoading,
   actionButton,
   onDraftClick,
@@ -59,6 +63,7 @@ export function StockMovementsTable({
   showRecordedBy,
 }: StockMovementsTableProps) {
   const router = useRouter();
+  const { link } = useCrumbs();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const {
     exportMovement,
@@ -326,7 +331,12 @@ export function StockMovementsTable({
         onRowClick={(row) =>
           row.status === 'DRAFT'
             ? onDraftClick?.(row.id)
-            : router.push(`/${tenantSlug}/operations/inventory/stock-management/${row.id}`)
+            : router.push(
+                (sourceLabel ? link : (h: string) => h)(
+                  `/${tenantSlug}/operations/inventory/stock-management/${row.id}`,
+                  sourceLabel ?? '',
+                ),
+              )
         }
         actionButton={actionButton}
         currentPage={page}

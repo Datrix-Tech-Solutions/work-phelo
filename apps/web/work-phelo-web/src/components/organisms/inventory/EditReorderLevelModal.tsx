@@ -16,15 +16,24 @@ interface EditReorderLevelModalProps {
 
 const invalid = (v: string) => v.trim() !== '' && !(Number(v) >= 0);
 
-/** Quick edit of an item's reorder level, without opening the full item form. */
+/** Quick edit of an item's reorder level and maximum stock, without opening the full item form. */
 export function EditReorderLevelModal({ item, onClose }: EditReorderLevelModalProps) {
   const toast = useToast();
   const { updateItem, isPending } = useUpdateInventoryItem();
   // The page remounts this modal per item (keyed by item id), so the field starts from the item.
   const [reorderLevel, setReorderLevel] = useState(() => item?.reorderLevel?.toString() ?? '');
+  const [maxStock, setMaxStock] = useState(() => item?.maxStock?.toString() ?? '');
+  // The maximum can't be below the reorder level.
+  const maxError = invalid(maxStock)
+    ? 'Must be 0 or more'
+    : maxStock.trim() !== '' &&
+        reorderLevel.trim() !== '' &&
+        Number(maxStock) < Number(reorderLevel)
+      ? 'Must be at least the reorder level'
+      : undefined;
 
   const handleSave = async () => {
-    if (!item || invalid(reorderLevel)) return;
+    if (!item || invalid(reorderLevel) || maxError) return;
     // The service takes the whole item on update, so send it back with the reorder level changed.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, currentStock, warehouseIds, ...rest } = item;
@@ -32,11 +41,12 @@ export function EditReorderLevelModal({ item, onClose }: EditReorderLevelModalPr
       await updateItem(item.id, {
         ...rest,
         reorderLevel: reorderLevel.trim() === '' ? null : Number(reorderLevel),
+        maxStock: maxStock.trim() === '' ? null : Number(maxStock),
       });
-      toast.success('Reorder level updated successfully');
+      toast.success('Stock levels updated successfully');
       onClose();
     } catch (err) {
-      toast.error(extractError(err, 'Could not update reorder level'));
+      toast.error(extractError(err, 'Could not update stock levels'));
     }
   };
 
@@ -44,10 +54,10 @@ export function EditReorderLevelModal({ item, onClose }: EditReorderLevelModalPr
     <Modal
       isOpen={item !== null}
       onClose={onClose}
-      title="Edit Reorder Level"
+      title="Edit Reorder Level & Maximum"
       description={
         item
-          ? `Set the stock level at which ${item.name} is flagged as low. It currently has ${item.currentStock} in stock.`
+          ? `Set the stock level at which ${item.name} is flagged as low, and the most each warehouse should hold. It currently has ${item.currentStock} in stock.`
           : undefined
       }
       width="max-w-md"
@@ -62,7 +72,7 @@ export function EditReorderLevelModal({ item, onClose }: EditReorderLevelModalPr
         </div>
       }
     >
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-4">
         <Input
           label="Reorder Level"
           type="number"
@@ -72,6 +82,16 @@ export function EditReorderLevelModal({ item, onClose }: EditReorderLevelModalPr
           value={reorderLevel}
           onChange={(e) => setReorderLevel(e.target.value)}
           error={invalid(reorderLevel) ? 'Must be 0 or more' : undefined}
+        />
+        <Input
+          label="Maximum Stock (per warehouse)"
+          type="number"
+          step="any"
+          min={0}
+          placeholder="Optional"
+          value={maxStock}
+          onChange={(e) => setMaxStock(e.target.value)}
+          error={maxError}
         />
       </div>
     </Modal>

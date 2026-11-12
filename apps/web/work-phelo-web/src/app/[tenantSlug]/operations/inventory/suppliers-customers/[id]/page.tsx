@@ -1,9 +1,9 @@
 'use client';
 
+import { InventoryBreadcrumb } from '@/components/molecules/inventory/InventoryBreadcrumb';
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
@@ -13,6 +13,7 @@ import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/Del
 import { OrderPanel } from '@/components/organisms/inventory/OrderPanel';
 import { PartyModal } from '@/components/organisms/inventory/PartyModal';
 import { PurchaseOrdersManager } from '@/components/organisms/inventory/PurchaseOrdersManager';
+import { SupplierPaymentsTable } from '@/components/organisms/inventory/SupplierPaymentsTable';
 import { SupplierPaymentPanel } from '@/components/organisms/inventory/SupplierPaymentPanel';
 import { SupplierOrderStats } from '@/components/organisms/inventory/SupplierOrderStats';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
@@ -98,13 +99,10 @@ export default function InventoryPartyDetailsPage({
   return (
     <>
       <div className={`${pageHeader} shrink-0 flex flex-col gap-3`}>
-        <nav className="flex items-center gap-2 text-sm text-gray-400">
-          <Link href={`${base}?tab=${kind}`} className="hover:text-gray-700 transition-colors">
-            Suppliers &amp; Customers
-          </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-gray-700 font-medium">{party.name}</span>
-        </nav>
+        <InventoryBreadcrumb
+          root={{ label: 'Suppliers & Customers', href: `${base}?tab=${kind}` }}
+          current={party.name}
+        />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold text-gray-900">{party.name}</h1>
@@ -164,6 +162,7 @@ export default function InventoryPartyDetailsPage({
               <TabBar
                 tabs={[
                   { key: 'orders', label: 'Purchase Orders' },
+                  { key: 'payments', label: 'Payments' },
                   { key: 'received', label: 'Stock Received' },
                 ]}
                 activeTab={tab}
@@ -171,9 +170,20 @@ export default function InventoryPartyDetailsPage({
                 className="px-0 [--tab-first-pl:0px]"
               />
               {tab === 'received' ? (
-                <StockMovementsTable movements={partyMovements} showVariant />
+                <StockMovementsTable
+                  movements={partyMovements}
+                  showVariant
+                  sourceLabel={party.name}
+                />
+              ) : tab === 'payments' ? (
+                <SupplierPaymentsTable
+                  orders={supplierOrders}
+                  isLoading={ordersLoading}
+                  sourceLabel={party.name}
+                />
               ) : (
                 <PurchaseOrdersManager
+                  sourceLabel={party.name}
                   purchaseOrders={supplierOrders}
                   isLoading={ordersLoading}
                   hideSupplier
@@ -184,7 +194,7 @@ export default function InventoryPartyDetailsPage({
         ) : (
           <div className="flex flex-col gap-2">
             <h3 className="text-base font-semibold text-gray-900">Stock Issued</h3>
-            <StockMovementsTable movements={partyMovements} showVariant />
+            <StockMovementsTable movements={partyMovements} showVariant sourceLabel={party.name} />
           </div>
         )}
       </div>

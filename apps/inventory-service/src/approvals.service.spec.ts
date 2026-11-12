@@ -342,3 +342,61 @@ describe('InventoryService - purchase invoices', () => {
     );
   });
 });
+
+describe('InventoryService - damaged goods on receiving', () => {
+  const D = (n: number) => new Prisma.Decimal(n);
+  const setup = () => {
+    const line = {
+      id: 'l1',
+      itemId: 'item-1',
+      orderedQuantity: D(20),
+      invoicedQuantity: D(10),
+      invoicedValue: D(20),
+      receivedQuantity: D(0),
+      extraQuantity: D(0),
+    };
+    const lineUpdate = jest.fn().mockResolvedValue({});
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      purchaseOrderLine: { update: lineUpdate },
+      purchaseOrder: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'po-1', status: 'INVOICED', lines: [line], supplier: {} }),
+        update: jest.fn().mockResolvedValue({}),
+        findFirstOrThrow: jest.fn().mockResolvedValue({ id: 'po-1', lines: [] }),
+      },
+    };
+    const prisma = { $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) };
+    return { service: new InventoryService(prisma as unknown as PrismaService), lineUpdate };
+  };
+  const receipt = (line: object) => ({ dateReceived: '2026-11-16', lines: [line] }) as never;
+
+  it('records damaged units without stocking them or counting them as received', async () => {
+    const { service, lineUpdate } = setup();
+    await service.receivePurchaseOrder(
+      't1',
+      'u1',
+      'po-1',
+      receipt({ lineId: 'l1', receivedQuantity: '0', damagedQuantity: '3' }),
+    );
+    const [args] = lineUpdate.mock.calls[0] as [
+      { where: { id: string }; data: { damagedQuantity: { increment: { toString(): string } } } },
+    ];
+    expect(args.where).toEqual({ id: 'l1' });
+    expect(args.data.damagedQuantity.increment.toString()).toBe('3');
+  });
+
+  it('will not take received and damaged units beyond what is invoiced', async () => {
+    const { service, lineUpdate } = setup();
+    await expect(
+      service.receivePurchaseOrder(
+        't1',
+        'u1',
+        'po-1',
+        receipt({ lineId: 'l1', receivedQuantity: '8', damagedQuantity: '3' }),
+      ),
+    ).rejects.toThrow('exceed');
+    expect(lineUpdate).not.toHaveBeenCalled();
+  });
+});

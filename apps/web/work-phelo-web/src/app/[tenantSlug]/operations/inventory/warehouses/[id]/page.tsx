@@ -1,9 +1,9 @@
 'use client';
 
+import { InventoryBreadcrumb } from '@/components/molecules/inventory/InventoryBreadcrumb';
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
@@ -89,13 +89,7 @@ export default function InventoryWarehouseDetailsPage({
   return (
     <>
       <div className={`${pageHeader} shrink-0 flex flex-col gap-3`}>
-        <nav className="flex items-center gap-2 text-sm text-gray-400">
-          <Link href={base} className="hover:text-gray-700 transition-colors">
-            Warehouses
-          </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-gray-700 font-medium">{warehouse.name}</span>
-        </nav>
+        <InventoryBreadcrumb root={{ label: 'Warehouses', href: base }} current={warehouse.name} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold text-gray-900">{warehouse.name}</h1>
@@ -147,11 +141,15 @@ export default function InventoryWarehouseDetailsPage({
             className="px-0 [--tab-first-pl:0px]"
           />
           {tab === 'items' ? (
-            <WarehouseItemsTable warehouseId={id} items={items} />
+            <WarehouseItemsTable warehouseId={id} items={items} sourceLabel={warehouse.name} />
           ) : tab === 'staff' ? (
             <WarehouseStaffTable />
           ) : (
-            <StockMovementsTable movements={warehouseMovements} typeFilter />
+            <StockMovementsTable
+              movements={warehouseMovements}
+              typeFilter
+              sourceLabel={warehouse.name}
+            />
           )}
         </div>
       </div>
