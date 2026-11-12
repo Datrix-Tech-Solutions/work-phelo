@@ -33,6 +33,11 @@ import {
   BulkImportItemsDto,
   SupplierPaymentDto,
   RejectionDto,
+  PurchaseInvoiceDto,
+  StockInCorrectionDto,
+  StockOutCorrectionDto,
+  StockTransferCorrectionDto,
+  StockAdjustmentCorrectionDto,
   UpdateItemDto,
   StockInDto,
   PurchaseOrderDto,
@@ -485,6 +490,16 @@ export class PurchaseOrdersController {
   create(@Req() req: UserRequest, @Body() dto: PurchaseOrderDto) {
     return this.service.createPurchaseOrder(req.user.tenantId, req.user.id, dto);
   }
+  @Post(':id/invoices')
+  @HttpCode(201)
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  invoice(
+    @Req() req: UserRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PurchaseInvoiceDto,
+  ) {
+    return this.service.recordPurchaseInvoice(req.user.tenantId, req.user.id, id, dto);
+  }
   @Post(':id/receive')
   @HttpCode(201)
   @RequirePermissions('operations.inventory.stock-in:CREATE')
@@ -627,5 +642,75 @@ export class StockMovementRequestsController {
   ) {
     await this.requireApprover(req, id);
     return this.service.rejectMovementRequest(req.user.tenantId, req.user.id, id, dto.reason);
+  }
+}
+
+const CHANGE_PERMISSIONS = Object.values(REQUEST_RESOURCE).flatMap((r) => [
+  `${r}:EDIT`,
+  `${r}:DELETE`,
+]);
+
+@ApiTags('Inventory - Stock movement corrections')
+@ApiBearerAuth('access-token')
+@Controller('stock-corrections')
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
+@RequireModule('operations')
+export class StockCorrectionsController {
+  constructor(private readonly service: InventoryService) {}
+  // Changing a posted movement needs EDIT on its kind (cancel, reverse) or DELETE (delete).
+  private async require(req: UserRequest, key: string, action: 'EDIT' | 'DELETE') {
+    const type = await this.service.movementType(req.user.tenantId, key);
+    const kind: StockMovementRequestKind =
+      type === 'STOCK_IN' || type === 'STOCK_OUT'
+        ? type
+        : type === 'TRANSFER_IN' || type === 'TRANSFER_OUT'
+          ? 'TRANSFER'
+          : 'ADJUSTMENT';
+    if (!can(req.user, `${REQUEST_RESOURCE[kind]}:${action}`))
+      throw new ForbiddenException('You do not have permission to change this movement');
+  }
+  private async correct(
+    req: UserRequest,
+    dto: { movementId: string; state: 'CANCELLED' | 'DELETED' },
+    kind: StockMovementRequestKind,
+    body: Parameters<InventoryService['correctMovement']>[5],
+  ) {
+    await this.require(req, dto.movementId, dto.state === 'DELETED' ? 'DELETE' : 'EDIT');
+    return this.service.correctMovement(
+      req.user.tenantId,
+      req.user.id,
+      dto.movementId,
+      dto.state,
+      kind,
+      body,
+    );
+  }
+  @Post(':id/reverse')
+  @HttpCode(200)
+  @RequireAnyPermission(...CHANGE_PERMISSIONS)
+  async reverse(@Req() req: UserRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await this.require(req, id, 'EDIT');
+    return this.service.reverseMovement(req.user.tenantId, req.user.id, id);
+  }
+  // The counter movement for a stock in is a stock out, and so on; each route takes its body.
+  @Post('stock-in')
+  @RequireAnyPermission(...CHANGE_PERMISSIONS)
+  stockIn(@Req() req: UserRequest, @Body() dto: StockInCorrectionDto) {
+    return this.correct(req, dto, 'STOCK_IN', dto.body);
+  }
+  @Post('stock-out')
+  @RequireAnyPermission(...CHANGE_PERMISSIONS)
+  stockOut(@Req() req: UserRequest, @Body() dto: StockOutCorrectionDto) {
+    return this.correct(req, dto, 'STOCK_OUT', dto.body);
+  }
+  @Post('transfer')
+  @RequireAnyPermission(...CHANGE_PERMISSIONS)
+  transfer(@Req() req: UserRequest, @Body() dto: StockTransferCorrectionDto) {
+    return this.correct(req, dto, 'TRANSFER', dto.body);
+  }
+  @Post('adjustment')
+  @RequireAnyPermission(...CHANGE_PERMISSIONS)
+  adjustment(@Req() req: UserRequest, @Body() dto: StockAdjustmentCorrectionDto) {
+    return this.correct(req, dto, 'ADJUSTMENT', dto.body);
   }
 }

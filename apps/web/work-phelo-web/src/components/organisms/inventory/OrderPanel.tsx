@@ -48,10 +48,23 @@ const newLine = (): LineRow => ({
   unitCost: 0,
 });
 
-const PAYMENT_TERMS = ['Due on receipt', 'Cash on delivery'].map((t) => ({ value: t, label: t }));
+// Terms decide when the supplier can be paid: on receipt or cash on delivery, once the goods have
+// arrived; on any of the others, as soon as the invoice is recorded.
+const PAYMENT_TERMS = [
+  'Due on receipt',
+  'Cash on delivery',
+  'Payment in advance',
+  'Net 15',
+  'Net 30',
+  'Net 60',
+].map((t) => ({ value: t, label: t }));
 
 const LINE_GRID =
   'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1fr)_30px]';
+
+// A purchase order has no prices: the unit cost is entered when the goods are received.
+const PURCHASE_LINE_GRID =
+  'grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_30px]';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankForm = (): FormValues => ({
@@ -75,7 +88,7 @@ const COPY = {
   PURCHASE: {
     title: 'Purchase Order',
     description:
-      'Order stock from this supplier. Nothing is added to stock until you receive the order.',
+      'Order stock from this supplier. Prices are entered when you receive the order, and nothing is added to stock until then.',
     partyLabel: 'Supplier',
     warehouseLabel: 'Deliver To',
     dateLabel: 'Expected Delivery',
@@ -164,7 +177,7 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
   };
 
   const isPurchase = kind === 'PURCHASE';
-  const lineGrid = LINE_GRID;
+  const lineGrid = isPurchase ? PURCHASE_LINE_GRID : LINE_GRID;
 
   const handleClose = () => {
     reset(blankForm());
@@ -191,7 +204,6 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
           itemId: l.itemId,
           variant: l.variant.trim() || null,
           quantity: l.quantity,
-          unitCost: l.unitCost,
         })),
       });
       handleClose();
@@ -357,7 +369,10 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
 
             <div className="rounded-xl border border-gray-200 overflow-hidden">
               <div className={cn(lineGrid, 'hidden bg-gray-50 px-2.5 py-2 sm:grid')}>
-                {['Item', 'Variant', 'Qty', copy.priceLabel, 'Total'].map((h) => (
+                {(isPurchase
+                  ? ['Item', 'Variant', 'Qty']
+                  : ['Item', 'Variant', 'Qty', copy.priceLabel, 'Total']
+                ).map((h) => (
                   <span key={h} className="text-xs font-bold text-gray-900">
                     {h}
                   </span>
@@ -414,20 +429,24 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
                       onChange={(v) => updateLine(line.key, { quantity: v })}
                       error={showLineErrors && line.quantity <= 0 ? 'Enter a quantity' : undefined}
                     />
-                    <NumberField
-                      ariaLabel={copy.priceLabel}
-                      className="w-full py-2"
-                      value={line.unitCost}
-                      onChange={() => {}}
-                      disabled
-                    />
-                    <NumberField
-                      ariaLabel="Total"
-                      className="w-full py-2"
-                      value={lineTotal(line)}
-                      onChange={() => {}}
-                      disabled
-                    />
+                    {!isPurchase && (
+                      <>
+                        <NumberField
+                          ariaLabel={copy.priceLabel}
+                          className="w-full py-2"
+                          value={line.unitCost}
+                          onChange={() => {}}
+                          disabled
+                        />
+                        <NumberField
+                          ariaLabel="Total"
+                          className="w-full py-2"
+                          value={lineTotal(line)}
+                          onChange={() => {}}
+                          disabled
+                        />
+                      </>
+                    )}
                     <div className="flex h-9.5 items-center">
                       {lines.length > 1 ? (
                         <button
@@ -456,10 +475,14 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
               >
                 Add Item
               </Button>
-              <div className="text-sm text-gray-600">
-                Total{' '}
-                <span className="ml-2 font-semibold text-gray-900">{formatValue(grandTotal)}</span>
-              </div>
+              {!isPurchase && (
+                <div className="text-sm text-gray-600">
+                  Total{' '}
+                  <span className="ml-2 font-semibold text-gray-900">
+                    {formatValue(grandTotal)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

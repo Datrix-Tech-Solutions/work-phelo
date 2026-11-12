@@ -10,11 +10,11 @@ import {
   PURCHASE_ORDER_STATUS_BADGE,
   purchaseOrderAmountOwed,
   purchaseOrderQuantity,
-  purchaseOrderValue,
   canApproveOrder,
   canCancelOrder,
   canCloseOrder,
   canReceive,
+  canRecordInvoice,
   type PurchaseOrder,
 } from '@/hooks/inventory/usePurchaseOrders';
 import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
@@ -31,6 +31,7 @@ interface PurchaseOrdersTableProps {
   onCancel?: (order: PurchaseOrder) => void;
   onCloseOrder?: (order: PurchaseOrder) => void;
   onApprove?: (order: PurchaseOrder) => void;
+  onRecordInvoice?: (order: PurchaseOrder) => void;
   onReject?: (order: PurchaseOrder) => void;
   /** Called when a row is selected, e.g. to open the order's details page. */
   onRowClick?: (order: PurchaseOrder) => void;
@@ -50,6 +51,7 @@ export function PurchaseOrdersTable({
   onCloseOrder,
   onApprove,
   onReject,
+  onRecordInvoice,
   onRowClick,
   hideSupplier,
 }: PurchaseOrdersTableProps) {
@@ -148,9 +150,6 @@ export function PurchaseOrdersTable({
             <span className="text-[13px] font-semibold text-gray-700">
               {payable > 0 ? formatInventoryValue(payable) : '—'}
             </span>
-            <span className="text-[9px] font-semibold text-gray-600">
-              {formatInventoryValue(purchaseOrderValue(row))} ordered
-            </span>
           </div>
         );
       },
@@ -217,6 +216,9 @@ export function PurchaseOrdersTable({
           : []),
         ...(canApproveOrder(row) && onReject
           ? [{ label: 'Reject', danger: true, onClick: () => onReject(row) }]
+          : []),
+        ...(canRecordInvoice(row) && onRecordInvoice
+          ? [{ label: 'Record Invoice', onClick: () => onRecordInvoice(row) }]
           : []),
         ...(canReceive(row) && onReceive
           ? [{ label: 'Receive Items', onClick: () => onReceive(row) }]

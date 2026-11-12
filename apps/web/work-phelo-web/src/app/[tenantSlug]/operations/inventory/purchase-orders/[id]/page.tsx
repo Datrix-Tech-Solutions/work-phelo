@@ -12,6 +12,8 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { StockMovementsTable } from '@/components/organisms/inventory/StockMovementsTable';
 import { SupplierPaymentPanel } from '@/components/organisms/inventory/SupplierPaymentPanel';
 import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
+import { PurchaseOrderTimeline } from '@/components/organisms/inventory/PurchaseOrderTimeline';
+import { RecordInvoicePanel } from '@/components/organisms/inventory/RecordInvoicePanel';
 import { RejectPurchaseOrderModal } from '@/components/organisms/inventory/RejectPurchaseOrderModal';
 import { ClosePurchaseOrderModal } from '@/components/organisms/inventory/ClosePurchaseOrderModal';
 import { ReceivePurchaseOrderPanel } from '@/components/organisms/inventory/ReceivePurchaseOrderPanel';
@@ -27,12 +29,14 @@ import {
   canApproveOrder,
   canCancelOrder,
   canCloseOrder,
+  canRecordInvoice,
+  purchaseOrderInvoiced,
+  type PurchaseInvoice,
   canPay,
   PAYMENT_METHOD_LABEL,
   purchaseOrderBalance,
   canReceive,
   purchaseOrderAmountOwed,
-  purchaseOrderValue,
   usePurchaseOrders,
   type PurchaseOrderLine,
   type PurchaseOrderPayment,
@@ -57,6 +61,7 @@ export default function PurchaseOrderDetailsPage({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const toast = useToast();
   const userName = useUserNames();
@@ -136,6 +141,12 @@ export default function PurchaseOrderDetailsPage({
       width: '90px',
       render: (l) => quantity(l.receivedQuantity),
     },
+    {
+      key: 'invoiced',
+      label: 'Invoiced',
+      width: '90px',
+      render: (l) => quantity(l.invoicedQuantity),
+    },
     { key: 'extra', label: 'Extra', width: '80px', render: (l) => quantity(l.extraQuantity) },
     {
       key: 'outstanding',
@@ -153,21 +164,76 @@ export default function PurchaseOrderDetailsPage({
       label: 'Unit Cost',
       width: '130px',
       className: 'text-right pr-4',
-      render: (l) => money(l.unitCost),
+      // The average invoiced: invoices for a line can be at different prices.
+      render: (l) => (l.unitCost === null ? '—' : money(l.unitCost)),
     },
     {
-      key: 'lineTotal',
-      label: 'Line Total',
+      key: 'invoicedAmount',
+      label: 'Invoiced Amount',
       width: '140px',
       className: 'text-right pr-4',
-      render: (l) => money(l.orderedQuantity * l.unitCost),
+      render: (l) => money(l.invoicedValue),
+    },
+  ];
+
+  const invoiceColumns: Column<PurchaseInvoice>[] = [
+    {
+      key: 'number',
+      label: 'Invoice No.',
+      width: 'minmax(130px, 1fr)',
+      render: (i) => (
+        <span className="font-mono text-sm font-medium text-gray-900">
+          {i.number}
+          {i.void && <span className="ml-2 text-xs font-semibold text-gray-400">Void</span>}
+        </span>
+      ),
     },
     {
-      key: 'amountOwed',
-      label: 'Amount Owed',
+      key: 'date',
+      label: 'Date',
+      width: '110px',
+      render: (i) => (
+        <span className="text-sm font-semibold text-gray-500">{formatDate(i.date)}</span>
+      ),
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      width: '110px',
+      render: (i) => (
+        <span className="text-sm font-semibold text-gray-500">
+          {i.dueDate ? formatDate(i.dueDate) : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'items',
+      label: 'Items',
+      width: '80px',
+      render: (i) => quantity(i.lines.length),
+    },
+    {
+      key: 'notes',
+      label: 'Notes',
+      width: 'minmax(140px, 2fr)',
+      render: (i) => <span className="truncate text-sm text-gray-600">{i.notes || '—'}</span>,
+    },
+    {
+      key: 'recordedBy',
+      label: 'Recorded By',
+      width: 'minmax(120px, 1fr)',
+      render: (i) => (
+        <span className="truncate text-sm font-semibold text-gray-500">
+          {userName(i.recordedBy)}
+        </span>
+      ),
+    },
+    {
+      key: 'total',
+      label: 'Amount',
       width: '140px',
       className: 'text-right pr-4',
-      render: (l) => money(l.receivedQuantity * l.unitCost),
+      render: (i) => money(i.total),
     },
   ];
 
@@ -201,6 +267,16 @@ export default function PurchaseOrderDetailsPage({
       label: 'Notes',
       width: 'minmax(140px, 2fr)',
       render: (p) => <span className="truncate text-sm text-gray-600">{p.notes || '—'}</span>,
+    },
+    {
+      key: 'recordedBy',
+      label: 'Recorded By',
+      width: 'minmax(120px, 1fr)',
+      render: (p) => (
+        <span className="truncate text-sm font-semibold text-gray-500">
+          {userName(p.recordedBy)}
+        </span>
+      ),
     },
     {
       key: 'amount',
@@ -242,6 +318,11 @@ export default function PurchaseOrderDetailsPage({
                   Reject
                 </Button>
               </>
+            )}
+            {canRecordInvoice(order) && (
+              <Button size="xs" variant="outline" onClick={() => setInvoiceOpen(true)}>
+                Record Invoice
+              </Button>
             )}
             {canReceive(order) && (
               <Button size="xs" variant="outline" onClick={() => setReceiveOpen(true)}>
@@ -289,11 +370,11 @@ export default function PurchaseOrderDetailsPage({
             />
             <DetailField label="Payment Terms" value={order.paymentTerms || '—'} />
             <DetailField
-              label="Order Total"
-              value={formatInventoryValue(purchaseOrderValue(order))}
+              label="Invoiced"
+              value={formatInventoryValue(purchaseOrderInvoiced(order))}
             />
             <DetailField
-              label="Amount Owed"
+              label="Payable So Far"
               value={formatInventoryValue(purchaseOrderAmountOwed(order))}
             />
             <DetailField label="Amount Paid" value={formatInventoryValue(order.amountPaid)} />
@@ -324,10 +405,13 @@ export default function PurchaseOrderDetailsPage({
           </div>
         </CollapsibleOverview>
 
+        <PurchaseOrderTimeline order={order} receipts={receipts} />
+
         <div className="flex flex-col gap-2">
           <TabBar
             tabs={[
               { key: 'items', label: 'Items' },
+              { key: 'invoices', label: 'Invoices' },
               { key: 'receipts', label: 'Receipts' },
               { key: 'payments', label: 'Payments' },
             ]}
@@ -335,8 +419,18 @@ export default function PurchaseOrderDetailsPage({
             onTabChange={setTab}
             className="px-0 [--tab-first-pl:0px]"
           />
-          {tab === 'receipts' ? (
-            <StockMovementsTable movements={receipts} showVariant />
+          {tab === 'invoices' ? (
+            <DataTable
+              columns={invoiceColumns}
+              data={order.invoices}
+              emptyMessage="No invoices recorded on this order"
+              currentPage={1}
+              totalPages={0}
+              onPageChange={() => {}}
+              noInternalScroll
+            />
+          ) : tab === 'receipts' ? (
+            <StockMovementsTable movements={receipts} showVariant showRecordedBy />
           ) : tab === 'payments' ? (
             <DataTable
               columns={paymentColumns}
@@ -370,6 +464,11 @@ export default function PurchaseOrderDetailsPage({
         orders={[order]}
         initialSelectedIds={[order.id]}
         layout="popup"
+      />
+      <RecordInvoicePanel
+        key={`invoice-${order.id}-${invoiceOpen}`}
+        order={invoiceOpen ? order : null}
+        onClose={() => setInvoiceOpen(false)}
       />
       <ReceivePurchaseOrderPanel
         key={`receive-${order.id}-${receiveOpen}`}

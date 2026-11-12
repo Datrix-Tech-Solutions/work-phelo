@@ -24,7 +24,7 @@ describe('InventoryService.createPurchaseOrder - payload', () => {
       orderDate: '2026-11-11',
       supplierId: 'supplier-1',
       locationId: 'location-1',
-      lines: [{ itemId: 'item-1', variant: 'Fixed Top', quantity: '33', unitCost: '40' }],
+      lines: [{ itemId: 'item-1', variant: 'Fixed Top', quantity: '33' }],
     });
 
     const args = create.mock.calls[0][0] as {
@@ -78,8 +78,9 @@ describe('InventoryService.createSupplierPayment', () => {
     reference: 'PO-1',
     supplierId: 's1',
     status: 'PARTIALLY_RECEIVED',
-    // 10 received at 5 = 50 owed.
-    lines: [{ receivedQuantity: new Prisma.Decimal(10), unitCost: new Prisma.Decimal(5) }],
+    paymentTerms: 'Due on receipt',
+    // 100 invoiced; 10 received at 5 = 50 received.
+    lines: [{ invoicedValue: new Prisma.Decimal(100), receivedValue: new Prisma.Decimal(50) }],
     payments: [{ amount: new Prisma.Decimal(20) }],
     ...over,
   });
@@ -139,6 +140,35 @@ describe('InventoryService.createSupplierPayment', () => {
       ),
     ).rejects.toThrow(/more than the 30.00 owed/);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('pays against the invoice unless the terms are pay-on-receipt', async () => {
+    const { service, create } = setup([order({ paymentTerms: 'Net 30' })]);
+    // 100 invoiced less 20 already paid: 80 can be paid before the goods arrive.
+    await expect(
+      service.createSupplierPayment(
+        't1',
+        'u1',
+        dto([{ purchaseOrderId: 'po-1', amount: '80.01' }]),
+      ),
+    ).rejects.toThrow(/more than the 80.00 owed/);
+    await service.createSupplierPayment(
+      't1',
+      'u1',
+      dto([{ purchaseOrderId: 'po-1', amount: '80' }]),
+    );
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('pays only what was received once the order is closed', async () => {
+    const { service } = setup([order({ paymentTerms: 'Net 30', status: 'CLOSED' })]);
+    await expect(
+      service.createSupplierPayment(
+        't1',
+        'u1',
+        dto([{ purchaseOrderId: 'po-1', amount: '30.01' }]),
+      ),
+    ).rejects.toThrow(/more than the 30.00 owed/);
   });
 
   it('refuses a cancelled order and another supplier’s order', async () => {

@@ -40,7 +40,7 @@ export function CancelPurchaseOrderModal({
       isOpen={order !== null}
       onClose={onClose}
       title="Cancel Purchase Order"
-      description={`Cancel ${order?.reference ?? 'this order'}? Nothing has been received on it, so stock is not affected. This cannot be undone.`}
+      description={`Cancel ${order?.reference ?? 'this order'}? Nothing has been received or paid on it, so stock is not affected. Any invoices recorded on it are voided and nothing is owed. This cannot be undone.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>

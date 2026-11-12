@@ -61,6 +61,8 @@ export interface StockMovement {
   status: StockMovementStatus;
   /** User ids: who recorded (or issued) the movement and who approved it. Unknown for drafts. */
   createdBy?: string | null;
+  /** When it was recorded (ISO date-time). */
+  createdAt?: string | null;
   approvedBy?: string | null;
   /** Rejected requests only. */
   rejectedBy?: string | null;
@@ -114,7 +116,10 @@ interface ApiStockMovement {
   lotId: string | null;
   purchaseOrderLineId: string | null;
   createdBy: string;
+  createdAt: string;
   approvedBy: string | null;
+  /** What happened to it since. Cancelled and deleted movements had their stock put back. */
+  state: 'ACTIVE' | 'REVERSED' | 'CANCELLED' | 'DELETED' | 'OFFSET';
 }
 
 export function getMovementQuantity(m: StockMovement): number {
@@ -143,6 +148,8 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
   const transfers = new Map<string, StockMovement>();
   const batchIdOf = new Map<StockMovement, string>();
   for (const m of rows) {
+    // Deleted movements, and the ones that put their stock back, are not listed.
+    if (m.state === 'DELETED' || m.state === 'OFFSET') continue;
     const before = result.length;
     const type = UI_TYPE[m.type];
     const quantity = toNumber(m.quantity) ?? 0;
@@ -171,8 +178,13 @@ function toMovements(rows: ApiStockMovement[]): StockMovement[] {
       notes: m.notes,
       reason: null,
       purpose: null,
-      status: 'COMPLETED' as const,
+      status: (m.state === 'REVERSED'
+        ? 'REVERSED'
+        : m.state === 'CANCELLED'
+          ? 'CANCELLED'
+          : 'COMPLETED') as StockMovementStatus,
       createdBy: m.createdBy,
+      createdAt: m.createdAt,
       approvedBy: m.approvedBy,
     };
     if (type === 'TRANSFER' && m.transferId) {
@@ -349,21 +361,24 @@ export function useStockMovements() {
     };
     return (requests ?? []).map((r) => requestToMovement(r, priceOf));
   }, [requests, items]);
-  // The service returns newest first.
+  // The service returns newest first. Price adjustments are kept in this browser, so what
+  // happened to them is too; every other movement carries its state from the service.
   const reversedIds = useReversedMovementStore((s) => s.ids);
   const cancelledIds = useCancelledMovementStore((s) => s.ids);
   const deletedIds = useDeletedMovementStore((s) => s.ids);
   const revaluations = useRevaluationStore((s) => s.entries);
   const movements = useMemo(
-    () =>
-      [
-        ...pending,
-        ...revaluations.map(revaluationToMovement),
-        ...toMovements(data ?? []).map((m) => {
+    () => [
+      ...pending,
+      ...revaluations
+        .map(revaluationToMovement)
+        .map((m) => {
           if (cancelledIds.includes(m.id)) return { ...m, status: 'CANCELLED' as const };
           return reversedIds.includes(m.id) ? { ...m, status: 'REVERSED' as const } : m;
-        }),
-      ].filter((m) => !deletedIds.includes(m.id)),
+        })
+        .filter((m) => !deletedIds.includes(m.id)),
+      ...toMovements(data ?? []),
+    ],
     [data, pending, reversedIds, cancelledIds, revaluations, deletedIds],
   );
   return { movements, isLoading: isLoading || isLoadingRequests };
@@ -378,15 +393,9 @@ const REQUEST_PATH: Record<string, string> = {
 };
 
 /**
- * Posts a movement as one batch request: every item is saved together under a shared batchId, or
- * none is, so a failure part-way never leaves half a movement behind. It changes stock at once;
- * new movements go through submitMovement instead, so that they are approved first.
+ * A movement is one batch request: every item is saved together under a shared batchId, or none
+ * is, so a failure part-way never leaves half a movement behind.
  */
-function postMovement(movement: NewStockMovement) {
-  const { path, body } = movementBody(movement);
-  return inventoryApi.post<{ batchId: string }>(path, body);
-}
-
 /** The service endpoint and body for a movement. */
 function movementBody(movement: NewStockMovement): { path: string; body: object } {
   const common = {
@@ -553,28 +562,46 @@ function counterMovement(m: StockMovement): NewStockMovement {
   };
 }
 
+/** Where the service takes the movement that puts a movement's stock back. */
+const CORRECTION_PATH: Record<string, string> = {
+  '/stock-in-batches': '/stock-corrections/stock-in',
+  '/stock-out-batches': '/stock-corrections/stock-out',
+  '/stock-transfer-batches': '/stock-corrections/transfer',
+  '/stock-adjustment-batches': '/stock-corrections/adjustment',
+};
+
 /**
- * Puts back the stock a posted movement changed, by posting the opposite movement. Resolves to the
- * id of that opposite movement (so it can be hidden from the lists), or null when the movement
- * changed no stock. Rejects, changing nothing, if the stock can't be put back, e.g. goods
- * received earlier have since been issued.
+ * Reverses, cancels or deletes a posted movement, recorded in the service so everyone sees the
+ * same status. Cancel and delete put the stock back by posting the opposite movement, and
+ * reject, changing nothing, if the stock can't be put back (e.g. goods received earlier have
+ * since been issued). Reverse is only a label: it changes no stock.
  */
-export function useReturnMovementStock() {
+export function useMovementCorrection() {
   const queryClient = useQueryClient();
   const m = useMutation({
-    mutationFn: async (movement: StockMovement) => {
-      if (movement.kind) return null;
-      const { batchId } = await postMovement(counterMovement(movement));
-      return batchId;
+    mutationFn: async ({
+      movement,
+      action,
+    }: {
+      movement: StockMovement;
+      action: 'REVERSED' | 'CANCELLED' | 'DELETED';
+    }) => {
+      if (action === 'REVERSED')
+        return inventoryApi.post(`/stock-corrections/${movement.id}/reverse`, {});
+      const { path, body } = movementBody(counterMovement(movement));
+      return inventoryApi.post(CORRECTION_PATH[path], {
+        movementId: movement.id,
+        state: action,
+        body,
+      });
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: inventoryKeys.movements });
-      queryClient.invalidateQueries({ queryKey: inventoryKeys.balances });
-      queryClient.invalidateQueries({ queryKey: inventoryKeys.variantBalances });
-      queryClient.invalidateQueries({ queryKey: inventoryKeys.lots });
-    },
+    onSettled: () => refreshStock(queryClient),
   });
-  return { returnStock: m.mutateAsync, isPending: m.isPending };
+  return {
+    correctMovement: (movement: StockMovement, action: 'REVERSED' | 'CANCELLED' | 'DELETED') =>
+      m.mutateAsync({ movement, action }),
+    isPending: m.isPending,
+  };
 }
 
 /** Approves or rejects a movement waiting for approval. Approving posts it to stock. */

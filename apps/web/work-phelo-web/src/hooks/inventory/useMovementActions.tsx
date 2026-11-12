@@ -13,7 +13,7 @@ import { useCancelledMovementStore } from '@/hooks/inventory/useCancelledMovemen
 import { useDeletedMovementStore } from '@/hooks/inventory/useDeletedMovements';
 import { useReversedMovementStore } from '@/hooks/inventory/useReversedMovements';
 import { useStockMovementDrafts } from '@/hooks/inventory/useStockMovementDrafts';
-import { useReturnMovementStock, type StockMovement } from '@/hooks/inventory/useStockMovements';
+import { useMovementCorrection, type StockMovement } from '@/hooks/inventory/useStockMovements';
 import { extractError } from '@/lib/extractError';
 import { useToast } from '@/hooks/useToast';
 
@@ -25,9 +25,10 @@ export const canDelete = (m: StockMovement) => m.status === 'COMPLETED';
 export const canCancel = canDelete;
 
 /**
- * Reverse, export and delete-draft for a stock movement, shared by the table and details page.
- * Render `modals` once alongside whatever triggers these. Reverse and draft delete are
- * front-end only: the inventory service has no endpoint for either.
+ * Reverse, cancel, delete, export and delete-draft for a stock movement, shared by the table and
+ * details page. Render `modals` once alongside whatever triggers these. What happens to a posted
+ * movement is saved in the inventory service, so every user sees it; price adjustments and
+ * drafts are kept in this browser only.
  */
 export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {}) {
   const toast = useToast();
@@ -35,7 +36,7 @@ export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {
   const { units } = useInventoryUnits();
   const { warehouses } = useInventoryWarehouses();
   const markCancelled = useCancelledMovementStore((s) => s.markCancelled);
-  const { returnStock, isPending: isReturning } = useReturnMovementStock();
+  const { correctMovement, isPending: isReturning } = useMovementCorrection();
   const markDeleted = useDeletedMovementStore((s) => s.markDeleted);
   const markReversed = useReversedMovementStore((s) => s.markReversed);
   const { deleteDraft } = useStockMovementDrafts();
@@ -43,6 +44,14 @@ export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {
   const [deleteMovementTarget, setDeleteMovementTarget] = useState<StockMovement | null>(null);
   const [cancelTarget, setCancelTarget] = useState<StockMovement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StockMovement | null>(null);
+
+  // Price adjustments live in this browser, so what happens to one is recorded here too.
+  const apply = async (m: StockMovement, action: 'REVERSED' | 'CANCELLED' | 'DELETED') => {
+    if (!m.kind) return correctMovement(m, action);
+    if (action === 'REVERSED') markReversed(m.id);
+    else if (action === 'CANCELLED') markCancelled(m.id);
+    else markDeleted(m.id);
+  };
 
   const exportMovement = (m: StockMovement) => {
     const warehouse = (id: string | null) =>
@@ -91,7 +100,7 @@ export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {
         isOpen={reverseTarget !== null}
         onClose={() => setReverseTarget(null)}
         title="Reverse Transaction"
-        description={`Mark ${reverseTarget?.reference ?? 'this movement'} as reversed? This is recorded in this browser only and does not put the stock back.`}
+        description={`Mark ${reverseTarget?.reference ?? 'this movement'} as reversed? Everyone will see it as reversed. This does not put the stock back: to do that, cancel or delete the movement instead.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setReverseTarget(null)}>
@@ -99,9 +108,16 @@ export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {
             </Button>
             <Button
               variant="danger"
-              onClick={() => {
+              isLoading={isReturning}
+              loadingText="Reversing..."
+              onClick={async () => {
                 if (!reverseTarget) return;
-                markReversed(reverseTarget.id);
+                try {
+                  await apply(reverseTarget, 'REVERSED');
+                } catch (err) {
+                  toast.error(extractError(err, 'Could not reverse the transaction'));
+                  return;
+                }
                 toast.success('Transaction reversed');
                 setReverseTarget(null);
               }}
@@ -129,9 +145,7 @@ export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {
                 if (!cancelTarget) return;
                 const target = cancelTarget;
                 try {
-                  const returnId = await returnStock(target);
-                  if (returnId) markDeleted(returnId);
-                  markCancelled(target.id);
+                  await apply(target, 'CANCELLED');
                 } catch (err) {
                   toast.error(extractError(err, 'Could not put the stock back'));
                   return;
@@ -163,9 +177,7 @@ export function useMovementActions({ onDeleted }: { onDeleted?: () => void } = {
                 if (!deleteMovementTarget) return;
                 const target = deleteMovementTarget;
                 try {
-                  const returnId = await returnStock(target);
-                  if (returnId) markDeleted(returnId);
-                  markDeleted(target.id);
+                  await apply(target, 'DELETED');
                 } catch (err) {
                   toast.error(extractError(err, 'Could not put the stock back'));
                   return;

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { CancelPurchaseOrderModal } from '@/components/organisms/inventory/CancelPurchaseOrderModal';
 import { ClosePurchaseOrderModal } from '@/components/organisms/inventory/ClosePurchaseOrderModal';
 import { PurchaseOrdersTable } from '@/components/organisms/inventory/PurchaseOrdersTable';
+import { RecordInvoicePanel } from '@/components/organisms/inventory/RecordInvoicePanel';
 import { ReceivePurchaseOrderPanel } from '@/components/organisms/inventory/ReceivePurchaseOrderPanel';
 import { RejectPurchaseOrderModal } from '@/components/organisms/inventory/RejectPurchaseOrderModal';
 import { useCanApprove } from '@/hooks/inventory/useApprovalAccess';
@@ -33,6 +34,7 @@ export function PurchaseOrdersManager({
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [receiveId, setReceiveId] = useState<string | null>(null);
+  const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<PurchaseOrder | null>(null);
   const [closeTarget, setCloseTarget] = useState<PurchaseOrder | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PurchaseOrder | null>(null);
@@ -47,6 +49,7 @@ export function PurchaseOrdersManager({
       toast.error(extractError(err, 'Could not approve the order'));
     }
   };
+  const invoiceTarget = purchaseOrders.find((o) => o.id === invoiceId) ?? null;
   const receiveTarget = purchaseOrders.find((o) => o.id === receiveId) ?? null;
 
   return (
@@ -57,6 +60,7 @@ export function PurchaseOrdersManager({
         actionButton={actionButton}
         hideSupplier={hideSupplier}
         onReceive={(o) => setReceiveId(o.id)}
+        onRecordInvoice={(o) => setInvoiceId(o.id)}
         onCancel={setCancelTarget}
         onCloseOrder={setCloseTarget}
         onApprove={canApprove ? approve : undefined}
@@ -64,6 +68,11 @@ export function PurchaseOrdersManager({
         onRowClick={(o) =>
           router.push(`/${tenantSlug}/operations/inventory/purchase-orders/${o.id}`)
         }
+      />
+      <RecordInvoicePanel
+        key={`invoice-${invoiceTarget?.id ?? 'none'}`}
+        order={invoiceTarget}
+        onClose={() => setInvoiceId(null)}
       />
       <ReceivePurchaseOrderPanel
         key={`receive-${receiveTarget?.id ?? 'none'}`}
