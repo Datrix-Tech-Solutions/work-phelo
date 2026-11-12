@@ -22,7 +22,7 @@ interface LineState {
   expiryDate: string;
 }
 
-const FIELD_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-6';
+const FIELD_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(110px,1fr))]';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const formatNumber = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -47,13 +47,13 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
   const [dateReceived, setDateReceived] = useState(today);
   const [notes, setNotes] = useState('');
   const [showErrors, setShowErrors] = useState(false);
-  // Each line starts by taking in everything still outstanding.
+  // Each line starts by taking in everything invoiced and not yet received.
   const [state, setState] = useState<Record<string, LineState>>(() =>
     Object.fromEntries(
       (order?.lines ?? []).map((l) => [
         l.id,
         {
-          received: Math.max(0, l.orderedQuantity - l.receivedQuantity),
+          received: Math.max(0, l.invoicedQuantity - l.receivedQuantity),
           extra: 0,
           lotNumber: '',
           manufactureDate: '',
@@ -65,7 +65,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
 
   const itemOf = (id: string) => items.find((i) => i.id === id);
   const outstanding = (l: PurchaseOrder['lines'][number]) =>
-    Math.max(0, l.orderedQuantity - l.receivedQuantity);
+    Math.max(0, l.invoicedQuantity - l.receivedQuantity);
   const update = (id: string, patch: Partial<LineState>) =>
     setState((s) => ({ ...s, [id]: { ...s[id], ...patch } }));
 
@@ -74,7 +74,8 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
 
   const lineError = (l: PurchaseOrder['lines'][number]) => {
     const s = state[l.id];
-    if (s.received > outstanding(l)) return `Only ${formatNumber(outstanding(l))} outstanding`;
+    if (s.received > outstanding(l))
+      return `Only ${formatNumber(outstanding(l))} invoiced and not received`;
     return undefined;
   };
   const expiryError = (l: PurchaseOrder['lines'][number]) => {
@@ -86,13 +87,17 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
     return undefined;
   };
 
-  const owedNow = lines.reduce((sum, l) => sum + (state[l.id]?.received ?? 0) * l.unitCost, 0);
+  const owedNow = lines.reduce(
+    (sum, l) => sum + (state[l.id]?.received ?? 0) * (l.unitCost ?? 0),
+    0,
+  );
   const stockedNow = lines.reduce(
     (sum, l) => sum + (state[l.id]?.received ?? 0) + (state[l.id]?.extra ?? 0),
     0,
   );
   const valueNow = lines.reduce(
-    (sum, l) => sum + ((state[l.id]?.received ?? 0) + (state[l.id]?.extra ?? 0)) * l.unitCost,
+    (sum, l) =>
+      sum + ((state[l.id]?.received ?? 0) + (state[l.id]?.extra ?? 0)) * (l.unitCost ?? 0),
     0,
   );
 
@@ -135,7 +140,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
       isOpen={order !== null}
       onClose={onClose}
       title={order ? `Receive ${order.reference}` : 'Receive Purchase Order'}
-      description="Enter what arrived. Received items are paid for; extra items are free. Both are added to stock."
+      description="Enter what arrived, up to what the supplier invoiced. Prices come from the invoice. Extra items are free. Both are added to stock."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose} disabled={isReceiving}>
@@ -202,9 +207,9 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                         )}
                       </div>
                       <span className="shrink-0 text-xs font-semibold text-gray-500">
-                        Ordered {formatNumber(l.orderedQuantity)} · Received{' '}
-                        {formatNumber(l.receivedQuantity)} · Outstanding{' '}
-                        {formatNumber(outstanding(l))}
+                        Ordered {formatNumber(l.orderedQuantity)} · Invoiced{' '}
+                        {formatNumber(l.invoicedQuantity)} · Received{' '}
+                        {formatNumber(l.receivedQuantity)}
                       </span>
                     </div>
 
@@ -231,11 +236,20 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                           onChange={(v) => update(l.id, { extra: v })}
                         />
                       </Field>
-                      <Field label="Amount to Pay">
+                      <Field label="Unit Cost">
+                        <NumberField
+                          ariaLabel="Unit cost"
+                          className="w-full"
+                          value={l.unitCost ?? 0}
+                          onChange={() => {}}
+                          disabled
+                        />
+                      </Field>
+                      <Field label="Invoiced Amount">
                         <NumberField
                           ariaLabel="Amount to pay"
                           className="w-full"
-                          value={money(s.received * l.unitCost)}
+                          value={money(s.received * (l.unitCost ?? 0))}
                           onChange={() => {}}
                           disabled
                         />
@@ -290,7 +304,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                 </span>
               </div>
               <div>
-                Amount to pay supplier
+                Invoiced amount received
                 <span className="ml-2 font-semibold text-gray-900">
                   {formatInventoryValue(money(owedNow))}
                 </span>

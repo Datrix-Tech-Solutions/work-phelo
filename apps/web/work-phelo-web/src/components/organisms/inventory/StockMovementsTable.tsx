@@ -44,6 +44,8 @@ interface StockMovementsTableProps {
   typeFilter?: boolean;
   /** Show a Variant column and filter: for the history of one item. */
   showVariant?: boolean;
+  /** Show who recorded (or issued) each movement. */
+  showRecordedBy?: boolean;
 }
 
 /** Searchable, paged table of stock movements — shared by Stock Management and warehouse details. */
@@ -54,6 +56,7 @@ export function StockMovementsTable({
   onDraftClick,
   typeFilter,
   showVariant,
+  showRecordedBy,
 }: StockMovementsTableProps) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -207,22 +210,26 @@ export function StockMovementsTable({
         </span>
       ),
     },
-    {
-      key: 'recordedBy',
-      // Stock is issued out and recorded in; a table with both says so.
-      label: recordedByLabel,
-      width: 'minmax(110px, 1fr)',
-      className: 'overflow-hidden min-w-0 pr-4',
-      render: (row) => (
-        <span className="text-sm font-semibold text-gray-500 block truncate">
-          {row.status === 'DRAFT' ? '—' : userName(row.createdBy)}
-        </span>
-      ),
-    },
+    ...(showRecordedBy
+      ? [
+          {
+            key: 'recordedBy',
+            // Stock is issued out and recorded in; a table with both says so.
+            label: recordedByLabel,
+            width: 'minmax(100px, 1fr)',
+            className: 'overflow-hidden min-w-0 pr-4',
+            render: (row: StockMovement) => (
+              <span className="text-sm font-semibold text-gray-500 block truncate">
+                {row.status === 'DRAFT' ? '—' : userName(row.createdBy)}
+              </span>
+            ),
+          },
+        ]
+      : []),
     {
       key: 'status',
       label: 'Status',
-      width: '120px',
+      width: '150px',
       render: (row) => {
         const { label, variant } = MOVEMENT_STATUS_BADGE[row.status];
         return <Badge variant={variant} label={label} />;

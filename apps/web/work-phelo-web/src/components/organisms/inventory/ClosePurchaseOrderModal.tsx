@@ -33,7 +33,7 @@ export function ClosePurchaseOrderModal({ order, onClose }: ClosePurchaseOrderMo
       isOpen={order !== null}
       onClose={onClose}
       title="Close Purchase Order"
-      description={`Close ${order?.reference ?? 'this order'}? The items already received stay in stock and are still owed to the supplier, but the rest of the order will no longer be expected. This cannot be undone.`}
+      description={`Close ${order?.reference ?? 'this order'}? The items already received stay in stock and are owed to the supplier at the invoiced prices. The rest of the order is no longer expected, and anything invoiced for it is no longer owed. This cannot be undone.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>

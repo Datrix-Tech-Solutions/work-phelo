@@ -42,7 +42,7 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
     widget = await item('Widget', 'W');
     milk = await item('Milk', 'M', true);
   });
-  const place = (lines: { itemId: string; quantity: string; unitCost: string }[], extra = {}) =>
+  const place = (lines: { itemId: string; quantity: string }[], extra = {}) =>
     service.createPurchaseOrder(tenant, 'user-a', {
       orderDate: '2026-11-11',
       supplierId: supplier,
@@ -51,20 +51,30 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
       ...extra,
     });
   // Most tests need an order that can be received, so this places one and approves it.
-  const order = async (
-    lines: { itemId: string; quantity: string; unitCost: string }[],
-    extra = {},
-  ) => {
+  const order = async (lines: { itemId: string; quantity: string }[], extra = {}) => {
     const placed = await place(lines, extra);
-    return service.approvePurchaseOrder(tenant, 'user-b', placed.id);
+    await service.approvePurchaseOrder(tenant, 'user-b', placed.id);
+    // The supplier's invoice for everything ordered, at 1 a unit, so the order can be received.
+    return service.recordPurchaseInvoice(tenant, 'user-b', placed.id, {
+      number: `INV-${placed.reference}`,
+      invoiceDate: '2026-11-12',
+      lines: placed.lines.map((l) => ({
+        lineId: l.id,
+        quantity: l.orderedQuantity.toString(),
+        unitCost: '1',
+      })),
+    });
   };
   const receive = (id: string, lines: object[], dateReceived = '2026-11-15') =>
-    service.receivePurchaseOrder(tenant, 'user-a', id, { dateReceived, lines } as never);
+    service.receivePurchaseOrder(tenant, 'user-a', id, {
+      dateReceived,
+      lines,
+    } as never);
   const stock = async (itemId: string) =>
     (await prisma.stockBalance.findFirst({ where: { tenantId: tenant, itemId } }))?.quantity;
 
   it('places an order for approval, which cannot be received until approved', async () => {
-    const po = await place([{ itemId: widget, quantity: '10', unitCost: '1' }]);
+    const po = await place([{ itemId: widget, quantity: '10' }]);
     expect(po.status).toBe('PENDING_APPROVAL');
     await expect(
       receive(po.id, [{ lineId: po.lines[0].id, receivedQuantity: '10', extraQuantity: '0' }]),
@@ -75,7 +85,7 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
   });
 
   it('creates an order without touching stock and generates a reference', async () => {
-    const po = await order([{ itemId: widget, quantity: '100', unitCost: '1' }]);
+    const po = await order([{ itemId: widget, quantity: '100' }]);
     expect(po.status).toBe('ORDERED');
     expect(po.reference).toMatch(/^PO-20261111-/);
     expect(po.lines).toHaveLength(1);
@@ -83,7 +93,7 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
   });
 
   it('stocks and values the extra units but does not count them as owed', async () => {
-    const po = await order([{ itemId: widget, quantity: '100', unitCost: '1' }]);
+    const po = await order([{ itemId: widget, quantity: '100' }]);
     const done = await receive(po.id, [
       { lineId: po.lines[0].id, receivedQuantity: '100', extraQuantity: '50' },
     ]);
@@ -99,15 +109,52 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
     expect(m.reference).toBe(po.reference);
     expect(m.supplier).toBe('Acme');
     // owed = received x unit cost
-    const owed = done.lines.reduce(
-      (sum, l) => sum + Number(l.receivedQuantity) * Number(l.unitCost),
-      0,
-    );
+    const owed = done.lines.reduce((sum, l) => sum + Number(l.receivedValue), 0);
     expect(owed).toBe(100);
   });
 
+  it('records an invoice that sets the price, and receives only what is invoiced', async () => {
+    const placed = await place([{ itemId: widget, quantity: '100' }]);
+    await service.approvePurchaseOrder(tenant, 'user-b', placed.id);
+    const lineId = placed.lines[0].id;
+    // Nothing can be received before it is invoiced.
+    await expect(receive(placed.id, [{ lineId, receivedQuantity: '10' }])).rejects.toThrow(
+      'invoice',
+    );
+    const invoiced = await service.recordPurchaseInvoice(tenant, 'user-b', placed.id, {
+      number: 'INV-1',
+      invoiceDate: '2026-11-12',
+      lines: [{ lineId, quantity: '60', unitCost: '2' }],
+    });
+    expect(invoiced.status).toBe('INVOICED');
+    expect(invoiced.lines[0].invoicedValue.toString()).toBe('120');
+    await expect(receive(placed.id, [{ lineId, receivedQuantity: '61' }])).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    // A second invoice at another price: the line is received at the average, 60@2 and 40@3.
+    await service.recordPurchaseInvoice(tenant, 'user-b', placed.id, {
+      number: 'INV-2',
+      invoiceDate: '2026-11-13',
+      lines: [{ lineId, quantity: '40', unitCost: '3' }],
+    });
+    const done = await receive(placed.id, [
+      { lineId, receivedQuantity: '100', extraQuantity: '10' },
+    ]);
+    expect(done.lines[0].receivedValue.toString()).toBe('240');
+    expect((await stock(widget))?.toString()).toBe('110');
+  });
+
+  it('voids the invoices when a not-yet-received order is cancelled', async () => {
+    const po = await order([{ itemId: widget, quantity: '10' }]);
+    const cancelled = await service.cancelPurchaseOrder(tenant, po.id);
+    expect(cancelled.status).toBe('CANCELLED');
+    const full = await service.getPurchaseOrder(tenant, po.id);
+    expect(full.invoices.every((i) => i.status === 'VOID')).toBe(true);
+    expect(full.lines[0].invoicedQuantity.toString()).toBe('0');
+  });
+
   it('receives in parts and tracks what is outstanding', async () => {
-    const po = await order([{ itemId: widget, quantity: '100', unitCost: '2' }]);
+    const po = await order([{ itemId: widget, quantity: '100' }]);
     const lineId = po.lines[0].id;
     expect((await receive(po.id, [{ lineId, receivedQuantity: '60' }])).status).toBe(
       'PARTIALLY_RECEIVED',
@@ -123,7 +170,7 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
   });
 
   it('rejects a receipt with nothing on it', async () => {
-    const po = await order([{ itemId: widget, quantity: '10', unitCost: '1' }]);
+    const po = await order([{ itemId: widget, quantity: '10' }]);
     await expect(
       receive(po.id, [{ lineId: po.lines[0].id, receivedQuantity: '0' }]),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -131,8 +178,8 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
 
   it('needs an expiry date on receipt for a perishable item and posts nothing without it', async () => {
     const po = await order([
-      { itemId: widget, quantity: '10', unitCost: '1' },
-      { itemId: milk, quantity: '10', unitCost: '3' },
+      { itemId: widget, quantity: '10' },
+      { itemId: milk, quantity: '10' },
     ]);
     const [wLine, mLine] = [
       po.lines.find((l) => l.itemId === widget)!,
@@ -155,12 +202,12 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
   });
 
   it('cancels an order only while nothing has been received', async () => {
-    const a = await order([{ itemId: widget, quantity: '10', unitCost: '1' }]);
+    const a = await order([{ itemId: widget, quantity: '10' }]);
     expect((await service.cancelPurchaseOrder(tenant, a.id)).status).toBe('CANCELLED');
     await expect(
       receive(a.id, [{ lineId: a.lines[0].id, receivedQuantity: '5' }]),
     ).rejects.toBeInstanceOf(ConflictException);
-    const b = await order([{ itemId: widget, quantity: '10', unitCost: '1' }]);
+    const b = await order([{ itemId: widget, quantity: '10' }]);
     await receive(b.id, [{ lineId: b.lines[0].id, receivedQuantity: '5' }]);
     await expect(service.cancelPurchaseOrder(tenant, b.id)).rejects.toBeInstanceOf(
       ConflictException,
@@ -168,18 +215,18 @@ localTests('Purchase orders - disposable PostgreSQL', () => {
   });
 
   it('rejects a duplicate reference, a customer as supplier, and a repeated item line', async () => {
-    await order([{ itemId: widget, quantity: '1', unitCost: '1' }], { reference: 'PO-1' });
+    await order([{ itemId: widget, quantity: '1' }], { reference: 'PO-1' });
     await expect(
-      order([{ itemId: widget, quantity: '1', unitCost: '1' }], { reference: 'PO-1' }),
+      order([{ itemId: widget, quantity: '1' }], { reference: 'PO-1' }),
     ).rejects.toBeInstanceOf(ConflictException);
     const customer = (await service.createParty(tenant, { kind: 'CUSTOMER', name: 'Cust' })).id;
     await expect(
-      order([{ itemId: widget, quantity: '1', unitCost: '1' }], { supplierId: customer }),
+      order([{ itemId: widget, quantity: '1' }], { supplierId: customer }),
     ).rejects.toThrow('Supplier not found');
     await expect(
       order([
-        { itemId: widget, quantity: '1', unitCost: '1' },
-        { itemId: widget, quantity: '2', unitCost: '1' },
+        { itemId: widget, quantity: '1' },
+        { itemId: widget, quantity: '2' },
       ]),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

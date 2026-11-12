@@ -8,6 +8,7 @@ import {
   IsDateString,
   IsDecimal,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -592,15 +593,6 @@ export class PurchaseOrderLineDto {
   @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
   @Matches(POSITIVE_QUANTITY)
   quantity!: string;
-  @ApiProperty({
-    type: String,
-    example: '1.0000',
-    description: 'Price per unit the supplier is paid.',
-  })
-  @Transform(decimal)
-  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
-  @Matches(QUANTITY)
-  unitCost!: string;
 }
 
 export class PurchaseOrderDto {
@@ -652,7 +644,7 @@ export class ReceiveLineDto {
     type: String,
     example: '100',
     description:
-      'Units of the ordered quantity that arrived. Paid for. Cannot exceed what is still outstanding.',
+      'Units of the invoiced quantity that arrived. Cannot exceed what is invoiced and not yet received.',
   })
   @Transform(decimal)
   @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
@@ -663,7 +655,7 @@ export class ReceiveLineDto {
     type: String,
     example: '50',
     description:
-      'Free units on top of the order. Stocked and valued at the unit cost but not paid for.',
+      'Free units on top of the order. Stocked and valued at the invoiced unit cost but not paid for.',
   })
   @IsOptional()
   @Transform(decimal)
@@ -847,4 +839,77 @@ export class RejectionDto {
   @IsNotEmpty()
   @MaxLength(500)
   reason!: string;
+}
+
+class MovementCorrectionBase {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'The movement as listed: its batch, transfer or row id.',
+  })
+  @IsUUID()
+  movementId!: string;
+  @ApiProperty({ enum: ['CANCELLED', 'DELETED'] })
+  @IsIn(['CANCELLED', 'DELETED'])
+  state!: 'CANCELLED' | 'DELETED';
+}
+
+// The body is the movement that puts the stock back.
+export class StockInCorrectionDto extends MovementCorrectionBase {
+  @ValidateNested()
+  @Type(() => StockInBatchDto)
+  body!: StockInBatchDto;
+}
+export class StockOutCorrectionDto extends MovementCorrectionBase {
+  @ValidateNested()
+  @Type(() => StockOutBatchDto)
+  body!: StockOutBatchDto;
+}
+export class StockTransferCorrectionDto extends MovementCorrectionBase {
+  @ValidateNested()
+  @Type(() => StockTransferBatchDto)
+  body!: StockTransferBatchDto;
+}
+export class StockAdjustmentCorrectionDto extends MovementCorrectionBase {
+  @ValidateNested()
+  @Type(() => StockAdjustmentBatchDto)
+  body!: StockAdjustmentBatchDto;
+}
+
+export class PurchaseInvoiceLineDto {
+  @ApiProperty({ format: 'uuid', description: 'A line of the purchase order.' })
+  @IsUUID()
+  lineId!: string;
+  @ApiProperty({ type: String, example: '100', description: 'Units charged on this invoice.' })
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(POSITIVE_QUANTITY)
+  quantity!: string;
+  @ApiProperty({ type: String, example: '1.0000', description: 'Price per unit on the invoice.' })
+  @Transform(decimal)
+  @IsDecimal({ decimal_digits: '0,4', force_decimal: false })
+  @Matches(QUANTITY)
+  unitCost!: string;
+}
+
+export class PurchaseInvoiceDto {
+  @ApiProperty({ maxLength: 100, description: "The supplier's invoice number." })
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  number!: string;
+  @ApiProperty({ example: '2026-11-15' })
+  @Matches(DATE_ONLY, { message: 'invoiceDate must be a date in YYYY-MM-DD format' })
+  invoiceDate!: string;
+  @ApiProperty({ required: false, nullable: true, type: String, example: '2026-12-15' })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: 'dueDate must be a date in YYYY-MM-DD format' })
+  dueDate?: string | null;
+  @ApiProperty({ required: false, nullable: true, type: String, maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string | null;
+  @batchLines(PurchaseInvoiceLineDto)
+  lines!: PurchaseInvoiceLineDto[];
 }

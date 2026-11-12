@@ -34,6 +34,7 @@ import {
   UpdateUnitDto,
   StockInDto,
   PurchaseOrderDto,
+  PurchaseInvoiceDto,
   ReceivePurchaseOrderDto,
   ReceiveLineDto,
   AssignVariantDto,
@@ -80,10 +81,29 @@ const PAYMENT_SHARES = {
   select: {
     id: true,
     amount: true,
-    payment: { select: { paymentDate: true, method: true, reference: true, notes: true } },
+    payment: {
+      select: {
+        paymentDate: true,
+        method: true,
+        reference: true,
+        notes: true,
+        createdBy: true,
+        createdAt: true,
+      },
+    },
   },
   orderBy: { payment: { paymentDate: 'asc' } },
 } satisfies Prisma.PurchaseOrder$paymentsArgs;
+
+// What an order reports about its invoices: each one, with its lines.
+const INVOICES = {
+  include: { lines: { orderBy: { id: 'asc' } } },
+  orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+} satisfies Prisma.PurchaseOrder$invoicesArgs;
+
+// Orders on these terms are paid when the goods arrive; on any other terms (in advance, net 30, no
+// terms) they are paid against the invoice.
+const PAID_ON_RECEIPT = ['due on receipt', 'cash on delivery'];
 
 @Injectable()
 export class InventoryService {
@@ -887,11 +907,34 @@ export class InventoryService {
     return order;
   }
   private purchaseOrderStatus(
-    lines: { orderedQuantity: Prisma.Decimal; receivedQuantity: Prisma.Decimal }[],
+    lines: {
+      orderedQuantity: Prisma.Decimal;
+      invoicedQuantity: Prisma.Decimal;
+      receivedQuantity: Prisma.Decimal;
+    }[],
   ) {
     if (lines.every((l) => l.receivedQuantity.gte(l.orderedQuantity))) return 'RECEIVED' as const;
     if (lines.some((l) => l.receivedQuantity.gt(0))) return 'PARTIALLY_RECEIVED' as const;
+    if (lines.some((l) => l.invoicedQuantity.gt(0))) return 'INVOICED' as const;
     return 'ORDERED' as const;
+  }
+  /**
+   * What can be paid on an order so far. On pay-on-receipt terms (and once an order is closed) that
+   * is the value of what has been received, at the invoiced prices; otherwise it is what has been
+   * invoiced.
+   */
+  private payable(order: {
+    status: string;
+    paymentTerms: string | null;
+    lines: { invoicedValue: Prisma.Decimal; receivedValue: Prisma.Decimal }[];
+  }) {
+    const onReceipt =
+      order.status === 'CLOSED' ||
+      PAID_ON_RECEIPT.includes((order.paymentTerms ?? '').trim().toLowerCase());
+    return order.lines.reduce(
+      (sum, l) => sum.plus(onReceipt ? l.receivedValue : l.invoicedValue),
+      new StockDecimal(0),
+    );
   }
   listPurchaseOrders(tenantId: string) {
     return this.prisma.purchaseOrder.findMany({
@@ -900,6 +943,7 @@ export class InventoryService {
         lines: { orderBy: { id: 'asc' } },
         supplier: { select: { name: true } },
         payments: PAYMENT_SHARES,
+        invoices: INVOICES,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
@@ -911,6 +955,7 @@ export class InventoryService {
         lines: { orderBy: { id: 'asc' } },
         supplier: { select: { name: true } },
         payments: PAYMENT_SHARES,
+        invoices: INVOICES,
       },
     });
     if (!order) throw new NotFoundException('Purchase order not found');
@@ -969,7 +1014,6 @@ export class InventoryService {
                   itemId: l.itemId,
                   variantName: l.variant || null,
                   orderedQuantity: new StockDecimal(l.quantity),
-                  unitCost: new StockDecimal(l.unitCost),
                 })),
               },
             },
@@ -1015,14 +1059,20 @@ export class InventoryService {
             if (!line) throw new NotFoundException('Purchase order line not found');
             const got = new StockDecimal(input.receivedQuantity);
             const extra = new StockDecimal(input.extraQuantity ?? 0);
-            if (got.gt(line.orderedQuantity.minus(line.receivedQuantity)))
-              throw new ConflictException('Received quantity exceeds what is still outstanding');
+            if (got.plus(extra).gt(0) && line.invoicedQuantity.lte(0))
+              throw new ConflictException('Record an invoice for this item before receiving it');
+            if (got.gt(line.invoicedQuantity.minus(line.receivedQuantity)))
+              throw new ConflictException(
+                'Received quantity exceeds what is invoiced and not yet received',
+              );
             if (got.plus(extra).gt(0)) received.push({ line, received: got, extra, input });
           }
           if (!received.length)
             throw new BadRequestException('Enter a quantity received for at least one line');
           received.sort((a, b) => a.line.itemId.localeCompare(b.line.itemId));
           for (const { line, received: got, extra, input } of received) {
+            // Goods are received at the average price invoiced for the line.
+            const unitCost = line.invoicedValue.div(line.invoicedQuantity).toDecimalPlaces(4);
             await this.stockInTx(
               tx,
               tenantId,
@@ -1036,7 +1086,7 @@ export class InventoryService {
                 supplier: order.supplier.name,
                 reference: order.reference,
                 notes: dto.notes ?? undefined,
-                unitCost: line.unitCost.toString(),
+                unitCost: unitCost.toString(),
                 lotNumber: input.lotNumber,
                 manufactureDate: input.manufactureDate,
                 expiryDate: input.expiryDate,
@@ -1046,7 +1096,12 @@ export class InventoryService {
             );
             await tx.purchaseOrderLine.update({
               where: { id: line.id },
-              data: { receivedQuantity: { increment: got }, extraQuantity: { increment: extra } },
+              data: {
+                receivedQuantity: { increment: got },
+                extraQuantity: { increment: extra },
+                // Only the units received are paid for; the extra is free.
+                receivedValue: { increment: got.times(unitCost) },
+              },
             });
             line.receivedQuantity = line.receivedQuantity.plus(got);
           }
@@ -1068,7 +1123,11 @@ export class InventoryService {
   ) {
     const order = await tx.purchaseOrder.findFirstOrThrow({
       where: { tenantId, id },
-      include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
+      include: {
+        lines: { orderBy: { id: 'asc' } },
+        supplier: { select: { name: true } },
+        invoices: INVOICES,
+      },
     });
     return { ...order, batchId };
   }
@@ -1080,12 +1139,111 @@ export class InventoryService {
           throw new ConflictException('The order is already cancelled');
         if (order.status === 'REJECTED') throw new ConflictException('The order was rejected');
         if (order.lines.some((l) => l.receivedQuantity.gt(0) || l.extraQuantity.gt(0)))
-          throw new ConflictException('An order that has received stock cannot be cancelled');
+          throw new ConflictException(
+            'An order that has received stock cannot be cancelled: close it instead',
+          );
+        const paid = await tx.purchaseOrderPayment.count({
+          where: { tenantId, purchaseOrderId: order.id },
+        });
+        if (paid > 0)
+          throw new ConflictException(
+            'An order with payments cannot be cancelled: close it instead',
+          );
+        // Its invoices no longer count: nothing is owed on a cancelled order.
+        await tx.purchaseInvoice.updateMany({
+          where: { tenantId, purchaseOrderId: order.id, status: 'ACTIVE' },
+          data: { status: 'VOID' },
+        });
+        await tx.purchaseOrderLine.updateMany({
+          where: { tenantId, purchaseOrderId: order.id },
+          data: { invoicedQuantity: 0, invoicedValue: 0 },
+        });
         return tx.purchaseOrder.update({
           where: { id: order.id },
           data: { status: 'CANCELLED' },
           include: { lines: { orderBy: { id: 'asc' } }, supplier: { select: { name: true } } },
         });
+      }),
+    );
+  }
+  /**
+   * Records the supplier's invoice for (part of) an order: how many units are charged and at what
+   * unit cost. It sets what is owed and the price goods are received at; it changes no stock.
+   */
+  recordPurchaseInvoice(tenantId: string, userId: string, id: string, dto: PurchaseInvoiceDto) {
+    const ids = dto.lines.map((l) => l.lineId);
+    if (new Set(ids).size !== ids.length)
+      throw new BadRequestException('A line can only appear once on an invoice');
+    return this.write(() =>
+      this.prisma.$transaction(async (tx) => {
+        const order = await this.lockPurchaseOrder(tx, tenantId, id);
+        if (order.status === 'PENDING_APPROVAL' || order.status === 'REJECTED')
+          throw new ConflictException('The order must be approved before it can be invoiced');
+        if (['CANCELLED', 'CLOSED', 'RECEIVED'].includes(order.status))
+          throw new ConflictException(`The order is ${order.status.toLowerCase()}`);
+        for (const input of dto.lines) {
+          const line = order.lines.find((l) => l.id === input.lineId);
+          if (!line) throw new NotFoundException('Purchase order line not found');
+          const quantity = new StockDecimal(input.quantity);
+          if (quantity.gt(line.orderedQuantity.minus(line.invoicedQuantity)))
+            throw new ConflictException(
+              'Invoiced quantity exceeds what is ordered and not yet invoiced',
+            );
+        }
+        let invoice;
+        try {
+          invoice = await tx.purchaseInvoice.create({
+            data: {
+              tenantId,
+              purchaseOrderId: order.id,
+              number: dto.number,
+              invoiceDate: new Date(dto.invoiceDate),
+              dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+              notes: dto.notes || null,
+              createdBy: userId,
+            },
+          });
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+            throw new ConflictException('This invoice number is already recorded on the order');
+          throw error;
+        }
+        await tx.purchaseInvoiceLine.createMany({
+          data: dto.lines.map((l) => ({
+            tenantId,
+            invoiceId: invoice.id,
+            purchaseOrderLineId: l.lineId,
+            quantity: new StockDecimal(l.quantity),
+            unitCost: new StockDecimal(l.unitCost),
+          })),
+        });
+        for (const input of dto.lines) {
+          const line = order.lines.find((l) => l.id === input.lineId)!;
+          const quantity = new StockDecimal(input.quantity);
+          line.invoicedQuantity = line.invoicedQuantity.plus(quantity);
+          line.invoicedValue = line.invoicedValue.plus(
+            quantity.times(new StockDecimal(input.unitCost)),
+          );
+          await tx.purchaseOrderLine.update({
+            where: { id: line.id },
+            data: {
+              invoicedQuantity: line.invoicedQuantity,
+              invoicedValue: line.invoicedValue,
+              // The average price invoiced so far: goods are received at it.
+              unitCost: line.invoicedValue.div(line.invoicedQuantity).toDecimalPlaces(4),
+            },
+          });
+        }
+        const updated = await tx.purchaseOrder.update({
+          where: { id: order.id },
+          data: { status: this.purchaseOrderStatus(order.lines) },
+          include: {
+            lines: { orderBy: { id: 'asc' } },
+            supplier: { select: { name: true } },
+            invoices: INVOICES,
+          },
+        });
+        return updated;
       }),
     );
   }
@@ -1135,7 +1293,7 @@ export class InventoryService {
           throw new ConflictException('The order has been received in full');
         if (order.status === 'PENDING_APPROVAL' || order.status === 'REJECTED')
           throw new ConflictException('The order has not been approved');
-        if (order.status === 'ORDERED')
+        if (order.status === 'ORDERED' || order.status === 'INVOICED')
           throw new ConflictException('Nothing has been received on this order: cancel it instead');
         return tx.purchaseOrder.update({
           where: { id: order.id },
@@ -1178,12 +1336,9 @@ export class InventoryService {
               throw new ConflictException(`${order.reference} is not an order from this supplier`);
             if (order.status === 'CANCELLED')
               throw new ConflictException(`${order.reference} is cancelled`);
-            const owed = order.lines
-              .reduce(
-                (sum, l) => sum.plus(l.receivedQuantity.times(l.unitCost)),
-                new StockDecimal(0),
-              )
-              .minus(order.payments.reduce((sum, p) => sum.plus(p.amount), new StockDecimal(0)));
+            const owed = this.payable(order).minus(
+              order.payments.reduce((sum, p) => sum.plus(p.amount), new StockDecimal(0)),
+            );
             const amount = new StockDecimal(allocation.amount);
             if (amount.gt(owed))
               throw new ConflictException(
@@ -1908,6 +2063,80 @@ export class InventoryService {
       throw new ConflictException('Only a request waiting for approval can be rejected');
     }
     return this.getMovementRequest(tenantId, id);
+  }
+  // ---- Reversing, cancelling and deleting posted movements ----
+  /** The rows of a movement as the lists show it: its batch, its transfer, or the row itself. */
+  private movementWhere(tenantId: string, key: string) {
+    return { tenantId, OR: [{ id: key }, { batchId: key }, { transferId: key }] };
+  }
+  /** The type of a posted movement, which says what permission is needed to change it. */
+  async movementType(tenantId: string, key: string) {
+    const row = await this.prisma.stockMovement.findFirst({
+      where: this.movementWhere(tenantId, key),
+      select: { type: true },
+    });
+    if (!row) throw new NotFoundException('Stock movement not found');
+    return row.type;
+  }
+  private async activeMovementRows(tenantId: string, key: string) {
+    const rows = await this.prisma.stockMovement.findMany({
+      where: this.movementWhere(tenantId, key),
+      select: { id: true, state: true, purchaseOrderLineId: true },
+    });
+    if (!rows.length) throw new NotFoundException('Stock movement not found');
+    if (rows.some((r) => r.state !== 'ACTIVE'))
+      throw new ConflictException('This movement has already been reversed, cancelled or deleted');
+    return rows;
+  }
+  /** Marks a movement as reversed. This is a label: no stock changes. */
+  async reverseMovement(tenantId: string, userId: string, key: string) {
+    const rows = await this.activeMovementRows(tenantId, key);
+    const changed = await this.prisma.stockMovement.updateMany({
+      where: { tenantId, id: { in: rows.map((r) => r.id) }, state: 'ACTIVE' },
+      data: { state: 'REVERSED', stateChangedBy: userId, stateChangedAt: new Date() },
+    });
+    if (changed.count !== rows.length)
+      throw new ConflictException('This movement has already been reversed, cancelled or deleted');
+    return { movementId: key, state: 'REVERSED' as const };
+  }
+  /**
+   * Cancels or deletes a movement by posting the movement that puts its stock back (the body, as
+   * the batch endpoints take it). The offsetting movement and the new state commit together, so
+   * the stock is never put back without the movement showing it, nor the reverse.
+   */
+  async correctMovement(
+    tenantId: string,
+    userId: string,
+    key: string,
+    state: 'CANCELLED' | 'DELETED',
+    kind: StockMovementRequestKind,
+    body: StockInBatchDto | StockOutBatchDto | StockTransferBatchDto | StockAdjustmentBatchDto,
+  ) {
+    const rows = await this.activeMovementRows(tenantId, key);
+    const after = async (tx: Prisma.TransactionClient, batchId: string) => {
+      const changed = await tx.stockMovement.updateMany({
+        where: { tenantId, id: { in: rows.map((r) => r.id) }, state: 'ACTIVE' },
+        data: { state, stateChangedBy: userId, stateChangedAt: new Date() },
+      });
+      if (changed.count !== rows.length)
+        throw new ConflictException(
+          'This movement has already been reversed, cancelled or deleted',
+        );
+      await tx.stockMovement.updateMany({
+        where: { tenantId, batchId },
+        data: { state: 'OFFSET', stateChangedBy: userId, stateChangedAt: new Date() },
+      });
+    };
+    switch (kind) {
+      case 'STOCK_IN':
+        return this.stockInBatch(tenantId, userId, body as StockInBatchDto, after);
+      case 'STOCK_OUT':
+        return this.stockOutBatch(tenantId, userId, body as StockOutBatchDto, after);
+      case 'TRANSFER':
+        return this.transferBatch(tenantId, userId, body as StockTransferBatchDto, after);
+      case 'ADJUSTMENT':
+        return this.adjustBatch(tenantId, userId, body as StockAdjustmentBatchDto, after);
+    }
   }
   async movements(tenantId: string, types?: StockMovementType[]) {
     const rows = await this.prisma.stockMovement.findMany({
