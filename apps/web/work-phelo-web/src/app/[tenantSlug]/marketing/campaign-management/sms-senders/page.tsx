@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -8,9 +9,11 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import {
   useArchiveSmsSenderIdentity,
+  useCreateSmsCreditRequest,
   useCreateSmsSenderIdentity,
   useRefreshSmsSenderProviderStatus,
   useSetDefaultSmsSenderIdentity,
+  useSmsCreditRequests,
   useSmsSenderIdentities,
   useSmsWalletBalance,
   useSubmitSmsSenderIdentity,
@@ -32,6 +35,14 @@ const EMPTY_FORM: SenderForm = {
   provider: '',
 };
 
+const MAX_CREDIT_REQUEST = 1_000_000;
+
+const REQUEST_VARIANTS = {
+  PENDING: 'warning',
+  FULFILLED: 'success',
+  REJECTED: 'danger',
+} as const;
+
 const REFRESHABLE_PROVIDERS = new Set(['termii', 'sasusync']);
 
 function statusLabel(value: string) {
@@ -45,7 +56,10 @@ export default function SmsSendersPage() {
   const canDelete = usePermissionRule('marketing.sms-sender-identities:DELETE');
   const canSubmit = usePermissionRule('marketing.sms-sender-identities:EDIT');
   const { data: senders = [], isLoading, isError } = useSmsSenderIdentities();
+  const canRequestCredits = usePermissionRule('marketing.sms-wallet:VIEW');
   const { data: wallet } = useSmsWalletBalance();
+  const { data: creditRequests = [] } = useSmsCreditRequests();
+  const createCreditRequest = useCreateSmsCreditRequest();
   const createSender = useCreateSmsSenderIdentity();
   const submitSender = useSubmitSmsSenderIdentity();
   const refreshProvider = useRefreshSmsSenderProviderStatus();
@@ -54,6 +68,37 @@ export default function SmsSendersPage() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [form, setForm] = useState<SenderForm>(EMPTY_FORM);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestCredits, setRequestCredits] = useState('');
+  const [requestNote, setRequestNote] = useState('');
+
+  const pendingRequest = creditRequests.find((request) => request.status === 'PENDING');
+  const requestAmount = Number(requestCredits);
+  const validRequestAmount =
+    Number.isInteger(requestAmount) && requestAmount >= 1 && requestAmount <= MAX_CREDIT_REQUEST;
+
+  function openRequest() {
+    setRequestCredits('');
+    setRequestNote('');
+    setRequestOpen(true);
+  }
+
+  function handleRequestCredits() {
+    if (!validRequestAmount) return;
+    createCreditRequest.mutate(
+      {
+        credits: requestAmount,
+        ...(requestNote.trim() ? { note: requestNote.trim() } : {}),
+      },
+      {
+        onSuccess: () => {
+          toast.success('Credit request sent');
+          setRequestOpen(false);
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to request credits')),
+      },
+    );
+  }
 
   function handleCreate() {
     if (!form.senderId.trim()) return;
@@ -131,8 +176,60 @@ export default function SmsSendersPage() {
               {(wallet?.totalCredits ?? 0).toLocaleString()} total
             </p>
           </div>
-          {canCreate && <Button onClick={() => setPanelOpen(true)}>Add Sender ID</Button>}
+          <div className="flex flex-wrap gap-2">
+            {canRequestCredits && (
+              <Button
+                variant="outline"
+                onClick={openRequest}
+                disabled={Boolean(pendingRequest)}
+                title={pendingRequest ? 'You already have a pending request' : undefined}
+              >
+                Request Credits
+              </Button>
+            )}
+            {canCreate && <Button onClick={() => setPanelOpen(true)}>Add Sender ID</Button>}
+          </div>
         </div>
+
+        {creditRequests.length > 0 && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+              Credit requests
+            </p>
+            <ul className="mt-2 divide-y divide-slate-100">
+              {creditRequests.slice(0, 5).map((request) => (
+                <li
+                  key={request.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {request.requestedCredits.toLocaleString()} credits
+                      {request.status === 'FULFILLED' &&
+                      request.grantedCredits !== request.requestedCredits
+                        ? ` (${request.grantedCredits?.toLocaleString()} granted)`
+                        : ''}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(request.requestedAt).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                      {request.status === 'REJECTED' && request.rejectionReason
+                        ? ` · ${request.rejectionReason}`
+                        : ''}
+                    </p>
+                  </div>
+                  <Badge
+                    label={request.status.toLowerCase()}
+                    variant={REQUEST_VARIANTS[request.status]}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -267,6 +364,53 @@ export default function SmsSendersPage() {
           />
         </div>
       </SidePanel>
+
+      <Modal
+        isOpen={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        title="Request SMS Credits"
+        description="Your request is sent to the platform team, who will add the credits once it is fulfilled."
+        width="max-w-sm"
+        height="max-h-fit"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setRequestOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRequestCredits}
+              isLoading={createCreditRequest.isPending}
+              disabled={!validRequestAmount}
+            >
+              Send Request
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <Input
+            label="Credits needed"
+            type="number"
+            min={1}
+            max={MAX_CREDIT_REQUEST}
+            value={requestCredits}
+            onChange={(e) => setRequestCredits(e.target.value)}
+            placeholder="eg; 5000"
+            error={
+              requestCredits && !validRequestAmount
+                ? `Enter a whole number from 1 to ${MAX_CREDIT_REQUEST.toLocaleString()}`
+                : undefined
+            }
+          />
+          <Input
+            label="Note (optional)"
+            value={requestNote}
+            maxLength={300}
+            onChange={(e) => setRequestNote(e.target.value)}
+            placeholder="eg; Year-end promotion campaign"
+          />
+        </div>
+      </Modal>
 
       <Modal
         isOpen={!!deleteId}

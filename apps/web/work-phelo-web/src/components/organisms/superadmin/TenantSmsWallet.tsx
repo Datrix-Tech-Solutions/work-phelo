@@ -1,17 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
+  useFulfillTenantSmsCreditRequest,
   useGrantTenantSmsCredits,
+  useRejectTenantSmsCreditRequest,
+  useTenantSmsCreditRequests,
   useTenantSmsLedger,
   useTenantSmsWalletBalance,
   type SmsLedgerEntryType,
 } from '@/hooks/marketing/useTenantSmsConfig';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
+import type { SmsCreditRequest } from '@/types/marketing';
 
 const MAX_GRANT = 1_000_000;
 
@@ -45,6 +50,58 @@ export function TenantSmsWallet({ tenantId }: { tenantId: string }) {
   const { data: wallet, isLoading, isError } = useTenantSmsWalletBalance(tenantId);
   const { data: ledger, isFetching: ledgerFetching } = useTenantSmsLedger(tenantId, page);
   const grant = useGrantTenantSmsCredits(tenantId);
+  const { data: creditRequests = [] } = useTenantSmsCreditRequests(tenantId);
+  const fulfill = useFulfillTenantSmsCreditRequest(tenantId);
+  const reject = useRejectTenantSmsCreditRequest(tenantId);
+
+  const [fulfilling, setFulfilling] = useState<SmsCreditRequest | null>(null);
+  const [fulfillCredits, setFulfillCredits] = useState('');
+  const [rejecting, setRejecting] = useState<SmsCreditRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const fulfillAmount = Number(fulfillCredits);
+  const validFulfillAmount =
+    Number.isInteger(fulfillAmount) && fulfillAmount >= 1 && fulfillAmount <= MAX_GRANT;
+  const pendingRequests = creditRequests.filter((request) => request.status === 'PENDING');
+  const pastRequests = creditRequests.filter((request) => request.status !== 'PENDING');
+
+  function openFulfill(request: SmsCreditRequest) {
+    setFulfilling(request);
+    setFulfillCredits(String(request.requestedCredits));
+  }
+
+  function handleFulfill() {
+    if (!fulfilling || !validFulfillAmount) return;
+    fulfill.mutate(
+      {
+        id: fulfilling.id,
+        ...(fulfillAmount !== fulfilling.requestedCredits ? { credits: fulfillAmount } : {}),
+      },
+      {
+        onSuccess: () => {
+          toast.success(`${fulfillAmount.toLocaleString()} SMS credits granted`);
+          setFulfilling(null);
+          setPage(1);
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to fulfil the request')),
+      },
+    );
+  }
+
+  function handleReject() {
+    if (!rejecting) return;
+    reject.mutate(
+      { id: rejecting.id, ...(rejectReason.trim() ? { reason: rejectReason.trim() } : {}) },
+      {
+        onSuccess: () => {
+          toast.success('Credit request rejected');
+          setRejecting(null);
+          setRejectReason('');
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, 'Failed to reject the request')),
+      },
+    );
+  }
 
   const [grantOpen, setGrantOpen] = useState(false);
   const [credits, setCredits] = useState('');
@@ -101,6 +158,58 @@ export function TenantSmsWallet({ tenantId }: { tenantId: string }) {
           <Stat label="Available" value={isLoading ? undefined : wallet?.availableCredits} />
           <Stat label="Reserved" value={isLoading ? undefined : wallet?.reservedCredits} />
           <Stat label="Total" value={isLoading ? undefined : wallet?.totalCredits} />
+        </div>
+      )}
+
+      {creditRequests.length > 0 && (
+        <div className="border-b border-gray-100 px-5 py-4">
+          <h4 className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+            Credit requests
+          </h4>
+          <ul className="mt-2 divide-y divide-gray-50">
+            {[...pendingRequests, ...pastRequests.slice(0, 5)].map((request) => (
+              <li
+                key={request.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm"
+              >
+                <div>
+                  <p className="font-medium text-gray-900">
+                    {request.requestedCredits.toLocaleString()} credits
+                    {request.status === 'FULFILLED' &&
+                    request.grantedCredits !== request.requestedCredits
+                      ? ` (${request.grantedCredits?.toLocaleString()} granted)`
+                      : ''}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(request.requestedAt).toLocaleString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                    {request.note ? ` · ${request.note}` : ''}
+                    {request.rejectionReason ? ` · Rejected: ${request.rejectionReason}` : ''}
+                  </p>
+                </div>
+                {request.status === 'PENDING' ? (
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setRejecting(request)}>
+                      Reject
+                    </Button>
+                    <Button size="sm" onClick={() => openFulfill(request)}>
+                      Fulfil
+                    </Button>
+                  </div>
+                ) : (
+                  <Badge
+                    label={request.status.toLowerCase()}
+                    variant={request.status === 'FULFILLED' ? 'success' : 'danger'}
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -177,6 +286,70 @@ export function TenantSmsWallet({ tenantId }: { tenantId: string }) {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={Boolean(fulfilling)}
+        onClose={() => setFulfilling(null)}
+        title="Fulfil Credit Request"
+        description={`They asked for ${fulfilling?.requestedCredits.toLocaleString() ?? ''} credits. You can grant a different amount.`}
+        width="max-w-sm"
+        height="max-h-fit"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setFulfilling(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFulfill}
+              isLoading={fulfill.isPending}
+              disabled={!validFulfillAmount}
+            >
+              Grant
+            </Button>
+          </>
+        }
+      >
+        <Input
+          label="Credits to grant"
+          type="number"
+          min={1}
+          max={MAX_GRANT}
+          value={fulfillCredits}
+          onChange={(e) => setFulfillCredits(e.target.value)}
+          error={
+            fulfillCredits && !validFulfillAmount
+              ? `Enter a whole number from 1 to ${MAX_GRANT.toLocaleString()}`
+              : undefined
+          }
+        />
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(rejecting)}
+        onClose={() => setRejecting(null)}
+        title="Reject Credit Request"
+        description="The reason is shown to the company."
+        width="max-w-sm"
+        height="max-h-fit"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setRejecting(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleReject} isLoading={reject.isPending}>
+              Reject
+            </Button>
+          </>
+        }
+      >
+        <Input
+          label="Reason (optional)"
+          value={rejectReason}
+          maxLength={300}
+          onChange={(e) => setRejectReason(e.target.value)}
+          placeholder="eg; Payment not received"
+        />
+      </Modal>
 
       <Modal
         isOpen={grantOpen}

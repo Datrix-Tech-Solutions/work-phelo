@@ -30,10 +30,12 @@ import { TenantMarketingEnabledGuard } from '../auth/guards/tenant-marketing-ena
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import {
   CreateSmsSenderIdentityDto,
+  FulfillSmsCreditRequestDto,
   GrantSmsCreditsDto,
   QuerySmsLedgerDto,
   QuerySmsSenderIdentitiesDto,
   ReconcileSmsSenderProviderStatusDto,
+  RejectSmsCreditRequestDto,
   UpdateSmsSenderIdentityDto,
 } from './dto/sms-sender-identity.dto';
 import { SmsSenderIdentitiesService } from './sms-sender-identities.service';
@@ -199,5 +201,48 @@ export class PlatformSmsController {
     @Req() request: AuthedRequest,
   ) {
     return this.wallet.grantCredits(actingIn(request.user, tenantId), dto);
+  }
+
+  @Get('credit-requests')
+  @ApiOperation({ summary: 'List a tenant’s SMS credit requests' })
+  listCreditRequests(@Param('tenantId', ParseUUIDPipe) tenantId: string) {
+    return this.wallet.listCreditRequests(tenantId);
+  }
+
+  @Post('credit-requests/:id/fulfill')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Fulfil a credit request by granting the credits',
+    description: 'Grants the requested amount unless `credits` overrides it.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  fulfillCreditRequest(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: FulfillSmsCreditRequestDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.wallet.fulfillCreditRequest(
+      actingIn(request.user, tenantId),
+      id,
+      dto,
+    );
+  }
+
+  @Post('credit-requests/:id/reject')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reject a credit request' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  rejectCreditRequest(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectSmsCreditRequestDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.wallet.rejectCreditRequest(
+      actingIn(request.user, tenantId),
+      id,
+      dto,
+    );
   }
 }

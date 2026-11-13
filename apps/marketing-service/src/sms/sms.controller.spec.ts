@@ -42,6 +42,8 @@ describe('SMS foundation controller authorization contracts', () => {
   it.each([
     ['getBalance', P.SMS_WALLET_VIEW],
     ['listLedger', P.SMS_WALLET_VIEW],
+    ['listRequests', P.SMS_WALLET_VIEW],
+    ['createRequest', P.SMS_WALLET_VIEW],
     ['grant', P.SMS_CREDITS_ADJUST],
   ] as const)('gates wallet %s behind %s', (method, permission) => {
     expect(anyPermissions(SmsWalletController.prototype[method])).toEqual([

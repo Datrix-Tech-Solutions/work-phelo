@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '@/lib/api';
 import type {
   CreateSmsSenderIdentityPayload,
+  SmsCreditRequest,
   SmsSenderIdentity,
   SmsSenderIdentityListResponse,
   SmsWalletBalance,
@@ -141,4 +142,41 @@ export function useGrantTenantSmsCredits(tenantId: string) {
     const res = await api.post<SmsWalletBalance>(`${base(tenantId)}/wallet/grants`, payload);
     return res.data;
   });
+}
+
+export function useTenantSmsCreditRequests(tenantId: string) {
+  return useQuery({
+    queryKey: [...key(tenantId), 'credit-requests'] as const,
+    queryFn: async () => {
+      const res = await api.get<SmsCreditRequest[]>(`${base(tenantId)}/credit-requests`);
+      return res.data;
+    },
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useFulfillTenantSmsCreditRequest(tenantId: string) {
+  return useInvalidatingMutation(
+    tenantId,
+    async ({ id, credits }: { id: string; credits?: number }) => {
+      const res = await api.post<SmsCreditRequest>(
+        `${base(tenantId)}/credit-requests/${id}/fulfill`,
+        credits === undefined ? {} : { credits },
+      );
+      return res.data;
+    },
+  );
+}
+
+export function useRejectTenantSmsCreditRequest(tenantId: string) {
+  return useInvalidatingMutation(
+    tenantId,
+    async ({ id, reason }: { id: string; reason?: string }) => {
+      const res = await api.post<SmsCreditRequest>(
+        `${base(tenantId)}/credit-requests/${id}/reject`,
+        reason ? { reason } : {},
+      );
+      return res.data;
+    },
+  );
 }
