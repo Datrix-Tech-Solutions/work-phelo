@@ -1313,6 +1313,27 @@ export interface SmsWalletBalance {
   totalCredits: number;
 }
 
+export type SmsCreditRequestStatus = 'PENDING' | 'FULFILLED' | 'REJECTED';
+
+export interface SmsCreditRequest {
+  id: string;
+  tenantId: string;
+  requestedCredits: number;
+  note: string | null;
+  status: SmsCreditRequestStatus;
+  requestedBy: string;
+  requestedAt: string;
+  grantedCredits: number | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  rejectionReason: string | null;
+}
+
+export interface CreateSmsCreditRequestPayload {
+  credits: number;
+  note?: string;
+}
+
 // ── Client billing (transactions raised in Accounting) ───────────────────────
 
 export type BillingNotReadyReason = 'NOT_CONFIGURED' | 'NOT_SET_UP' | 'UNAVAILABLE';

@@ -209,3 +209,43 @@ export class QuerySmsLedgerDto {
   @Max(100)
   limit?: number;
 }
+
+export class CreateSmsCreditRequestDto {
+  @ApiProperty({ example: 5000, minimum: 1, maximum: 1000000 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000000)
+  credits!: number;
+
+  @ApiPropertyOptional({ maxLength: 300 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+}
+
+export class FulfillSmsCreditRequestDto {
+  @ApiPropertyOptional({
+    example: 5000,
+    minimum: 1,
+    maximum: 1000000,
+    description: 'Credits to grant. Defaults to the amount requested.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000000)
+  credits?: number;
+}
+
+export class RejectSmsCreditRequestDto {
+  @ApiPropertyOptional({ maxLength: 300 })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}

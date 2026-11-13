@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
+  CreateSmsCreditRequestPayload,
   CreateSmsSenderIdentityPayload,
+  SmsCreditRequest,
   CreateTenantDomainPayload,
   SmsSenderIdentity,
   SmsSenderIdentityListResponse,
@@ -46,6 +48,27 @@ export function useSmsWalletBalance(enabled = true) {
       return res.data;
     },
     enabled,
+  });
+}
+
+export function useSmsCreditRequests() {
+  return useQuery({
+    queryKey: [...SMS_KEY, 'wallet', 'requests'] as const,
+    queryFn: async () => {
+      const res = await api.get<SmsCreditRequest[]>(`${WALLET_ENDPOINT}/requests`);
+      return res.data;
+    },
+  });
+}
+
+export function useCreateSmsCreditRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateSmsCreditRequestPayload) => {
+      const res = await api.post<SmsCreditRequest>(`${WALLET_ENDPOINT}/requests`, payload);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SMS_KEY }),
   });
 }
 
