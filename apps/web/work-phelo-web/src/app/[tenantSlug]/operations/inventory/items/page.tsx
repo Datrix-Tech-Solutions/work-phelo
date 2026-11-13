@@ -1,5 +1,6 @@
 'use client';
 
+import { useUnitSymbol } from '@/hooks/inventory/useUnitSymbol';
 import { Suspense, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -9,12 +10,12 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { EditItemValueModal } from '@/components/organisms/inventory/EditItemValueModal';
 import { EditReorderLevelModal } from '@/components/organisms/inventory/EditReorderLevelModal';
 import { ItemPanel } from '@/components/organisms/inventory/ItemPanel';
+import { ItemExportDialog } from '@/components/organisms/inventory/ItemExportDialog';
 import { ItemImportDialog } from '@/components/organisms/inventory/ItemImportDialog';
 import { DeleteInventoryRecordModal } from '@/components/organisms/inventory/DeleteInventoryRecordModal';
 import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
 import { useStockPositions } from '@/hooks/inventory/useStockBalances';
-import { useInventoryUnits } from '@/hooks/inventory/useInventoryUnits';
 import { useToast } from '@/hooks/useToast';
 import { formatInventoryValue } from '@/lib/inventoryCurrency';
 import { pageHeader, pageContent } from '@/lib/layout';
@@ -40,6 +41,7 @@ function InventoryItemsInner() {
   // The dashboard's "Add Item" shortcut arrives with ?new=1.
   const [modalOpen, setModalOpen] = useState(useSearchParams().get('new') === '1');
   const [importOpen, setImportOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const [valueTarget, setValueTarget] = useState<InventoryItem | null>(null);
   const [reorderTarget, setReorderTarget] = useState<InventoryItem | null>(null);
@@ -51,7 +53,6 @@ function InventoryItemsInner() {
   const { items, isLoading } = useInventoryItems();
   const { deleteItem } = useDeleteInventoryItem();
   const { categories } = useInventoryCategories();
-  const { units } = useInventoryUnits();
   const { warehouses } = useInventoryWarehouses();
   const { positions } = useStockPositions();
 
@@ -61,7 +62,7 @@ function InventoryItemsInner() {
     warehouseFilter ? (positions.get(i.id)?.get(warehouseFilter) ?? 0) : i.currentStock;
 
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? '—';
-  const unitName = (id: string) => units.find((u) => u.id === id)?.name ?? '—';
+  const unitSymbol = useUnitSymbol();
 
   const term = search.trim().toLowerCase();
   const filtered = items.filter(
@@ -101,20 +102,15 @@ function InventoryItemsInner() {
       render: (row) => <span className="text-sm text-gray-600 font-mono">{row.sku}</span>,
     },
     {
-      key: 'unit',
-      label: 'Unit',
-      width: '70px',
-      render: (row) => (
-        <span className="text-sm font-semibold text-gray-600">{unitName(row.unitId)}</span>
-      ),
-    },
-    {
       key: 'currentStock',
       label: 'Current Stock',
-      width: '100px',
+      width: '110px',
       render: (row) => (
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-bold text-gray-900">{formatNumber(shownStock(row))}</span>
+          <span className="text-sm font-bold text-gray-900">
+            {formatNumber(shownStock(row))}{' '}
+            <span className="font-semibold text-gray-500">{unitSymbol(row.unitId)}</span>
+          </span>
           {/* {warehouseFilter && (
             <span className="text-xs text-gray-500">of {formatNumber(row.currentStock)}</span>
           )} */}
@@ -124,10 +120,17 @@ function InventoryItemsInner() {
     {
       key: 'reorderLevel',
       label: 'Reorder Level',
-      width: '100px',
+      width: '110px',
       render: (row) => (
         <span className="text-sm font-extrabold text-gray-600">
-          {row.reorderLevel === null ? '—' : formatNumber(row.reorderLevel)}
+          {row.reorderLevel === null ? (
+            '—'
+          ) : (
+            <>
+              {formatNumber(row.reorderLevel)}{' '}
+              <span className="font-semibold text-gray-500">{unitSymbol(row.unitId)}</span>
+            </>
+          )}
         </span>
       ),
     },
@@ -237,7 +240,10 @@ function InventoryItemsInner() {
               </div>
             </div>
           }
-          secondaryButtons={[{ label: 'Import', onClick: () => setImportOpen(true) }]}
+          secondaryButtons={[
+            { label: 'Import', onClick: () => setImportOpen(true) },
+            { label: 'Export', onClick: () => setExportOpen(true) },
+          ]}
           actionButton={{ label: 'Add Item', onClick: () => setModalOpen(true) }}
           currentPage={page}
           totalPages={totalPages}
@@ -255,6 +261,7 @@ function InventoryItemsInner() {
         item={editTarget}
       />
       <ItemImportDialog isOpen={importOpen} onClose={() => setImportOpen(false)} />
+      <ItemExportDialog isOpen={exportOpen} onClose={() => setExportOpen(false)} items={filtered} />
       <EditItemValueModal
         key={`value-${valueTarget?.id ?? 'none'}`}
         item={valueTarget}

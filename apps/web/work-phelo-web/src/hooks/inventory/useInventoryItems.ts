@@ -76,6 +76,14 @@ export const STOCK_STATUS_BADGE: Record<
   OUT_OF_STOCK: { label: 'Out of Stock', variant: 'danger' },
 };
 
+/** The tag an item picker shows beside an item that is low or out of stock; none when stocked. */
+export function stockStatusTag(item: InventoryItem) {
+  const status = getStockStatus(item);
+  if (status === 'OUT_OF_STOCK') return { tag: 'Out of stock', tagTone: 'danger' as const };
+  if (status === 'LOW_STOCK') return { tag: 'Low stock', tagTone: 'warning' as const };
+  return {};
+}
+
 export function getStockStatus(item: InventoryItem): InventoryStockStatus {
   if (item.currentStock <= 0) return 'OUT_OF_STOCK';
   if (item.reorderLevel !== null && item.currentStock <= item.reorderLevel) return 'LOW_STOCK';

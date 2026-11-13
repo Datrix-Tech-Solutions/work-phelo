@@ -171,17 +171,15 @@ export default function StockMovementDetailsPage({
       ),
     },
     {
-      key: 'unit',
-      label: 'Unit',
-      width: '80px',
-      render: (row) => <span className="text-gray-600">{unitOf(row.itemId)}</span>,
-    },
-    {
       key: 'before',
       label: 'Before QTY',
       width: '110px',
       className: 'text-right',
-      render: (row) => <span className="text-gray-900">{formatNumber(row.before)}</span>,
+      render: (row) => (
+        <span className="text-gray-900">
+          {formatNumber(row.before)} {unitOf(row.itemId)}
+        </span>
+      ),
     },
     {
       key: 'movement',
@@ -200,7 +198,7 @@ export default function StockMovementDetailsPage({
             )}
           >
             {!transfer && shown > 0 ? '+' : ''}
-            {formatNumber(shown)}
+            {formatNumber(shown)} {unitOf(row.itemId)}
           </span>
         );
       },
@@ -210,7 +208,11 @@ export default function StockMovementDetailsPage({
       label: 'After QTY',
       width: '110px',
       className: 'text-right',
-      render: (row) => <span className="font-medium text-gray-900">{formatNumber(row.after)}</span>,
+      render: (row) => (
+        <span className="font-medium text-gray-900">
+          {formatNumber(row.after)} {unitOf(row.itemId)}
+        </span>
+      ),
     },
     {
       key: 'unitCost',

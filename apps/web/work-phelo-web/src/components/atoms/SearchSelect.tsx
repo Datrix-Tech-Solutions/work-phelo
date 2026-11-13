@@ -16,6 +16,8 @@ export interface SearchSelectOption {
   disabled?: boolean;
   /** Short tag shown at the right of the option, typically the reason it is disabled. */
   tag?: string;
+  /** Colour of the tag: amber by default, red for something worse such as out of stock. */
+  tagTone?: 'warning' | 'danger';
 }
 
 interface SearchSelectProps {
@@ -398,7 +400,14 @@ export function SearchSelect({
                           {opt.label}
                         </span>
                         {opt.tag && (
-                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                              opt.tagTone === 'danger'
+                                ? 'bg-red-50 text-red-700'
+                                : 'bg-amber-50 text-amber-700',
+                            )}
+                          >
                             {opt.tag}
                           </span>
                         )}

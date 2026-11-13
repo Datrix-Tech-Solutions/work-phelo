@@ -133,6 +133,7 @@ export function AssignVariantModal({ itemId, isOpen, onClose }: AssignVariantMod
             value={quantity}
             onChange={setQuantity}
             decimals={4}
+            keepTyped
             disabled={!warehouseId}
             error={showErrors ? quantityError : undefined}
           />

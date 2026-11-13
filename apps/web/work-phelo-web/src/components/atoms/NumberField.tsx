@@ -19,6 +19,9 @@ interface NumberFieldProps {
   /** Decimal places shown once blurred, and typed at most. 0 gives a whole-number field
    * (e.g. an odometer reading). Defaults to 2. */
   decimals?: number;
+  /** Show the value as typed once blurred ("1" stays 1, "1.5" stays 1.5) instead of padding it to
+   * `decimals` places. `decimals` still limits what can be stored. For quantities. */
+  keepTyped?: boolean;
 }
 
 /** Text input that shows raw digits while focused and a thousands-formatted,
@@ -28,6 +31,7 @@ export function NumberField({
   onChange,
   onBlur,
   decimals = 2,
+  keepTyped,
   placeholder = decimals > 0 ? `0.${'0'.repeat(decimals)}` : '0',
   className,
   label,
@@ -48,7 +52,9 @@ export function NumberField({
     focused || local === ''
       ? local
       : Number(local).toLocaleString(undefined, {
-          minimumFractionDigits: decimals,
+          minimumFractionDigits: keepTyped
+            ? Math.min(local.split('.')[1]?.length ?? 0, decimals)
+            : decimals,
           maximumFractionDigits: decimals,
         });
 
@@ -64,7 +70,12 @@ export function NumberField({
         onBlur?.(local === '' ? 0 : Number(local));
       }}
       onChange={(e) => {
-        const raw = e.target.value.replace(decimals > 0 ? /[^0-9.]/g : /[^0-9]/g, '');
+        let raw = e.target.value.replace(decimals > 0 ? /[^0-9.]/g : /[^0-9]/g, '');
+        // A kept-as-typed field stops at its decimal places rather than storing digits it can't show.
+        if (keepTyped && raw.includes('.')) {
+          const [whole, ...rest] = raw.split('.');
+          raw = `${whole}.${rest.join('').slice(0, decimals)}`;
+        }
         setLocal(raw);
         onChange(raw === '' ? 0 : Number(raw));
       }}

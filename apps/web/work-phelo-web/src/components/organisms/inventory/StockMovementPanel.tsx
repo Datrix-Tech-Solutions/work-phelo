@@ -14,7 +14,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useItemVariantsMap, useVariantBalances } from '@/hooks/inventory/useItemVariants';
 import { useStockLots } from '@/hooks/inventory/useStockLots';
-import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { useInventoryItems, stockStatusTag } from '@/hooks/inventory/useInventoryItems';
 import { useInventoryParties } from '@/hooks/inventory/useInventoryParties';
 import { useStockPositions } from '@/hooks/inventory/useStockBalances';
 import { useInventoryWarehouses } from '@/hooks/inventory/useInventoryWarehouses';
@@ -268,6 +268,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
           value: i.id,
           label: i.name,
           sublabel: onHandOnly ? `${i.sku} · ${stockAt(i.id, sourceWarehouseId)} in stock` : i.sku,
+          ...stockStatusTag(i),
         })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, onHandOnly, positions, sourceWarehouseId],
@@ -915,6 +916,7 @@ export function StockMovementPanel({ type, isOpen, onClose, draft }: StockMoveme
                           className="w-full py-2"
                           placeholder="0"
                           decimals={4}
+                          keepTyped
                           value={isRevaluation ? qtyOf(line) : line.quantity}
                           onChange={(v) => updateLine(line.key, { quantity: v })}
                           disabled={isRevaluation}

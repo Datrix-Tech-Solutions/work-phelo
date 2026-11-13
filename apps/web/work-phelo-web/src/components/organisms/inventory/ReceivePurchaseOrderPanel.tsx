@@ -1,5 +1,6 @@
 'use client';
 
+import { useUnitSymbol } from '@/hooks/inventory/useUnitSymbol';
 import { useMemo, useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -68,6 +69,9 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
   );
 
   const itemOf = (id: string) => items.find((i) => i.id === id);
+  const unitSymbol = useUnitSymbol();
+  const qty = (l: { itemId: string }, n: number) =>
+    `${formatNumber(n)} ${unitSymbol(itemOf(l.itemId)?.unitId)}`;
   const { positions } = useStockPositions();
   // Warns, without blocking, when the order's warehouse would hold more of an item than the item's
   // maximum stock (set per warehouse). Every line of the same item counts toward it.
@@ -99,7 +103,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
   const lineError = (l: PurchaseOrder['lines'][number]) => {
     const s = state[l.id];
     if (s.received + s.damaged > outstanding(l))
-      return `Only ${formatNumber(outstanding(l))} invoiced and not received`;
+      return `Only ${qty(l, outstanding(l))} invoiced and not received`;
     return undefined;
   };
   const expiryError = (l: PurchaseOrder['lines'][number]) => {
@@ -232,9 +236,8 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                         )}
                       </div>
                       <span className="shrink-0 text-xs font-semibold text-gray-500">
-                        Ordered {formatNumber(l.orderedQuantity)} · Invoiced{' '}
-                        {formatNumber(l.invoicedQuantity)} · Received{' '}
-                        {formatNumber(l.receivedQuantity)}
+                        Ordered {qty(l, l.orderedQuantity)} · Invoiced {qty(l, l.invoicedQuantity)}{' '}
+                        · Received {qty(l, l.receivedQuantity)}
                       </span>
                     </div>
 
@@ -245,6 +248,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                           className="w-full"
                           placeholder="0"
                           decimals={4}
+                          keepTyped
                           value={s.received}
                           disabled={outstanding(l) === 0}
                           onChange={(v) => update(l.id, { received: v })}
@@ -257,6 +261,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                           className="w-full"
                           placeholder="0"
                           decimals={4}
+                          keepTyped
                           value={s.extra}
                           onChange={(v) => update(l.id, { extra: v })}
                         />
@@ -267,6 +272,7 @@ export function ReceivePurchaseOrderPanel({ order, onClose }: ReceivePurchaseOrd
                           className="w-full"
                           placeholder="0"
                           decimals={4}
+                          keepTyped
                           value={s.damaged}
                           onChange={(v) => update(l.id, { damaged: v })}
                         />
