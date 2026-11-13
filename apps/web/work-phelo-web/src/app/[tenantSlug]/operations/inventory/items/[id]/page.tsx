@@ -1,5 +1,6 @@
 'use client';
 
+import { useUnitSymbol } from '@/hooks/inventory/useUnitSymbol';
 import { InventoryBreadcrumb } from '@/components/molecules/inventory/InventoryBreadcrumb';
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -50,6 +51,7 @@ export default function InventoryItemDetailsPage({
   const { items, isLoading } = useInventoryItems();
   const { categories } = useInventoryCategories();
   const { units } = useInventoryUnits();
+  const unitSymbol = useUnitSymbol();
   const { movements } = useStockMovements();
 
   const item = items.find((i) => i.id === id);
@@ -107,6 +109,7 @@ export default function InventoryItemDetailsPage({
   }
 
   const status = STOCK_STATUS_BADGE[getStockStatus(item)];
+  const withUnit = (n: string) => `${n} ${unitSymbol(item.unitId)}`;
 
   return (
     <>
@@ -156,10 +159,10 @@ export default function InventoryItemDetailsPage({
               label="Unit"
               value={units.find((u) => u.id === item.unitId)?.name ?? '—'}
             />
-            <DetailField label="Current Stock" value={formatNumber(item.currentStock)} />
+            <DetailField label="Current Stock" value={withUnit(formatNumber(item.currentStock))} />
             <DetailField
               label="Reorder Level"
-              value={item.reorderLevel === null ? '—' : formatNumber(item.reorderLevel)}
+              value={item.reorderLevel === null ? '—' : withUnit(formatNumber(item.reorderLevel))}
             />
             <DetailField label="Warehouses Holding" value={item.warehouseIds.length} />
             <DetailField label="Movements" value={itemMovements.length} />
@@ -185,7 +188,7 @@ export default function InventoryItemDetailsPage({
             <div className={compactCardGrid}>
               <KpiCard
                 label="Total Stock"
-                value={formatNumber(item.currentStock)}
+                value={withUnit(formatNumber(item.currentStock))}
                 icon={Boxes}
                 iconColor="var(--module-inventory, #0047ab)"
               />
@@ -193,7 +196,7 @@ export default function InventoryItemDetailsPage({
                 <KpiCard
                   key={r.name}
                   label={r.name}
-                  value={formatNumber(r.stock)}
+                  value={withUnit(formatNumber(r.stock))}
                   icon={Layers}
                   iconColor={VARIANT_COLORS[i % VARIANT_COLORS.length]}
                 />
@@ -213,7 +216,7 @@ export default function InventoryItemDetailsPage({
             className="px-0 [--tab-first-pl:0px]"
           />
           {tab === 'batches' ? (
-            <ItemBatchesTable itemId={id} />
+            <ItemBatchesTable itemId={id} unit={unitSymbol(item.unitId)} />
           ) : (
             <StockMovementsTable
               movements={itemMovements}

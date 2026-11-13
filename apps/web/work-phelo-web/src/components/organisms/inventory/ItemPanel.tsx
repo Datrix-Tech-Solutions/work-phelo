@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { suggestTransactionTypeCode } from '@/lib/accounting/transactionTypeCode';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { Plus, Trash2 } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -42,6 +43,9 @@ interface ItemFormValues {
   imageUrl: string | null;
   isPerishable: boolean;
 }
+
+/** Same suggestion the warehouse code uses: "Paper Towel Roll" -> "PAP-TOW-ROL". */
+const skuFromName = (name: string) => suggestTransactionTypeCode(name).slice(0, 64);
 
 const FORM_DEFAULTS: ItemFormValues = {
   name: '',
@@ -95,8 +99,12 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
     formState: { errors },
   } = useForm<ItemFormValues>({ defaultValues: FORM_DEFAULTS });
 
+  // A new item's SKU follows its name until the SKU is typed in by hand (clearing it resumes).
+  const skuTouched = useRef(false);
+
   useEffect(() => {
     if (!isOpen) return;
+    skuTouched.current = !!item;
     reset(
       item
         ? {
@@ -282,6 +290,10 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
                     required: 'Item name is required',
                     validate: (v) => v.trim().length > 0 || 'Item name is required',
                     maxLength: { value: 150, message: 'Name cannot exceed 150 characters' },
+                    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+                      if (skuTouched.current) return;
+                      setValue('sku', skuFromName(e.target.value), { shouldValidate: true });
+                    },
                   })}
                   error={errors.name}
                   placeholder="e.g. A4 Paper"
@@ -294,6 +306,9 @@ export function ItemPanel({ isOpen, onClose, item }: ItemPanelProps) {
                     required: 'SKU is required',
                     validate: (v) => v.trim().length > 0 || 'SKU is required',
                     maxLength: { value: 64, message: 'SKU cannot exceed 64 characters' },
+                    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+                      skuTouched.current = e.target.value.trim() !== '';
+                    },
                   })}
                   error={errors.sku}
                   placeholder="e.g. PAP-A4-001"

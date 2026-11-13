@@ -1,5 +1,6 @@
 'use client';
 
+import { useUnitSymbol } from '@/hooks/inventory/useUnitSymbol';
 import { useCrumbs } from '@/hooks/inventory/useCrumbs';
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -12,7 +13,6 @@ import {
   getStockStatus,
   type InventoryItem,
 } from '@/hooks/inventory/useInventoryItems';
-import { useInventoryUnits } from '@/hooks/inventory/useInventoryUnits';
 import { useStockPositions } from '@/hooks/inventory/useStockBalances';
 import { formatInventoryValue } from '@/lib/inventoryCurrency';
 
@@ -34,14 +34,13 @@ export function WarehouseItemsTable({ warehouseId, items, sourceLabel }: Warehou
   const { link } = useCrumbs();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { categories } = useInventoryCategories();
-  const { units } = useInventoryUnits();
   const { positions, isLoading } = useStockPositions();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const stockHere = (i: InventoryItem) => positions.get(i.id)?.get(warehouseId) ?? 0;
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? '—';
-  const unitName = (id: string) => units.find((u) => u.id === id)?.name ?? '—';
+  const unitSymbol = useUnitSymbol();
 
   const term = search.trim().toLowerCase();
   const filtered = items.filter(
@@ -79,19 +78,14 @@ export function WarehouseItemsTable({ warehouseId, items, sourceLabel }: Warehou
       render: (row) => <span className="text-sm text-gray-600 font-mono">{row.sku}</span>,
     },
     {
-      key: 'unit',
-      label: 'Unit',
-      width: '70px',
-      render: (row) => (
-        <span className="text-sm font-semibold text-gray-600">{unitName(row.unitId)}</span>
-      ),
-    },
-    {
       key: 'stock',
       label: 'Stock Here',
       width: '110px',
       render: (row) => (
-        <span className="text-sm font-bold text-gray-900">{formatNumber(stockHere(row))}</span>
+        <span className="text-sm font-bold text-gray-900">
+          {formatNumber(stockHere(row))}{' '}
+          <span className="font-semibold text-gray-500">{unitSymbol(row.unitId)}</span>
+        </span>
       ),
     },
     {

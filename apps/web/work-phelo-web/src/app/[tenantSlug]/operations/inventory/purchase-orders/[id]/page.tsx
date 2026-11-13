@@ -1,5 +1,6 @@
 'use client';
 
+import { useUnitSymbol } from '@/hooks/inventory/useUnitSymbol';
 import { useCrumbs } from '@/hooks/inventory/useCrumbs';
 import { InventoryBreadcrumb } from '@/components/molecules/inventory/InventoryBreadcrumb';
 import { use, useMemo, useState } from 'react';
@@ -58,6 +59,7 @@ export default function PurchaseOrderDetailsPage({
   const { link } = useCrumbs();
   const { purchaseOrders, isLoading, approvePurchaseOrder, isApproving } = usePurchaseOrders();
   const { items } = useInventoryItems();
+  const unitSymbol = useUnitSymbol();
   const { warehouses } = useInventoryWarehouses();
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -115,6 +117,7 @@ export default function PurchaseOrderDetailsPage({
 
   const { label, variant } = PURCHASE_ORDER_STATUS_BADGE[order.status];
   const itemName = (itemId: string) => items.find((i) => i.id === itemId)?.name ?? 'Item';
+  const itemUnitId = (itemId: string) => items.find((i) => i.id === itemId)?.unitId;
   const warehouseName = warehouses.find((w) => w.id === order.warehouseId)?.name ?? '—';
   const extraUnits = order.lines.reduce((sum, l) => sum + l.extraQuantity, 0);
   const damagedUnits = order.lines.reduce((sum, l) => sum + l.damagedQuantity, 0);
@@ -122,8 +125,10 @@ export default function PurchaseOrderDetailsPage({
   const money = (n: number) => (
     <span className="text-sm font-semibold text-gray-600">{formatInventoryValue(n)}</span>
   );
-  const quantity = (n: number) => (
-    <span className="text-sm font-semibold text-gray-500">{formatNumber(n)}</span>
+  const quantity = (n: number, itemId: string) => (
+    <span className="text-sm font-semibold text-gray-500">
+      {formatNumber(n)} {unitSymbol(itemUnitId(itemId))}
+    </span>
   );
   const lineColumns: Column<PurchaseOrderLine>[] = [
     {
@@ -137,26 +142,36 @@ export default function PurchaseOrderDetailsPage({
         </div>
       ),
     },
-    { key: 'ordered', label: 'Ordered', width: '90px', render: (l) => quantity(l.orderedQuantity) },
+    {
+      key: 'ordered',
+      label: 'Ordered',
+      width: '90px',
+      render: (l) => quantity(l.orderedQuantity, l.itemId),
+    },
 
     {
       key: 'invoiced',
       label: 'Invoiced',
       width: '90px',
-      render: (l) => quantity(l.invoicedQuantity),
+      render: (l) => quantity(l.invoicedQuantity, l.itemId),
     },
     {
       key: 'received',
       label: 'Received',
       width: '90px',
-      render: (l) => quantity(l.receivedQuantity),
+      render: (l) => quantity(l.receivedQuantity, l.itemId),
     },
-    { key: 'extra', label: 'Extra', width: '80px', render: (l) => quantity(l.extraQuantity) },
+    {
+      key: 'extra',
+      label: 'Extra',
+      width: '80px',
+      render: (l) => quantity(l.extraQuantity, l.itemId),
+    },
     {
       key: 'damaged',
       label: 'Damaged',
       width: '90px',
-      render: (l) => quantity(l.damagedQuantity),
+      render: (l) => quantity(l.damagedQuantity, l.itemId),
     },
     {
       key: 'outstanding',
@@ -167,6 +182,7 @@ export default function PurchaseOrderDetailsPage({
           order.status === 'CANCELLED' || order.status === 'CLOSED'
             ? 0
             : Math.max(0, l.orderedQuantity - l.receivedQuantity),
+          l.itemId,
         ),
     },
     {
@@ -220,7 +236,9 @@ export default function PurchaseOrderDetailsPage({
       key: 'items',
       label: 'Items',
       width: '80px',
-      render: (i) => quantity(i.lines.length),
+      render: (i) => (
+        <span className="text-sm font-semibold text-gray-500">{formatNumber(i.lines.length)}</span>
+      ),
     },
     {
       key: 'notes',

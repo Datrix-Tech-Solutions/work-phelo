@@ -28,7 +28,7 @@ function expiryBadge(expiry: string | null) {
 }
 
 /** Batches / lots received for one item, with how much of each is left. */
-export function ItemBatchesTable({ itemId }: { itemId: string }) {
+export function ItemBatchesTable({ itemId, unit }: { itemId: string; unit?: string }) {
   const { warehouses } = useInventoryWarehouses();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -84,7 +84,9 @@ export function ItemBatchesTable({ itemId }: { itemId: string }) {
       label: 'Qty Received',
       width: '110px',
       render: (row) => (
-        <span className="text-sm text-gray-600">{formatNumber(row.receivedQuantity)}</span>
+        <span className="text-sm text-gray-600">
+          {formatNumber(row.receivedQuantity)} {unit}
+        </span>
       ),
     },
     {
@@ -93,7 +95,7 @@ export function ItemBatchesTable({ itemId }: { itemId: string }) {
       width: '100px',
       render: (row) => (
         <span className="text-sm font-bold text-gray-900">
-          {formatNumber(row.remainingQuantity)}
+          {formatNumber(row.remainingQuantity)} {unit}
         </span>
       ),
     },

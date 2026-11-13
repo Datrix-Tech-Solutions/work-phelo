@@ -1,5 +1,6 @@
 'use client';
 
+import { useUnitSymbol } from '@/hooks/inventory/useUnitSymbol';
 import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -62,6 +63,9 @@ export function RecordInvoicePanel({ order, onClose }: RecordInvoicePanelProps) 
   );
 
   const itemOf = (id: string) => items.find((i) => i.id === id);
+  const unitSymbol = useUnitSymbol();
+  const qty = (l: { itemId: string }, n: number) =>
+    `${formatNumber(n)} ${unitSymbol(itemOf(l.itemId)?.unitId)}`;
   const lines = (order?.lines ?? []).filter((l) => remaining(l) > 0);
   const update = (id: string, patch: Partial<LineState>) =>
     setState((s) => ({ ...s, [id]: { ...s[id], ...patch } }));
@@ -69,7 +73,7 @@ export function RecordInvoicePanel({ order, onClose }: RecordInvoicePanelProps) 
 
   const quantityError = (l: OrderLine) =>
     state[l.id].quantity > remaining(l)
-      ? `Only ${formatNumber(remaining(l))} left to invoice`
+      ? `Only ${qty(l, remaining(l))} left to invoice`
       : undefined;
   const costError = (l: OrderLine) =>
     showErrors && charged(l) && state[l.id].unitCost <= 0 ? 'Enter the unit cost' : undefined;
@@ -201,8 +205,8 @@ export function RecordInvoicePanel({ order, onClose }: RecordInvoicePanelProps) 
                         )}
                       </div>
                       <span className="shrink-0 text-xs font-semibold text-gray-500">
-                        Ordered {formatNumber(l.orderedQuantity)} · Invoiced{' '}
-                        {formatNumber(l.invoicedQuantity)} · Left {formatNumber(remaining(l))}
+                        Ordered {qty(l, l.orderedQuantity)} · Invoiced {qty(l, l.invoicedQuantity)}{' '}
+                        · Left {qty(l, remaining(l))}
                       </span>
                     </div>
                     <div className={FIELD_GRID}>
@@ -212,6 +216,7 @@ export function RecordInvoicePanel({ order, onClose }: RecordInvoicePanelProps) 
                           className="w-full"
                           placeholder="0"
                           decimals={4}
+                          keepTyped
                           value={s.quantity}
                           onChange={(v) => update(l.id, { quantity: v })}
                           error={quantityError(l)}

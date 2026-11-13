@@ -11,7 +11,7 @@ import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect'
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useInventoryItems } from '@/hooks/inventory/useInventoryItems';
+import { useInventoryItems, stockStatusTag } from '@/hooks/inventory/useInventoryItems';
 import { ApprovePromptModal } from '@/components/organisms/inventory/ApprovePromptModal';
 import { useCanApprove } from '@/hooks/inventory/useApprovalAccess';
 import { usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
@@ -145,7 +145,7 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
     () =>
       items
         .filter((i) => i.status === 'ACTIVE')
-        .map((i) => ({ value: i.id, label: i.name, sublabel: i.sku })),
+        .map((i) => ({ value: i.id, label: i.name, sublabel: i.sku, ...stockStatusTag(i) })),
     [items],
   );
   const partyOptions = useMemo(
@@ -421,6 +421,7 @@ export function OrderPanel({ kind, isOpen, onClose, partyName, partyId }: OrderP
                       className="w-full py-2"
                       placeholder="0"
                       decimals={4}
+                      keepTyped
                       value={line.quantity}
                       onChange={(v) => updateLine(line.key, { quantity: v })}
                       error={showLineErrors && line.quantity <= 0 ? 'Enter a quantity' : undefined}
