@@ -53,6 +53,10 @@ const HASHED_PASSWORD =
 
 function makePrismaMock() {
   return {
+    employeeAccessCommand: { findFirst: jest.fn().mockResolvedValue(null) },
+    employeeAccessLifecycleCommand: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     tenant: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -142,6 +146,64 @@ describe('AuthService', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  describe('managed pending employee activation', () => {
+    it.each([
+      'forced-reset',
+      'verify-email',
+      'resend-verification',
+      'new-social',
+      'existing-social',
+    ])(
+      'requires invite acceptance before %s can activate a managed identity',
+      async (flow) => {
+        const user = {
+          ...USER_BASE,
+          status: 'PENDING_VERIFICATION',
+          forcePasswordReset: true,
+          emailVerifiedAt: null,
+        };
+        prisma.tenant.findUnique.mockResolvedValue(TENANT);
+        prisma.user.findUnique.mockResolvedValue(user);
+        prisma.user.findFirst.mockResolvedValue(user);
+        prisma.employeeAccessCommand.findFirst.mockResolvedValue({
+          id: 'managed-operation',
+          status: 'READY',
+        });
+        prisma.socialAccount.findUnique.mockResolvedValue(
+          flow === 'existing-social' ? { user, userId: user.id } : null,
+        );
+        let attempt: Promise<unknown>;
+        if (flow === 'forced-reset')
+          attempt = service.forceResetPassword({
+            userId: user.id,
+            newPassword: 'Password123!',
+          });
+        else if (flow === 'verify-email')
+          attempt = service.verifyEmail({
+            tenantSlug: TENANT.slug,
+            email: user.email,
+            otp: '123456',
+          });
+        else if (flow === 'resend-verification')
+          attempt = service.resendVerification({
+            tenantSlug: TENANT.slug,
+            email: user.email,
+          });
+        else
+          attempt = service.handleSocialLogin(
+            { id: 'provider-id', email: user.email },
+            'GOOGLE',
+            TENANT.slug,
+          );
+        await expect(attempt).rejects.toThrow(ForbiddenException);
+        expect(prisma.user.update).not.toHaveBeenCalled();
+        expect(prisma.socialAccount.create).not.toHaveBeenCalled();
+        expect(prisma.otpCode.updateMany).not.toHaveBeenCalled();
+        expect(jwt.sign).not.toHaveBeenCalled();
+      },
+    );
+  });
 
   // ════════════════════════════════════════════════════════════════════════
   // LOGIN
@@ -519,6 +581,17 @@ describe('AuthService', () => {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       user: { ...USER_BASE, tenant: TENANT },
     };
+    it('rejects a pre-suspension refresh token even if a stale row was not revoked', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...STORED_TOKEN,
+        user: { ...STORED_TOKEN.user, sessionVersion: 2 },
+      });
+      jwt.decode.mockReturnValue({ sessionVersion: 0 });
+      await expect(
+        service.refresh({ refreshToken: 'valid-refresh-token' }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
 
     it('rotates tokens and returns new pair on valid refresh token', async () => {
       prisma.refreshToken.findUnique.mockResolvedValue(STORED_TOKEN);

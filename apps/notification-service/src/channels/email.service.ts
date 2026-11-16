@@ -260,6 +260,7 @@ export class EmailService {
     to: string,
     subject: string,
     html: string,
+    idempotencyKey?: string,
   ): Promise<boolean> {
     try {
       const res = await axios.post(
@@ -269,7 +270,9 @@ export class EmailService {
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
+            ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
           },
+          ...(idempotencyKey ? { timeout: 8000 } : {}),
         },
       );
       const resData = res.data as { id?: string };
@@ -305,6 +308,7 @@ export class EmailService {
     firstName: string,
     tenantName: string,
     acceptInviteUrl: string,
+    idempotencyKey?: string,
   ): Promise<boolean> {
     return this.send(
       to,
@@ -314,6 +318,7 @@ export class EmailService {
         tenantName: this.escapeHtml(tenantName),
         acceptInviteUrl: this.sanitizeUrl(acceptInviteUrl),
       }),
+      idempotencyKey,
     );
   }
 

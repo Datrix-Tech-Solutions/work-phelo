@@ -30,7 +30,7 @@ type AnnouncementActorContext = {
 type AnnouncementNotificationRecipient = {
   employeeId: string;
   userId: string;
-  email: string;
+  email: string | null;
   phone?: string;
   firstName: string;
   lastName: string;
@@ -496,7 +496,7 @@ export class AnnouncementsService {
           }
         }
 
-        if (options.includeEmail || recipient.phone) {
+        if ((options.includeEmail && recipient.email) || recipient.phone) {
           return [recipient];
         }
 

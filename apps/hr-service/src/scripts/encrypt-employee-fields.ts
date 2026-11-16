@@ -45,7 +45,7 @@ type SensitiveField = (typeof SENSITIVE_FIELDS)[number];
 
 type EmployeeRow = {
   id: string;
-  email: string;
+  email: string | null;
   emailHash: string | null;
 } & Record<SensitiveField, string | null>;
 
@@ -152,7 +152,7 @@ async function run() {
         }
       }
 
-      if (!employee.emailHash) {
+      if (employee.email && !employee.emailHash) {
         updateData['emailHash'] = computeHmac(employee.email, hmacKey);
       }
 

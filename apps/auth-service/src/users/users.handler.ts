@@ -1,4 +1,9 @@
-import { Controller, HttpException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  HttpException,
+  Logger,
+} from '@nestjs/common';
 import {
   Ctx,
   EventPattern,
@@ -8,7 +13,10 @@ import {
   RpcException,
 } from '@nestjs/microservices';
 import { UsersService } from './users.service';
-import { InviteUserDto } from './dto/invite-user.dto';
+import {
+  verifyAccessRpc,
+  EmployeeAccessProof,
+} from '@work-phelo/internal-auth';
 import {
   EventPatterns,
   WithMeta,
@@ -187,21 +195,14 @@ export class UsersHandler {
     @Payload() data: WithMeta<InviteEmployeeEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, email, firstName, lastName, _meta } = data;
+    const { email, _meta } = data;
     this.logger.log(
       `[auth.invite_employee] Received | email=${email} | corrId=${_meta?.correlationId}`,
     );
     try {
-      await this.usersService.invite(tenantId, {
-        email,
-        firstName,
-        lastName,
-        role: 'EMPLOYEE' as InviteUserDto['role'],
-      });
-      this.logger.log(
-        `[auth.invite_employee] Invite sent | email=${email} | corrId=${_meta?.correlationId}`,
+      throw new BadRequestException(
+        'Use the authorized durable employee access workflow.',
       );
-      this.ack(context);
     } catch (e: unknown) {
       this.settleEventFailure(
         context,
@@ -217,19 +218,12 @@ export class UsersHandler {
     @Payload() data: WithMeta<ProvisionEmployeeInviteCommand>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, email, firstName, lastName, phone, _meta } = data;
+    const { email, _meta } = data;
     this.logger.log(
       `[auth.provision_employee_invite] Received | email=${email} | corrId=${_meta?.correlationId}`,
     );
     try {
-      const result = await this.usersService.provisionEmployeeInvite(tenantId, {
-        email,
-        firstName,
-        lastName,
-        phone,
-      });
-      this.ack(context);
-      return result;
+      throw new BadRequestException('Use auth.employee_access.execute.v1.');
     } catch (error) {
       this.settleRpcFailure(
         context,
@@ -243,14 +237,19 @@ export class UsersHandler {
 
   @MessagePattern(EventPatterns.AUTH_DELETE_PENDING_EMPLOYEE_INVITE)
   async handleDeletePendingEmployeeInvite(
-    @Payload() data: WithMeta<DeletePendingEmployeeInviteCommand>,
+    @Payload()
+    envelope: {
+      payload: DeletePendingEmployeeInviteCommand;
+      proof: EmployeeAccessProof;
+    },
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, userId, email, _meta } = data;
-    this.logger.log(
-      `[auth.delete_pending_employee_invite] Received | email=${email} | corrId=${_meta?.correlationId}`,
-    );
     try {
+      const { tenantId, userId, email } = verifyAccessRpc(
+        'hr-service',
+        EventPatterns.AUTH_DELETE_PENDING_EMPLOYEE_INVITE,
+        envelope,
+      );
       const result = await this.usersService.deletePendingEmployeeInvite(
         tenantId,
         {
@@ -265,7 +264,7 @@ export class UsersHandler {
         context,
         'auth.delete_pending_employee_invite',
         error,
-        `email=${email} | corrId=${_meta?.correlationId}`,
+        'signed pending invite cleanup',
       );
       throw new RpcException(this.toRpcErrorPayload(error));
     }
@@ -273,14 +272,16 @@ export class UsersHandler {
 
   @MessagePattern(EventPatterns.AUTH_GET_USER_STATUSES)
   async handleGetUserStatuses(
-    @Payload() data: WithMeta<GetUserStatusesCommand>,
+    @Payload()
+    envelope: { payload: GetUserStatusesCommand; proof: EmployeeAccessProof },
     @Ctx() context: RmqContext,
   ): Promise<UserStatusSnapshot[]> {
-    const { tenantId, userIds, _meta } = data;
-    this.logger.log(
-      `[auth.get_user_statuses] Received | count=${userIds.length} | corrId=${_meta?.correlationId}`,
-    );
     try {
+      const { tenantId, userIds } = verifyAccessRpc(
+        'hr-service',
+        EventPatterns.AUTH_GET_USER_STATUSES,
+        envelope,
+      );
       const result = await this.usersService.getUserStatuses(tenantId, userIds);
       this.ack(context);
       return result;
@@ -289,7 +290,7 @@ export class UsersHandler {
         context,
         'auth.get_user_statuses',
         error,
-        `count=${userIds.length} | corrId=${_meta?.correlationId}`,
+        'signed status lookup',
       );
       throw new RpcException(this.toRpcErrorPayload(error));
     }
@@ -297,15 +298,20 @@ export class UsersHandler {
 
   @MessagePattern(EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS)
   async handleDeactivateEmployeeAccess(
-    @Payload() data: WithMeta<DeactivateEmployeeAccessCommand>,
+    @Payload()
+    envelope: {
+      payload: DeactivateEmployeeAccessCommand;
+      proof: EmployeeAccessProof;
+    },
     @Ctx() context: RmqContext,
   ): Promise<DeactivateEmployeeAccessResult> {
-    const { tenantId, userId, email, _meta } = data;
-    this.logger.log(
-      `[auth.deactivate_employee_access] Received | email=${email} | corrId=${_meta?.correlationId}`,
-    );
     try {
-      await this.usersService.deactivate(tenantId, userId);
+      const { tenantId, userId } = verifyAccessRpc(
+        'hr-service',
+        EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS,
+        envelope,
+      );
+      await this.usersService.deactivateEmployeeAccess(tenantId, userId);
       this.ack(context);
       return { deactivated: true };
     } catch (error) {
@@ -313,7 +319,7 @@ export class UsersHandler {
         context,
         'auth.deactivate_employee_access',
         error,
-        `email=${email} | corrId=${_meta?.correlationId}`,
+        'signed employee offboarding',
       );
       throw new RpcException(this.toRpcErrorPayload(error));
     }
@@ -324,16 +330,12 @@ export class UsersHandler {
     @Payload() data: WithMeta<EmployeeOffboardedEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, userId, email, _meta } = data;
+    const { email, _meta } = data;
     this.logger.log(
       `[hr.employee_offboarded] Received | email=${email} | corrId=${_meta?.correlationId}`,
     );
     try {
-      await this.usersService.deactivate(tenantId, userId);
-      this.logger.log(
-        `[hr.employee_offboarded] Account deactivated and tokens revoked | email=${email} | corrId=${_meta?.correlationId}`,
-      );
-      this.ack(context);
+      throw new BadRequestException('Use the signed employee offboarding RPC.');
     } catch (e: unknown) {
       this.settleEventFailure(
         context,
@@ -349,33 +351,14 @@ export class UsersHandler {
     @Payload() data: WithMeta<ResendEmployeeInviteEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, email, firstName, lastName, _meta } = data;
+    const { tenantId, email, _meta } = data;
     this.logger.log(
       `[auth.resend_employee_invite] Received | email=${email} | corrId=${_meta?.correlationId}`,
     );
     try {
-      const user = await this.usersService.findByEmail(tenantId, email);
-      if (!user) {
-        this.logger.warn(
-          `[auth.resend_employee_invite] No user found — sending fresh invite | email=${email} | corrId=${_meta?.correlationId}`,
-        );
-        await this.usersService.invite(tenantId, {
-          email,
-          firstName,
-          lastName: lastName ?? '',
-          role: 'EMPLOYEE' as InviteUserDto['role'],
-        });
-        this.logger.log(
-          `[auth.resend_employee_invite] Fresh invite sent | email=${email} | corrId=${_meta?.correlationId}`,
-        );
-        this.ack(context);
-        return;
-      }
-      await this.usersService.resendInvite(tenantId, user.id);
-      this.logger.log(
-        `[auth.resend_employee_invite] Invite resent | email=${email} | corrId=${_meta?.correlationId}`,
+      throw new BadRequestException(
+        'Use the authorized durable employee invitation resend endpoint.',
       );
-      this.ack(context);
     } catch (e: unknown) {
       this.settleEventFailure(
         context,

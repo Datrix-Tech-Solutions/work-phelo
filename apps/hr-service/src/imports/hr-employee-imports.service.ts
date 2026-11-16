@@ -44,7 +44,7 @@ type ValidatedRow = EmployeeImportDryRunRowDto & {
 
 type ExistingEmployee = {
   id: string;
-  email: string;
+  email: string | null;
   employeeNumber: string;
 };
 
@@ -316,7 +316,9 @@ export class HrEmployeeImportsService {
       branches.map((branch) => [this.normalizeLookup(branch.name), branch]),
     );
     const existingEmailSet = new Set(
-      existingEmployees.map((employee) => this.normalizeLookup(employee.email)),
+      existingEmployees
+        .filter((employee) => employee.email)
+        .map((employee) => this.normalizeLookup(employee.email)),
     );
     const existingEmployeeNumberSet = new Set(
       existingEmployees.map((employee) =>
@@ -324,10 +326,9 @@ export class HrEmployeeImportsService {
       ),
     );
     const existingEmployeesByEmail = new Map(
-      existingEmployees.map((employee) => [
-        this.normalizeLookup(employee.email),
-        employee,
-      ]),
+      existingEmployees
+        .filter((employee) => employee.email)
+        .map((employee) => [this.normalizeLookup(employee.email), employee]),
     );
     const existingEmployeesByNumber = new Map(
       existingEmployees.map((employee) => [
@@ -747,7 +748,7 @@ export class HrEmployeeImportsService {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  private normalizeLookup(value: string | undefined) {
+  private normalizeLookup(value: string | null | undefined) {
     return value?.trim().toLowerCase() ?? '';
   }
 

@@ -6,6 +6,7 @@ import {
   Min,
   Max,
   MaxLength,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -14,6 +15,20 @@ import {
 } from '../../../prisma/generated/client';
 
 export class QueryEmployeesDto {
+  @IsOptional()
+  @IsIn([
+    'NONE',
+    'PROVISIONING',
+    'PROVISIONING_FAILED',
+    'INVITED',
+    'INVITE_EXPIRED',
+    'ACTIVE',
+    'SUSPENDED',
+    'INACTIVE',
+    'UNAVAILABLE',
+    'INCONSISTENT',
+  ])
+  accessStatus?: string;
   @IsOptional() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsString() departmentId?: string;
   @IsOptional() @IsEnum(EmploymentStatus) status?: EmploymentStatus;

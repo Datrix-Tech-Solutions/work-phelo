@@ -1,6 +1,13 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
+import { firstValueFrom, timeout } from 'rxjs';
+import { signAccessRpc } from '@work-phelo/internal-auth';
+import {
+  EmployeeAccessCommandPayload,
+  EmployeeAccessCommandResult,
+  EmployeeAccessReference,
+} from '@work-phelo/types';
 import {
   EventPatterns,
   WithMeta,
@@ -45,6 +52,63 @@ import {
 
 @Injectable()
 export class RabbitMQPublisher {
+  employeeAccessCommand(
+    pattern: string,
+    payload: EmployeeAccessCommandPayload | EmployeeAccessReference,
+  ) {
+    return firstValueFrom(
+      this.authClient
+        .send<EmployeeAccessCommandResult>(
+          pattern,
+          signAccessRpc('hr-service', pattern, payload),
+        )
+        .pipe(timeout(this.rmqTimeoutMs)),
+    );
+  }
+  employeeAccessLifecycle(
+    payload: import('@work-phelo/types').EmployeeAccessLifecycle,
+  ) {
+    return firstValueFrom(
+      this.authClient
+        .send<
+          import('@work-phelo/types').EmployeeAccessLifecycleResult
+        >('auth.employee_access.lifecycle.v1', signAccessRpc('hr-service', 'auth.employee_access.lifecycle.v1', payload))
+        .pipe(timeout(this.rmqTimeoutMs)),
+    );
+  }
+  employeeAccessAccount(
+    payload: import('@work-phelo/types').EmployeeAccessAccountRequest,
+  ) {
+    return firstValueFrom(
+      this.authClient
+        .send<
+          import('@work-phelo/types').EmployeeAccessAccount
+        >('auth.employee_access.account.v1', signAccessRpc('hr-service', 'auth.employee_access.account.v1', payload))
+        .pipe(timeout(this.rmqTimeoutMs)),
+    );
+  }
+  employeeAccessSnapshot(
+    payload: import('@work-phelo/types').EmployeeAccessSnapshotRequest,
+  ) {
+    return firstValueFrom(
+      this.authClient
+        .send<
+          import('@work-phelo/types').EmployeeAccessSnapshot
+        >('auth.employee_access.snapshot.v1', signAccessRpc('hr-service', 'auth.employee_access.snapshot.v1', payload))
+        .pipe(timeout(this.rmqTimeoutMs)),
+    );
+  }
+  recoverEmployeeAccess(
+    payload: import('@work-phelo/types').EmployeeAccessRecovery,
+  ) {
+    return firstValueFrom(
+      this.authClient
+        .send<
+          import('@work-phelo/types').EmployeeAccessRecoveryResult
+        >('auth.employee_access.recover.v1', signAccessRpc('hr-service', 'auth.employee_access.recover.v1', payload))
+        .pipe(timeout(this.rmqTimeoutMs)),
+    );
+  }
   private readonly logger = new Logger(RabbitMQPublisher.name);
   private readonly rmqTimeoutMs = Number(
     process.env.RABBITMQ_RPC_TIMEOUT_MS ?? 10000,
@@ -255,11 +319,8 @@ export class RabbitMQPublisher {
     data: EmployeeOffboardedEvent,
     correlationId?: string,
   ): Promise<void> {
-    return this.publish(
-      this.authClient,
-      EventPatterns.AUTH_EMPLOYEE_OFFBOARDED,
-      data,
-      correlationId,
+    return this.authDeactivateEmployeeAccess(data, correlationId).then(
+      () => undefined,
     );
   }
 
@@ -293,11 +354,17 @@ export class RabbitMQPublisher {
     data: DeletePendingEmployeeInviteCommand,
     correlationId?: string,
   ): Promise<DeletePendingEmployeeInviteResult> {
-    return this.request(
-      this.authClient,
-      EventPatterns.AUTH_DELETE_PENDING_EMPLOYEE_INVITE,
-      data,
-      correlationId,
+    return firstValueFrom(
+      this.authClient
+        .send<DeletePendingEmployeeInviteResult>(
+          EventPatterns.AUTH_DELETE_PENDING_EMPLOYEE_INVITE,
+          signAccessRpc(
+            'hr-service',
+            EventPatterns.AUTH_DELETE_PENDING_EMPLOYEE_INVITE,
+            data,
+          ),
+        )
+        .pipe(timeout(this.rmqTimeoutMs)),
     );
   }
 
@@ -305,11 +372,17 @@ export class RabbitMQPublisher {
     data: DeactivateEmployeeAccessCommand,
     correlationId?: string,
   ): Promise<DeactivateEmployeeAccessResult> {
-    return this.request(
-      this.authClient,
-      EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS,
-      data,
-      correlationId,
+    return firstValueFrom(
+      this.authClient
+        .send<DeactivateEmployeeAccessResult>(
+          EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS,
+          signAccessRpc(
+            'hr-service',
+            EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS,
+            data,
+          ),
+        )
+        .pipe(timeout(this.rmqTimeoutMs)),
     );
   }
 
@@ -325,16 +398,25 @@ export class RabbitMQPublisher {
     );
   }
 
-  authGetUserStatuses(
+  async authGetUserStatuses(
     data: GetUserStatusesCommand,
     correlationId?: string,
   ): Promise<UserStatusSnapshot[]> {
-    return this.request(
-      this.authClient,
-      EventPatterns.AUTH_GET_USER_STATUSES,
-      data,
-      correlationId,
-    );
+    const ids = [...new Set(data.userIds)];
+    const results: UserStatusSnapshot[] = [];
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const batch = { ...data, userIds: ids.slice(offset, offset + 100) };
+      results.push(
+        ...(await firstValueFrom(
+          this.authClient
+            .send<
+              UserStatusSnapshot[]
+            >(EventPatterns.AUTH_GET_USER_STATUSES, signAccessRpc('hr-service', EventPatterns.AUTH_GET_USER_STATUSES, batch))
+            .pipe(timeout(this.rmqTimeoutMs)),
+        )),
+      );
+    }
+    return results;
   }
 
   // ── HR → Notification ──────────────────────────────────────────────────────

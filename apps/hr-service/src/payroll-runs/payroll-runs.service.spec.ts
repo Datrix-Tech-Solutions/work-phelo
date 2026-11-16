@@ -376,11 +376,12 @@ describe('PayrollRunsService.run', () => {
     expect(prisma.payrollRun.create).not.toHaveBeenCalled();
   });
 
-  it('leaves out people whose account is still waiting to be verified', async () => {
+  it('includes employees regardless of account verification or access', async () => {
     const { service, prisma, rabbitmq } = build({
       employees: [
         employee('kofi', { userId: 'u-1' }),
         employee('new', { userId: 'u-2' }),
+        employee('no-access', { userId: null }),
       ],
     });
     rabbitmq.authGetUserStatuses.mockResolvedValue([
@@ -393,7 +394,10 @@ describe('PayrollRunsService.run', () => {
     const items = prisma.payrollRun.create.mock.calls[0][0].data.items.create;
     expect(items.map((i: { employeeId: string }) => i.employeeId)).toEqual([
       'kofi',
+      'new',
+      'no-access',
     ]);
+    expect(rabbitmq.authGetUserStatuses).not.toHaveBeenCalled();
   });
 
   describe('a month that has already been run', () => {

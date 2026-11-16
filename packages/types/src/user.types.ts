@@ -25,11 +25,13 @@ export interface JwtPayload {
   /** Set on tokens issued to the careers site; the gateway restricts what they can call. */
   scope?: TokenScope;
   iat?: number;
+  sessionVersion?: number;
   exp?: number;
 }
 
 /** Shape of request.user after JWT validation in any service */
 export interface RequestUser {
+  sessionVersion?: number;
   id: string;
   email: string;
   role: string;

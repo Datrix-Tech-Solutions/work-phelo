@@ -348,7 +348,7 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
     @Req() req: Request & { user: RequestUser },
   ) {
-    return this.usersService.update(req.user.tenantId, id, dto);
+    return this.usersService.update(req.user.tenantId, id, dto, req.user);
   }
 
   @Patch(':id/deactivate')

@@ -360,30 +360,119 @@ model UserPermissionSet {
 
 // ── User ───────────────────────────────────────────────────────────────────
 
+enum EmployeeAccessCommandStatus {
+  PROVISIONED
+  READY
+  PROVIDER_ACCEPTED
+  FAILED
+  PAUSED
+  EXPIRED
+
+  @@schema("w_auth")
+}
+
+model EmployeeAccessCommand {
+  id                 String                      @id
+  tenantId           String
+  employeeId         String
+  actorUserId        String
+  action             String                      @default("GRANT")
+  idempotencyKey     String
+  requestHash        String
+  payloadHash        String
+  employeePermission String
+  email              String
+  firstName          String
+  tenantName         String
+  tenantSlug         String
+  targetUserId       String?                     @unique
+  expectedUserId     String?
+  status             EmployeeAccessCommandStatus @default(PROVISIONED)
+  attemptCount       Int                         @default(0)
+  nextAttemptAt      DateTime?
+  leaseUntil         DateTime?
+  leaseToken         String?
+  lastErrorCode      String?
+  completedAt        DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, employeeId])
+  @@schema("w_auth")
+}
+
+model EmployeeAccessLifecycleCommand {
+  id             String    @id
+  tenantId       String
+  employeeId     String
+  actorUserId    String
+  targetUserId   String
+  action         String
+  idempotencyKey String
+  requestHash    String
+  payloadHash    String
+  reason         String
+  status         String    @default("READY")
+  lastErrorCode  String?
+  attemptCount   Int       @default(0)
+  nextAttemptAt  DateTime?
+  leaseUntil     DateTime?
+  leaseToken     String?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, employeeId, createdAt], map: "EmployeeAccessLifecycleCommand_employee_history_idx")
+  @@index([tenantId, targetUserId, createdAt, id], map: "EmployeeAccessLifecycleCommand_target_history_idx")
+  @@schema("w_auth")
+}
+
+model EmployeeAccessRecoveryReceipt {
+  id             String   @id
+  tenantId       String
+  operationId    String
+  operatorUserId String
+  payloadHash    String
+  outcome        String
+  lastErrorCode  String?
+  reason         String
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, operationId])
+  @@schema("w_auth")
+}
+
 model User {
-  id                  String     @id @default(uuid())
-  tenantId            String
-  email               String
-  password            String?
-  firstName           String
-  lastName            String
-  phone               String?
-  role                UserRole   @default(EMPLOYEE)
-  status              UserStatus @default(PENDING_VERIFICATION)
-  avatarUrl           String?
-  isMfaEnabled        Boolean    @default(false)
-  mfaMethod           MfaMethod?
-  mfaSecret           String?
-  forcePasswordReset  Boolean    @default(false)
-  failedLoginAttempts Int        @default(0)
-  lockedUntil         DateTime?
-  inviteToken         String?    @unique
-  inviteExpiresAt     DateTime?
-  emailVerifiedAt     DateTime?
-  lastLoginAt         DateTime?
-  passwordChangedAt   DateTime?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  id                     String     @id @default(uuid())
+  tenantId               String
+  email                  String
+  password               String?
+  firstName              String
+  lastName               String
+  phone                  String?
+  role                   UserRole   @default(EMPLOYEE)
+  status                 UserStatus @default(PENDING_VERIFICATION)
+  sessionVersion         Int        @default(0)
+  accessSuspendedAt      DateTime?
+  accessSuspensionReason String?
+  avatarUrl              String?
+  isMfaEnabled           Boolean    @default(false)
+  mfaMethod              MfaMethod?
+  mfaSecret              String?
+  forcePasswordReset     Boolean    @default(false)
+  failedLoginAttempts    Int        @default(0)
+  lockedUntil            DateTime?
+  inviteToken            String?    @unique
+  inviteExpiresAt        DateTime?
+  emailVerifiedAt        DateTime?
+  lastLoginAt            DateTime?
+  passwordChangedAt      DateTime?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
 
   tenant                    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   refreshTokens             RefreshToken[]

@@ -122,6 +122,7 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.prod" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "PORT=4004" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \

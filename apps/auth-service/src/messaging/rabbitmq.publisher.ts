@@ -1,6 +1,14 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
+import { firstValueFrom, timeout } from 'rxjs';
+import { signAccessRpc } from '@work-phelo/internal-auth';
+import {
+  EmployeeAccessInvite,
+  EmployeeAccessInviteResult,
+  EmployeeAccessPatterns,
+  EmployeeAccessReference,
+} from '@work-phelo/types';
 import {
   EventPatterns,
   WithMeta,
@@ -23,6 +31,66 @@ import {
 
 @Injectable()
 export class RabbitMQPublisher {
+  verifyEmployeeAccessLink(
+    payload: EmployeeAccessReference,
+  ): Promise<{ linked: boolean; action?: string; hasIdentity?: boolean }> {
+    return firstValueFrom(
+      this.hrClient
+        .send<{
+          linked: boolean;
+          action?: string;
+          hasIdentity?: boolean;
+        }>(
+          EmployeeAccessPatterns.verifyLink,
+          signAccessRpc(
+            'auth-service',
+            EmployeeAccessPatterns.verifyLink,
+            payload,
+          ),
+        )
+        .pipe(timeout(10000)),
+    );
+  }
+  inspectEmployeeInvite(
+    payload: import('@work-phelo/types').EmployeeInviteReceiptRequest,
+  ) {
+    return firstValueFrom(
+      this.notificationClient
+        .send<
+          import('@work-phelo/types').EmployeeInviteReceiptState
+        >('notification.employee_access.receipt.v1', signAccessRpc('auth-service', 'notification.employee_access.receipt.v1', payload))
+        .pipe(timeout(10000)),
+    );
+  }
+  verifyEmployeeOffboarded(payload: { tenantId: string; userId: string }) {
+    return firstValueFrom(
+      this.hrClient
+        .send<{
+          offboarded: boolean;
+        }>(
+          'hr.employee_access.offboarded.v1',
+          signAccessRpc(
+            'auth-service',
+            'hr.employee_access.offboarded.v1',
+            payload,
+          ),
+        )
+        .pipe(timeout(10000)),
+    );
+  }
+
+  sendEmployeeAccessInvite(
+    payload: EmployeeAccessInvite,
+  ): Promise<EmployeeAccessInviteResult> {
+    return firstValueFrom(
+      this.notificationClient
+        .send<EmployeeAccessInviteResult>(
+          EmployeeAccessPatterns.notify,
+          signAccessRpc('auth-service', EmployeeAccessPatterns.notify, payload),
+        )
+        .pipe(timeout(10000)),
+    );
+  }
   private readonly logger = new Logger(RabbitMQPublisher.name);
 
   constructor(

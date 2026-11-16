@@ -61,6 +61,9 @@ coverage/
 # Keep e2e and integration specs local — they require a live database
 **/*.e2e-spec.ts
 apps/*/test/integration/
+!apps/hr-service/test/integration/
+apps/hr-service/test/integration/*
+!apps/hr-service/test/integration/employee-access.integration.spec.ts
 apps/*/test/e2e/
 prisma/generated/
 packages/*/src/*.js

@@ -254,7 +254,7 @@ export class TimeService {
   ): Promise<TimeApprovalRecipient | null> {
     let manager: {
       userId: string | null;
-      email: string;
+      email: string | null;
       firstName: string;
       lastName: string;
     } | null = null;
@@ -536,7 +536,7 @@ export class TimeService {
       employee: {
         id: string;
         userId: string | null;
-        email: string;
+        email: string | null;
         firstName: string;
         lastName: string;
         managerId: string | null;
@@ -1946,39 +1946,41 @@ export class TimeService {
       note: dto.reason?.trim() || null,
     });
 
-    this.emitNotificationEvent(
-      this.publisher.notificationShiftSwapRequested({
-        tenantId,
-        shiftSwapId: swap.id,
-        recipientEmail: requesterSchedule.employee.email,
-        recipientFirstName: requesterSchedule.employee.firstName,
-        recipientRole: 'REQUESTER',
-        counterpartFullName: targetName,
-        requesterFullName: requesterName,
-        requesterShiftLabel: requesterShift,
-        targetShiftLabel: targetShift,
-        reason: dto.reason?.trim() || null,
-        scheduleLink,
-      }),
-      'shift_swap_requested(requester)',
-    );
+    if (requesterSchedule.employee.email)
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapRequested({
+          tenantId,
+          shiftSwapId: swap.id,
+          recipientEmail: requesterSchedule.employee.email,
+          recipientFirstName: requesterSchedule.employee.firstName,
+          recipientRole: 'REQUESTER',
+          counterpartFullName: targetName,
+          requesterFullName: requesterName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          reason: dto.reason?.trim() || null,
+          scheduleLink,
+        }),
+        'shift_swap_requested(requester)',
+      );
 
-    this.emitNotificationEvent(
-      this.publisher.notificationShiftSwapRequested({
-        tenantId,
-        shiftSwapId: swap.id,
-        recipientEmail: targetSchedule.employee.email,
-        recipientFirstName: targetSchedule.employee.firstName,
-        recipientRole: 'COLLEAGUE',
-        counterpartFullName: requesterName,
-        requesterFullName: requesterName,
-        requesterShiftLabel: requesterShift,
-        targetShiftLabel: targetShift,
-        reason: dto.reason?.trim() || null,
-        scheduleLink,
-      }),
-      'shift_swap_requested(colleague)',
-    );
+    if (targetSchedule.employee.email)
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapRequested({
+          tenantId,
+          shiftSwapId: swap.id,
+          recipientEmail: targetSchedule.employee.email,
+          recipientFirstName: targetSchedule.employee.firstName,
+          recipientRole: 'COLLEAGUE',
+          counterpartFullName: requesterName,
+          requesterFullName: requesterName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          reason: dto.reason?.trim() || null,
+          scheduleLink,
+        }),
+        'shift_swap_requested(colleague)',
+      );
 
     return swap;
   }

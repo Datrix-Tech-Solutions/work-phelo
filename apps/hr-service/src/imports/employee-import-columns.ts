@@ -1,7 +1,6 @@
 export const EMPLOYEE_IMPORT_REQUIRED_COLUMNS = [
   'firstName',
   'lastName',
-  'email',
   'department',
   'jobTitle',
   'employmentType',
@@ -9,6 +8,7 @@ export const EMPLOYEE_IMPORT_REQUIRED_COLUMNS = [
 ] as const;
 
 export const EMPLOYEE_IMPORT_OPTIONAL_COLUMNS = [
+  'email',
   'employeeNumber',
   'phone',
   'gender',

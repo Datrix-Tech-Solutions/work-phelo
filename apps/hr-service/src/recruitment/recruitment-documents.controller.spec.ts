@@ -153,7 +153,12 @@ describe('Recruitment document HTTP contracts', () => {
     expect(res.headers['access-control-allow-origin']).toBe(origin);
     expect(
       res.headers['access-control-allow-headers'].toLowerCase().split(','),
-    ).toEqual(['content-type', 'authorization', 'x-application-access-token']);
+    ).toEqual([
+      'content-type',
+      'authorization',
+      'idempotency-key',
+      'x-application-access-token',
+    ]);
     expect(res.headers['access-control-allow-headers']).not.toContain('*');
   });
 });

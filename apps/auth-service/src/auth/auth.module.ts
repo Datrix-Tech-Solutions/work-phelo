@@ -34,6 +34,6 @@ import { RabbitMQModule } from '../messaging/rabbitmq.module';
     GoogleStrategy,
     MicrosoftStrategy,
   ],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, JwtStrategy],
 })
 export class AuthModule {}

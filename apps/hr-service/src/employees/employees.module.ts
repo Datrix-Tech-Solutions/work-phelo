@@ -5,6 +5,13 @@ import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CryptoModule } from '../crypto/crypto.module';
 import { EmployeesService } from './employees.service';
+import { EmployeeAccessService } from './employee-access.service';
+import { EmployeeAccessRecoveryService } from './employee-access-recovery.service';
+import {
+  EmployeeAccessController,
+  EmployeeAccessLinkHandler,
+  EmployeeAccessOperationsController,
+} from './employee-access.controller';
 import { DriverLicenceService } from './driver-licence.service';
 import { EmployeesController } from './employees.controller';
 import { EmployeeSyncRecoveryCronService } from './employee-sync-recovery.cron';
@@ -23,9 +30,16 @@ import {
     CryptoModule,
     BullModule.registerQueue({ name: RESIGNATION_QUEUE }),
   ],
-  controllers: [EmployeesController],
+  controllers: [
+    EmployeeAccessOperationsController,
+    EmployeesController,
+    EmployeeAccessController,
+    EmployeeAccessLinkHandler,
+  ],
   providers: [
+    EmployeeAccessRecoveryService,
     EmployeesService,
+    EmployeeAccessService,
     DriverLicenceService,
     EmployeeSyncRecoveryCronService,
     ResignationNotificationProcessor,

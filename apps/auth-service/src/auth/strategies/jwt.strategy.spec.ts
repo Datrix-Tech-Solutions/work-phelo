@@ -41,11 +41,36 @@ describe('Auth current user/tenant state', () => {
     jest.clearAllMocks();
     prisma.user.findUnique.mockResolvedValue(current);
   });
+  it('rejects tokens from before suspension even after account restoration', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...current, sessionVersion: 2 });
+    await expect(
+      strategy.validate({ ...payload, sessionVersion: 0 }),
+    ).rejects.toThrow(UnauthorizedException);
+    await expect(strategy.validate(payload)).rejects.toThrow(
+      UnauthorizedException,
+    );
+    await expect(
+      strategy.validate({ ...payload, sessionVersion: 1 }),
+    ).rejects.toThrow(UnauthorizedException);
+    await expect(
+      strategy.validate({ ...payload, sessionVersion: 2 }),
+    ).resolves.toMatchObject({ sessionVersion: 2 });
+  });
+  it('lets trusted deferred commands resolve current authority without reusing a JWT', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...current, sessionVersion: 2 });
+    await expect(
+      strategy.resolveCurrentUser(current.id, current.tenantId),
+    ).resolves.toMatchObject({ sessionVersion: 2 });
+  });
 
   it.each([
     ['deleted user', null],
     ['disabled user', { ...current, status: 'DISABLED' }],
     ['pending user', { ...current, status: 'PENDING_VERIFICATION' }],
+    [
+      'inconsistent suspension marker',
+      { ...current, accessSuspendedAt: new Date() },
+    ],
     ['removed tenant linkage', { ...current, tenant: null }],
     ['changed tenant linkage', { ...current, tenantId: 'other-tenant' }],
     [

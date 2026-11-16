@@ -327,7 +327,7 @@ export class NotificationService {
     recipients: {
       employeeId: string;
       userId: string;
-      email: string;
+      email: string | null;
       phone?: string;
       firstName: string;
       lastName: string;
@@ -373,6 +373,7 @@ export class NotificationService {
 
     const emailTasks = shouldSendEmail
       ? data.recipients.map(async (recipient) => {
+          if (!recipient.email) return;
           const success =
             await this.email.sendAnnouncementPublishedNotification(
               recipient.email,
@@ -412,7 +413,7 @@ export class NotificationService {
               tenantId: data.tenantId,
               type: 'ANNOUNCEMENT_PUBLISHED',
               channel: 'SMS',
-              recipient: recipient.email,
+              recipient: recipient.email ?? `employee:${recipient.employeeId}`,
               subject: data.title,
               status: 'SKIPPED',
               metadata: {
