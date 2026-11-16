@@ -8,6 +8,7 @@ import {
   ApiBody,
   ApiQuery,
   ApiConsumes,
+  ApiHeader,
 } from '@nestjs/swagger';
 import {
   Controller,
@@ -24,10 +25,13 @@ import {
   UploadedFile,
   HttpCode,
   HttpStatus,
+  Headers,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentType } from '../../prisma/generated/client';
 import { EmployeesService } from './employees.service';
+import { accessKey } from './employee-access.service';
+import { EmployeeAccessReasonDto } from './employee-access.controller';
 import { DriverLicenceService } from './driver-licence.service';
 import {
   CreateDriverLicenceDto,
@@ -105,9 +109,16 @@ export class EmployeesController {
   }
 
   @Post()
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: 'Stable key for replaying this employee creation request',
+  })
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions(Permission.CREATE_EMPLOYEE)
-  @ApiOperation({ summary: 'Create a new employee profile' })
+  @ApiOperation({
+    summary: 'Create an employee without system access by default',
+  })
   @ApiBody({
     schema: {
       example: {
@@ -132,13 +143,17 @@ export class EmployeesController {
   @ApiResponse({ status: 201, description: 'Employee created successfully' })
   @ApiResponse({
     status: 409,
-    description: 'Employee already exists for this user',
+    description: 'An employee with this normalized email already exists',
   })
   create(
     @Body() dto: CreateEmployeeDto,
     @Req() req: Request & { user: RequestUser },
+    @Headers('idempotency-key') key: string,
   ) {
-    return this.employeesService.create(req.user.tenantId, dto);
+    return this.employeesService.create(req.user.tenantId, dto, {
+      actor: req.user,
+      idempotencyKey: accessKey(key),
+    });
   }
 
   @Post('bulk-import')
@@ -515,18 +530,20 @@ export class EmployeesController {
   }
 
   @Post(':id/resend-invite')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions(Permission.CREATE_EMPLOYEE)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @PermissionExempt(
+    'service-policy',
+    'Resend requires employees:EDIT AND users:CREATE in EmployeeAccessService.',
+  )
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiOperation({
-    summary:
-      'Queue employee invite resend — invalidates previous link when auth resend succeeds',
+    summary: 'Queue a durable resend for the existing linked pending identity',
   })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({
-    status: 200,
+    status: 202,
     description:
       'Invite resend queued for the employee identity linked to this profile',
-    schema: { example: { message: 'Invitation resent successfully' } },
   })
   @ApiResponse({
     status: 400,
@@ -536,8 +553,16 @@ export class EmployeesController {
   resendInvite(
     @Param('id') id: string,
     @Req() req: Request & { user: RequestUser },
+    @Headers('idempotency-key') key: string,
+    @Body() dto: EmployeeAccessReasonDto,
   ) {
-    return this.employeesService.resendInvite(req.user.tenantId, id);
+    return this.employeesService.resendInvite(
+      req.user.tenantId,
+      id,
+      req.user,
+      key,
+      dto.reason,
+    );
   }
 
   @Get(':id/allowances')

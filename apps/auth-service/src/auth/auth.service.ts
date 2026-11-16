@@ -43,10 +43,39 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
+  private async assertManagedEmployeeInviteAccepted(user: {
+    id: string;
+    tenantId: string;
+    status: string;
+    emailVerifiedAt?: Date | null;
+    accessSuspendedAt?: Date | null;
+  }) {
+    if (user.accessSuspendedAt)
+      throw new ForbiddenException('Employee access is suspended.');
+    if (user.status === 'ACTIVE' && user.emailVerifiedAt) return;
+    const managed = await this.prisma.employeeAccessCommand.findFirst({
+      where: { tenantId: user.tenantId, targetUserId: user.id },
+    });
+    const renewed = !managed
+      ? await this.prisma.employeeAccessLifecycleCommand.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            targetUserId: user.id,
+            action: 'RESEND',
+          },
+        })
+      : null;
+    if (managed || renewed)
+      throw new ForbiddenException(
+        'Accept the employee invitation before continuing.',
+      );
+  }
+
   signAccessToken(user: RequestUser): string {
     return this.jwtService.sign(
       {
         sub: user.id,
+        sessionVersion: user.sessionVersion ?? 0,
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
@@ -71,6 +100,8 @@ export class AuthService {
       role: string;
       tenantId: string;
       firstName: string;
+      sessionVersion?: number;
+      accessSuspendedAt?: Date | null;
     },
     tenant: {
       id: string;
@@ -86,6 +117,8 @@ export class AuthService {
   ) {
     // A company that only signed up on the careers site may post jobs there, but
     // cannot use the main app until it is verified and becomes a normal company.
+    if (user.accessSuspendedAt)
+      throw new ForbiddenException('Employee access is suspended.');
     if (tenant.source === 'WEBSITE' && scope !== 'careers') {
       throw new ForbiddenException(
         'This account can only sign in on the careers site until it is verified.',
@@ -93,6 +126,7 @@ export class AuthService {
     }
     const payload = {
       sub: user.id,
+      sessionVersion: user.sessionVersion ?? 0,
       email: user.email,
       role: user.role,
       tenantId: tenant.id,
@@ -117,6 +151,7 @@ export class AuthService {
       {
         sub: user.id,
         type: 'refresh',
+        sessionVersion: user.sessionVersion ?? 0,
         jti: randomUUID(),
         ...(scope ? { scope } : {}),
       },
@@ -393,6 +428,7 @@ export class AuthService {
       },
     });
     if (!user) throw new NotFoundException('User not found');
+    await this.assertManagedEmployeeInviteAccepted(user);
 
     const otp = await this.prisma.otpCode.findFirst({
       where: {
@@ -442,6 +478,8 @@ export class AuthService {
         message: 'If that email exists, a verification code has been sent',
       };
 
+    await this.assertManagedEmployeeInviteAccepted(user);
+
     await this.prisma.otpCode.updateMany({
       where: { userId: user.id, type: 'EMAIL_VERIFICATION', usedAt: null },
       data: { usedAt: new Date() },
@@ -488,6 +526,7 @@ export class AuthService {
 
     if (
       storedToken.user.status !== 'ACTIVE' ||
+      storedToken.user.accessSuspendedAt ||
       storedToken.user.tenant.status !== 'ACTIVE'
     ) {
       await this.prisma.refreshToken.update({
@@ -495,6 +534,16 @@ export class AuthService {
         data: { isRevoked: true },
       });
       throw new UnauthorizedException('User or tenant is no longer active');
+    }
+
+    const refreshClaims = this.jwtService.decode<{
+      sessionVersion?: number;
+    } | null>(dto.refreshToken);
+    if (
+      (refreshClaims?.sessionVersion ?? 0) !==
+      (storedToken.user.sessionVersion ?? 0)
+    ) {
+      throw new UnauthorizedException('Session has been revoked');
     }
 
     await this.prisma.refreshToken.update({
@@ -787,6 +836,7 @@ export class AuthService {
       include: { tenant: true },
     });
     if (!user) throw new NotFoundException('User not found');
+    await this.assertManagedEmployeeInviteAccepted(user);
     if (!user.forcePasswordReset) {
       throw new BadRequestException('No password reset required for this user');
     }
@@ -969,6 +1019,7 @@ export class AuthService {
     });
 
     if (existing) {
+      await this.assertManagedEmployeeInviteAccepted(existing.user);
       const { accessToken, refreshToken } = await this.generateTokens(
         existing.user,
         existing.user.tenant,
@@ -988,6 +1039,8 @@ export class AuthService {
       throw new NotFoundException(
         'No account found for this email. Contact your administrator.',
       );
+
+    await this.assertManagedEmployeeInviteAccepted(user);
 
     await this.prisma.socialAccount.create({
       data: {

@@ -30,6 +30,13 @@ describe('DirectoryService', () => {
 
   beforeEach(() => jest.resetAllMocks());
 
+  it('includes employees with neither email nor system access', async () => {
+    prisma.employee.findMany.mockResolvedValue([{ ...kofiRow, email: null }]);
+    await expect(service.list(TENANT)).resolves.toEqual([
+      expect.objectContaining({ employeeId: 'e2', email: null, userId: null }),
+    ]);
+  });
+
   it('never returns encrypted personal fields', async () => {
     prisma.employee.findMany.mockResolvedValue([ama]);
 

@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class EmployeeSyncRecoveryCronService {
   private readonly logger = new Logger(EmployeeSyncRecoveryCronService.name);
+  private offboardCursor?: { updatedAt: Date; id: string };
+  private scanningOffboards = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -53,12 +55,19 @@ export class EmployeeSyncRecoveryCronService {
     }
   }
 
-  @Cron(CronExpression.EVERY_30_MINUTES)
-  async reconcileOffboardedAuthAccess() {
-    const employees = await this.prisma.employee.findMany({
+  private offboardPage(cursor?: { updatedAt: Date; id: string }) {
+    return this.prisma.employee.findMany({
       where: {
         employmentStatus: 'OFFBOARDED',
         userId: { not: null },
+        ...(cursor
+          ? {
+              OR: [
+                { updatedAt: { gt: cursor.updatedAt } },
+                { updatedAt: cursor.updatedAt, id: { gt: cursor.id } },
+              ],
+            }
+          : {}),
       },
       select: {
         id: true,
@@ -66,71 +75,90 @@ export class EmployeeSyncRecoveryCronService {
         userId: true,
         email: true,
         offboardReason: true,
+        updatedAt: true,
       },
       take: 100,
-      orderBy: { updatedAt: 'asc' },
+      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
     });
+  }
 
-    if (employees.length === 0) {
-      return;
-    }
-
-    const employeesByTenant = new Map<string, typeof employees>();
-
-    for (const employee of employees) {
-      const tenantEmployees = employeesByTenant.get(employee.tenantId) ?? [];
-      tenantEmployees.push(employee);
-      employeesByTenant.set(employee.tenantId, tenantEmployees);
-    }
-
-    for (const [tenantId, tenantEmployees] of employeesByTenant.entries()) {
-      const userIds = tenantEmployees
-        .map((employee) => employee.userId)
-        .filter((userId): userId is string => Boolean(userId));
-
-      if (userIds.length === 0) {
-        continue;
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async reconcileOffboardedAuthAccess() {
+    if (this.scanningOffboards) return;
+    this.scanningOffboards = true;
+    try {
+      let employees = await this.offboardPage(this.offboardCursor);
+      if (!employees.length && this.offboardCursor) {
+        this.offboardCursor = undefined;
+        employees = await this.offboardPage();
       }
 
-      try {
-        const statuses = await this.rabbitmq.authGetUserStatuses({
-          tenantId,
-          userIds,
-        });
-        const activeUserIds = new Set(
-          statuses
-            .filter((status) => status.status !== 'INACTIVE')
-            .map((status) => status.userId),
-        );
+      if (employees.length === 0) {
+        return;
+      }
 
-        for (const employee of tenantEmployees) {
-          if (!employee.userId || !activeUserIds.has(employee.userId)) {
-            continue;
-          }
+      // A restart may revisit a page, but repeatedly inactive accounts cannot pin the scan.
+      const last = employees[employees.length - 1];
+      this.offboardCursor = { updatedAt: last.updatedAt, id: last.id };
 
-          try {
-            await this.rabbitmq.authDeactivateEmployeeAccess({
-              tenantId,
-              userId: employee.userId,
-              email: employee.email,
-              reason: employee.offboardReason ?? 'OFFBOARDED',
-            });
-            this.logger.log(
-              `[recovery] Deactivated auth access for offboarded employee ${employee.id}`,
-            );
-          } catch (error) {
-            this.logger.error(
-              `[recovery] Failed to deactivate auth access for employee ${employee.id}`,
-              error,
-            );
-          }
+      const employeesByTenant = new Map<string, typeof employees>();
+
+      for (const employee of employees) {
+        const tenantEmployees = employeesByTenant.get(employee.tenantId) ?? [];
+        tenantEmployees.push(employee);
+        employeesByTenant.set(employee.tenantId, tenantEmployees);
+      }
+
+      for (const [tenantId, tenantEmployees] of employeesByTenant.entries()) {
+        const userIds = tenantEmployees
+          .map((employee) => employee.userId)
+          .filter((userId): userId is string => Boolean(userId));
+
+        if (userIds.length === 0) {
+          continue;
         }
-      } catch (error) {
-        this.logger.error(
-          `[recovery] Failed to fetch auth statuses for offboarded users in tenant ${tenantId}`,
-          error,
-        );
+
+        try {
+          const statuses = await this.rabbitmq.authGetUserStatuses({
+            tenantId,
+            userIds,
+          });
+          // Include legacy INACTIVE identities so they acquire the protected offboarding marker.
+          const activeUserIds = new Set(
+            statuses.map((status) => status.userId),
+          );
+
+          for (const employee of tenantEmployees) {
+            if (!employee.userId || !activeUserIds.has(employee.userId)) {
+              continue;
+            }
+
+            try {
+              await this.rabbitmq.authDeactivateEmployeeAccess({
+                tenantId,
+                userId: employee.userId,
+                email: employee.email ?? undefined,
+                reason: employee.offboardReason ?? 'OFFBOARDED',
+              });
+              this.logger.log(
+                `[recovery] Deactivated auth access for offboarded employee ${employee.id}`,
+              );
+            } catch (error) {
+              this.logger.error(
+                `[recovery] Failed to deactivate auth access for employee ${employee.id}`,
+                error,
+              );
+            }
+          }
+        } catch (error) {
+          this.logger.error(
+            `[recovery] Failed to fetch auth statuses for offboarded users in tenant ${tenantId}`,
+            error,
+          );
+        }
       }
+    } finally {
+      this.scanningOffboards = false;
     }
   }
 

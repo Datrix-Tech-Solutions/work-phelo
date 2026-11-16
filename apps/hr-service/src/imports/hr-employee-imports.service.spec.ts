@@ -103,6 +103,21 @@ describe('HrEmployeeImportsService', () => {
     expect(sample).toContain('Head Office');
   });
 
+  it('accepts CSV rows without an email column and ignores email-less lookup entries', async () => {
+    prisma.employee.findMany.mockResolvedValue([
+      { id: 'email-less', email: null, employeeNumber: 'EMP-0002' },
+    ]);
+    const result = await service.dryRunEmployees(
+      tenantId,
+      createdByUserId,
+      csvFile(
+        'firstName,lastName,department,jobTitle,employmentType,hireDate\nAma,Mensah,Engineering,Officer,FULL_TIME,2026-01-05',
+      ),
+    );
+    expect(result.invalidRows).toBe(0);
+    expect(result.validRows).toBe(1);
+  });
+
   it('validates a valid CSV and persists valid row results', async () => {
     const result = await service.dryRunEmployees(
       tenantId,

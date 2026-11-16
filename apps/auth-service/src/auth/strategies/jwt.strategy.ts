@@ -26,21 +26,48 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<RequestUser> {
-    if (!payload.sub || !payload.tenantId)
+    return this.resolve(
+      payload.sub,
+      payload.tenantId,
+      payload.sessionVersion ?? 0,
+    );
+  }
+
+  // Trusted internal commands resolve current authority, not a persisted JWT snapshot.
+  async resolveCurrentUser(
+    userId: string,
+    tenantId: string,
+  ): Promise<RequestUser> {
+    return this.resolve(userId, tenantId);
+  }
+
+  private async resolve(
+    sub: string,
+    tenantId: string,
+    sessionVersion?: number,
+  ): Promise<RequestUser> {
+    if (!sub || !tenantId)
       throw new UnauthorizedException('Invalid tenant session');
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+      where: { id: sub },
       include: { tenant: true },
     });
 
     if (
       !user ||
-      user.tenantId !== payload.tenantId ||
+      user.tenantId !== tenantId ||
       !user.tenant ||
       user.status !== 'ACTIVE' ||
+      user.accessSuspendedAt ||
       user.tenant.status !== 'ACTIVE'
     ) {
       throw new UnauthorizedException('User not found or inactive');
+    }
+    if (
+      sessionVersion !== undefined &&
+      sessionVersion !== (user.sessionVersion ?? 0)
+    ) {
+      throw new UnauthorizedException('Session has been revoked');
     }
 
     // Fetch permissions from DB — the JWT no longer embeds them to keep
@@ -79,6 +106,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     return {
       id: user.id,
+      sessionVersion: user.sessionVersion ?? 0,
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,

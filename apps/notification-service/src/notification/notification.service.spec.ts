@@ -79,6 +79,21 @@ describe('NotificationService announcement delivery channels', () => {
   const notificationLogEntries = () =>
     notificationLogCreate.mock.calls.map(([entry]) => entry.data);
 
+  it('skips missing email without suppressing SMS delivery', async () => {
+    await service.sendAnnouncementPublishedNotification({
+      ...baseAnnouncement,
+      deliveryChannels: ['EMAIL', 'SMS'],
+      recipients: [{ ...recipient, email: null }],
+    });
+    expect(email.sendAnnouncementPublishedNotification).not.toHaveBeenCalled();
+    expect(sms.sendMessage).toHaveBeenCalledTimes(1);
+    expect(notificationLogEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ channel: 'SMS', status: 'SENT' }),
+      ]),
+    );
+  });
+
   it('keeps legacy email announcement delivery when deliveryChannels is omitted', async () => {
     await service.sendAnnouncementPublishedNotification({
       ...baseAnnouncement,

@@ -516,7 +516,8 @@ model Employee {
   employeeNumber       String
   firstName            String
   lastName             String
-  email                String
+  email                String?
+  normalizedEmail      String?
   phone                String?
   gender               Gender?
   dateOfBirth          DateTime?
@@ -598,7 +599,10 @@ model Employee {
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
+  @@unique([tenantId, normalizedEmail])
   @@index([tenantId, payrollGroupId])
+  @@index([tenantId, userId])
+  @@index([tenantId, createdAt, id], map: "Employee_access_candidates_idx")
   @@schema("hr")
 }
 
@@ -2250,6 +2254,84 @@ model AnnouncementReadReceipt {
   @@unique([tenantId, announcementId, userId])
   @@index([tenantId, userId, readAt])
   @@index([tenantId, userId, announcementId])
+  @@schema("hr")
+}
+
+enum EmployeeAccessOperationStatus {
+  QUEUED
+  RUNNING
+  RECONCILING
+  LINKED
+  COMPLETED
+  FAILED
+  PAUSED
+
+  @@schema("hr")
+}
+
+model EmployeeAccessOperation {
+  id                 String                        @id @default(uuid())
+  tenantId           String
+  employeeId         String
+  actorUserId        String
+  action             String                        @default("GRANT")
+  reason             String?
+  idempotencyKey     String
+  requestHash        String
+  employeePermission String
+  email              String
+  firstName          String
+  lastName           String
+  targetUserId       String?
+  expectedUserId     String?
+  status             EmployeeAccessOperationStatus @default(QUEUED)
+  attemptCount       Int                           @default(0)
+  nextAttemptAt      DateTime?                     @default(now())
+  leaseUntil         DateTime?
+  leaseToken         String?
+  lastErrorCode      String?
+  completedAt        DateTime?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, employeeId, createdAt])
+  @@index([tenantId, employeeId, status])
+  @@index([tenantId, createdAt, id], map: "EmployeeAccessOperation_admin_history_idx")
+  @@index([tenantId, status, createdAt, id], map: "EmployeeAccessOperation_admin_status_idx")
+  @@schema("hr")
+}
+
+model EmployeeCreateRequest {
+  id             String   @id @default(uuid())
+  tenantId       String
+  actorUserId    String
+  idempotencyKey String
+  requestHash    String
+  employeeId     String   @unique
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, idempotencyKey])
+  @@schema("hr")
+}
+
+model EmployeeAccessRecoveryRequest {
+  id             String   @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  operationId    String
+  operatorUserId String
+  idempotencyKey String
+  requestHash    String
+  reason         String
+  outcome        String   @default("PENDING")
+  lastErrorCode  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, operationId, createdAt], map: "EmployeeAccessRecoveryRequest_operation_history_idx")
   @@schema("hr")
 }
 

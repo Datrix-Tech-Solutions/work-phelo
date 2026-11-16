@@ -121,7 +121,7 @@ export class PayrollRunsService {
       }),
     ]);
 
-    const onPayroll = await this.verifiedOnly(tenantId, employees);
+    const onPayroll = employees;
     if (onPayroll.length === 0) {
       throw new BadRequestException('No payroll-eligible employees found');
     }
@@ -458,26 +458,5 @@ export class PayrollRunsService {
       }
     }
     return { approved, failed };
-  }
-
-  /** People whose account is still waiting to be verified aren't paid yet. */
-  private async verifiedOnly<T extends { userId: string | null }>(
-    tenantId: string,
-    employees: T[],
-  ): Promise<T[]> {
-    const userIds = employees
-      .map((e) => e.userId)
-      .filter((id): id is string => !!id);
-    if (userIds.length === 0) return employees;
-    const statuses = await this.rabbitmq.authGetUserStatuses({
-      tenantId,
-      userIds,
-    });
-    const verified = new Set(
-      statuses
-        .filter((s) => s.status !== 'PENDING_VERIFICATION')
-        .map((s) => s.userId),
-    );
-    return employees.filter((e) => !e.userId || verified.has(e.userId));
   }
 }

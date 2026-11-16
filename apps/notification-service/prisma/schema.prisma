@@ -10,6 +10,32 @@ datasource db {
   schemas  = ["notify"]
 }
 
+enum EmployeeInviteReceiptStatus {
+  SENDING
+  PROVIDER_ACCEPTED
+  RETRY
+  UNKNOWN
+  EXPIRED
+
+  @@schema("notify")
+}
+
+model EmployeeInviteReceipt {
+  id            String                      @id
+  tenantId      String
+  userId        String
+  requestHash   String
+  status        EmployeeInviteReceiptStatus @default(SENDING)
+  leaseToken    String?
+  leaseUntil    DateTime?
+  attemptCount  Int                         @default(0)
+  lastErrorCode String?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  @@schema("notify")
+}
+
 enum NotificationChannel {
   EMAIL
   SMS
@@ -71,18 +97,18 @@ enum NotificationType {
 }
 
 model NotificationLog {
-  id        String             @id @default(uuid())
+  id        String              @id @default(uuid())
   tenantId  String?
   userId    String?
   type      NotificationType
   channel   NotificationChannel
   recipient String
   subject   String?
-  status    NotificationStatus @default(PENDING)
+  status    NotificationStatus  @default(PENDING)
   error     String?
   metadata  Json?
   sentAt    DateTime?
-  createdAt DateTime           @default(now())
+  createdAt DateTime            @default(now())
 
   @@schema("notify")
 }

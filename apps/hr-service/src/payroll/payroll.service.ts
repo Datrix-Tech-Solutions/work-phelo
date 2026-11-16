@@ -700,31 +700,8 @@ export class PayrollService {
       throw new BadRequestException('No payroll-eligible employees found');
     }
 
-    // Exclude employees whose linked user account is still pending verification
-    const userIds = employees
-      .map((e) => e.userId)
-      .filter((id): id is string => id !== null && id !== undefined);
-
-    const verifiedEmployees =
-      userIds.length > 0
-        ? await (async () => {
-            const statusMap = await this.rabbitmq.authGetUserStatuses({
-              tenantId,
-              userIds,
-            });
-            const verifiedIds = new Set(
-              statusMap
-                .filter((s) => s.status !== 'PENDING_VERIFICATION')
-                .map((s) => s.userId),
-            );
-            return employees.filter(
-              (e) =>
-                e.userId === null ||
-                e.userId === undefined ||
-                verifiedIds.has(e.userId),
-            );
-          })()
-        : employees;
+    // Employment, not login/account verification, determines payroll eligibility.
+    const verifiedEmployees = employees;
 
     if (verifiedEmployees.length === 0) {
       throw new BadRequestException('No payroll-eligible employees found');
@@ -1586,7 +1563,7 @@ export class PayrollService {
     if (employeeIds.length === 0) return;
 
     const employees = await this.prisma.employee.findMany({
-      where: { id: { in: employeeIds }, userId: { not: null } },
+      where: { tenantId, id: { in: employeeIds }, userId: { not: null } },
       select: { id: true, userId: true },
     });
 

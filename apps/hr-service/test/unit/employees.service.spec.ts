@@ -95,6 +95,7 @@ describe('EmployeesService', () => {
 
     service = moduleRef.get(EmployeesService);
     jest.clearAllMocks();
+    prisma.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
   });
 
   const dto = {
@@ -126,7 +127,7 @@ describe('EmployeesService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('creates employee and triggers async invite + leave initialization', async () => {
+  it('creates employee and leave balances without an Auth invitation', async () => {
     prisma.department.count.mockResolvedValue(1);
     prisma.employee.findUnique.mockResolvedValue(null);
     prisma.employee.count.mockResolvedValue(0);
@@ -141,14 +142,12 @@ describe('EmployeesService', () => {
     const employee = await service.create('tenant-1', dto);
 
     expect(employee.id).toBe('emp-1');
-    expect(rabbitmq.authProvisionEmployeeInvite).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'tenant-1', email: dto.email }),
-      undefined,
-      undefined,
-    );
+    expect(rabbitmq.authProvisionEmployeeInvite).not.toHaveBeenCalled();
     expect(leaveService.initializeLeaveBalances).toHaveBeenCalledWith(
       'tenant-1',
       'emp-1',
+      undefined,
+      prisma,
     );
   });
 });

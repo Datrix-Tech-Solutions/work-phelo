@@ -11,7 +11,8 @@ import {
   ValidateNested,
   ArrayMinSize,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { normalizeEmployeeEmail } from '../employee-email';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   EmployeeCompensationType,
@@ -36,9 +37,11 @@ export class EmployeeImportRowDto {
   @IsString()
   lastName!: string;
 
-  @ApiProperty({ example: 'ama.boateng@example.com' })
+  @ApiPropertyOptional({ example: 'ama.boateng@example.com', nullable: true })
+  @Transform(({ value }) => normalizeEmployeeEmail(value))
+  @IsOptional()
   @IsEmail()
-  email!: string;
+  email?: string | null;
 
   @ApiPropertyOptional({ example: '0244000000' })
   @IsOptional()

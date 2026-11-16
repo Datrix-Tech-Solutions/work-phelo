@@ -139,6 +139,7 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.dev" \
   "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.dev" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "PORT=4004" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \

@@ -602,9 +602,12 @@ export class LeaveService {
   }
 
   // ── Seed default leave types for new tenant ───────────────────────────────
-  async seedDefaultLeaveTypes(tenantId: string) {
+  async seedDefaultLeaveTypes(
+    tenantId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
     for (const lt of DEFAULT_LEAVE_TYPES) {
-      await this.prisma.leaveType.upsert({
+      await db.leaveType.upsert({
         where: { tenantId_name: { tenantId, name: lt.name } },
         // Preserve tenant-specific edits and archives after initial seeding.
         update: { isDefault: true },
@@ -957,8 +960,9 @@ export class LeaveService {
     tenantId: string,
     employeeId: string,
     year = new Date().getFullYear(),
+    db: Prisma.TransactionClient = this.prisma,
   ) {
-    let leaveTypes = await this.prisma.leaveType.findMany({
+    let leaveTypes = await db.leaveType.findMany({
       where: { tenantId, isActive: true },
     });
 
@@ -966,13 +970,13 @@ export class LeaveService {
     // or the event was missed), seed defaults now so the employee always gets
     // balances regardless of event delivery.
     if (leaveTypes.length === 0) {
-      await this.seedDefaultLeaveTypes(tenantId);
-      leaveTypes = await this.prisma.leaveType.findMany({
+      await this.seedDefaultLeaveTypes(tenantId, db);
+      leaveTypes = await db.leaveType.findMany({
         where: { tenantId, isActive: true },
       });
     }
 
-    const employee = await this.prisma.employee.findUnique({
+    const employee = await db.employee.findUnique({
       where: { id: employeeId },
       select: { employmentType: true, gender: true },
     });
@@ -988,7 +992,7 @@ export class LeaveService {
         continue;
       }
 
-      await this.prisma.leaveBalance.upsert({
+      await db.leaveBalance.upsert({
         where: {
           employeeId_leaveTypeId_year: { employeeId, leaveTypeId: lt.id, year },
         },
@@ -1702,7 +1706,7 @@ export class LeaveService {
   ): Promise<LeaveNotificationRecipient | null> {
     let manager: {
       userId: string | null;
-      email: string;
+      email: string | null;
       firstName: string;
       lastName: string;
     } | null = null;
@@ -1928,19 +1932,20 @@ export class LeaveService {
 
       const leaveTypeName = leaveType?.name ?? 'Leave';
 
-      await this.rabbitmq.notificationLeaveReviewed({
-        tenantId,
-        employeeId,
-        employeeEmail: employee.email,
-        employeeFirstName: employee.firstName,
-        status,
-        leaveTypeName,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        totalDays,
-        note,
-        platformLink: this.buildTenantWorkspaceLink(tenantSlug),
-      });
+      if (employee.email)
+        await this.rabbitmq.notificationLeaveReviewed({
+          tenantId,
+          employeeId,
+          employeeEmail: employee.email,
+          employeeFirstName: employee.firstName,
+          status,
+          leaveTypeName,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          totalDays,
+          note,
+          platformLink: this.buildTenantWorkspaceLink(tenantSlug),
+        });
 
       if (employee.userId) {
         await this.rabbitmq.notificationInAppCreate({

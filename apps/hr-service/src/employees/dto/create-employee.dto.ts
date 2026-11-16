@@ -9,7 +9,8 @@ import {
   IsBoolean,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { normalizeEmployeeEmail } from '../employee-email';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   EmployeeCompensationType,
@@ -19,15 +20,6 @@ import {
 } from '../../../prisma/generated/client';
 
 export class CreateEmployeeDto {
-  @ApiPropertyOptional({
-    description:
-      'Optional internal user ID to link employee to an existing user record',
-    example: 'user-123',
-  })
-  @IsOptional()
-  @IsString()
-  userId?: string;
-
   @ApiProperty({ description: 'Given name of the employee', example: 'Kofi' })
   @IsString()
   firstName!: string;
@@ -39,12 +31,25 @@ export class CreateEmployeeDto {
   @IsString()
   lastName!: string;
 
-  @ApiProperty({
-    description: 'Employee email address for login and notifications',
+  @ApiPropertyOptional({
+    description:
+      'Optional employee contact email. Does not grant system access.',
+    nullable: true,
     example: 'kofi.boateng@acmeghana.com',
   })
+  @Transform(({ value }) => normalizeEmployeeEmail(value))
+  @IsOptional()
   @IsEmail()
-  email!: string;
+  email?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Defaults to false. When true, accepts a durable access request; requires a valid email, Idempotency-Key and users:CREATE authority.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  grantSystemAccess?: boolean = false;
 
   @ApiPropertyOptional({
     description: 'Contact phone number in international format',

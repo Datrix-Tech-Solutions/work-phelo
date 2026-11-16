@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { NotificationHandler } from './notification.handler';
+import {
+  EmployeeAccessInviteHandler,
+  EmployeeAccessInviteService,
+} from './employee-access-invite.handler';
 import { AgooSmsProvider } from '../channels/agoosms-sms.provider';
 import { EmailService } from '../channels/email.service';
 import { PiloSmsProvider } from '../channels/pilosms.provider';
@@ -12,9 +16,10 @@ import { MarketingRabbitPublisher } from '../messaging/marketing-rabbit.publishe
 
 @Module({
   imports: [InAppNotificationsModule],
-  controllers: [NotificationHandler],
+  controllers: [NotificationHandler, EmployeeAccessInviteHandler],
   providers: [
     NotificationService,
+    EmployeeAccessInviteService,
     EmailService,
     SmsService,
     TermiiSmsProvider,

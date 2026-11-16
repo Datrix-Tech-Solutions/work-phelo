@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { JwtService } from '@nestjs/jwt';
 import { InviteUserDto, UserSystemRole } from './dto/invite-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, UserStatus } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { generateSecureToken } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
@@ -21,6 +21,7 @@ import { syncUserSystemPermissionSet } from '../permissions/system-permission-se
 import { normalizeEmail } from '../common/email.helper';
 import { TenantAssetStorageService } from '../tenants/tenant-asset-storage.service';
 import { UploadUserDocumentDto } from './dto/upload-user-document.dto';
+import { RequestUser } from '@work-phelo/types';
 
 const AVATAR_ALLOWED_MIME_TYPES = new Set([
   'image/png',
@@ -364,6 +365,18 @@ export class UsersService {
       return { deleted: false };
     }
 
+    // Durable employee provisioning owns its identity; legacy timeout cleanup must not delete it.
+    if (
+      (await this.prisma.employeeAccessCommand.findFirst({
+        where: { tenantId, targetUserId: user.id },
+      })) ||
+      (await this.prisma.employeeAccessLifecycleCommand.findFirst({
+        where: { tenantId, targetUserId: user.id },
+      }))
+    ) {
+      return { deleted: false };
+    }
+
     if (user.role !== 'EMPLOYEE') {
       throw new BadRequestException(
         'Only pending employee invites can be rolled back.',
@@ -381,6 +394,12 @@ export class UsersService {
   }
 
   async getUserStatuses(tenantId: string, userIds: string[]) {
+    if (
+      !Array.isArray(userIds) ||
+      userIds.length > 100 ||
+      userIds.some((id) => typeof id !== 'string' || !id || id.length > 100)
+    )
+      throw new BadRequestException('At most 100 user IDs are allowed.');
     if (userIds.length === 0) {
       return [];
     }
@@ -412,6 +431,58 @@ export class UsersService {
       );
     }
 
+    const managedInvite = await this.prisma.employeeAccessCommand.findFirst({
+      where: { tenantId: user.tenantId, targetUserId: user.id },
+    });
+    const lifecycleInvite =
+      await this.prisma.employeeAccessLifecycleCommand.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          targetUserId: user.id,
+          action: 'RESEND',
+          status: { not: 'FAILED' },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    if (
+      lifecycleInvite &&
+      !['READY', 'COMPLETED'].includes(lifecycleInvite.status)
+    )
+      throw new ForbiddenException(
+        'Employee invitation requires reconciliation.',
+      );
+    if (
+      managedInvite &&
+      !lifecycleInvite &&
+      !['READY', 'PROVIDER_ACCEPTED'].includes(managedInvite.status)
+    ) {
+      throw new ForbiddenException(
+        'Employee access linkage must be finalized before invitation acceptance.',
+      );
+    }
+
+    const invitationOperation = lifecycleInvite ?? managedInvite;
+    if (invitationOperation) {
+      if (
+        user.status !== 'PENDING_VERIFICATION' ||
+        user.role !== 'EMPLOYEE' ||
+        !(
+          await this.rabbitmq.verifyEmployeeAccessLink({
+            operationId: invitationOperation.id,
+            tenantId: user.tenantId,
+            employeeId: invitationOperation.employeeId,
+            actorUserId: invitationOperation.actorUserId,
+            requestHash: invitationOperation.requestHash,
+            userId: user.id,
+          })
+        ).linked
+      ) {
+        throw new ForbiddenException(
+          'Employee invitation is no longer eligible for acceptance.',
+        );
+      }
+    }
+
     if (user.role === 'TENANT_ADMIN') {
       await this.rabbitmq.hrProvisionTenantWorkspace({
         tenantId: user.tenantId,
@@ -420,7 +491,7 @@ export class UsersService {
         country: user.tenant.country,
         currency: user.tenant.currency,
       });
-    } else {
+    } else if (!invitationOperation) {
       await this.rabbitmq.hrLinkEmployeeIdentity({
         tenantId: user.tenantId,
         email: user.email,
@@ -429,19 +500,41 @@ export class UsersService {
     }
 
     const hashed = await bcrypt.hash(dto.password, 12);
-    const updated = await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        password: hashed,
-        status: 'ACTIVE',
-        emailVerifiedAt: new Date(),
-        forcePasswordReset: false,
-        inviteToken: null,
-        inviteExpiresAt: null,
-        lastLoginAt: new Date(),
-      },
-      include: { tenant: true },
-    });
+    const activationData = {
+      password: hashed,
+      status: 'ACTIVE' as const,
+      emailVerifiedAt: new Date(),
+      forcePasswordReset: false,
+      inviteToken: null,
+      inviteExpiresAt: null,
+      lastLoginAt: new Date(),
+    };
+    const updated = invitationOperation
+      ? await this.prisma.$transaction(async (tx) => {
+          const activated = await tx.user.updateMany({
+            where: {
+              id: user.id,
+              tenantId: user.tenantId,
+              status: 'PENDING_VERIFICATION',
+              inviteToken: dto.inviteToken,
+            },
+            data: activationData,
+          });
+          if (activated.count !== 1) {
+            throw new ForbiddenException(
+              'Employee invitation is no longer eligible for acceptance.',
+            );
+          }
+          return tx.user.findUniqueOrThrow({
+            where: { id: user.id },
+            include: { tenant: true },
+          });
+        })
+      : await this.prisma.user.update({
+          where: { id: user.id },
+          data: activationData,
+          include: { tenant: true },
+        });
 
     // Activate tenant when Company Admin accepts invite
     if (updated.role === 'TENANT_ADMIN') {
@@ -454,6 +547,7 @@ export class UsersService {
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
       sub: updated.id,
+      sessionVersion: updated.sessionVersion ?? 0,
       email: updated.email,
       role: updated.role,
       tenantId: updated.tenantId,
@@ -465,7 +559,11 @@ export class UsersService {
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
-      { sub: updated.id, type: 'refresh' },
+      {
+        sub: updated.id,
+        type: 'refresh',
+        sessionVersion: updated.sessionVersion ?? 0,
+      },
       { expiresIn: '7d' },
     );
 
@@ -500,6 +598,18 @@ export class UsersService {
       include: { tenant: true },
     });
     if (!user) throw new NotFoundException('User not found');
+    const managed = await this.prisma.employeeAccessCommand.findFirst({
+      where: { tenantId, targetUserId: user.id },
+    });
+    const lifecycleInvite =
+      await this.prisma.employeeAccessLifecycleCommand.findFirst({
+        where: { tenantId, targetUserId: user.id, action: 'RESEND' },
+      });
+    if (managed || lifecycleInvite) {
+      throw new ConflictException(
+        'Use the durable employee access invitation resend endpoint.',
+      );
+    }
     if (user.status !== 'PENDING_VERIFICATION') {
       throw new ForbiddenException('User has already accepted the invitation.');
     }
@@ -615,31 +725,188 @@ export class UsersService {
     return user;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateUserDto) {
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateUserDto,
+    actor?: RequestUser,
+  ) {
+    if (
+      dto.role &&
+      (!actor ||
+        actor.tenantId !== tenantId ||
+        !['SUPER_ADMIN', 'TENANT_ADMIN'].includes(actor.role))
+    ) {
+      throw new ForbiddenException(
+        'Only tenant administrators may change system roles.',
+      );
+    }
+    if (
+      dto.status &&
+      (!actor ||
+        actor.tenantId !== tenantId ||
+        (!['SUPER_ADMIN', 'TENANT_ADMIN'].includes(actor.role) &&
+          !actor.permissions.includes(
+            `users:${dto.status === UserStatus.INACTIVE || dto.status === UserStatus.SUSPENDED ? 'DELETE' : 'EDIT'}`,
+          )))
+    ) {
+      throw new ForbiddenException(
+        'Action-specific user management authority required.',
+      );
+    }
     const existing = await this.findById(tenantId, id);
     if (existing.role === 'SUPER_ADMIN') {
       throw new ForbiddenException(
         'The super admin account cannot be modified.',
       );
     }
-    return this.prisma.user.update({
-      where: { id },
-      data: dto,
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        role: true,
-        status: true,
-        avatarUrl: true,
-        isMfaEnabled: true,
-        updatedAt: true,
-      },
+    const lifecycleState =
+      dto.status || dto.role
+        ? await this.prisma.user.findFirst({
+            where: { id, tenantId },
+            select: {
+              accessSuspendedAt: true,
+              sessionVersion: true,
+              status: true,
+              role: true,
+            },
+          })
+        : null;
+    if (dto.status || dto.role) {
+      if (!lifecycleState) throw new NotFoundException('User not found');
+      if (lifecycleState?.accessSuspendedAt)
+        throw new ForbiddenException(
+          'Use the employee access lifecycle to restore a suspended account.',
+        );
+    }
+    const managedInvite = await this.prisma.employeeAccessCommand.findFirst({
+      where: { tenantId, targetUserId: id },
     });
+    const renewedInvite =
+      await this.prisma.employeeAccessLifecycleCommand.findFirst({
+        where: { tenantId, targetUserId: id, action: 'RESEND' },
+      });
+    if (
+      (managedInvite || renewedInvite) &&
+      (dto.role || dto.status === UserStatus.ACTIVE)
+    ) {
+      if (dto.status === UserStatus.ACTIVE && existing.status !== 'ACTIVE')
+        throw new ForbiddenException(
+          'Use the employee access lifecycle to restore access.',
+        );
+      const verified = await this.prisma.user.findFirst({
+        where: { id, tenantId },
+        select: { emailVerifiedAt: true },
+      });
+      if (!verified?.emailVerifiedAt) {
+        throw new ForbiddenException(
+          'Pending employee access must complete the verified invitation flow.',
+        );
+      }
+    }
+    const data = {
+      ...dto,
+      ...(dto.status && String(dto.status) !== lifecycleState?.status
+        ? { sessionVersion: { increment: 1 } }
+        : {}),
+    };
+    const select = {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      role: true,
+      status: true,
+      avatarUrl: true,
+      isMfaEnabled: true,
+      updatedAt: true,
+    } as const;
+    if (lifecycleState) {
+      return this.prisma.$transaction(async (tx) => {
+        const changed = await tx.user.updateMany({
+          where: {
+            id,
+            tenantId,
+            role: existing.role,
+            status: existing.status,
+            sessionVersion: lifecycleState.sessionVersion,
+            accessSuspendedAt: null,
+          },
+          data,
+        });
+        if (changed.count !== 1)
+          throw new ConflictException(
+            'Account changed; reload before retrying.',
+          );
+        return tx.user.findUniqueOrThrow({ where: { id }, select });
+      });
+    }
+    return this.prisma.user.update({ where: { id }, data, select });
   }
 
+  async deactivateEmployeeAccess(tenantId: string, id: string) {
+    const user = await this.findById(tenantId, id);
+    if (user.role !== 'EMPLOYEE')
+      throw new ForbiddenException(
+        'Protected accounts cannot be offboarded through HR.',
+      );
+    if (
+      !(await this.rabbitmq.verifyEmployeeOffboarded({ tenantId, userId: id }))
+        .offboarded
+    )
+      throw new ForbiddenException('Employee is not offboarded.');
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.user.findFirst({ where: { tenantId, id } });
+      if (!current || current.role !== 'EMPLOYEE')
+        throw new ForbiddenException(
+          'Protected accounts cannot be offboarded through HR.',
+        );
+      if (
+        current.status === 'INACTIVE' &&
+        current.accessSuspendedAt &&
+        current.accessSuspensionReason === 'EMPLOYEE_OFFBOARDED'
+      )
+        return { deactivated: true };
+      const changed = await tx.user.updateMany({
+        where: {
+          id,
+          tenantId,
+          role: 'EMPLOYEE',
+          status: current.status,
+          sessionVersion: current.sessionVersion,
+        },
+        data: {
+          status: 'INACTIVE',
+          sessionVersion: { increment: 1 },
+          accessSuspendedAt: new Date(),
+          accessSuspensionReason: 'EMPLOYEE_OFFBOARDED',
+        },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException('Account changed while offboarding.');
+      await tx.refreshToken.updateMany({
+        where: { userId: id, isRevoked: false },
+        data: { isRevoked: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          resource: 'users',
+          resourceId: id,
+          action: 'UPDATE',
+          changes: {
+            after: {
+              status: 'INACTIVE',
+              reason: 'EMPLOYEE_OFFBOARDED',
+              source: 'verified-hr-offboarding',
+            },
+          },
+        },
+      });
+      return { deactivated: true };
+    });
+  }
   async deactivate(tenantId: string, id: string) {
     const existing = await this.findById(tenantId, id);
     if (existing.role === 'SUPER_ADMIN') {
@@ -647,13 +914,18 @@ export class UsersService {
         'The super admin account cannot be deactivated.',
       );
     }
-    await this.prisma.refreshToken.updateMany({
-      where: { userId: id, isRevoked: false },
-      data: { isRevoked: true },
-    });
-    return this.prisma.user.update({
-      where: { id },
-      data: { status: 'INACTIVE' },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.refreshToken.updateMany({
+        where: { userId: id, isRevoked: false },
+        data: { isRevoked: true },
+      });
+      return tx.user.update({
+        where: { id },
+        data: {
+          status: 'INACTIVE',
+          sessionVersion: { increment: 1 },
+        },
+      });
     });
   }
 

@@ -20,7 +20,7 @@ type EmployeeRow = {
   userId: string | null;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null;
   jobTitle: string | null;
   department: { id: string; name: string } | null;
   branch: { id: string; name: string } | null;

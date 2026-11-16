@@ -178,21 +178,17 @@ export class EventsHandler {
 
   private async linkEmployeeIdentity(
     tenantId: string,
-    email: string,
+    _email: string,
     userId: string,
   ) {
     const employee = await this.prisma.employee.findFirst({
-      where: { tenantId, email },
+      // Acceptance confirms an existing link; matching contact email is not access consent.
+      where: { tenantId, userId },
       select: { id: true },
     });
     if (!employee) {
-      throw new NotFoundException(`No employee record found for ${email}`);
+      throw new NotFoundException('No linked employee record found');
     }
-
-    await this.prisma.employee.update({
-      where: { id: employee.id },
-      data: { userId },
-    });
 
     return { linked: true, employeeId: employee.id };
   }

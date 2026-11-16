@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -26,6 +27,8 @@ function makePrisma() {
       findUnique: MockFn;
       create: MockFn;
       update: MockFn;
+      updateMany: MockFn;
+      findUniqueOrThrow: MockFn;
       delete: MockFn;
     };
     tenant: { findUnique: MockFn; update: MockFn };
@@ -36,6 +39,8 @@ function makePrisma() {
       upsert: MockFn;
     };
     refreshToken: { create: MockFn };
+    employeeAccessCommand: { findFirst: MockFn };
+    employeeAccessLifecycleCommand: { findFirst: MockFn };
   } = {
     $transaction: jest.fn(async (callback) => callback(prisma)),
     resource: {
@@ -46,6 +51,8 @@ function makePrisma() {
       findUnique: jest.fn() as MockFn,
       create: jest.fn() as MockFn,
       update: jest.fn().mockResolvedValue({}) as MockFn,
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }) as MockFn,
+      findUniqueOrThrow: jest.fn() as MockFn,
       delete: jest.fn().mockResolvedValue({}) as MockFn,
     },
     tenant: {
@@ -64,6 +71,12 @@ function makePrisma() {
     refreshToken: {
       create: jest.fn().mockResolvedValue({}) as MockFn,
     },
+    employeeAccessCommand: {
+      findFirst: jest.fn().mockResolvedValue(null) as MockFn,
+    },
+    employeeAccessLifecycleCommand: {
+      findFirst: jest.fn().mockResolvedValue(null) as MockFn,
+    },
   };
   return prisma;
 }
@@ -75,6 +88,9 @@ function makeRabbit() {
       .fn()
       .mockResolvedValue(undefined) as MockFn,
     hrLinkEmployeeIdentity: jest.fn().mockResolvedValue(undefined) as MockFn,
+    verifyEmployeeAccessLink: jest
+      .fn()
+      .mockResolvedValue({ linked: true }) as MockFn,
   };
 }
 
@@ -113,6 +129,54 @@ function makeService(
     storage as unknown as TenantAssetStorageService,
   );
 }
+
+describe('UsersService sensitive update fencing', () => {
+  it.each([1, 0])(
+    'uses a lifecycle compare-and-set (matched rows: %i)',
+    async (count) => {
+      const prisma = makePrisma();
+      const current = {
+        id: 'user',
+        tenantId: 'tenant',
+        role: 'EMPLOYEE',
+        status: 'ACTIVE',
+        sessionVersion: 3,
+        accessSuspendedAt: null,
+      };
+      prisma.user.findFirst.mockResolvedValue(current);
+      prisma.user.updateMany.mockResolvedValue({ count });
+      prisma.user.findUniqueOrThrow.mockResolvedValue(current);
+      const service = makeService(prisma);
+      const result = service.update(
+        'tenant',
+        'user',
+        { status: 'ACTIVE' } as never,
+        {
+          id: 'admin',
+          tenantId: 'tenant',
+          role: 'TENANT_ADMIN',
+          permissions: [],
+        } as never,
+      );
+      if (count) await expect(result).resolves.toEqual(current);
+      else await expect(result).rejects.toThrow(ConflictException);
+      expect(prisma.user.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 'user',
+            tenantId: 'tenant',
+            role: 'EMPLOYEE',
+            status: 'ACTIVE',
+            sessionVersion: 3,
+            accessSuspendedAt: null,
+          },
+        }),
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      if (!count) expect(prisma.user.findUniqueOrThrow).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe('UsersService.resendInvite', () => {
   const pendingUser = {
@@ -485,5 +549,122 @@ describe('UsersService.acceptInvite after resend token rotation', () => {
         password: 'Password123!',
       }),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('managed employee invitation activation', () => {
+  it('does not allow legacy rollback to delete a durably renewed legacy invitation', async () => {
+    const prisma = makePrisma();
+    prisma.user.findFirst.mockResolvedValue({ id: 'legacy-user' });
+    prisma.employeeAccessLifecycleCommand.findFirst.mockResolvedValue({
+      id: 'renewal',
+    });
+    await expect(
+      makeService(prisma).deletePendingEmployeeInvite('tenant', {
+        userId: 'legacy-user',
+        email: 'legacy@example.test',
+      }),
+    ).resolves.toEqual({ deleted: false });
+    expect(prisma.user.delete).not.toHaveBeenCalled();
+  });
+  function setup() {
+    const prisma = makePrisma();
+    const rabbit = makeRabbit();
+    const user = {
+      id: 'employee-user',
+      tenantId: 'tenant-1',
+      role: 'EMPLOYEE',
+      status: 'PENDING_VERIFICATION',
+      email: 'employee@example.test',
+      firstName: 'Employee',
+      lastName: 'Test',
+      inviteToken: 'invite-token',
+      inviteExpiresAt: new Date(Date.now() + 3600000),
+      tenant: { id: 'tenant-1', slug: 'tenant', name: 'Tenant' },
+    };
+    prisma.user.findUnique.mockResolvedValue(user);
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      ...user,
+      status: 'ACTIVE',
+    });
+    prisma.employeeAccessCommand.findFirst.mockResolvedValue({
+      id: 'operation',
+      employeeId: 'employee',
+      actorUserId: 'actor',
+      requestHash: 'hash',
+      status: 'PROVIDER_ACCEPTED',
+    });
+    return { prisma, rabbit, service: makeService(prisma, rabbit) };
+  }
+
+  it('activates only after confirmed linkage using an atomic pending/token check', async () => {
+    const { prisma, rabbit, service } = setup();
+    await service.acceptInvite({
+      inviteToken: 'invite-token',
+      password: 'Password123!',
+    });
+    expect(rabbit.verifyEmployeeAccessLink).toHaveBeenCalledWith({
+      operationId: 'operation',
+      tenantId: 'tenant-1',
+      employeeId: 'employee',
+      actorUserId: 'actor',
+      requestHash: 'hash',
+      userId: 'employee-user',
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'employee-user',
+          tenantId: 'tenant-1',
+          status: 'PENDING_VERIFICATION',
+          inviteToken: 'invite-token',
+        },
+      }),
+    );
+    expect(rabbit.hrLinkEmployeeIdentity).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing or ineligible HR linkage without activating', async () => {
+    const { prisma, rabbit, service } = setup();
+    rabbit.verifyEmployeeAccessLink.mockResolvedValue({ linked: false });
+    await expect(
+      service.acceptInvite({
+        inviteToken: 'invite-token',
+        password: 'Password123!',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('uses the same atomic activation protection for renewed pre-Phase-2 invitations', async () => {
+    const { prisma, service, rabbit } = setup();
+    prisma.employeeAccessCommand.findFirst.mockResolvedValue(null);
+    prisma.employeeAccessLifecycleCommand.findFirst.mockResolvedValue({
+      id: 'resend-operation',
+      employeeId: 'employee',
+      actorUserId: 'actor',
+      requestHash: 'hash',
+      status: 'COMPLETED',
+    });
+    await service.acceptInvite({
+      inviteToken: 'invite-token',
+      password: 'Password123!',
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalled();
+    expect(rabbit.hrLinkEmployeeIdentity).not.toHaveBeenCalled();
+  });
+
+  it('does not reactivate a user offboarded while acceptance was in flight', async () => {
+    const { prisma, service } = setup();
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      service.acceptInvite({
+        inviteToken: 'invite-token',
+        password: 'Password123!',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    expect(prisma.user.findUniqueOrThrow).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
   ServiceUnavailableException,
+  Optional,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -12,6 +13,13 @@ import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { normalizeEmployeeEmail } from './employee-email';
+import { accessFingerprint } from '@work-phelo/internal-auth';
+import {
+  accessKey,
+  assertAccessActor,
+  EmployeeAccessService,
+} from './employee-access.service';
 import { EmployeeImportRowDto } from './dto/bulk-import-employees.dto';
 import { BulkImportRowResult } from '../common/bulk-import.types';
 import {
@@ -98,21 +106,8 @@ export class EmployeesService {
     private readonly documentStorage: EmployeeDocumentStorageService,
     @InjectQueue(RESIGNATION_QUEUE)
     private readonly resignationQueue: Queue<ResignationNotifyPayload>,
+    @Optional() private readonly access?: EmployeeAccessService,
   ) {}
-
-  private isDuplicateAuthUserError(error: unknown) {
-    const remote =
-      error && typeof error === 'object'
-        ? (error as { message?: unknown; statusCode?: unknown })
-        : undefined;
-    const message =
-      typeof remote?.message === 'string' ? remote.message : String(error);
-
-    return (
-      remote?.statusCode === 409 ||
-      message.includes('A user with this email already exists')
-    );
-  }
 
   private mapEmployeeAssets<T extends { assignedAssets?: unknown[] }>(
     employee: T,
@@ -144,8 +139,8 @@ export class EmployeesService {
     statusMap: Map<string, string>,
   ) {
     const userStatus = employee.userId
-      ? (statusMap.get(employee.userId) ?? 'PENDING_VERIFICATION')
-      : 'PENDING_VERIFICATION';
+      ? (statusMap.get(employee.userId) ?? null)
+      : null;
 
     return { ...employee, userStatus };
   }
@@ -220,50 +215,14 @@ export class EmployeesService {
     }
   }
 
-  private async cleanUpUnconfirmedInvite(
-    tenantId: string,
-    email: string,
-    cause: unknown,
-  ) {
-    const lastError = cause instanceof Error ? cause.message : String(cause);
-    let deleted = false;
-    try {
-      const result = await this.rabbitmq.authDeletePendingEmployeeInvite({
-        tenantId,
-        email,
-      });
-      deleted = result.deleted;
-    } catch (rollbackErr) {
-      this.logger.error(
-        `Failed to clean up unconfirmed auth invite for ${email}`,
-        rollbackErr,
-      );
-    }
-
-    if (deleted) return;
-
-    // Auth may still be processing the original request, so let the recovery cron retry.
-    await this.prisma.employeeInviteRollbackTask.upsert({
-      where: { tenantId_email: { tenantId, email } },
-      update: {
-        attemptCount: { increment: 1 },
-        lastError,
-        lastAttemptAt: new Date(),
-      },
-      create: {
-        tenantId,
-        email,
-        attemptCount: 1,
-        lastError,
-        lastAttemptAt: new Date(),
-      },
-    });
-  }
-
   private async createEmployeeWithUniqueNumber(
     tenantId: string,
     dto: CreateEmployeeDto,
-    provisionedUser: { userId: string },
+    request?: {
+      actor: RequestUser;
+      idempotencyKey: string;
+      requestHash: string;
+    },
   ) {
     let attempt = 0;
 
@@ -271,55 +230,121 @@ export class EmployeesService {
       const employeeNumber = await this.generateEmployeeNumber(tenantId);
 
       try {
-        return await this.prisma.employee.create({
-          data: {
+        return await this.prisma.$transaction(async (tx) => {
+          if (request) {
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`employee-create:${tenantId}:${request.idempotencyKey}`}, 0))::text`;
+            const prior = await tx.employeeCreateRequest.findUnique({
+              where: {
+                tenantId_idempotencyKey: {
+                  tenantId,
+                  idempotencyKey: request.idempotencyKey,
+                },
+              },
+            });
+            if (prior) {
+              if (
+                prior.requestHash !== request.requestHash ||
+                prior.actorUserId !== request.actor.id
+              )
+                throw new ConflictException(
+                  'Idempotency key was used for a different request.',
+                );
+              return tx.employee.findFirstOrThrow({
+                where: { id: prior.employeeId, tenantId },
+                include: { department: true, branch: true },
+              });
+            }
+          }
+          const employee = await tx.employee.create({
+            data: {
+              tenantId,
+              employeeNumber,
+              userId: null,
+              firstName: dto.firstName,
+              lastName: dto.lastName,
+              email: dto.email ?? null,
+              normalizedEmail: dto.email ?? null,
+              emailHash: dto.email ? this.encryption.hmac(dto.email) : null,
+              phone: this.encryption.encrypt(dto.phone),
+              gender: dto.gender,
+              dateOfBirth: dto.dateOfBirth
+                ? new Date(dto.dateOfBirth)
+                : undefined,
+              maritalStatus: dto.maritalStatus,
+              nationality: dto.nationality,
+              address: this.encryption.encrypt(dto.address),
+              city: dto.city,
+              region: dto.region,
+              emergencyName: this.encryption.encrypt(dto.emergencyName),
+              emergencyPhone: this.encryption.encrypt(dto.emergencyPhone),
+              emergencyRelation: dto.emergencyRelation,
+              jobTitle: dto.jobTitle,
+              employmentType: dto.employmentType,
+              hireDate: new Date(dto.hireDate),
+              probationEndsAt: dto.probationEndsAt
+                ? new Date(dto.probationEndsAt)
+                : undefined,
+              contractEndDate: dto.contractEndDate
+                ? new Date(dto.contractEndDate)
+                : undefined,
+              basicSalary: dto.basicSalary ?? 0,
+              nationalId: this.encryption.encrypt(dto.nationalId),
+              bankName: this.encryption.encrypt(dto.bankName),
+              bankAccountNumber: this.encryption.encrypt(dto.bankAccountNumber),
+              bankBranch: this.encryption.encrypt(dto.bankBranch),
+              ssnit: this.encryption.encrypt(dto.ssnit),
+              tinNumber: this.encryption.encrypt(dto.tinNumber),
+              compensationType: dto.compensationType,
+              ...(dto.departmentId && { departmentId: dto.departmentId }),
+              ...(dto.branchId && { branchId: dto.branchId }),
+              ...(dto.managerId && { managerId: dto.managerId }),
+            },
+            include: { department: true, branch: true },
+          });
+          await this.leaveService.initializeLeaveBalances(
             tenantId,
-            employeeNumber,
-            userId: provisionedUser.userId,
-            firstName: dto.firstName,
-            lastName: dto.lastName,
-            email: dto.email,
-            emailHash: this.encryption.hmac(dto.email),
-            phone: this.encryption.encrypt(dto.phone),
-            gender: dto.gender,
-            dateOfBirth: dto.dateOfBirth
-              ? new Date(dto.dateOfBirth)
-              : undefined,
-            maritalStatus: dto.maritalStatus,
-            nationality: dto.nationality,
-            address: this.encryption.encrypt(dto.address),
-            city: dto.city,
-            region: dto.region,
-            emergencyName: this.encryption.encrypt(dto.emergencyName),
-            emergencyPhone: this.encryption.encrypt(dto.emergencyPhone),
-            emergencyRelation: dto.emergencyRelation,
-            jobTitle: dto.jobTitle,
-            employmentType: dto.employmentType,
-            hireDate: new Date(dto.hireDate),
-            probationEndsAt: dto.probationEndsAt
-              ? new Date(dto.probationEndsAt)
-              : undefined,
-            contractEndDate: dto.contractEndDate
-              ? new Date(dto.contractEndDate)
-              : undefined,
-            basicSalary: dto.basicSalary ?? 0,
-            nationalId: this.encryption.encrypt(dto.nationalId),
-            bankName: this.encryption.encrypt(dto.bankName),
-            bankAccountNumber: this.encryption.encrypt(dto.bankAccountNumber),
-            bankBranch: this.encryption.encrypt(dto.bankBranch),
-            ssnit: this.encryption.encrypt(dto.ssnit),
-            tinNumber: this.encryption.encrypt(dto.tinNumber),
-            compensationType: dto.compensationType,
-            ...(dto.departmentId && { departmentId: dto.departmentId }),
-            ...(dto.branchId && { branchId: dto.branchId }),
-            ...(dto.managerId && { managerId: dto.managerId }),
-          },
-          include: { department: true, branch: true },
+            employee.id,
+            undefined,
+            tx,
+          );
+          if (request) {
+            if (dto.grantSystemAccess) {
+              await this.access!.enqueue(
+                tx,
+                employee,
+                request.actor,
+                `create:${request.idempotencyKey}`,
+                'CREATE',
+                dto.email!,
+              );
+            }
+            await tx.employeeCreateRequest.create({
+              data: {
+                tenantId,
+                actorUserId: request.actor.id,
+                idempotencyKey: request.idempotencyKey,
+                requestHash: request.requestHash,
+                employeeId: employee.id,
+              },
+            });
+          }
+          return employee;
         });
       } catch (error) {
         if (this.isDuplicateEmployeeNumberError(error)) {
           attempt += 1;
           continue;
+        }
+
+        const duplicate = error as {
+          code?: string;
+          meta?: { target?: unknown };
+        };
+        const target = JSON.stringify(duplicate?.meta?.target ?? '');
+        if (duplicate?.code === 'P2002' && /email/i.test(target)) {
+          throw new ConflictException(
+            'Employee with this email already exists',
+          );
         }
 
         throw error;
@@ -466,8 +491,65 @@ export class EmployeesService {
   async create(
     tenantId: string,
     dto: CreateEmployeeDto,
-    options?: { rpcTimeoutMs?: number },
+    options?: { actor: RequestUser; idempotencyKey: string },
   ) {
+    if ('userId' in dto || 'tenantId' in dto) {
+      throw new BadRequestException(
+        'Employee identity linkage is server-managed.',
+      );
+    }
+    if (
+      dto.grantSystemAccess !== undefined &&
+      typeof dto.grantSystemAccess !== 'boolean'
+    ) {
+      throw new BadRequestException('grantSystemAccess must be a boolean.');
+    }
+    dto = { ...dto, email: normalizeEmployeeEmail(dto.email) };
+    if (dto.grantSystemAccess) {
+      assertAccessActor(options?.actor, tenantId, 'CREATE', 'CREATE');
+      if (!dto.email)
+        throw new BadRequestException('A valid login email is required.');
+      if (!this.access)
+        throw new ServiceUnavailableException(
+          'Employee access provisioning is unavailable.',
+        );
+    }
+    const request = options
+      ? {
+          ...options,
+          idempotencyKey: accessKey(options.idempotencyKey),
+          requestHash: accessFingerprint({
+            ...dto,
+            grantSystemAccess: dto.grantSystemAccess ?? false,
+          }),
+        }
+      : undefined;
+    if (request) {
+      if (request.actor.tenantId !== tenantId)
+        throw new BadRequestException('Invalid employee tenant scope.');
+      const prior = await this.prisma.employeeCreateRequest.findUnique({
+        where: {
+          tenantId_idempotencyKey: {
+            tenantId,
+            idempotencyKey: request.idempotencyKey,
+          },
+        },
+      });
+      if (prior) {
+        if (
+          prior.requestHash !== request.requestHash ||
+          prior.actorUserId !== request.actor.id
+        )
+          throw new ConflictException(
+            'Idempotency key was used for a different request.',
+          );
+        const employee = await this.prisma.employee.findFirstOrThrow({
+          where: { id: prior.employeeId, tenantId },
+          include: { department: true, branch: true },
+        });
+        return this.creationResponse(employee, request);
+      }
+    }
     // Enforce minimum one department before adding employees
     const deptCount = await this.prisma.department.count({
       where: { tenantId, isActive: true },
@@ -478,9 +560,18 @@ export class EmployeesService {
       );
     }
 
-    const existing = await this.prisma.employee.findUnique({
-      where: { tenantId_email: { tenantId, email: dto.email } },
-    });
+    const existing =
+      dto.email && !request
+        ? await this.prisma.employee.findFirst({
+            where: {
+              tenantId,
+              OR: [
+                { normalizedEmail: dto.email },
+                { email: { equals: dto.email, mode: 'insensitive' } },
+              ],
+            },
+          })
+        : null;
     if (existing)
       throw new ConflictException('Employee with this email already exists');
 
@@ -520,111 +611,55 @@ export class EmployeesService {
         : undefined,
     });
 
-    let provisionedUser;
+    const employee = await this.createEmployeeWithUniqueNumber(
+      tenantId,
+      {
+        ...dto,
+        probationEndsAt: resolvedProbationEndsAt?.toISOString(),
+      },
+      request,
+    );
     try {
-      provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite(
-        {
-          tenantId,
-          email: dto.email,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          phone: dto.phone,
-        },
-        undefined,
-        options?.rpcTimeoutMs,
-      );
-    } catch (error) {
-      if (this.isDuplicateAuthUserError(error)) {
-        throw new ConflictException('A user with this email already exists.');
-      }
-      // The auth user may have been created even though the request failed or timed out
-      // (e.g. a late reply during a bulk import), so clean up by email rather than leaving
-      // a user with no employee profile.
-      await this.cleanUpUnconfirmedInvite(tenantId, dto.email, error);
-      throw error;
-    }
-
-    let employee;
-    try {
-      employee = await this.createEmployeeWithUniqueNumber(
-        tenantId,
-        {
-          ...dto,
-          probationEndsAt: resolvedProbationEndsAt
-            ? resolvedProbationEndsAt.toISOString()
-            : undefined,
-        },
-        provisionedUser,
-      );
-      await this.leaveService.initializeLeaveBalances(tenantId, employee.id);
       await this.leaveService.ensurePublicHolidaysSeededForEmployee(
         tenantId,
         employee.id,
         [employee.hireDate.getFullYear(), employee.hireDate.getFullYear() + 1],
       );
-      this.logger.log(`Leave balances initialised for employee ${employee.id}`);
-    } catch (err) {
-      if (employee) {
-        try {
-          await this.prisma.employee.delete({
-            where: { id: employee.id },
-          });
-        } catch (rollbackErr) {
-          this.logger.error(
-            `Failed to roll back HR employee ${dto.email} after onboarding setup failed`,
-            rollbackErr,
-          );
-        }
-      }
-
-      try {
-        await this.rabbitmq.authDeletePendingEmployeeInvite({
-          tenantId,
-          userId: provisionedUser.userId,
-          email: dto.email,
-        });
-      } catch (rollbackErr) {
-        this.logger.error(
-          `Failed to roll back auth invite for ${dto.email} after onboarding setup failed`,
-          rollbackErr,
-        );
-        await this.prisma.employeeInviteRollbackTask.upsert({
-          where: {
-            tenantId_email: {
-              tenantId,
-              email: dto.email,
-            },
-          },
-          update: {
-            userId: provisionedUser.userId,
-            attemptCount: { increment: 1 },
-            lastError:
-              rollbackErr instanceof Error
-                ? rollbackErr.message
-                : String(rollbackErr),
-            lastAttemptAt: new Date(),
-          },
-          create: {
-            tenantId,
-            userId: provisionedUser.userId,
-            email: dto.email,
-            attemptCount: 1,
-            lastError:
-              rollbackErr instanceof Error
-                ? rollbackErr.message
-                : String(rollbackErr),
-            lastAttemptAt: new Date(),
-          },
-        });
-      }
-      throw err;
+    } catch {
+      // Calendar seeding is recoverable and must not undo committed HR records.
+      this.logger.warn(
+        `Holiday seeding needs retry for employee ${employee.id}`,
+      );
     }
 
-    return this.encryption.decryptEmployeeFields(employee);
+    return this.creationResponse(employee, request);
+  }
+
+  private async creationResponse<T extends { id: string; tenantId: string }>(
+    employee: T,
+    request?: { idempotencyKey: string },
+  ) {
+    const operation = request
+      ? await this.prisma.employeeAccessOperation.findUnique({
+          where: {
+            tenantId_idempotencyKey: {
+              tenantId: employee.tenantId,
+              idempotencyKey: `create:${request.idempotencyKey}`,
+            },
+          },
+        })
+      : null;
+    return {
+      ...this.encryption.decryptEmployeeFields(employee),
+      systemAccessOperation:
+        operation && this.access
+          ? this.access.publicOperation(operation)
+          : null,
+    };
   }
 
   /** Creates employees from bulk-import rows sequentially, one row at a time, via the same
-   *  create() used by the single-employee form — so invite emails, leave balance init, and
+   *  create() used by the single-employee form — so leave balance init and
    *  holiday seeding all happen exactly as they would for a manually created employee.
    *  Department is a required lookup: an unresolved name fails the row. Branch and Reporting
    *  Manager are optional lookups: unresolved/ambiguous values are dropped with a warning and
@@ -693,26 +728,22 @@ export class EmployeesService {
       }
 
       try {
-        const employee = await this.create(
-          tenantId,
-          {
-            firstName: row.firstName,
-            lastName: row.lastName,
-            email: row.email,
-            phone: row.phone,
-            gender: row.gender,
-            departmentId: department.id,
-            branchId,
-            jobTitle: row.jobTitle,
-            managerId,
-            hireDate: row.hireDate,
-            employmentType: row.employmentType,
-            contractEndDate: row.contractEndDate,
-            compensationType: row.compensationType,
-            basicSalary: row.basicSalary,
-          },
-          { rpcTimeoutMs: this.rabbitmq.bulkRmqTimeoutMs },
-        );
+        const employee = await this.create(tenantId, {
+          firstName: row.firstName,
+          lastName: row.lastName,
+          email: row.email,
+          phone: row.phone,
+          gender: row.gender,
+          departmentId: department.id,
+          branchId,
+          jobTitle: row.jobTitle,
+          managerId,
+          hireDate: row.hireDate,
+          employmentType: row.employmentType,
+          contractEndDate: row.contractEndDate,
+          compensationType: row.compensationType,
+          basicSalary: row.basicSalary,
+        });
         employeeCandidates.push({
           id: employee.id,
           firstName: employee.firstName,
@@ -771,86 +802,160 @@ export class EmployeesService {
       ];
     }
 
-    const [employees, total] = await Promise.all([
-      this.prisma.employee.findMany({
-        where,
-        take,
-        skip,
-        select: {
-          id: true,
-          employeeNumber: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          jobTitle: true,
-          employmentStatus: true,
-          employmentType: true,
-          hireDate: true,
-          avatarUrl: true,
-          userId: true,
-          basicSalary: true,
-          compensationType: true,
-          taxPolicy: true,
-          fixedTaxAmount: true,
-          commissionTaxable: true,
-          payrollGroupId: true,
-          ssnit: true,
-          allowances: {
-            select: {
-              id: true,
-              employeeId: true,
-              type: true,
-              name: true,
-              amount: true,
-              effectiveFrom: true,
-              createdAt: true,
-            },
-          },
-          deductions: {
-            select: {
-              id: true,
-              employeeId: true,
-              name: true,
-              totalAmount: true,
-              monthlyRate: true,
-              amountPaid: true,
-              startDate: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
-          department: { select: { id: true, name: true } },
-          branch: { select: { id: true, name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.employee.count({ where }),
-    ]);
+    const queryPage = async (db: Prisma.TransactionClient) => {
+      let accessTotal: number | undefined;
+      let accessStates: Map<string, string> | undefined;
+      let accessSnapshotAt: string | null = null;
+      if (query.accessStatus) {
+        assertAccessActor(actor, tenantId, 'VIEW', 'VIEW');
+        if (query.accessStatus !== 'NONE') {
+          if (!this.access)
+            throw new ServiceUnavailableException(
+              'Access filtering unavailable.',
+            );
+          const filtered = await this.access.filterPage(
+            db,
+            tenantId,
+            where,
+            actor!,
+            query.accessStatus,
+            take,
+            skip,
+          );
+          where.id = { in: filtered.ids };
+          accessTotal = filtered.total;
+          accessStates = filtered.states;
+          accessSnapshotAt = filtered.capturedAt;
+        } else {
+          const search = query.search ? `%${query.search}%` : null;
+          const [matched] = await db.$queryRaw<
+            { total: bigint; ids: string[] }[]
+          >`
+        WITH matches AS NOT MATERIALIZED (
+          SELECT e."id", e."createdAt" FROM "hr"."Employee" e
+          WHERE e."tenantId" = ${tenantId} AND e."userId" IS NULL
+          AND NOT EXISTS (SELECT 1 FROM "hr"."EmployeeAccessOperation" o WHERE o."tenantId" = e."tenantId" AND o."employeeId" = e."id")
+          AND (${query.status ?? null}::text IS NULL OR e."employmentStatus"::text = ${query.status ?? null})
+          AND (${query.type ?? null}::text IS NULL OR e."employmentType"::text = ${query.type ?? null})
+          AND (${query.departmentId ?? null}::text IS NULL OR e."departmentId" = ${query.departmentId ?? null})
+          AND (${search}::text IS NULL OR e."firstName" ILIKE ${search} OR e."lastName" ILIKE ${search}
+            OR e."email" ILIKE ${search} OR e."employeeNumber" ILIKE ${search} OR e."jobTitle" ILIKE ${search})
+        ) SELECT (SELECT count(*) FROM matches) AS total,
+          ARRAY(SELECT "id" FROM matches ORDER BY "createdAt" DESC, "id" DESC LIMIT ${take} OFFSET ${skip}) AS ids`;
+          where.id = { in: matched.ids };
+          accessTotal = Number(matched.total);
+        }
+      }
 
-    const userIds = employees
-      .map((employee) => employee.userId)
-      .filter((id): id is string => Boolean(id));
-    const [statusMap, avatarUrls] = await Promise.all([
-      this.getUserStatusMap(tenantId, userIds),
-      this.avatarUrlResolver.resolveMany(
-        employees.map((employee) => employee.avatarUrl),
-      ),
-    ]);
-    const employeesWithStatus = employees.map((employee, index) =>
-      this.withUserStatus(
-        this.encryption.maskListFields({
-          ...employee,
-          avatarUrl: avatarUrls[index],
+      const [employees, total] = await Promise.all([
+        db.employee.findMany({
+          where,
+          take,
+          skip: query.accessStatus ? 0 : skip,
+          select: {
+            id: true,
+            employeeNumber: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            jobTitle: true,
+            employmentStatus: true,
+            employmentType: true,
+            hireDate: true,
+            avatarUrl: true,
+            userId: true,
+            basicSalary: true,
+            compensationType: true,
+            taxPolicy: true,
+            fixedTaxAmount: true,
+            commissionTaxable: true,
+            payrollGroupId: true,
+            ssnit: true,
+            allowances: {
+              select: {
+                id: true,
+                employeeId: true,
+                type: true,
+                name: true,
+                amount: true,
+                effectiveFrom: true,
+                createdAt: true,
+              },
+            },
+            deductions: {
+              select: {
+                id: true,
+                employeeId: true,
+                name: true,
+                totalAmount: true,
+                monthlyRate: true,
+                amountPaid: true,
+                startDate: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+            department: { select: { id: true, name: true } },
+            branch: { select: { id: true, name: true } },
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         }),
-        statusMap,
-      ),
-    );
+        accessTotal === undefined
+          ? db.employee.count({ where })
+          : Promise.resolve(accessTotal),
+      ]);
 
-    return {
-      employees: employeesWithStatus,
-      meta: buildMeta(page, take, total),
+      const userIds = employees
+        .map((employee) => employee.userId)
+        .filter((id): id is string => Boolean(id));
+      const [statusMap, avatarUrls] = await Promise.all([
+        query.accessStatus
+          ? Promise.resolve(new Map<string, string>())
+          : this.getUserStatusMap(tenantId, userIds),
+        this.avatarUrlResolver.resolveMany(
+          employees.map((employee) => employee.avatarUrl),
+        ),
+      ]);
+      const employeesWithStatus = employees.map((employee, index) => ({
+        ...this.withUserStatus(
+          this.encryption.maskListFields({
+            ...employee,
+            avatarUrl: avatarUrls[index],
+          }),
+          statusMap,
+        ),
+        ...(query.accessStatus
+          ? {
+              accessStatus: accessStates?.get(employee.id) ?? 'NONE',
+              userStatus: employee.userId
+                ? ((
+                    {
+                      ACTIVE: 'ACTIVE',
+                      SUSPENDED: 'SUSPENDED',
+                      INACTIVE: 'INACTIVE',
+                      INVITED: 'PENDING_VERIFICATION',
+                      INVITE_EXPIRED: 'PENDING_VERIFICATION',
+                      PROVISIONING: 'PENDING_VERIFICATION',
+                    } as Record<string, string>
+                  )[accessStates?.get(employee.id) ?? ''] ?? null)
+                : null,
+            }
+          : {}),
+      }));
+
+      return {
+        employees: employeesWithStatus,
+        meta: buildMeta(page, take, total),
+        ...(query.accessStatus ? { accessSnapshotAt } : {}),
+      };
     };
+    return query.accessStatus
+      ? this.prisma.$transaction(queryPage, {
+          isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+          timeout: 20000,
+        })
+      : queryPage(this.prisma);
   }
 
   async findOptions(tenantId: string) {
@@ -1265,7 +1370,7 @@ export class EmployeesService {
   ): Promise<ResignationNotificationRecipient | null> {
     let manager: {
       userId: string | null;
-      email: string;
+      email: string | null;
       firstName: string;
       lastName: string;
     } | null = null;
@@ -1878,7 +1983,7 @@ export class EmployeesService {
         .authDeactivateEmployeeAccess({
           tenantId,
           userId: employee.userId,
-          email: employee.email,
+          email: employee.email ?? undefined,
           reason: record.reason,
         })
         .catch((err) =>
@@ -1890,25 +1995,26 @@ export class EmployeesService {
     }
 
     // 3. Notify the employee their employment has ended (all offboard reasons)
-    void this.rabbitmq
-      .notificationEmployeeTermination({
-        tenantId,
-        employeeId,
-        email: employee.email,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        reason: record.reason,
-        lastWorkingDate: record.lastWorkingDate
-          ? record.lastWorkingDate.toISOString()
-          : new Date().toISOString(),
-        platformLink: this.buildTenantWorkspaceLink(actor.tenantSlug),
-      })
-      .catch((err) =>
-        this.logger.error(
-          `Failed to emit termination notification for ${employee.email}`,
-          err,
-        ),
-      );
+    if (employee.email)
+      void this.rabbitmq
+        .notificationEmployeeTermination({
+          tenantId,
+          employeeId,
+          email: employee.email,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          reason: record.reason,
+          lastWorkingDate: record.lastWorkingDate
+            ? record.lastWorkingDate.toISOString()
+            : new Date().toISOString(),
+          platformLink: this.buildTenantWorkspaceLink(actor.tenantSlug),
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit termination notification for ${employee.email}`,
+            err,
+          ),
+        );
 
     return { message: 'Offboarding completed successfully', employee };
   }
@@ -2204,24 +2310,25 @@ export class EmployeesService {
     }
   }
 
-  async resendInvite(tenantId: string, employeeId: string) {
-    const employee = await this.prisma.employee.findFirst({
-      where: { id: employeeId, tenantId },
-    });
-    if (!employee) throw new NotFoundException('Employee not found');
-
-    if (!employee.email) {
-      throw new BadRequestException('Employee has no email address on record');
-    }
-
-    void this.rabbitmq.authResendEmployeeInvite({
+  async resendInvite(
+    tenantId: string,
+    employeeId: string,
+    actor?: RequestUser,
+    key?: string,
+    reason = 'Resend employee invitation',
+  ) {
+    assertAccessActor(actor, tenantId, 'EDIT', 'CREATE');
+    if (!this.access)
+      throw new ServiceUnavailableException(
+        'Employee access service unavailable.',
+      );
+    return this.access.lifecycle(
       tenantId,
       employeeId,
-      email: employee.email,
-      firstName: employee.firstName,
-      lastName: employee.lastName,
-    });
-
-    return { message: 'Invitation resent successfully' };
+      actor!,
+      accessKey(key),
+      'RESEND',
+      reason,
+    );
   }
 }

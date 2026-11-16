@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { EmployeeAccessLifecycleService } from './employee-access-lifecycle.service';
+import { EmployeeAccessRecoveryService } from './employee-access-recovery.service';
+import { EmployeeAccessCommandService } from './employee-access-command.service';
+import { EmployeeAccessCommandHandler } from './employee-access-command.handler';
 import { UsersController } from './users.controller';
 import { UsersInternalController } from './users-internal.controller';
 import { UsersHandler } from './users.handler';
@@ -17,8 +21,18 @@ import { TenantsModule } from '../tenants/tenants.module';
     PrismaModule,
     TenantsModule,
   ],
-  controllers: [UsersController, UsersInternalController, UsersHandler],
-  providers: [UsersService],
+  controllers: [
+    UsersController,
+    UsersInternalController,
+    UsersHandler,
+    EmployeeAccessCommandHandler,
+  ],
+  providers: [
+    EmployeeAccessRecoveryService,
+    UsersService,
+    EmployeeAccessCommandService,
+    EmployeeAccessLifecycleService,
+  ],
   exports: [UsersService],
 })
 export class UsersModule {}

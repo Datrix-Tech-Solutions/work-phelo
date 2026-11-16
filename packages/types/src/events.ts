@@ -212,7 +212,7 @@ export interface DeletePendingEmployeeInviteResult {
 export interface DeactivateEmployeeAccessCommand {
   tenantId: string;
   userId: string;
-  email: string;
+  email?: string;
   reason: string;
 }
 
@@ -681,7 +681,7 @@ export interface ShiftSwapExpiredEvent {
 export interface AnnouncementRecipientEvent {
   employeeId: string;
   userId: string;
-  email: string;
+  email: string | null;
   phone?: string;
   firstName: string;
   lastName: string;
