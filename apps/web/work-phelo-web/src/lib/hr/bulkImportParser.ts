@@ -164,7 +164,10 @@ function parseEmployeesSheet(sheet: ExcelJS.Worksheet | undefined): EmployeeImpo
     if (rowNumber === 1) return;
     const firstName = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[0]);
     const lastName = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[1]);
-    const email = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[2]);
+    // Older templates headed this column "Work Email *".
+    const email =
+      cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[2]) ||
+      cellText(row, columnIndexByHeader, 'Work Email *');
     const phone = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[3]);
     const gender = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[4]);
     const departmentName = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[5]);
@@ -176,6 +179,7 @@ function parseEmployeesSheet(sheet: ExcelJS.Worksheet | undefined): EmployeeImpo
     const contractEndDate = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[11]);
     const compensationType = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[12]);
     const basicSalaryText = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[13]);
+    const accessText = cellText(row, columnIndexByHeader, EMPLOYEE_IMPORT_HEADERS[14]);
     if (!firstName && !lastName && !email) return;
 
     const errors: string[] = [];
@@ -184,9 +188,25 @@ function parseEmployeesSheet(sheet: ExcelJS.Worksheet | undefined): EmployeeImpo
 
     if (!firstName) errors.push('First Name is required');
     if (!lastName) errors.push('Last Name is required');
-    if (!email) errors.push('Work Email is required');
-    else if (!EMAIL_RE.test(email)) errors.push(`"${email}" is not a valid email`);
-    else if (seenEmails.has(emailLower)) errors.push(`Duplicate email "${email}" in this file`);
+    if (email && !EMAIL_RE.test(email)) errors.push(`"${email}" is not a valid email`);
+    else if (email && seenEmails.has(emailLower)) {
+      errors.push(`Duplicate email "${email}" in this file`);
+    }
+
+    // The sheet can ask for access, but a login needs an email, so the request is dropped
+    // (with a warning) when there is none. The final choice is made in the preview.
+    const accessLower = accessText.trim().toLowerCase();
+    let accessRequested = false;
+    if (accessLower === 'yes') accessRequested = true;
+    else if (accessLower !== '' && accessLower !== 'no') {
+      errors.push(`System Access must be "Yes" or "No", got "${accessText}"`);
+    }
+    if (accessRequested && !email) {
+      accessRequested = false;
+      warnings.push(
+        'System Access was Yes but there is no email — imported as an employee record only.',
+      );
+    }
 
     if (!departmentName) errors.push('Department is required');
     if (!jobTitle) errors.push('Job Title is required');
@@ -235,7 +255,9 @@ function parseEmployeesSheet(sheet: ExcelJS.Worksheet | undefined): EmployeeImpo
       rowNumber,
       firstName,
       lastName,
-      email,
+      email: email || undefined,
+      accessRequested,
+      grantAccess: accessRequested,
       phone: phone || undefined,
       gender: gender ? genderUpper : undefined,
       departmentName,

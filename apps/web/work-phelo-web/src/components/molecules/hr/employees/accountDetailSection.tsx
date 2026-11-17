@@ -8,7 +8,9 @@ interface Props {
 }
 
 export function AccountDetailsSection({ employee }: Props) {
-  const isPendingInvite = !employee.userId;
+  // No linked user means a record-only employee, not a pending invite.
+  const hasAccess = Boolean(employee.userId);
+  const isPendingInvite = employee.userStatus === 'PENDING_VERIFICATION';
 
   return (
     <SectionCard title="Account Details">
@@ -23,9 +25,13 @@ export function AccountDetailsSection({ employee }: Props) {
 
         {/* Invite Status */}
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs text-gray-400">Invite Status</span>
+          <span className="text-xs text-gray-400">System Access</span>
           <div className="mt-0.5">
-            <StatusBadge status={isPendingInvite ? 'PENDING' : 'ACTIVE'} />
+            {hasAccess ? (
+              <StatusBadge status={isPendingInvite ? 'PENDING' : 'ACTIVE'} />
+            ) : (
+              <span className="text-sm text-gray-500">No system access</span>
+            )}
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 export const EMPLOYEE_IMPORT_HEADERS = [
   'First Name *',
   'Last Name *',
-  'Work Email *',
+  'Work Email',
   'Phone Number',
   'Gender',
   'Department *',
@@ -13,12 +13,13 @@ export const EMPLOYEE_IMPORT_HEADERS = [
   'Contract/Internship End Date',
   'Compensation Type',
   'Basic Salary',
+  'System Access',
 ];
 
 const EMPLOYEE_EXAMPLE_ROW = {
   'First Name *': 'Ama',
   'Last Name *': 'Boateng',
-  'Work Email *': 'ama.boateng@example.com',
+  'Work Email': 'ama.boateng@example.com',
   'Phone Number': '0244000000',
   Gender: 'FEMALE',
   'Department *': 'Human Resources',
@@ -30,6 +31,7 @@ const EMPLOYEE_EXAMPLE_ROW = {
   'Contract/Internship End Date': '',
   'Compensation Type': 'SALARY',
   'Basic Salary': '4500',
+  'System Access': 'Yes',
 };
 
 export const DEPARTMENT_IMPORT_HEADERS = [
@@ -62,6 +64,9 @@ const EMPLOYEE_NOTES: NoteRow[] = [
   ['Gender must be one of:', 'MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'],
   'Gender is optional.',
   "Probation End Date isn't collected here — it's calculated automatically from your company's default probation period.",
+  'Work Email is optional. It is required only if System Access is Yes.',
+  ['System Access must be one of:', 'Yes', 'No'],
+  'Yes gives the employee a login and sends an invite; No (or blank) creates an employee record only. Rows marked Yes without a Work Email are imported as records only, and you can pick the people to give access to in the preview before importing.',
 ];
 
 const DEPARTMENT_NOTES: NoteRow[] = [
@@ -246,6 +251,9 @@ export async function downloadCompanyImportTemplate() {
     ['Gender must be one of:', 'MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'],
     'Gender is optional.',
     "Probation End Date isn't collected here — it's calculated automatically from your company's default probation period.",
+    'Work Email is optional. It is required only if System Access is Yes.',
+    ['System Access must be one of:', 'Yes', 'No'],
+    'Yes gives the employee a login and sends an invite; No (or blank) creates an employee record only. Rows marked Yes without a Work Email are imported as records only, and you can pick the people to give access to in the preview before importing.',
   ]);
 
   await downloadWorkbook(workbook, 'company-import-template.xlsx');

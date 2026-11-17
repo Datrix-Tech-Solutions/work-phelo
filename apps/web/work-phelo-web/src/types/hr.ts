@@ -78,7 +78,8 @@ export interface Employee {
   employeeNumber: string;
   firstName: string;
   lastName: string;
-  email: string;
+  /** Optional: employees can exist as HR records without an email or login. */
+  email: string | null;
   phone?: string;
   gender?: Gender;
   dateOfBirth?: string;
@@ -259,7 +260,10 @@ export interface UpdateEmployeePayload {
 export interface CreateEmployeePayload {
   firstName: string;
   lastName: string;
-  email: string;
+  /** Required by the backend only when `grantSystemAccess` is true. */
+  email?: string;
+  /** When true the backend queues an invite and creates a login. Defaults to false. */
+  grantSystemAccess?: boolean;
   phone?: string;
   gender?: Gender;
   dateOfBirth: string;

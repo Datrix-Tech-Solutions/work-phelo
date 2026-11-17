@@ -40,7 +40,7 @@ export function EmployeeProfileCard({ employee }: EmployeeProfileCardProps) {
 
       {/* Contact Info */}
       <div className="w-full flex flex-col gap-3">
-        <DetailField label="Email Address" value={employee.email} />
+        <DetailField label="Email Address" value={employee.email ?? '—'} />
         {employee.phone && <DetailField label="Phone Number" value={employee.phone} />}
         {employee.employeeNumber && (
           <DetailField label="Employee No." value={employee.employeeNumber} />

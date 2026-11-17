@@ -14,6 +14,7 @@ import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { EmployeeImportDialog } from '@/components/organisms/hr/bulkUpload/EmployeeImportDialog';
 import { InviteEmployeePanel } from '@/components/organisms/hr/employee/inviteEmployeePanel';
 import { formatDate } from '@/lib/formatters';
 import { EmploymentStatus } from '@/types/hr';
@@ -49,6 +50,7 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
   const [page, setPage] = useState(1);
 
   const [panelOpen, setPanelOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [noDeptWarning, setNoDeptWarning] = useState(false);
   const [successEmployee, setSuccessEmployee] = useState<string | null>(null);
 
@@ -128,9 +130,15 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
           setSearch(q);
           setPage(1);
         }}
-        actionButton={
-          canInvite ? { label: 'Invite Employee', onClick: handleInviteClick } : undefined
+        secondaryButton={
+          canInvite
+            ? {
+                label: 'Import',
+                onClick: () => setImportOpen(true),
+              }
+            : undefined
         }
+        actionButton={canInvite ? { label: 'Add Employee', onClick: handleInviteClick } : undefined}
         extraFilters={
           <EmployeeFilterBar
             statusFilter={statusFilter}
@@ -162,6 +170,13 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
           <ContactCard
             name={`${emp.firstName} ${emp.lastName}`}
             avatarUrl={emp.avatarUrl}
+            nameCheck={
+              emp.userId
+                ? emp.userStatus === 'PENDING_VERIFICATION'
+                  ? 'System access: invite pending'
+                  : 'Has system access'
+                : undefined
+            }
             subtitle={emp.jobTitle}
             statusPill={
               onLeaveEmployeeIds.has(emp.id)
@@ -213,6 +228,10 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
         title="Employee Invited!"
         message={`An invite has been sent to ${successEmployee}. They will receive an email to set up their account.`}
       />
+
+      {canInvite && (
+        <EmployeeImportDialog isOpen={importOpen} onClose={() => setImportOpen(false)} />
+      )}
 
       {canInvite && (
         <InviteEmployeePanel

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -17,7 +17,9 @@ import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
-import { usePermissionSets, useAssignPermissionSet } from '@/hooks/hr/useRoles';
+import { Toggle } from '@/components/atoms/Toggle';
+import { usePermission } from '@/hooks/hr/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import { NumberField } from '@/components/atoms/NumberField';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
 import type { EmployeeCompensationType } from '@/types/hr';
@@ -28,6 +30,7 @@ interface InviteForm {
   firstName: string;
   lastName: string;
   email: string;
+  grantSystemAccess: boolean;
   phone?: string;
   gender?: string;
   jobTitle: string;
@@ -77,9 +80,10 @@ function InviteEmployeeForm({
   const { data: branches = [] } = useBranchOptions(true);
   const { data: policiesSettings } = useCompanyPoliciesSettings();
   const { currency: tenantCurrency } = useTenantConfig();
-  const { data: permissionSetsRaw = [] } = usePermissionSets();
-  const { mutateAsync: assignPermissionSet } = useAssignPermissionSet();
-  const [selectedPermissionSetId, setSelectedPermissionSetId] = useState('');
+  // Only people who can create users may give an employee a login.
+  const canGrantAccess = usePermission(Permission.INVITE_USER);
+  // One key per form submission: a retry after a lost response replays the same create.
+  const idempotencyKey = useRef<string | null>(null);
 
   const {
     register,
@@ -93,6 +97,7 @@ function InviteEmployeeForm({
       employmentType: 'FULL_TIME',
       phone: '',
       compensationType: 'SALARY',
+      grantSystemAccess: false,
     },
   });
 
@@ -106,6 +111,7 @@ function InviteEmployeeForm({
         employmentType: 'FULL_TIME',
         phone: '',
         compensationType: 'SALARY',
+        grantSystemAccess: false,
         ...initialValues,
       });
     }
@@ -121,6 +127,7 @@ function InviteEmployeeForm({
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
   const genderValue = useWatch({ control, name: 'gender' });
   const basicSalaryValue = useWatch({ control, name: 'basicSalary' });
+  const grantAccessValue = useWatch({ control, name: 'grantSystemAccess' }) && canGrantAccess;
   const compensationTypeValue = useWatch({ control, name: 'compensationType' }) ?? 'SALARY';
 
   useEffect(() => {
@@ -156,7 +163,9 @@ function InviteEmployeeForm({
   const entry = useMultiEntryPanel({ isOpen, onStop: onClose, onContinue: () => {} });
 
   const onSubmit = async (d: InviteForm) => {
-    const normalized = { ...d };
+    const { grantSystemAccess: _ignored, ...rest } = d;
+    void _ignored;
+    const normalized = { ...rest };
     if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
     if (normalized.contractEndDate?.length === 7) normalized.contractEndDate += '-01';
 
@@ -165,13 +174,12 @@ function InviteEmployeeForm({
     ) as unknown as CreateEmployeePayload;
 
     try {
-      const employee = await createEmployee(payload);
-      if (selectedPermissionSetId && employee.userId) {
-        await assignPermissionSet({
-          userId: employee.userId,
-          permissionSetId: selectedPermissionSetId,
-        });
-      }
+      idempotencyKey.current ??= crypto.randomUUID();
+      await createEmployee({
+        payload: { ...payload, grantSystemAccess: grantAccessValue },
+        idempotencyKey: idempotencyKey.current,
+      });
+      idempotencyKey.current = null;
       // The form is cleared as soon as the invite goes out, so Stop and Continue both
       // start from a blank form.
       reset({
@@ -190,22 +198,27 @@ function InviteEmployeeForm({
         contractEndDate: undefined,
         basicSalary: undefined,
         compensationType: 'SALARY',
+        grantSystemAccess: false,
       });
-      setSelectedPermissionSetId('');
       const fullName = `${d.firstName} ${d.lastName}`;
       // Locked: the panel's Continue / Stop prompt replaces the directory's success modal.
       entry.finishSave(
-        {
-          title: 'Employee Invited!',
-          message: `An invite has been sent to ${fullName}. They will receive an email to set up their account.`,
-        },
+        grantAccessValue
+          ? {
+              title: 'Employee Added!',
+              message: `${fullName} has been added and an invite is being sent. They will receive an email to set up their account.`,
+            }
+          : {
+              title: 'Employee Added!',
+              message: `${fullName} has been added as an employee record. They do not have system access.`,
+            },
         () => {
           onClose();
           onSuccess(fullName);
         },
       );
     } catch (err) {
-      toast.error(extractError(err, 'Failed to invite employee'));
+      toast.error(extractError(err, 'Failed to add employee'));
     }
   };
 
@@ -215,7 +228,7 @@ function InviteEmployeeForm({
       onClose={onClose}
       {...entry.panelProps}
       title="Add New Employee"
-      description="Add a new employee to onboard them onto WorkPhelo."
+      description="Add a new employee. Choose whether they also get a WorkPhelo login."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>
@@ -223,14 +236,31 @@ function InviteEmployeeForm({
           </Button>
           <Button
             isLoading={isPending}
-            loadingText="Sending invite…"
+            loadingText={grantAccessValue ? 'Sending invite…' : 'Saving…'}
             onClick={handleSubmit(onSubmit)}
           >
-            Send Invite
+            {grantAccessValue ? 'Add & Send Invite' : 'Add Employee'}
           </Button>
         </div>
       }
     >
+      {canGrantAccess && (
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 p-4">
+          <div>
+            <p className="text-sm font-medium text-gray-900">Give this employee system access</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {grantAccessValue
+                ? 'An invite will be sent to their work email so they can log in.'
+                : 'Off: this is an employee record only. They will not be able to log in.'}
+            </p>
+          </div>
+          <Toggle
+            enabled={grantAccessValue}
+            onChange={(v) => setValue('grantSystemAccess', v, { shouldValidate: true })}
+          />
+        </div>
+      )}
+
       {/* Personal Information */}
       <div className="flex flex-col gap-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
@@ -252,9 +282,9 @@ function InviteEmployeeForm({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <FormField
-            label="Work Email"
+            label={grantAccessValue ? 'Work Email' : 'Work Email (optional)'}
             registration={register('email', {
-              required: 'Required',
+              required: grantAccessValue ? 'Required to send an invite' : false,
               pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
             })}
             error={errors.email}
@@ -337,15 +367,6 @@ function InviteEmployeeForm({
               { value: 'INTERN', label: 'Intern' },
             ]}
           />
-          {permissionSetsRaw.length > 0 && (
-            <SearchSelect
-              label="Role"
-              placeholder="Select role"
-              value={selectedPermissionSetId}
-              onChange={setSelectedPermissionSetId}
-              options={permissionSetsRaw.map((s) => ({ value: s.id, label: s.name }))}
-            />
-          )}
           <DatePicker
             label="Date Hired"
             value={hireDateValue}

@@ -7,6 +7,7 @@ import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 import { Button } from '@/components/atoms/Button';
 import { frostedAvatarStyle, cardClass } from '@/lib/utils';
 import { Building2, Users, FolderTree, GitBranch } from 'lucide-react';
+import { employeeSection } from '@/components/organisms/hr/bulkUpload/EmployeeImportDialog';
 import { BulkUploadImportDialog } from '@/components/organisms/hr/bulkUpload/BulkUploadImportDialog';
 import type { ImportSectionData } from '@/components/organisms/hr/bulkUpload/ImportPreviewSection';
 import {
@@ -33,6 +34,7 @@ import { useBulkImportBranches } from '@/hooks/hr/useBranches';
 import { useBulkImportDepartments } from '@/hooks/hr/useDepartments';
 import { useBulkImportEmployees } from '@/hooks/hr/useEmployees';
 import { useBulkImportCompany } from '@/hooks/hr/useBulkImportCompany';
+import { useGrantImportedAccess } from '@/hooks/hr/useGrantImportedAccess';
 
 type BulkUploadOption = {
   key: string;
@@ -86,24 +88,6 @@ function departmentSection(rows: DepartmentImportRow[]): ImportSectionData {
   };
 }
 
-function employeeSection(rows: EmployeeImportRow[]): ImportSectionData {
-  return {
-    key: 'employees',
-    title: 'Employees',
-    rows,
-    columns: [
-      {
-        header: 'Name',
-        render: (r: EmployeeImportRow) => `${r.firstName} ${r.lastName}`.trim() || '—',
-      },
-      { header: 'Email', render: (r: EmployeeImportRow) => r.email || '—' },
-      { header: 'Department', render: (r: EmployeeImportRow) => r.departmentName || '—' },
-      { header: 'Job Title', render: (r: EmployeeImportRow) => r.jobTitle || '—' },
-      { header: 'Hire Date', render: (r: EmployeeImportRow) => r.hireDate || '—' },
-    ],
-  };
-}
-
 function newRows<Row extends { status: 'new' | 'invalid' }>(rows: Row[]): Row[] {
   return rows.filter((r) => r.status === 'new');
 }
@@ -122,6 +106,7 @@ export default function BulkUploadPage() {
   const bulkImportDepartments = useBulkImportDepartments();
   const bulkImportEmployees = useBulkImportEmployees();
   const bulkImportCompany = useBulkImportCompany();
+  const { canGrantAccess, grantAccess } = useGrantImportedAccess();
 
   const IMPORT_DIALOG_CONFIG: Record<
     string,
@@ -160,7 +145,7 @@ export default function BulkUploadPage() {
         return {
           branches: result.branches,
           departments: result.departments,
-          employees: result.employees,
+          employees: await grantAccess(employees, result.employees),
         };
       },
     },
@@ -173,7 +158,7 @@ export default function BulkUploadPage() {
       onImport: async (sections) => {
         const employees = newRows((sections[0]?.rows ?? []) as EmployeeImportRow[]);
         const result = await bulkImportEmployees.mutateAsync(employees);
-        return { employees: result };
+        return { employees: await grantAccess(employees, result) };
       },
     },
     'employee-and-departments': {
@@ -193,7 +178,10 @@ export default function BulkUploadPage() {
           (sections.find((s) => s.key === 'employees')?.rows ?? []) as EmployeeImportRow[],
         );
         const result = await bulkImportCompany.mutateAsync({ departments, employees });
-        return { departments: result.departments, employees: result.employees };
+        return {
+          departments: result.departments,
+          employees: await grantAccess(employees, result.employees),
+        };
       },
     },
     department: {
@@ -309,6 +297,7 @@ export default function BulkUploadPage() {
         onDownloadTemplate={importDialogConfig?.onDownloadTemplate}
         parseFile={importDialogConfig?.parseFile}
         onImport={importDialogConfig?.onImport}
+        canGrantAccess={canGrantAccess}
       />
     </div>
   );

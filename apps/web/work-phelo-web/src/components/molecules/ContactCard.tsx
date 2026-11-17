@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin, UserPlus, Trash2, Mail, Phone, Pencil, User } from 'lucide-react';
+import { MapPin, UserPlus, Trash2, Mail, Phone, Pencil, User, BadgeCheck } from 'lucide-react';
 import { cn, glassStrongClass } from '@/lib/utils';
 import { Avatar } from '@/components/atoms/Avatar';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
@@ -46,6 +46,8 @@ export interface ContactCardDetail {
 interface ContactCardProps {
   name: string;
   avatarUrl?: string;
+  /** Small check mark after the name, e.g. a person who also has a login. The text is its tooltip. */
+  nameCheck?: string;
   /** Plain text under the name — e.g. a job title. */
   subtitle?: string;
   /** Pill under the name, MapPin icon — e.g. a cedant/reinsurer's territory. */
@@ -74,6 +76,7 @@ interface ContactCardProps {
 export function ContactCard({
   name,
   avatarUrl,
+  nameCheck,
   subtitle,
   location,
   statusPill,
@@ -168,7 +171,14 @@ export function ContactCard({
         <div className="flex items-start gap-3">
           <Avatar name={name} avatarUrl={avatarUrl} />
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-bold text-gray-900 leading-snug">{name}</span>
+            <span className="text-sm font-bold text-gray-900 leading-snug flex items-center gap-1">
+              {name}
+              {nameCheck && (
+                <BadgeCheck size={15} className="shrink-0 text-blue-500" aria-label={nameCheck}>
+                  <title>{nameCheck}</title>
+                </BadgeCheck>
+              )}
+            </span>
             {subtitle && <span className="text-sm text-gray-400">{subtitle}</span>}
             {location && (
               <Pill color="green" icon={<MapPin size={10} />}>

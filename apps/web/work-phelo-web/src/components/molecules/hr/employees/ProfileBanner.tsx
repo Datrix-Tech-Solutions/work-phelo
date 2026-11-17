@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Camera, MoreHorizontal, Pencil } from 'lucide-react';
+import { BadgeCheck, Camera, MoreHorizontal, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Avatar } from '@/components/atoms/Avatar';
 import { cn } from '@/lib/utils';
@@ -116,12 +116,21 @@ export function ProfileBanner({
 
         <div className="flex-1 min-w-0 self-stretch flex flex-col">
           <div className="min-w-0">
-            <h1 className="text-base font-bold text-white truncate">{name}</h1>
+            <h1 className="flex items-center gap-1.5 text-base font-bold text-white">
+              <span className="truncate">{name}</span>
+              {employee.userId && (
+                <BadgeCheck size={16} className="shrink-0 text-sky-300">
+                  <title>
+                    {isPendingInvite ? 'System access: invite pending' : 'Has system access'}
+                  </title>
+                </BadgeCheck>
+              )}
+            </h1>
             <div className="flex items-center gap-2.5 flex-wrap mt-0.5">
-              <span className="text-xs text-white/60">{employee.email}</span>
+              {employee.email && <span className="text-xs text-white/60">{employee.email}</span>}
               {employee.phone && (
                 <>
-                  <span className="text-white/30 text-xs">·</span>
+                  {employee.email && <span className="text-white/30 text-xs">·</span>}
                   <span className="text-xs text-white/60">{employee.phone}</span>
                 </>
               )}
