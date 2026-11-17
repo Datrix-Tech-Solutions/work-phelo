@@ -48,6 +48,7 @@ const cycle = (overrides: Record<string, unknown> = {}) => ({
       },
     },
   ],
+  groups: [],
   ...overrides,
 });
 
@@ -113,5 +114,76 @@ describe('AppraisalGoalCyclesService', () => {
     expect(deleteMany).toHaveBeenCalledWith({
       where: { tenantId: 't1', cycleId: 'c1' },
     });
+  });
+
+  const dates = {
+    startDate: '2026-10-01',
+    endDate: '2026-12-31',
+    selfAssessmentDeadline: '2026-12-10',
+    managerReviewDeadline: '2026-12-20',
+  };
+
+  it('refuses groups that share a person, since they would have two sets of weights', async () => {
+    const create = jest.fn();
+    const prisma = {
+      appraisalCycle: { findFirst: jest.fn(async () => null), create },
+      appraisalGroup: {
+        findMany: jest.fn(async () => [
+          { id: 'a', employeeIds: ['e1', 'e2'], goals: [{ goalId: 'g1' }] },
+          { id: 'b', employeeIds: ['e2', 'e3'], goals: [{ goalId: 'g2' }] },
+        ]),
+      },
+    };
+    await expect(
+      build(prisma).createCycle('t1', 'u1', {
+        title: 'Q4',
+        ...dates,
+        groupIds: ['a', 'b'],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('runs the goals of its groups, once each', async () => {
+    const create = jest.fn(async (_args: unknown) =>
+      cycle({
+        status: 'UPCOMING',
+        groups: [{ groupId: 'a' }, { groupId: 'b' }],
+      }),
+    );
+    const prisma = {
+      appraisalCycle: { findFirst: jest.fn(async () => null), create },
+      appraisalGroup: {
+        findMany: jest.fn(async () => [
+          { id: 'a', employeeIds: ['e1'], goals: [{ goalId: 'g1' }] },
+          {
+            id: 'b',
+            employeeIds: ['e2'],
+            goals: [{ goalId: 'g1' }, { goalId: 'g2' }],
+          },
+        ]),
+      },
+    };
+    const view = await build(prisma).createCycle('t1', 'u1', {
+      title: 'Q4',
+      ...dates,
+      groupIds: ['a', 'b'],
+    });
+    const data = (
+      create.mock.calls[0][0] as {
+        data: { goals: { create: { goalId: string }[] } };
+      }
+    ).data;
+    expect(data.goals.create.map((g) => g.goalId)).toEqual(['g1', 'g2']);
+    expect(view.groupIds).toEqual(['a', 'b']);
+  });
+
+  it('needs groups or goals to create a cycle', async () => {
+    const prisma = {
+      appraisalCycle: { findFirst: jest.fn(async () => null) },
+    };
+    await expect(
+      build(prisma).createCycle('t1', 'u1', { title: 'Q4', ...dates }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

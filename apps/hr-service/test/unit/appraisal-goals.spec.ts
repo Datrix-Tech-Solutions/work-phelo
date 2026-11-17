@@ -72,6 +72,23 @@ describe('AppraisalGoalsService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('refuses to delete a goal that is in a group', async () => {
+    const prisma = {
+      appraisalGoal: { findFirst: jest.fn(async () => ({ id: 'g1' })) },
+      appraisalCycleGoal: { count: jest.fn(async () => 0) },
+      appraisalGroupGoal: { count: jest.fn(async () => 1) },
+      $transaction: jest.fn(),
+    };
+    const service = new AppraisalGoalsService(
+      prisma as unknown as PrismaService,
+      {} as AppraisalObjectivesService,
+    );
+    await expect(service.remove('tenant-1', 'g1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('clears goalId and linkedAt on the objectives it orphans', async () => {
     const updateMany = jest.fn();
     const del = jest.fn();
@@ -81,6 +98,7 @@ describe('AppraisalGoalsService', () => {
         delete: del,
       },
       appraisalCycleGoal: { count: jest.fn(async () => 0) },
+      appraisalGroupGoal: { count: jest.fn(async () => 0) },
       appraisalObjective: { updateMany },
       $transaction: jest.fn(async () => []),
     };
