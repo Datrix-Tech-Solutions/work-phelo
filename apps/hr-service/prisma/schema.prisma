@@ -1996,7 +1996,8 @@ model AppraisalCycle {
   appraisals Appraisal[]
   kpis       AppraisalKpi[]
   goals      AppraisalCycleGoal[]
-  template   AppraisalTemplate?   @relation(fields: [templateId], references: [id])
+  groups     AppraisalCycleGroup[]
+  template   AppraisalTemplate?    @relation(fields: [templateId], references: [id])
 
   @@unique([tenantId, title])
   @@schema("hr")
@@ -2120,6 +2121,7 @@ model AppraisalGoal {
   updatedAt               DateTime @updatedAt
 
   cycleGoals AppraisalCycleGoal[]
+  groupGoals AppraisalGroupGoal[]
   objectives AppraisalObjective[]
 
   @@unique([tenantId, name])
@@ -2143,6 +2145,62 @@ model AppraisalCycleGoal {
 
   @@unique([cycleId, goalId])
   @@index([tenantId, goalId])
+  @@schema("hr")
+}
+
+/// People scored together, and how much each goal counts for them. A member who is not on one of the goals is scored on the rest, rescaled to 100.
+model AppraisalGroup {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  employeeIds String[] @default([])
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  goals       AppraisalGroupGoal[]
+  cycleGroups AppraisalCycleGroup[]
+
+  @@unique([tenantId, name])
+  @@schema("hr")
+}
+
+/// A goal in a group with its weight; the weights of a group total 100.
+model AppraisalGroupGoal {
+  id       String @id @default(uuid())
+  tenantId String
+  groupId  String
+  goalId   String
+  weight   Int
+
+  group AppraisalGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  /// Restrict: a goal that is in a group cannot be deleted.
+  goal  AppraisalGoal  @relation(fields: [goalId], references: [id], onDelete: Restrict)
+
+  @@unique([groupId, goalId])
+  @@index([tenantId, goalId])
+  @@schema("hr")
+}
+
+/// A group in a cycle. The name, members and weights are copied here when the cycle starts, so editing the group later never changes a running or finished cycle.
+model AppraisalCycleGroup {
+  id          String   @id @default(uuid())
+  tenantId    String
+  cycleId     String
+  groupId     String
+  groupName   String?
+  /// Null until the cycle starts.
+  employeeIds String[] @default([])
+  /// Goal id to weight, as a JSON object; null until the cycle starts.
+  goalWeights Json?
+  createdAt   DateTime @default(now())
+
+  cycle AppraisalCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  /// Restrict: a group that is in a cycle cannot be deleted.
+  group AppraisalGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  @@unique([cycleId, groupId])
+  @@index([tenantId, groupId])
   @@schema("hr")
 }
 

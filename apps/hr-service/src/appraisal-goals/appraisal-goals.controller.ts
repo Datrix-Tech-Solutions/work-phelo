@@ -25,6 +25,11 @@ import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { AppraisalGoalsService } from './appraisal-goals.service';
 import { AppraisalObjectivesService } from './appraisal-objectives.service';
+import { AppraisalGroupsService } from './appraisal-groups.service';
+import {
+  CreateAppraisalGroupDto,
+  UpdateAppraisalGroupDto,
+} from './dto/group.dto';
 import { CreateAppraisalGoalDto, UpdateAppraisalGoalDto } from './dto/goal.dto';
 import {
   AddObjectiveCommentDto,
@@ -200,5 +205,54 @@ export class AppraisalObjectivesController {
       objectiveId,
       dto.body,
     );
+  }
+}
+
+@ApiTags('Appraisal groups')
+@Controller('appraisal-groups')
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
+@RequireModule('hr')
+@RequireFeature('hr', 'appraisals')
+@ApiBearerAuth('access-token')
+export class AppraisalGroupsController {
+  constructor(private readonly groups: AppraisalGroupsService) {}
+
+  @PermissionExempt(
+    'module-reference',
+    'Tenant appraisal group catalog, read when choosing the groups of a cycle.',
+  )
+  @Get()
+  @ApiOperation({ summary: 'List groups, flagging the ones in a cycle' })
+  list(@Req() req: AuthenticatedRequest) {
+    return this.groups.list(req.user.tenantId);
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Create a group of employees and weighted goals' })
+  create(
+    @Body() dto: CreateAppraisalGroupDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.groups.create(req.user.tenantId, req.user.id, dto);
+  }
+
+  @Patch(':groupId')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Update a group' })
+  update(
+    @Param('groupId') groupId: string,
+    @Body() dto: UpdateAppraisalGroupDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.groups.update(req.user.tenantId, groupId, dto);
+  }
+
+  @Delete(':groupId')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Delete a group that is not in a cycle' })
+  remove(@Param('groupId') groupId: string, @Req() req: AuthenticatedRequest) {
+    return this.groups.remove(req.user.tenantId, groupId);
   }
 }

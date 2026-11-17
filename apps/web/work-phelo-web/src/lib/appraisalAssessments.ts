@@ -71,6 +71,10 @@ export function overlappingCycles(
  */
 export function overallScore(assessment: Assessment, entries: AssessmentEntry[]): number | null {
   if (assessment.status !== 'MANAGER_SUBMITTED' && assessment.status !== 'FINALIZED') return null;
+  // A cycle that ran groups scores by the person's group weights, as the server does.
+  if (assessment.goalWeights) {
+    return weightedOverallScore(assessment, entries, assessment.goalWeights);
+  }
   const scores = entries.flatMap(({ goal, objectives }) =>
     objectives.map((o) => {
       const self = assessment.selfRatings[o.id]?.score ?? 0;
@@ -143,4 +147,28 @@ export function goalScores(assessment: Assessment, entries: Entries) {
     const average = blended.reduce((sum, s) => sum + s, 0) / blended.length;
     return { goal, score: Math.round((average / RATING_MAX) * 100) };
   });
+}
+
+/**
+ * The overall score when the person's performance group weights the goals, as a percentage.
+ * `weights` is goal id to percentage (see effectiveWeights). Each goal's score is weighted by it.
+ * A goal with no weight, or with no objectives in this assessment, is left out and the rest are
+ * rescaled so the score is still out of 100. Null until the manager has rated, or when no goal
+ * has a weight.
+ */
+export function weightedOverallScore(
+  assessment: Assessment,
+  entries: Entries,
+  weights: Record<string, number>,
+): number | null {
+  if (assessment.status !== 'MANAGER_SUBMITTED' && assessment.status !== 'FINALIZED') return null;
+  const scored = goalScores(
+    assessment,
+    entries.filter((e) => e.objectives.length > 0),
+  ).filter(({ goal }) => (weights[goal.id] ?? 0) > 0);
+  const total = scored.reduce((sum, { goal }) => sum + weights[goal.id], 0);
+  if (total <= 0) return null;
+  return Math.round(
+    scored.reduce((sum, { goal, score }) => sum + score * weights[goal.id], 0) / total,
+  );
 }
