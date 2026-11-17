@@ -41,3 +41,38 @@ export function overallScore(
   if (blended.length === 0) return null;
   return pct(blended.reduce((sum, s) => sum + s, 0) / blended.length);
 }
+
+export interface WeightedScoreEntry extends ScoreEntry {
+  goal: ScoreEntry['goal'] & { id: string };
+}
+
+/**
+ * The overall score when the person's group weights the goals: each goal's score (its objectives'
+ * blended ratings, averaged) is weighted by `weights` (goal id to weight). A goal with no weight, or
+ * no objectives, is left out and the rest are rescaled, so a person who lacks one of the group's
+ * goals is still scored out of 100. Null when no goal has a weight.
+ */
+export function weightedOverallScore(
+  entries: WeightedScoreEntry[],
+  self: ObjectiveRatings,
+  manager: ObjectiveRatings,
+  weights: Record<string, number>,
+): number | null {
+  let total = 0;
+  let sum = 0;
+  for (const { goal, objectives } of entries) {
+    const weight = weights[goal.id] ?? 0;
+    if (weight <= 0 || objectives.length === 0) continue;
+    const blended = objectives.map(
+      (o) =>
+        ((self[o.id]?.score ?? 0) * goal.selfAssessmentWeight +
+          (manager[o.id]?.score ?? 0) * goal.managerAssessmentWeight) /
+        100,
+    );
+    const average = blended.reduce((a, b) => a + b, 0) / blended.length;
+    // Rounded per goal as the web does, so the server and the screen agree to the point.
+    sum += pct(average) * weight;
+    total += weight;
+  }
+  return total > 0 ? Math.round(sum / total) : null;
+}

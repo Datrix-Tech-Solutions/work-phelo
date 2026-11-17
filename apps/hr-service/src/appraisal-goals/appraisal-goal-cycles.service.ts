@@ -21,7 +21,12 @@ import {
   UpdateGoalCycleDto,
 } from './dto/cycle.dto';
 import { linkedInCycleWindow, startOfUtcDay } from './objective-window';
-import { overallScore, sideScore, type ObjectiveRatings } from './score';
+import {
+  overallScore,
+  sideScore,
+  weightedOverallScore,
+  type ObjectiveRatings,
+} from './score';
 
 const can = (user: RequestUser, ...rules: string[]) =>
   isCompanyAdminUser(user) || rules.some((r) => hasPermissionRule(user, r));
@@ -56,6 +61,7 @@ const cycleInclude = {
     },
     orderBy: { createdAt: 'asc' },
   },
+  groups: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.AppraisalCycleInclude;
 
 type CycleWithGoals = Prisma.AppraisalCycleGetPayload<{
@@ -95,6 +101,7 @@ export class AppraisalGoalCyclesService {
         ? day(cycle.managerReviewDeadline)
         : '',
       goalIds: cycle.goals.map((g) => g.goalId),
+      groupIds: cycle.groups.map((g) => g.groupId),
       status,
       cancelledReason: cycle.cancelledReason ?? undefined,
       cancelledAt: cycle.cancelledAt ? day(cycle.cancelledAt) : undefined,
@@ -178,6 +185,60 @@ export class AppraisalGoalCyclesService {
     }
   }
 
+  /**
+   * What a cycle runs. Groups win: the cycle runs their goals, and nobody may be in two of them or
+   * they would have two sets of weights. Without groups the goals given are used as they are.
+   */
+  private async resolveRunSet(
+    tenantId: string,
+    groupIds: string[] | undefined,
+    goalIds: string[] | undefined,
+  ) {
+    if (groupIds?.length) {
+      const groups = await this.prisma.appraisalGroup.findMany({
+        where: { tenantId, id: { in: groupIds } },
+        include: { goals: true },
+      });
+      if (groups.length !== new Set(groupIds).size) {
+        throw new BadRequestException('One or more groups do not exist');
+      }
+      const seen = new Set<string>();
+      for (const group of groups) {
+        for (const id of group.employeeIds) {
+          if (seen.has(id)) {
+            throw new BadRequestException(
+              'Some people are in more than one of the chosen groups',
+            );
+          }
+          seen.add(id);
+        }
+      }
+      return {
+        groupIds,
+        goalIds: [
+          ...new Set(groups.flatMap((g) => g.goals.map((x) => x.goalId))),
+        ],
+      };
+    }
+    if (!goalIds?.length) {
+      throw new BadRequestException('Choose at least one group');
+    }
+    await this.assertGoalsExist(tenantId, goalIds);
+    return { groupIds: [] as string[], goalIds };
+  }
+
+  /** The weights a person is scored by in this cycle, copied from their group when it started. */
+  private weightsFor(
+    cycle: { groups: { employeeIds: string[]; goalWeights: unknown }[] },
+    employeeId: string,
+  ): Record<string, number> | undefined {
+    const group = cycle.groups.find((g) => g.employeeIds.includes(employeeId));
+    if (!group?.goalWeights || typeof group.goalWeights !== 'object') {
+      return undefined;
+    }
+    return group.goalWeights as Record<string, number>;
+  }
+
   async listCycles(tenantId: string) {
     const cycles = await this.prisma.appraisalCycle.findMany({
       where: { tenantId, goals: { some: {} } },
@@ -221,7 +282,7 @@ export class AppraisalGoalCyclesService {
 
   async createCycle(tenantId: string, userId: string, dto: CreateGoalCycleDto) {
     await this.assertTitleFree(tenantId, dto.title);
-    await this.assertGoalsExist(tenantId, dto.goalIds);
+    const run = await this.resolveRunSet(tenantId, dto.groupIds, dto.goalIds);
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
     const selfAssessmentDeadline = new Date(dto.selfAssessmentDeadline);
@@ -247,7 +308,10 @@ export class AppraisalGoalCyclesService {
         status: 'UPCOMING',
         isActive: false,
         goals: {
-          create: dto.goalIds.map((goalId) => ({ tenantId, goalId })),
+          create: run.goalIds.map((goalId) => ({ tenantId, goalId })),
+        },
+        groups: {
+          create: run.groupIds.map((groupId) => ({ tenantId, groupId })),
         },
       },
       include: cycleInclude,
@@ -299,8 +363,11 @@ export class AppraisalGoalCyclesService {
         selfAssessmentDeadline,
         managerReviewDeadline,
       });
-      if (rest.goalIds) await this.assertGoalsExist(tenantId, rest.goalIds);
     }
+    const run =
+      !started && (rest.groupIds || rest.goalIds)
+        ? await this.resolveRunSet(tenantId, rest.groupIds, rest.goalIds)
+        : undefined;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.appraisalCycle.update({
@@ -319,10 +386,14 @@ export class AppraisalGoalCyclesService {
               }),
         },
       });
-      if (!started && rest.goalIds) {
+      if (run) {
         await tx.appraisalCycleGoal.deleteMany({ where: { cycleId } });
         await tx.appraisalCycleGoal.createMany({
-          data: rest.goalIds.map((goalId) => ({ tenantId, cycleId, goalId })),
+          data: run.goalIds.map((goalId) => ({ tenantId, cycleId, goalId })),
+        });
+        await tx.appraisalCycleGroup.deleteMany({ where: { cycleId } });
+        await tx.appraisalCycleGroup.createMany({
+          data: run.groupIds.map((groupId) => ({ tenantId, cycleId, groupId })),
         });
       }
     });
@@ -362,7 +433,20 @@ export class AppraisalGoalCyclesService {
     const goals = await this.prisma.appraisalGoal.findMany({
       where: { tenantId, id: { in: cycle.goals.map((g) => g.goalId) } },
     });
-    const covered = [...new Set(goals.flatMap((g) => g.employeeIds))];
+    const groups = cycle.groups.length
+      ? await this.prisma.appraisalGroup.findMany({
+          where: { tenantId, id: { in: cycle.groups.map((g) => g.groupId) } },
+          include: { goals: true },
+        })
+      : [];
+    // A cycle that runs groups assesses their members; one that runs goals only, the goals' people.
+    const covered = [
+      ...new Set(
+        groups.length
+          ? groups.flatMap((g) => g.employeeIds)
+          : goals.flatMap((g) => g.employeeIds),
+      ),
+    ];
     const employees = await this.prisma.employee.findMany({
       where: { tenantId, id: { in: covered } },
       select: { id: true, userId: true, managerId: true },
@@ -375,7 +459,7 @@ export class AppraisalGoalCyclesService {
     const recipients = employees.filter((e) => counting.has(e.id));
     if (recipients.length === 0) {
       throw new BadRequestException(
-        'No employee covered by these goals has an objective in this period',
+        'No employee covered by this cycle has an objective in this period',
       );
     }
 
@@ -387,6 +471,18 @@ export class AppraisalGoalCyclesService {
             goalName: goal.name,
             selfAssessmentWeight: goal.selfAssessmentWeight,
             managerAssessmentWeight: goal.managerAssessmentWeight,
+          },
+        });
+      }
+      for (const group of groups) {
+        await tx.appraisalCycleGroup.updateMany({
+          where: { cycleId, groupId: group.id },
+          data: {
+            groupName: group.name,
+            employeeIds: group.employeeIds,
+            goalWeights: Object.fromEntries(
+              group.goals.map((g) => [g.goalId, g.weight]),
+            ),
           },
         });
       }
@@ -585,6 +681,8 @@ export class AppraisalGoalCyclesService {
         status,
         selfRatings: ratingsOf('SELF'),
         managerRatings: ratingsOf('MANAGER'),
+        /** What each goal counts for this person, copied from their group when the cycle started. */
+        goalWeights: cycle ? this.weightsFor(cycle, a.employeeId) : undefined,
         managerComment: a.managerComment ?? undefined,
         hrComment: a.finalizationNote ?? undefined,
         rejectionReason:
@@ -781,11 +879,15 @@ export class AppraisalGoalCyclesService {
     const view = (await this.viewsFor(tenantId, [appraisal]))[0];
     const managerRatings = this.toRatings(ratings);
     const managerScore = sideScore(view.entries, managerRatings);
-    const finalScore = overallScore(
-      view.entries,
-      view.selfRatings,
-      managerRatings,
-    );
+    // Scored by the person's group weights when the cycle had groups; the plain average otherwise.
+    const finalScore = view.goalWeights
+      ? weightedOverallScore(
+          view.entries,
+          view.selfRatings,
+          managerRatings,
+          view.goalWeights,
+        )
+      : overallScore(view.entries, view.selfRatings, managerRatings);
     await this.prisma.$transaction(async (tx) => {
       await this.saveScores(tx, tenantId, appraisalId, 'MANAGER', ratings);
       await tx.appraisal.update({

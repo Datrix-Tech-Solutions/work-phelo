@@ -147,7 +147,7 @@ export class AppraisalGoalsService {
   }
 
   /**
-   * A goal that is in a cycle cannot be deleted. Otherwise its objectives are kept but orphaned:
+   * A goal that is in a cycle or a group cannot be deleted. Otherwise its objectives are kept but orphaned:
    * the goal and the date they were linked are cleared together, since linkedAt means nothing without a goal.
    */
   async remove(tenantId: string, goalId: string) {
@@ -163,6 +163,15 @@ export class AppraisalGoalsService {
     if (inCycle > 0) {
       throw new ConflictException(
         'This goal is part of a cycle and cannot be deleted',
+      );
+    }
+
+    const inGroup = await this.prisma.appraisalGroupGoal.count({
+      where: { tenantId, goalId },
+    });
+    if (inGroup > 0) {
+      throw new ConflictException(
+        'This goal is in a group and cannot be deleted',
       );
     }
 

@@ -17,6 +17,20 @@ export interface GoalObjectiveDraft {
 }
 export type GoalInput = Omit<Goal, 'id' | 'inCycle'>;
 
+/**
+ * Who is scored on which goals and how much each counts. Every goal in the group covers all of its
+ * employees, and the weights total 100.
+ */
+export interface PerformanceGroup {
+  id: string;
+  name: string;
+  employeeIds: string[];
+  goals: { goalId: string; weight: number }[];
+  /** Whether a cycle runs it; such a group cannot be deleted. */
+  inCycle?: boolean;
+}
+export type PerformanceGroupInput = Omit<PerformanceGroup, 'id' | 'inCycle'>;
+
 export type GoalCycleStatus = 'UPCOMING' | 'ACTIVE' | 'CLOSED' | 'CANCELLED';
 
 export interface GoalCycle {
@@ -28,8 +42,10 @@ export interface GoalCycle {
   endDate: string;
   selfAssessmentDeadline: string;
   managerReviewDeadline: string;
-  /** The goals the cycle runs; a cycle can run several. */
+  /** The goals the cycle runs, taken from its groups. */
   goalIds: string[];
+  /** The groups the cycle runs. */
+  groupIds: string[];
   status: GoalCycleStatus;
   cancelledReason?: string;
   /** The day it was cancelled (YYYY-MM-DD). */
@@ -48,7 +64,7 @@ export type CycleInput = Pick<
   | 'endDate'
   | 'selfAssessmentDeadline'
   | 'managerReviewDeadline'
-  | 'goalIds'
+  | 'groupIds'
 >;
 
 export type AssessmentStatus = 'NOT_STARTED' | 'SELF_SUBMITTED' | 'MANAGER_SUBMITTED' | 'FINALIZED';
@@ -86,6 +102,8 @@ export interface Assessment {
   hrComment?: string;
   /** Why HR sent the manager's review back, while it waits to be redone. */
   rejectionReason?: string;
+  /** What each goal counts for this person (goal id to weight), copied from their group when the cycle started. Absent for cycles without groups. */
+  goalWeights?: Record<string, number>;
   entries: AssessmentEntry[];
 }
 

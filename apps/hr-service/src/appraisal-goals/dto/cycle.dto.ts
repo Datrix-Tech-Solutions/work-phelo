@@ -53,12 +53,28 @@ export class CreateGoalCycleDto {
   @IsDateString()
   managerReviewDeadline!: string;
 
-  @ApiProperty({ description: 'Goals the cycle runs', type: [String] })
+  @ApiPropertyOptional({
+    description:
+      'Groups the cycle runs. The cycle runs their goals and assesses their members. Give these or goalIds.',
+    type: [String],
+  })
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()
   @IsUUID('4', { each: true })
-  goalIds!: string[];
+  groupIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Goals the cycle runs, when no groups are given',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  goalIds?: string[];
 }
 
 /** Before the cycle starts anything can change. Afterwards only the name and description. */
@@ -98,6 +114,14 @@ export class UpdateGoalCycleDto {
   @IsOptional()
   @IsDateString()
   managerReviewDeadline?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  groupIds?: string[];
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
