@@ -30,7 +30,12 @@ export interface DepartmentImportRow extends ParsedRowBase {
 export interface EmployeeImportRow extends ParsedRowBase {
   firstName: string;
   lastName: string;
-  email: string;
+  /** Optional: employees can be imported as records without a login email. */
+  email?: string;
+  /** Whether the sheet asked for system access (Yes in the access column). */
+  accessRequested?: boolean;
+  /** Final choice made in the preview. Only true for rows that have an email. */
+  grantAccess?: boolean;
   phone?: string;
   gender?: string;
   departmentName: string;
@@ -51,4 +56,7 @@ export interface BulkImportRowResult {
   id?: string;
   message?: string;
   warnings: string[];
+  /** Outcome of the follow-up system-access grant for this row, when one was requested. */
+  access?: 'queued' | 'failed';
+  accessMessage?: string;
 }

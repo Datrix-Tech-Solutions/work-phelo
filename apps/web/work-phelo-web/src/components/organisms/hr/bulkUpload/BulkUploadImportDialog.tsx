@@ -20,6 +20,8 @@ interface BulkUploadImportDialogProps {
   onDownloadTemplate?: () => void;
   parseFile?: (file: File) => Promise<ImportSectionData[]>;
   onImport?: (sections: ImportSectionData[]) => Promise<ResultsByKey>;
+  /** When true, employee sections show a checkbox per row to also give that employee a login. */
+  canGrantAccess?: boolean;
 }
 
 export function BulkUploadImportDialog({
@@ -30,6 +32,7 @@ export function BulkUploadImportDialog({
   onDownloadTemplate,
   parseFile,
   onImport,
+  canGrantAccess = false,
 }: BulkUploadImportDialogProps) {
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
@@ -77,6 +80,45 @@ export function BulkUploadImportDialog({
     sections?.reduce((sum, s) => sum + s.rows.filter((r) => r.status === 'new').length, 0) ?? 0;
   const hasInvalidRows = sections?.some((s) => s.rows.some((r) => r.status === 'invalid')) ?? false;
 
+  const setAccess = (sectionKey: string, rowNumber: number | 'all', value: boolean) => {
+    setSections(
+      (current) =>
+        current?.map((section) =>
+          section.key !== sectionKey
+            ? section
+            : {
+                ...section,
+                rows: section.rows.map((row) => {
+                  const r = row as typeof row & { email?: string };
+                  const matches = rowNumber === 'all' || row.rowNumber === rowNumber;
+                  if (!matches || row.status !== 'new' || !r.email) return row;
+                  return { ...row, grantAccess: value };
+                }),
+              },
+        ) ?? null,
+    );
+  };
+
+  const updateRow = (sectionKey: string, rowNumber: number, patch: Record<string, unknown>) => {
+    setSections(
+      (current) =>
+        current?.map((section) =>
+          section.key !== sectionKey
+            ? section
+            : {
+                ...section,
+                rows: section.rows.map((row) =>
+                  row.rowNumber !== rowNumber
+                    ? row
+                    : section.reviseRow
+                      ? section.reviseRow(row, patch)
+                      : { ...row, ...patch },
+                ),
+              },
+        ) ?? null,
+    );
+  };
+
   const handleImport = async () => {
     if (!sections || !onImport) return;
     setIsImporting(true);
@@ -86,10 +128,15 @@ export function BulkUploadImportDialog({
 
       const allResults = Object.values(nextResults).flat();
       const createdCount = allResults.filter((r) => r.status === 'created').length;
+      const accessFailures = allResults.filter((r) => r.access === 'failed').length;
 
-      if (createdCount === totalNew) {
+      if (createdCount === totalNew && accessFailures === 0) {
         toast.success(`Created ${createdCount} item${createdCount === 1 ? '' : 's'}`);
         handleClose();
+      } else if (createdCount === totalNew) {
+        toast.error(
+          `Created ${createdCount}, but access could not be granted for ${accessFailures} — see below`,
+        );
       } else {
         toast.error(`Created ${createdCount} of ${totalNew} — see errors below`);
       }
@@ -158,6 +205,18 @@ export function BulkUploadImportDialog({
                 title={section.title}
                 rows={section.rows}
                 columns={section.columns}
+                supportsAccess={section.supportsAccess}
+                onToggleAccess={
+                  canGrantAccess && section.supportsAccess
+                    ? (rowNumber, value) => setAccess(section.key, rowNumber, value)
+                    : undefined
+                }
+                onToggleAllAccess={
+                  canGrantAccess && section.supportsAccess
+                    ? (value) => setAccess(section.key, 'all', value)
+                    : undefined
+                }
+                onUpdateRow={(rowNumber, patch) => updateRow(section.key, rowNumber, patch)}
                 results={results?.[section.key]}
               />
             ))}

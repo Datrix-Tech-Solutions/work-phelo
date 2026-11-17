@@ -130,8 +130,18 @@ export function useCreateEmployee() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: CreateEmployeePayload) => {
-      const res = await api.post<Employee>('/hr/employees', payload);
+    // The backend requires an Idempotency-Key so a retry after a lost response replays the
+    // same create instead of making a duplicate. Callers keep one key per form submission.
+    mutationFn: async ({
+      payload,
+      idempotencyKey,
+    }: {
+      payload: CreateEmployeePayload;
+      idempotencyKey: string;
+    }) => {
+      const res = await api.post<Employee>('/hr/employees', payload, {
+        headers: { 'Idempotency-Key': idempotencyKey },
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -329,7 +339,12 @@ export function useDismissResignation(employeeId: string) {
 export function useResendEmployeeInvite() {
   return useMutation({
     mutationFn: async (employeeId: string) => {
-      const res = await api.post(`/hr/employees/${employeeId}/resend-invite`);
+      // Resend is now a queued (202) operation that needs a key and a reason.
+      const res = await api.post(
+        `/hr/employees/${employeeId}/resend-invite`,
+        { reason: 'Invite resent from the employee profile' },
+        { headers: { 'Idempotency-Key': `resend:${employeeId}:${crypto.randomUUID()}` } },
+      );
       return res.data;
     },
   });
