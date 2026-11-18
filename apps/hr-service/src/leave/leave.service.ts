@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { CreateOnBehalfLeaveRequestDto } from './dto/create-on-behalf-leave-request.dto';
 import { CreatePublicHolidayDto } from './dto/create-public-holiday.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
 import { UpdatePublicHolidayDto } from './dto/update-public-holiday.dto';
@@ -34,6 +35,23 @@ import {
   getSeededPublicHolidaysForLocation,
   SeededPublicHoliday,
 } from './public-holiday.catalog';
+
+const LEAVE_REQUEST_EMPLOYEE_SELECT = {
+  id: true,
+  userId: true,
+  firstName: true,
+  lastName: true,
+  employmentType: true,
+  employmentStatus: true,
+  gender: true,
+  hireDate: true,
+  managerId: true,
+  departmentId: true,
+} satisfies Prisma.EmployeeSelect;
+
+type LeaveRequestEmployee = Prisma.EmployeeGetPayload<{
+  select: typeof LEAVE_REQUEST_EMPLOYEE_SELECT;
+}>;
 
 type DefaultLeaveTypeDefinition = {
   name: string;
@@ -1082,26 +1100,55 @@ export class LeaveService {
   ) {
     const empRecord = await this.prisma.employee.findFirst({
       where: { userId: actor.id, tenantId },
-      select: {
-        id: true,
-        userId: true,
-        firstName: true,
-        lastName: true,
-        employmentType: true,
-        employmentStatus: true,
-        gender: true,
-        hireDate: true,
-        managerId: true,
-        departmentId: true,
-      },
+      select: LEAVE_REQUEST_EMPLOYEE_SELECT,
     });
     if (!empRecord) throw new NotFoundException('Employee profile not found');
+    return this.submitLeaveRequest(tenantId, actor, dto, empRecord, false);
+  }
+
+  /**
+   * Records leave for another employee. There is no approval step: the request is saved as
+   * APPROVED and the days go straight to the employee's used balance. Needs leave:APPROVE, and
+   * nobody can record leave for themselves, since that would skip their own approval.
+   */
+  async createRequestOnBehalf(
+    tenantId: string,
+    actor: RequestUser,
+    dto: CreateOnBehalfLeaveRequestDto,
+  ) {
+    assertHrAccess(
+      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'leave:APPROVE'),
+    );
+
+    const empRecord = await this.prisma.employee.findFirst({
+      where: { id: dto.employeeId, tenantId },
+      select: LEAVE_REQUEST_EMPLOYEE_SELECT,
+    });
+    if (!empRecord) throw new NotFoundException('Employee not found');
+    if (empRecord.userId && empRecord.userId === actor.id) {
+      throw new ForbiddenException(
+        'You cannot record leave for yourself. Submit a normal leave request so it can be approved.',
+      );
+    }
+
+    return this.submitLeaveRequest(tenantId, actor, dto, empRecord, true);
+  }
+
+  private async submitLeaveRequest(
+    tenantId: string,
+    actor: RequestUser,
+    dto: CreateLeaveRequestDto,
+    empRecord: LeaveRequestEmployee,
+    onBehalf: boolean,
+  ) {
     if (
       empRecord.employmentStatus !== 'ACTIVE' &&
       empRecord.employmentStatus !== 'PROBATION'
     ) {
       throw new ForbiddenException(
-        'Only active or probationary employees can submit leave requests.',
+        onBehalf
+          ? 'Leave can only be recorded for active or probationary employees.'
+          : 'Only active or probationary employees can submit leave requests.',
       );
     }
     const employeeId = empRecord.id;
@@ -1118,12 +1165,14 @@ export class LeaveService {
       !leaveType.applicableTo.includes(empRecord.employmentType)
     ) {
       throw new ForbiddenException(
-        `This leave type is not available for your employment type (${empRecord.employmentType.replace('_', ' ').toLowerCase()})`,
+        `This leave type is not available for ${onBehalf ? "this employee's" : 'your'} employment type (${empRecord.employmentType.replace('_', ' ').toLowerCase()})`,
       );
     }
     if (leaveType.applicableGenders.length > 0 && empRecord.gender === null) {
       throw new ForbiddenException(
-        'This leave type is only available to employees with a recorded gender. Please update your profile or contact HR.',
+        onBehalf
+          ? 'This leave type is only available to employees with a recorded gender. Update the employee profile first.'
+          : 'This leave type is only available to employees with a recorded gender. Please update your profile or contact HR.',
       );
     }
     if (
@@ -1132,7 +1181,7 @@ export class LeaveService {
       !leaveType.applicableGenders.includes(empRecord.gender)
     ) {
       throw new ForbiddenException(
-        `This leave type is not available for your gender (${this.genderLabel(empRecord.gender)}).`,
+        `This leave type is not available for ${onBehalf ? "this employee's" : 'your'} gender (${this.genderLabel(empRecord.gender)}).`,
       );
     }
     const supportingDocumentName = dto.supportingDocumentName?.trim();
@@ -1141,6 +1190,16 @@ export class LeaveService {
       supportingDocumentName,
       supportingDocumentUrl,
     );
+    // Nobody reviews this request, so a required document has to come with it.
+    if (
+      onBehalf &&
+      leaveType.requiresSupportingDocument &&
+      (!supportingDocumentName || !supportingDocumentUrl)
+    ) {
+      throw new BadRequestException(
+        'A supporting document is required for this leave type.',
+      );
+    }
     const start = this.parseDateOnly(dto.startDate, 'Start date');
     const end = this.parseDateOnly(dto.endDate, 'End date');
     const coverageNote = dto.coverageNote?.trim();
@@ -1157,7 +1216,9 @@ export class LeaveService {
     if (dto.coverageEmployeeId) {
       if (dto.coverageEmployeeId === employeeId) {
         throw new BadRequestException(
-          'You cannot assign yourself as your own leave cover.',
+          onBehalf
+            ? 'The employee cannot be their own leave cover.'
+            : 'You cannot assign yourself as your own leave cover.',
         );
       }
 
@@ -1195,7 +1256,7 @@ export class LeaveService {
 
     if (overlappingRequest) {
       throw new ConflictException(
-        `You already have a ${overlappingRequest.status.toLowerCase()} leave request overlapping ${this.formatDateOnly(overlappingRequest.startDate)} to ${this.formatDateOnly(overlappingRequest.endDate)}.`,
+        `${onBehalf ? 'This employee already has' : 'You already have'} a ${overlappingRequest.status.toLowerCase()} leave request overlapping ${this.formatDateOnly(overlappingRequest.startDate)} to ${this.formatDateOnly(overlappingRequest.endDate)}.`,
       );
     }
 
@@ -1278,10 +1339,16 @@ export class LeaveService {
             id: balance.id,
             remainingDays: { gte: requestedDays },
           },
-          data: {
-            pendingDays: { increment: requestedDays },
-            remainingDays: { decrement: requestedDays },
-          },
+          // Recorded leave is already approved, so it skips the pending stage.
+          data: onBehalf
+            ? {
+                usedDays: { increment: requestedDays },
+                remainingDays: { decrement: requestedDays },
+              }
+            : {
+                pendingDays: { increment: requestedDays },
+                remainingDays: { decrement: requestedDays },
+              },
         });
 
         if (balanceUpdate.count !== 1) {
@@ -1304,7 +1371,14 @@ export class LeaveService {
           coverageNote,
           supportingDocumentName,
           supportingDocumentUrl,
-          status: 'PENDING',
+          ...(onBehalf
+            ? {
+                status: 'APPROVED' as const,
+                approvedBy: actor.id,
+                approvedAt: new Date(),
+                requestedByUserId: actor.id,
+              }
+            : { status: 'PENDING' as const }),
         },
         include: {
           leaveType: true,
@@ -1319,6 +1393,33 @@ export class LeaveService {
         },
       });
     });
+
+    if (onBehalf) {
+      // Already approved, so nobody needs to review it. Only the employee is told.
+      void this.notifyEmployeeOfLeaveDecision(
+        tenantId,
+        request.id,
+        employeeId,
+        dto.leaveTypeId,
+        actor.tenantSlug,
+        'APPROVED',
+        start,
+        end,
+        totalDays,
+        'This leave was recorded on your behalf by HR.',
+      );
+
+      return {
+        request,
+        message: 'Leave recorded and approved for the employee.',
+        notificationSummary: {
+          managerNotified: false,
+          approverCount: 0,
+          employeeNotified: Boolean(empRecord.userId),
+          autoApproved: true,
+        },
+      };
+    }
 
     const detailLink = this.buildLeaveRequestDetailLink(
       actor.tenantSlug,

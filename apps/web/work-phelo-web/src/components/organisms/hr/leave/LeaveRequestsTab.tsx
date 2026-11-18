@@ -8,6 +8,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Avatar } from '@/components/atoms/Avatar';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { LeaveRequestDetailPanel } from '@/components/organisms/hr/leave/LeaveRequestDetailPanel';
+import { RecordLeavePanel } from '@/components/organisms/hr/leave/RecordLeavePanel';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useLeaveTypes, useLeaveRequests } from '@/hooks/hr/useLeave';
 import { useDepartments } from '@/hooks/hr/useDepartments';
@@ -35,6 +36,7 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterFrom] = useState('');
   const [reqPage, setReqPage] = useState(1);
+  const [recordOpen, setRecordOpen] = useState(false);
 
   const { data: leaveTypesRaw } = useLeaveTypes(tenantSlug);
   const leaveTypes: LeaveType[] = Array.isArray(leaveTypesRaw)
@@ -211,6 +213,11 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
               </div>
             </>
           }
+          actionButton={
+            canReview
+              ? { label: 'Request for Employee', onClick: () => setRecordOpen(true) }
+              : undefined
+          }
           emptyMessage="No leave requests found"
           currentPage={reqPage}
           totalPages={reqTotalPages}
@@ -219,6 +226,14 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
           noInternalScroll
         />
       </div>
+
+      {canReview && (
+        <RecordLeavePanel
+          isOpen={recordOpen}
+          onClose={() => setRecordOpen(false)}
+          tenantSlug={tenantSlug}
+        />
+      )}
 
       <LeaveRequestDetailPanel
         isOpen={!!selectedRequest}

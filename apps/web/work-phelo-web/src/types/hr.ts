@@ -444,6 +444,14 @@ export interface CreateLeaveRequestDto {
   documentationUrl?: string;
 }
 
+/** Leave recorded by HR for another employee. It is saved as approved, with no review step. */
+export interface CreateOnBehalfLeaveRequestDto extends Omit<
+  CreateLeaveRequestDto,
+  'documentationUrl'
+> {
+  employeeId: string;
+}
+
 export interface ReviewLeaveRequestDto {
   action: 'APPROVED' | 'REJECTED';
   note?: string;
