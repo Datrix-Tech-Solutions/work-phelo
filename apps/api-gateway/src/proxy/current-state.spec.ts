@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events';
+import { Logger } from '@nestjs/common';
+import { createHash, createHmac } from 'crypto';
 import * as http from 'http';
 import * as jwt from 'jsonwebtoken';
 import { ProxyController } from './proxy.controller';
@@ -116,7 +118,7 @@ describe('Gateway current-state authorization boundary', () => {
       ...headers,
     };
     const req = {
-      path,
+      path: path.split('?')[0],
       url: path,
       method: 'GET',
       headers: requestHeaders,
@@ -330,4 +332,279 @@ describe('Gateway current-state authorization boundary', () => {
       expect(outgoing).not.toHaveBeenCalled();
     },
   );
+
+  describe('AI routing infrastructure (mock downstream only)', () => {
+    beforeEach(() => {
+      process.env.AI_SERVICE_URL = 'http://ai.test:4011';
+    });
+
+    it.each(['success', 'error', 'timeout'] as const)(
+      'redacts AI paths, queries, credentials and upstream error details on %s',
+      async (outcome) => {
+        const log = jest
+          .spyOn(Logger.prototype, 'log')
+          .mockImplementation(() => {});
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => {});
+        const error = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => {});
+        let fail: ((error: Error) => void) | undefined;
+        let timeout: (() => void) | undefined;
+        outgoing.mockReturnValue({
+          setTimeout: jest.fn((_ms: number, handler: () => void) => {
+            timeout = handler;
+          }),
+          on: jest.fn((event: string, handler: (error: Error) => void) => {
+            if (event === 'error') fail = handler;
+          }),
+          end: jest.fn(),
+          destroy: jest.fn(),
+        });
+        const { req } = await send(
+          '/api/v1/ai/private-path-canary?token=private-query-canary',
+        );
+        if (outcome === 'error') fail?.(new Error('private-error-canary'));
+        if (outcome === 'timeout') timeout?.();
+        expect(log).toHaveBeenCalledWith('GET /api/v1/ai → ai');
+        if (outcome === 'error')
+          expect(error).toHaveBeenCalledWith('AI proxy unavailable');
+        if (outcome === 'timeout')
+          expect(warn).toHaveBeenCalledWith('AI proxy timeout after 30000ms');
+        const logs = JSON.stringify([
+          log.mock.calls,
+          warn.mock.calls,
+          error.mock.calls,
+        ]);
+        expect(logs).not.toContain('private-');
+        expect(logs).not.toContain(req.headers.authorization.slice(7));
+        expect(logs).not.toContain(req.headers['x-gateway-auth-context']);
+      },
+    );
+
+    it('maps the AI namespace and preserves query parameters with current-bound assertions', async () => {
+      const { req } = await send('/api/v1/ai/routing-canary?probe=1');
+      expect(http.request).toHaveBeenCalledTimes(1);
+      expect(http.request).toHaveBeenCalledWith(
+        expect.objectContaining({ path: '/me', hostname: 'auth.test' }),
+        expect.any(Function),
+      );
+      expect(outgoing).toHaveBeenCalledWith(
+        false,
+        expect.objectContaining({
+          hostname: 'ai.test',
+          port: 4011,
+          path: '/api/routing-canary?probe=1',
+        }),
+        expect.any(Function),
+      );
+      const assertion = jwt.verify(
+        req.headers['x-gateway-auth-context'],
+        secret,
+        {
+          algorithms: ['HS256'],
+          issuer: 'workphelo-gateway',
+          audience: 'ai',
+        },
+      ) as jwt.JwtPayload;
+      expect(assertion.user).toMatchObject({
+        id: userId,
+        role: 'EMPLOYEE',
+        tenantId: 'tenant-a',
+      });
+      expect(assertion.exp! - assertion.iat!).toBe(30);
+      expect(req.headers['x-user-permissions']).toBe('[]');
+      expect(assertion.permissionsHash).toBe(
+        createHash('sha256').update('[]').digest('hex'),
+      );
+      expect(assertion.tokenHash).toBe(
+        createHash('sha256')
+          .update(req.headers.authorization.replace('Bearer ', ''))
+          .digest('hex'),
+      );
+      expect(req.headers['x-gateway-permissions-signature']).toBe(
+        createHmac('sha256', secret)
+          .update(`${userId}:tenant-a:[]`)
+          .digest('hex'),
+      );
+      // This proves proxy infrastructure, not an existing authenticated AI API.
+    });
+
+    it('replaces caller identity/context headers and never takes identity from the query', async () => {
+      const { req } = await send(
+        '/api/v1/ai/routing-canary?tenantId=attacker',
+        {},
+        {
+          'x-user-id': 'attacker',
+          'x-user-email': 'attacker@example.test',
+          'x-user-role': 'SUPER_ADMIN',
+          'x-tenant-id': 'foreign',
+          'x-tenant-slug': 'foreign',
+          'x-tenant-name': 'Foreign',
+          'x-user-first-name': 'Attacker',
+          'x-company-role-id': 'forged',
+          'x-user-permissions': '["payroll:APPROVE"]',
+          'x-gateway-permissions-signature': 'forged',
+          'x-gateway-auth-context': 'forged',
+        },
+      );
+      expect(req.headers['x-user-id']).toBe(userId);
+      expect(req.headers['x-tenant-id']).toBe('tenant-a');
+      expect(req.headers['x-user-role']).toBe('EMPLOYEE');
+      expect(req.headers['x-user-email']).toBe('current@example.test');
+      expect(req.headers['x-company-role-id']).toBeUndefined();
+      expect(req.headers['x-gateway-auth-context']).not.toBe('forged');
+      expect(req.headers['x-user-permissions']).toBe('[]');
+    });
+
+    it.each(['careers', 'unknown-restricted', '', null, ['careers']])(
+      'rejects restricted or unsupported scope %p before Auth/proxy',
+      async (scope) => {
+        const { res } = await send('/api/v1/ai/routing-canary', { scope });
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(http.request).not.toHaveBeenCalled();
+        expect(outgoing).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([401, 403, 500])('does not proxy after Auth %s', async (status) => {
+      authStatus = status;
+      const { res } = await send('/api/v1/ai/routing-canary');
+      expect(res.status).toHaveBeenCalledWith(status === 500 ? 503 : status);
+      expect(outgoing).not.toHaveBeenCalled();
+    });
+
+    it.each(['network', 'timeout'] as const)(
+      'fails closed on Auth %s failure',
+      async (kind) => {
+        failure = kind;
+        const { res } = await send('/api/v1/ai/routing-canary');
+        expect(res.status).toHaveBeenCalledWith(503);
+        expect(outgoing).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not reuse prior authorization after revocation', async () => {
+      await send('/api/v1/ai/routing-canary');
+      authStatus = 401;
+      const { res } = await send('/api/v1/ai/routing-canary');
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(outgoing).toHaveBeenCalledTimes(1);
+      expect(http.request).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([undefined, 'not-a-url'])(
+      'fails closed for unconfigured/invalid AI URL %p',
+      async (url) => {
+        if (url === undefined) delete process.env.AI_SERVICE_URL;
+        else process.env.AI_SERVICE_URL = url;
+        const { res } = await send('/api/v1/ai/routing-canary');
+        expect(res.status).toHaveBeenCalledWith(503);
+        expect(outgoing).not.toHaveBeenCalled();
+        await send();
+        expect(outgoing).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(['health', 'ready', 'health/', 'ready/'])(
+      'does not expose the internal %s probe through the business namespace',
+      async (probe) => {
+        const { res } = await send(`/api/v1/ai/${probe}`);
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(outgoing).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      'health',
+      'ready',
+      'inference',
+      'conversations',
+      'eligibility',
+      'docs',
+    ])('does not make AI %s public', async (path) => {
+      const { res } = await send(
+        `/api/v1/ai/${path}`,
+        {},
+        { authorization: '' },
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(http.request).not.toHaveBeenCalled();
+      expect(outgoing).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid session JWTs before Auth/proxy', async () => {
+      const { res } = await send(
+        '/api/v1/ai/routing-canary',
+        {},
+        { authorization: 'Bearer invalid' },
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(outgoing).not.toHaveBeenCalled();
+    });
+
+    it('handles an unavailable AI upstream without leaking details', async () => {
+      let fail: ((error: Error) => void) | undefined;
+      outgoing.mockReturnValue({
+        setTimeout: jest.fn(),
+        on: jest.fn((event: string, handler: (error: Error) => void) => {
+          if (event === 'error') fail = handler;
+        }),
+        end: jest.fn(),
+      });
+      const { res } = await send('/api/v1/ai/routing-canary');
+      fail?.(new Error('connect ECONNREFUSED ai.test:4011'));
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Service temporarily unavailable',
+        statusCode: 503,
+      });
+    });
+
+    it.each([
+      ['HR_SERVICE_URL', '/api/v1/hr/employees', '/employees', 'hr'],
+      [
+        'MARKETING_SERVICE_URL',
+        '/api/v1/marketing/prospects',
+        '/api/prospects',
+        'marketing',
+      ],
+      [
+        'ACCOUNTING_SERVICE_URL',
+        '/api/v1/accounting/journals',
+        '/api/journals',
+        'accounting',
+      ],
+      [
+        'REINSURANCE_SERVICE_URL',
+        '/api/v1/operations/reinsurance/placements',
+        '/api/placements',
+        'reinsurance',
+      ],
+      [
+        'INVENTORY_SERVICE_URL',
+        '/api/v1/operations/inventory/items',
+        '/api/items',
+        'inventory',
+      ],
+    ])(
+      'preserves %s routing and audience',
+      async (envName, path, downstream, audience) => {
+        process.env[envName] = 'http://existing.test:4999';
+        const { req } = await send(path);
+        expect(outgoing).toHaveBeenCalledWith(
+          false,
+          expect.objectContaining({ path: downstream }),
+          expect.any(Function),
+        );
+        expect(
+          jwt.verify(req.headers['x-gateway-auth-context'], secret, {
+            issuer: 'workphelo-gateway',
+            audience,
+          }),
+        ).toMatchObject({ aud: audience });
+      },
+    );
+  });
 });

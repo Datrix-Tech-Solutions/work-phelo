@@ -61,3 +61,33 @@ Browser code should still call same-origin `/api/v1/...` from the app host.
 - `ENABLE_SWAGGER`
 
 Do not commit secret values.
+
+## Optional AI Routing Foundation
+
+`AI_SERVICE_URL` is an optional, operator-controlled HTTP(S) origin (no credentials,
+path, query, or fragment). Missing or invalid configuration disables AI routing
+with a 503 response without preventing ERP startup. AI is an optional health
+dependency; an unreachable or unhealthy AI service does not fail Gateway health.
+The health aggregator may inspect the internal `/api/health` probe, but the
+business namespace does not forward `/api/v1/ai/health` or `/api/v1/ai/ready`.
+
+The reserved `/api/v1/ai/...` namespace maps to `/api/...` using the existing
+JWT verification and live Auth `/me` lookup. Forwarded assertions have audience
+`ai`, expire after 30 seconds, and retain the existing token/permission hash
+binding. Caller identity headers are replaced with current Auth state. Careers
+and other explicitly scoped sessions cannot access AI. Existing assertion
+signatures do not bind request bodies or queries; this slice does not change
+that protocol or authorize any business operation.
+
+Registration itself grants no authenticated AI operation. Phase 2A.3 adds only
+`GET /api/v1/ai/eligibility`, verified by the AI service's exact handler policy
+and trusted-context guard when authentication routes are enabled. Internal
+probes remain excluded from this namespace, and undeclared AI handlers remain
+denied. Mock downstream tests prove routing only, not live Auth/DB validation or
+an available chat/inference API. `AI_ENABLED` is not consulted by Gateway and
+cannot grant inference access.
+
+A later, separately reviewed rollout must supply `AI_SERVICE_URL` through the
+Gateway runtime environment. This change adds no deployment/Compose forwarding,
+provider credentials, or tenant configuration. Downstream trusted-context
+verification is a prerequisite before any authenticated AI handler is added.

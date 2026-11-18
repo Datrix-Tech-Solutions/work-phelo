@@ -11,6 +11,7 @@ export const gatewayOptionalServiceEnvVars = [
   'REINSURANCE_SERVICE_URL',
   'ACCOUNTING_SERVICE_URL',
   'INVENTORY_SERVICE_URL',
+  'AI_SERVICE_URL',
 ] as const;
 
 const allGatewayEnvVars = [
@@ -26,7 +27,8 @@ export type GatewayServiceName =
   | 'marketing'
   | 'reinsurance'
   | 'accounting'
-  | 'inventory';
+  | 'inventory'
+  | 'ai';
 
 export const gatewayRequiredServices: GatewayServiceName[] = [
   'auth',
@@ -40,6 +42,7 @@ export const gatewayOptionalServices: GatewayServiceName[] = [
   'reinsurance',
   'accounting',
   'inventory',
+  'ai',
 ];
 
 export const gatewayServiceConfig: Record<
@@ -82,6 +85,11 @@ export const gatewayServiceConfig: Record<
     healthPath: '/api/health',
     downstreamPrefix: '/api',
   },
+  ai: {
+    envVar: 'AI_SERVICE_URL',
+    healthPath: '/api/health',
+    downstreamPrefix: '/api',
+  },
 };
 
 export function assertGatewayRuntimeEnv(): void {
@@ -97,15 +105,36 @@ export function assertGatewayRuntimeEnv(): void {
 export function getGatewayServiceUrl(
   serviceName: GatewayServiceName,
 ): string | undefined {
-  return process.env[gatewayServiceConfig[serviceName].envVar];
+  const value = process.env[gatewayServiceConfig[serviceName].envVar];
+  if (serviceName !== 'ai' || !value) return value;
+
+  // Invalid optional AI configuration disables only AI, never ordinary ERP startup.
+  try {
+    const url = new URL(value);
+    if (
+      value !== value.trim() ||
+      !['http:', 'https:'].includes(url.protocol) ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      return undefined;
+    }
+    return url.origin;
+  } catch {
+    return undefined;
+  }
 }
 
 export function getConfiguredGatewayServices(): Partial<
   Record<GatewayServiceName, string>
 > {
-  return Object.entries(gatewayServiceConfig).reduce(
-    (services, [serviceName, config]) => {
-      const value = process.env[config.envVar];
+  return Object.keys(gatewayServiceConfig).reduce(
+    (services, serviceName) => {
+      const value = getGatewayServiceUrl(serviceName as GatewayServiceName);
       if (value) {
         services[serviceName as GatewayServiceName] = value;
       }

@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { ExecutionContext } from '@nestjs/common';
 import { HealthController } from '../health/health.controller';
 import { FoundationOnlyGuard } from './foundation-only.guard';
+import { TrustedAuthGuard } from '../auth/trusted-auth.guard';
+import { EligibilityController } from '../eligibility/eligibility.controller';
 
 class OtherController {
   health() {
@@ -14,7 +16,15 @@ const readyHandler = Object.getOwnPropertyDescriptor(HealthController.prototype,
   ?.value as unknown;
 
 describe('Foundation-only route registry', () => {
-  const guard = new FoundationOnlyGuard();
+  const authenticate = jest.fn(() => true);
+  const guard = new FoundationOnlyGuard({
+    canActivate: authenticate,
+  } as unknown as TrustedAuthGuard);
+  const setHeader = jest.fn();
+  beforeEach(() => {
+    authenticate.mockClear();
+    setHeader.mockClear();
+  });
   function context(
     controller: unknown,
     handler: unknown,
@@ -25,6 +35,7 @@ describe('Foundation-only route registry', () => {
       getClass: () => controller,
       getHandler: () => handler,
       switchToHttp: () => ({
+        getResponse: () => ({ setHeader }),
         getRequest: () => ({
           path,
           method,
@@ -37,6 +48,22 @@ describe('Foundation-only route registry', () => {
   it('exempts only the exact two registered handlers', () => {
     expect(guard.canActivate(context(HealthController, healthHandler))).toBe(true);
     expect(guard.canActivate(context(HealthController, readyHandler, '/api/ready'))).toBe(true);
+  });
+  it('always authenticates the exact eligibility handler without relying on a decorator', () => {
+    const handler = Object.getOwnPropertyDescriptor(EligibilityController.prototype, 'eligibility')
+      ?.value as unknown;
+    expect(guard.canActivate(context(EligibilityController, handler, '/api/eligibility'))).toBe(
+      true,
+    );
+    expect(authenticate).toHaveBeenCalledTimes(1);
+    expect(setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(() => guard.canActivate(context(OtherController, handler, '/api/eligibility'))).toThrow(
+      'Forbidden',
+    );
+    expect(() =>
+      guard.canActivate(context(EligibilityController, handler, '/api/eligibility', 'HEAD')),
+    ).toThrow('Forbidden');
+    expect(authenticate).toHaveBeenCalledTimes(1);
   });
   it('denies matching paths on another controller, even when borrowing a probe handler', () => {
     expect(() => guard.canActivate(context(OtherController, healthHandler))).toThrow('Forbidden');
