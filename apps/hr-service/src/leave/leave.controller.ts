@@ -25,6 +25,7 @@ import {
 import { LeaveService } from './leave.service';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { CreateOnBehalfLeaveRequestDto } from './dto/create-on-behalf-leave-request.dto';
 import { CreatePublicHolidayDto } from './dto/create-public-holiday.dto';
 import { QueryLeaveRequestsDto } from './dto/query-leave-requests.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
@@ -240,6 +241,30 @@ export class LeaveController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.createRequest(req.user.tenantId, req.user, dto);
+  }
+
+  @Post('requests/on-behalf')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.APPROVE_LEAVE)
+  @ApiOperation({
+    summary:
+      'Record leave for another employee. It is saved as approved with no approval step.',
+  })
+  @ApiBody({ type: CreateOnBehalfLeaveRequestDto })
+  @ApiResponse({ status: 201, description: 'Leave recorded and approved' })
+  @ApiResponse({
+    status: 403,
+    description: 'Cannot record leave for yourself',
+  })
+  createRequestOnBehalf(
+    @Body() dto: CreateOnBehalfLeaveRequestDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.leaveService.createRequestOnBehalf(
+      req.user.tenantId,
+      req.user,
+      dto,
+    );
   }
 
   @PermissionExempt(

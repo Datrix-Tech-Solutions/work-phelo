@@ -6,6 +6,7 @@ import {
   LeaveBalance,
   CreateLeaveTypeDto,
   CreateLeaveRequestDto,
+  CreateOnBehalfLeaveRequestDto,
 } from '@/types/hr';
 
 // ─── Query Key Factory ────────────────────────────────────────────────────────
@@ -210,6 +211,29 @@ export function useCreateLeaveRequest() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+/** Records leave for another employee as already approved (needs leave:APPROVE). */
+export function useCreateLeaveRequestOnBehalf() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: CreateOnBehalfLeaveRequestDto) => {
+      const res = await api.post<RawCreateLeaveRequestResponse>(
+        '/hr/leave/requests/on-behalf',
+        payload,
+      );
+      return {
+        request: transformRequest(res.data.request),
+        message: res.data.message,
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },

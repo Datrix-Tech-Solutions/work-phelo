@@ -1462,6 +1462,8 @@ model LeaveRequest {
   rejectedBy             String?
   rejectedAt             DateTime?
   rejectionNote          String?
+  /// Set when someone filed the (already approved) request on the employee's behalf.
+  requestedByUserId      String?
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
