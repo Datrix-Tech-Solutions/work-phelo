@@ -6,6 +6,8 @@ export interface AiRuntimeConfig {
   AI_SERVICE_PORT: number;
   AI_REQUEST_TIMEOUT_MS: number;
   AI_POLICY_VERSION: string;
+  AI_AUTHENTICATED_ROUTES_ENABLED: boolean;
+  JWT_SECRET?: string;
 }
 
 export class RuntimeConfigurationError extends Error {
@@ -59,6 +61,14 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
   }
   const enabled = booleanValue(env, 'AI_ENABLED');
   const mockEnabled = booleanValue(env, 'AI_MOCK_ENABLED');
+  const authenticatedRoutes = booleanValue(env, 'AI_AUTHENTICATED_ROUTES_ENABLED');
+  const secret = env.JWT_SECRET;
+  if (
+    authenticatedRoutes &&
+    (typeof secret !== 'string' || !secret.trim() || secret !== secret.trim())
+  ) {
+    throw new RuntimeConfigurationError('JWT_SECRET');
+  }
   // Neither flag can enable mock execution in a production process.
   if (nodeEnv === 'production' && (enabled || mockEnabled)) {
     throw new RuntimeConfigurationError('AI_ENABLED/AI_MOCK_ENABLED');
@@ -71,5 +81,7 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
     AI_SERVICE_PORT: integerValue(env, 'AI_SERVICE_PORT', 4011, 65535),
     AI_REQUEST_TIMEOUT_MS: integerValue(env, 'AI_REQUEST_TIMEOUT_MS', 5000, 25000),
     AI_POLICY_VERSION: policy,
+    AI_AUTHENTICATED_ROUTES_ENABLED: authenticatedRoutes,
+    ...(authenticatedRoutes ? { JWT_SECRET: secret as string } : {}),
   };
 }

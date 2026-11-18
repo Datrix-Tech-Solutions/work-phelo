@@ -326,6 +326,13 @@ export class ProxyController {
           process.env.JWT_SECRET!,
         ) as JwtPayload;
 
+        if (service === 'ai' && payload.scope !== undefined) {
+          return res.status(403).json({
+            message: 'This session cannot access this resource',
+            statusCode: 403,
+          });
+        }
+
         // Tokens issued to the careers site may only reach the job-posting routes.
         if (
           payload.scope === 'careers' &&
@@ -400,6 +407,11 @@ export class ProxyController {
     const remainingParts = pathParts.slice(consumedPathParts);
     const downstreamPath = '/' + remainingParts.join('/');
 
+    // Foundation probes are internal operational endpoints, not assistant APIs.
+    if (service === 'ai' && ['/health', '/ready'].includes(downstreamPath)) {
+      return res.status(404).json({ message: 'Not found', statusCode: 404 });
+    }
+
     const queryString = req.url.includes('?')
       ? req.url.substring(req.url.indexOf('?'))
       : '';
@@ -409,7 +421,11 @@ export class ProxyController {
         : '';
     const targetPath = downstreamPrefix + downstreamPath + queryString;
 
-    this.logger.log(`${req.method} ${req.path} → ${serviceUrl}${targetPath}`);
+    this.logger.log(
+      service === 'ai'
+        ? `${req.method} /api/v1/ai → ai`
+        : `${req.method} ${req.path} → ${serviceUrl}${targetPath}`,
+    );
 
     const url = new URL(serviceUrl);
     const isHttps = url.protocol === 'https:';
@@ -476,7 +492,9 @@ export class ProxyController {
       timedOut = true;
       cleanupProxyListeners();
       this.logger.warn(
-        `Proxy timeout → ${serviceUrl}${targetPath} after ${proxyTimeoutMs}ms`,
+        service === 'ai'
+          ? `AI proxy timeout after ${proxyTimeoutMs}ms`
+          : `Proxy timeout → ${serviceUrl}${targetPath} after ${proxyTimeoutMs}ms`,
       );
       proxyReq.destroy();
       if (!res.headersSent && !res.writableEnded) {
@@ -496,7 +514,9 @@ export class ProxyController {
       }
 
       this.logger.error(
-        `Proxy error → ${serviceUrl}${targetPath}: ${err.message}`,
+        service === 'ai'
+          ? 'AI proxy unavailable'
+          : `Proxy error → ${serviceUrl}${targetPath}: ${err.message}`,
       );
       if (!res.headersSent && !res.writableEnded) {
         res.status(503).json({

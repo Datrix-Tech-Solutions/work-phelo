@@ -12,6 +12,7 @@ describe('AI runtime configuration', () => {
       ...valid,
       AI_ENABLED: false,
       AI_MOCK_ENABLED: false,
+      AI_AUTHENTICATED_ROUTES_ENABLED: false,
       AI_SERVICE_PORT: 4011,
       AI_REQUEST_TIMEOUT_MS: 5000,
     });
@@ -47,12 +48,40 @@ describe('AI runtime configuration', () => {
     );
   });
 
-  it.each(['AI_ENABLED', 'AI_MOCK_ENABLED'])('strictly parses %s', (name) => {
-    for (const value of ['', 'TRUE', 'False', '1', '0', 'yes', ' false ', true, null]) {
-      expect(() => parseRuntimeEnv({ ...valid, [name]: value })).toThrow(
-        new RuntimeConfigurationError(name),
-      );
-    }
+  it.each(['AI_ENABLED', 'AI_MOCK_ENABLED', 'AI_AUTHENTICATED_ROUTES_ENABLED'])(
+    'strictly parses %s',
+    (name) => {
+      for (const value of ['', 'TRUE', 'False', '1', '0', 'yes', ' false ', true, null]) {
+        expect(() => parseRuntimeEnv({ ...valid, [name]: value })).toThrow(
+          new RuntimeConfigurationError(name),
+        );
+      }
+    },
+  );
+
+  it.each([undefined, '', ' ', ' secret ', null, 123])(
+    'requires a usable JWT_SECRET only when authentication is enabled: %p',
+    (JWT_SECRET) => {
+      expect(() =>
+        parseRuntimeEnv({ ...valid, AI_AUTHENTICATED_ROUTES_ENABLED: 'true', JWT_SECRET }),
+      ).toThrow('JWT_SECRET');
+      expect(parseRuntimeEnv({ ...valid, JWT_SECRET })).not.toHaveProperty('JWT_SECRET');
+    },
+  );
+
+  it('enables verification independently of inference without enabling any HTTP handler', () => {
+    expect(
+      parseRuntimeEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        AI_AUTHENTICATED_ROUTES_ENABLED: 'true',
+        JWT_SECRET: 'test-only-shared-secret',
+      }),
+    ).toMatchObject({
+      AI_AUTHENTICATED_ROUTES_ENABLED: true,
+      AI_ENABLED: false,
+      AI_MOCK_ENABLED: false,
+    });
   });
 
   it.each(['AI_SERVICE_PORT', 'AI_REQUEST_TIMEOUT_MS'])('rejects malformed %s', (name) => {
