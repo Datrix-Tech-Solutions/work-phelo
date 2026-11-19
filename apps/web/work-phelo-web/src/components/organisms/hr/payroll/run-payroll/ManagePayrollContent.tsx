@@ -86,7 +86,7 @@ export function ManagePayrollContent() {
   const visibleTypes = PAYSLIP_TYPE_ORDER.filter((key) => rows.some((r) => typeOf(r) === key));
   const tab = visibleTypes.includes(chosenTab) ? chosenTab : (visibleTypes[0] ?? chosenTab);
   const tabRows = rows.filter((r) => typeOf(r) === tab);
-  // A run is paid in one currency: the one its configurations share.
+  // A type paid in several currencies is run as one run per currency, made together.
   const tabCurrencies = [...new Set(tabRows.map((r) => r.configuration.currency))];
   const currency = tabCurrencies[0] ?? DEFAULT_CURRENCY;
   const visibleRows = tabRows.filter((r) =>
@@ -112,13 +112,11 @@ export function ManagePayrollContent() {
     ? 'Payroll for this month was already run in the old system. See History.'
     : locked
       ? null
-      : tabCurrencies.length > 1
-        ? `${type.label} payroll uses configurations in different currencies (${tabCurrencies.join(', ')}). Use one currency for them.`
-        : unassigned.length > 0
-          ? `Running is blocked until everyone on payroll has a payroll group (${unassigned.length} without one). Add them on Payroll Groups.`
-          : problems > 0
-            ? `${problems} ${problems === 1 ? 'payslip' : 'payslips'} can't be worked out yet. Open ${problems === 1 ? 'it' : 'them'} to see why.`
-            : null;
+      : unassigned.length > 0
+        ? `Running is blocked until everyone on payroll has a payroll group (${unassigned.length} without one). Add them on Payroll Groups.`
+        : problems > 0
+          ? `${problems} ${problems === 1 ? 'payslip' : 'payslips'} can't be worked out yet. Open ${problems === 1 ? 'it' : 'them'} to see why.`
+          : null;
 
   const runNow = async () => {
     try {
@@ -147,6 +145,23 @@ export function ManagePayrollContent() {
   const total = (pick: (r: PayslipResult) => number, list: Row[] = tabRows) =>
     list.reduce((sum, r) => sum + (r.result ? pick(r.result) : 0), 0);
 
+  // Totals are kept per currency: amounts in different currencies must never be added together.
+  const totalText = (pick: (r: PayslipResult) => number, list: Row[] = tabRows) => {
+    const codes = [...new Set(list.map((r) => r.configuration.currency))];
+    if (codes.length === 0) return formatAmount(0, currency);
+    return codes
+      .map((code) =>
+        formatAmount(
+          total(
+            pick,
+            list.filter((r) => r.configuration.currency === code),
+          ),
+          code,
+        ),
+      )
+      .join(' · ');
+  };
+
   const allowanceTotal = (row: Row) =>
     row.components
       .filter((c) => c.enabled && c.kind === 'earning' && c.params.source === 'allowance')
@@ -163,7 +178,7 @@ export function ManagePayrollContent() {
     }));
 
   const money = (row: Row, pick: (r: PayslipResult) => number) =>
-    row.result ? formatAmount(pick(row.result), currency) : '-';
+    row.result ? formatAmount(pick(row.result), row.configuration.currency) : '-';
 
   const allColumns: Column<Row>[] = [
     {
@@ -243,7 +258,9 @@ export function ManagePayrollContent() {
       key: 'allowances',
       label: 'Allowances',
       render: (r) => (
-        <span className="tabular-nums">{formatAmount(allowanceTotal(r), currency)}</span>
+        <span className="tabular-nums">
+          {formatAmount(allowanceTotal(r), r.configuration.currency)}
+        </span>
       ),
     },
     { key: 'gross', label: 'Gross', render: (r) => money(r, (x) => x.gross) },
@@ -274,10 +291,7 @@ export function ManagePayrollContent() {
               <KpiCard
                 key={group.id}
                 label={group.name}
-                value={formatAmount(
-                  total((r) => r.employerCost, groupRows),
-                  currency,
-                )}
+                value={totalText((r) => r.employerCost, groupRows)}
                 icon={Users}
                 iconColor="#2a78d6"
                 sub={[{ label: 'Employees', value: group.employeeCount }]}
@@ -330,37 +344,25 @@ export function ManagePayrollContent() {
       <div className="grid shrink-0 grid-cols-2 gap-4 md:grid-cols-4">
         <KpiCard
           label="Total Gross"
-          value={formatAmount(
-            total((r) => r.gross),
-            currency,
-          )}
+          value={totalText((r) => r.gross)}
           icon={TrendingUp}
           iconColor="#2a78d6"
         />
         <KpiCard
           label="Total Net Pay"
-          value={formatAmount(
-            total((r) => r.net),
-            currency,
-          )}
+          value={totalText((r) => r.net)}
           icon={TrendingUp}
           iconColor="#1baf7a"
         />
         <KpiCard
           label="Total Deductions"
-          value={formatAmount(
-            total((r) => r.totalDeductions),
-            currency,
-          )}
+          value={totalText((r) => r.totalDeductions)}
           icon={TrendingDown}
           iconColor="#eda100"
         />
         <KpiCard
           label="Employer Cost"
-          value={formatAmount(
-            total((r) => r.employerCost),
-            currency,
-          )}
+          value={totalText((r) => r.employerCost)}
           icon={TrendingUp}
           iconColor="#2a78d6"
         />
@@ -405,34 +407,10 @@ export function ManagePayrollContent() {
         <dl className="mb-4 divide-y divide-gray-100 rounded-lg border border-gray-200 text-sm">
           {[
             ['Payslips', String(tabRows.length)],
-            [
-              'Total gross',
-              formatAmount(
-                total((r) => r.gross),
-                currency,
-              ),
-            ],
-            [
-              'Total deductions',
-              formatAmount(
-                total((r) => r.totalDeductions),
-                currency,
-              ),
-            ],
-            [
-              'Total net pay',
-              formatAmount(
-                total((r) => r.net),
-                currency,
-              ),
-            ],
-            [
-              'Employer cost',
-              formatAmount(
-                total((r) => r.employerCost),
-                currency,
-              ),
-            ],
+            ['Total gross', totalText((r) => r.gross)],
+            ['Total deductions', totalText((r) => r.totalDeductions)],
+            ['Total net pay', totalText((r) => r.net)],
+            ['Employer cost', totalText((r) => r.employerCost)],
           ].map(([label, value]) => (
             <div key={label} className="flex items-center justify-between px-3 py-2">
               <dt className="text-gray-500">{label}</dt>
@@ -463,7 +441,7 @@ export function ManagePayrollContent() {
         <PayslipPanel
           key={selected.id}
           row={selected}
-          currency={currency}
+          currency={selected.configuration.currency}
           monthEnd={monthEnd}
           readOnly={locked}
           basic={basicFor(selected.employee, figures)}

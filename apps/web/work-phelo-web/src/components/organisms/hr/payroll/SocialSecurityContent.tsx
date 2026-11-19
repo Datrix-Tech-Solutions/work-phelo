@@ -10,7 +10,7 @@ import { Column, DataTable } from '../../shared/DataTable';
 import { usePayrollRuns, usePayrollRun, useAllEmployees, usePayrollSettings } from '@/hooks';
 import { PayrollItem, PayrollRun } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
-import { formatPayrollMoney } from '@/lib/payrollDisplay';
+import { currencyTag, formatPayrollMoney } from '@/lib/payrollDisplay';
 
 type Kind = 'employee' | 'employer' | 'pension';
 
@@ -205,7 +205,7 @@ export function SocialSecurityContent() {
               placeholder="Select payroll run…"
               options={availableRuns.map<SearchSelectOption>((r) => ({
                 value: r.id,
-                label: `${runLabel(r)}, ${fmtStatus(r.status)}`,
+                label: `${runLabel(r)}${currencyTag(r, availableRuns)}, ${fmtStatus(r.status)}`,
               }))}
               value={selectedRunId || runId}
               onChange={(v) => setSelectedRunId(v)}

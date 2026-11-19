@@ -176,7 +176,7 @@ export function useRunConfiguredPayroll() {
 
   return useMutation({
     mutationFn: async (payload: RunConfiguredPayrollDto) => {
-      const res = await api.post<PayrollRun>('/hr/payroll-runs', payload);
+      const res = await api.post<PayrollRun[]>('/hr/payroll-runs', payload);
       return res.data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payroll'] }),

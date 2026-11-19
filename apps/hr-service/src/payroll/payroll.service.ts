@@ -655,14 +655,13 @@ export class PayrollService {
   }
 
   async runPayroll(tenantId: string, runBy: string, dto: RunPayrollDto) {
-    const existing = await this.prisma.payrollRun.findUnique({
+    // A month has one old-system run, whatever currency it was made in.
+    const existing = await this.prisma.payrollRun.findFirst({
       where: {
-        tenantId_month_year_payslipKey: {
-          tenantId,
-          month: dto.month,
-          year: dto.year,
-          payslipKey: 'legacy',
-        },
+        tenantId,
+        month: dto.month,
+        year: dto.year,
+        payslipKey: 'legacy',
       },
     });
 
@@ -735,14 +734,17 @@ export class PayrollService {
     const totals = this.calculateRunTotals(payrollItems);
 
     return this.prisma.payrollRun.upsert({
-      where: {
-        tenantId_month_year_payslipKey: {
-          tenantId,
-          month: dto.month,
-          year: dto.year,
-          payslipKey: 'legacy',
-        },
-      },
+      where: existing
+        ? { id: existing.id }
+        : {
+            tenantId_month_year_payslipKey_payrollCurrency: {
+              tenantId,
+              month: dto.month,
+              year: dto.year,
+              payslipKey: 'legacy',
+              payrollCurrency: settings.payrollCurrency,
+            },
+          },
       update: {
         status: 'DRAFT',
         totalGross: totals.totalGross.toString(),

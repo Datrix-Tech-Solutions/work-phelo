@@ -13,6 +13,7 @@ import {
   formatPayrollMoney,
   getPayrollLabels,
   normalizePayrollCountry,
+  currencyTag,
 } from '@/lib/payrollDisplay';
 
 const GH_MAX_INSURABLE = 69_000;
@@ -241,7 +242,7 @@ export function SSNITTab() {
               placeholder="Select payroll run…"
               options={availableRuns.map<SearchSelectOption>((r) => ({
                 value: r.id,
-                label: payrollMonthLabel(r.month, r.year),
+                label: `${payrollMonthLabel(r.month, r.year)}${currencyTag(r, availableRuns)}`,
                 sublabel: fmtStatus(r.status),
               }))}
               value={selectedRunId || runId}
