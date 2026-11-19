@@ -7,6 +7,10 @@ import { HealthModule } from './health/health.module';
 import { FoundationOnlyGuard } from './security/foundation-only.guard';
 import { TrustedAuthModule } from './auth/trusted-auth.module';
 import { EligibilityController } from './eligibility/eligibility.controller';
+import { PersistenceModule } from './persistence/persistence.module';
+import { MessageEncryptionModule } from './encryption/encryption.module';
+import { RequestIntegrityModule } from './request-integrity/request-integrity.module';
+import { ConversationAuthorizationModule } from './security/conversation-authorization.module';
 
 export interface ConfigurationOptions {
   envFilePath?: string;
@@ -29,6 +33,10 @@ export class AppModule {
         InferenceModule,
         HealthModule,
         TrustedAuthModule,
+        PersistenceModule,
+        MessageEncryptionModule,
+        RequestIntegrityModule,
+        ConversationAuthorizationModule,
       ],
       providers: [{ provide: APP_GUARD, useClass: FoundationOnlyGuard }],
     };

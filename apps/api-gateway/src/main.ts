@@ -9,6 +9,7 @@ import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
 import { assertGatewayRuntimeEnv } from './config/runtime-env';
 import { httpCorsOptions } from './config/cors';
+import { aiConversationJsonBoundary } from './proxy/ai-conversation-body';
 
 const ORDINARY_BODY_LIMIT = process.env.HTTP_BODY_LIMIT ?? '1mb';
 const DEFAULT_TRUST_PROXY_HOPS = 1;
@@ -27,6 +28,7 @@ async function bootstrap() {
   assertGatewayRuntimeEnv();
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   app.enableShutdownHooks();
+  app.use(aiConversationJsonBoundary());
   app.use(json({ limit: ORDINARY_BODY_LIMIT }));
   app.use(urlencoded({ extended: true, limit: ORDINARY_BODY_LIMIT }));
   app

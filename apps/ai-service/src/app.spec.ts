@@ -73,8 +73,10 @@ describe('AI foundation bootstrap', () => {
         await request(app.getHttpServer())
           .post(path)
           .send({ tenantId: 'spoofed', userId: 'spoofed' })
-          .expect(404);
-        await request(app.getHttpServer()).get(path).expect(404);
+          .expect(path === '/api/conversations' ? 503 : 404);
+        await request(app.getHttpServer())
+          .get(path)
+          .expect(path === '/api/conversations' ? 503 : 404);
       }
       const response = await request(app.getHttpServer()).get('/api/missing');
       expect(response.headers['x-content-type-options']).toBe('nosniff');

@@ -1,5 +1,6 @@
 import 'reflect-metadata';
-import { ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { ConversationAuthorizationService } from './conversation-authorization.service';
 import { HealthController } from '../health/health.controller';
 import { FoundationOnlyGuard } from './foundation-only.guard';
 import { TrustedAuthGuard } from '../auth/trusted-auth.guard';
@@ -17,9 +18,14 @@ const readyHandler = Object.getOwnPropertyDescriptor(HealthController.prototype,
 
 describe('Foundation-only route registry', () => {
   const authenticate = jest.fn(() => true);
-  const guard = new FoundationOnlyGuard({
-    canActivate: authenticate,
-  } as unknown as TrustedAuthGuard);
+  const guard = new FoundationOnlyGuard(
+    { canActivate: authenticate } as unknown as TrustedAuthGuard,
+    {
+      authorize: () => {
+        throw new ForbiddenException();
+      },
+    } as unknown as ConversationAuthorizationService,
+  );
   const setHeader = jest.fn();
   beforeEach(() => {
     authenticate.mockClear();

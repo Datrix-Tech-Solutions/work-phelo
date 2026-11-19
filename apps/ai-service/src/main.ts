@@ -17,7 +17,11 @@ export async function createApplication(
     abortOnError: false,
     logger: false,
   });
-  configureApplication(app, log);
+  configureApplication(
+    app,
+    log,
+    app.get(ConfigService).get<unknown>('AI_REQUEST_VERIFICATION_ENABLED') === true,
+  );
   return app;
 }
 

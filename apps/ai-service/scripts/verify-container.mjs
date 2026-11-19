@@ -76,11 +76,19 @@ try {
     const assert = require('node:assert/strict'), fs = require('node:fs');
     (async () => {
       assert(process.getuid() > 0);
-      for (const name of ['prisma', '@prisma/client', '@nestjs/cli', 'jest']) {
+      for (const name of ['prisma', '@nestjs/cli', 'jest']) {
         assert.throws(() => require.resolve(name));
       }
       assert(!fs.existsSync('/app/apps/ai-service/src'));
-      assert(!fs.existsSync('/app/apps/ai-service/prisma'));
+      assert(fs.existsSync('/app/apps/ai-service/prisma/generated/client/index.js'));
+      const { PrismaClient, Prisma } = require('./prisma/generated/client');
+      const client = new PrismaClient({datasources:{db:{url:'postgresql://fixture:fixture@127.0.0.1:1/workphelo_ai_2b1?schema=ai&connect_timeout=1'}},log:[]});
+      try {
+        // P1001 proves the generated engine loads with runtime OpenSSL/dependencies;
+        // network-none and loopback port 1 deliberately prevent any database access.
+        await assert.rejects(client.$connect(), error => error instanceof Prisma.PrismaClientInitializationError && error.errorCode === 'P1001');
+      } finally { await client.$disconnect(); }
+      assert(!fs.existsSync('/app/apps/ai-service/prisma/migrations'));
       assert.deepEqual(fs.readdirSync('/app/apps'), ['ai-service']);
       assert.equal(process.env.DATABASE_URL, undefined);
       const health = await fetch('http://127.0.0.1:4011/api/health');
@@ -91,9 +99,10 @@ try {
       assert.deepEqual(await ready.json(), {status:'ready',service:'ai-service',inferenceAvailable:false});
       for (const path of ['chat','generate','messages','conversations','private-b6-canary?token=private-b6-query']) {
         const response = await fetch('http://127.0.0.1:4011/api/'+path, {headers:{'x-user-role':'SUPER_ADMIN','x-user-id':'private-b6-user','x-tenant-id':'private-b6-tenant','x-request-id':'private-b6-id'}});
-        assert.equal(response.status, 404);
+        assert.equal(response.status, path === 'conversations' ? 503 : 404);
         const body = await response.json();
-        assert.equal(body.code, 'NOT_FOUND');
+        assert.equal(body.code, path === 'conversations' ? 'SERVICE_UNAVAILABLE' : 'NOT_FOUND');
+        if (path === 'conversations') assert.equal(response.headers.get('cache-control'), 'no-store');
         assert.equal(body.requestId, response.headers.get('x-request-id'));
       }
       const net = require('node:net');
@@ -103,7 +112,7 @@ try {
         socket.once('error',()=>{socket.destroy();resolve();});
         socket.setTimeout(1000,()=>{socket.destroy();reject(new Error('Expected immediate network isolation'));});
       });
-      console.log('Runtime, probes, non-root, production dependencies, and egress isolation PASS');
+      console.log('Runtime, probes, non-root, production Prisma engine/dependencies, and egress isolation PASS');
     })().catch(error=>{console.error(error.message);process.exitCode=1;});
   `,
   );

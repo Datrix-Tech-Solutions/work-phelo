@@ -13,6 +13,15 @@ describe('AI runtime configuration', () => {
       AI_ENABLED: false,
       AI_MOCK_ENABLED: false,
       AI_AUTHENTICATED_ROUTES_ENABLED: false,
+      AI_PERSISTENCE_ENABLED: false,
+      AI_MESSAGE_ENCRYPTION_ENABLED: false,
+      AI_MESSAGE_OPERATIONS_ENABLED: false,
+      AI_RETENTION_CLEANUP_ENABLED: false,
+      AI_RETENTION_SCHEDULER_ENABLED: false,
+      AI_REQUEST_VERIFICATION_ENABLED: false,
+      AI_CONVERSATION_HTTP_ENABLED: false,
+      AI_CLEANUP_BATCH_SIZE: 25,
+      AI_CLEANUP_INTERVAL_MS: 60000,
       AI_SERVICE_PORT: 4011,
       AI_REQUEST_TIMEOUT_MS: 5000,
     });
@@ -48,16 +57,24 @@ describe('AI runtime configuration', () => {
     );
   });
 
-  it.each(['AI_ENABLED', 'AI_MOCK_ENABLED', 'AI_AUTHENTICATED_ROUTES_ENABLED'])(
-    'strictly parses %s',
-    (name) => {
-      for (const value of ['', 'TRUE', 'False', '1', '0', 'yes', ' false ', true, null]) {
-        expect(() => parseRuntimeEnv({ ...valid, [name]: value })).toThrow(
-          new RuntimeConfigurationError(name),
-        );
-      }
-    },
-  );
+  it.each([
+    'AI_ENABLED',
+    'AI_MOCK_ENABLED',
+    'AI_AUTHENTICATED_ROUTES_ENABLED',
+    'AI_PERSISTENCE_ENABLED',
+    'AI_MESSAGE_ENCRYPTION_ENABLED',
+    'AI_MESSAGE_OPERATIONS_ENABLED',
+    'AI_RETENTION_CLEANUP_ENABLED',
+    'AI_RETENTION_SCHEDULER_ENABLED',
+    'AI_REQUEST_VERIFICATION_ENABLED',
+    'AI_CONVERSATION_HTTP_ENABLED',
+  ])('strictly parses %s', (name) => {
+    for (const value of ['', 'TRUE', 'False', '1', '0', 'yes', ' false ', true, null]) {
+      expect(() => parseRuntimeEnv({ ...valid, [name]: value })).toThrow(
+        new RuntimeConfigurationError(name),
+      );
+    }
+  });
 
   it.each([undefined, '', ' ', ' secret ', null, 123])(
     'requires a usable JWT_SECRET only when authentication is enabled: %p',
