@@ -84,8 +84,9 @@ export class PayrollRunsService {
         'Payroll for this month was already run in the old system.',
       );
     }
-    const sameType = existing.find((r) => r.payslipKey === payslipType);
-    if (sameType && sameType.status !== 'DRAFT') {
+    // A type paid in several currencies has one run per currency; they are run and replaced together.
+    const sameType = existing.filter((r) => r.payslipKey === payslipType);
+    if (sameType.some((r) => r.status !== 'DRAFT')) {
       throw new ConflictException(
         `${type.label} payroll for this month has already been run. Return it to draft to run it again.`,
       );
@@ -168,18 +169,6 @@ export class PayrollRunsService {
         `No one is paid ${type.label.toLowerCase()} through a payroll group.`,
       );
     }
-
-    // A run is paid in one currency, so every configuration it uses must agree.
-    const currencies = [
-      ...new Set(members.map(({ configuration }) => configuration.currency)),
-    ];
-    if (currencies.length > 1) {
-      throw new BadRequestException(
-        `${type.label} payroll uses configurations in different currencies (${currencies.join(', ')}). ` +
-          'Change the configurations or payroll groups so they share one currency.',
-      );
-    }
-    const currency = currencies[0];
 
     // Each configuration's version in force must be usable before anyone is calculated.
     const versions = new Map<string, ReturnType<typeof versionInForce>>();
@@ -300,104 +289,138 @@ export class PayrollRunsService {
       );
     }
 
-    const runTotals: RoleTotals = sumRoleTotals(payslips.map((p) => p.totals));
-    const sum = (pick: (p: (typeof payslips)[number]) => number) =>
-      payslips.reduce((total, p) => total + pick(p), 0);
-    const totalNet = sum((p) => p.result.net);
-    const totalEmployerCost = sum((p) => p.result.employerCost);
+    // A run is paid in one currency, so a type paid in several gets one run for each, made together.
+    const currencies = [
+      ...new Set(payslips.map((p) => p.configuration.currency)),
+    ];
 
-    const run = await this.prisma.$transaction(async (tx) => {
-      // A run returned to draft is replaced by the new one.
-      if (sameType) await tx.payrollRun.delete({ where: { id: sameType.id } });
+    const runs = await this.prisma.$transaction(async (tx) => {
+      // Runs returned to draft are replaced by the new ones.
+      if (sameType.length) {
+        await tx.payrollRun.deleteMany({
+          where: { id: { in: sameType.map((r) => r.id) } },
+        });
+      }
 
-      return tx.payrollRun.create({
-        data: {
-          tenantId,
-          month,
-          year,
-          payslipKey: payslipType,
-          status: 'DRAFT',
-          runBy: actor.id,
-          notes: dto.notes,
-          payrollCurrency: currency,
-          totalGross: money(runTotals.grossPay),
-          totalNet: money(totalNet),
-          totalEmployerCost: money(totalEmployerCost),
-          totalEmployeeSocialSecurity: money(runTotals.employeeSocialSecurity),
-          totalPension: money(runTotals.pension),
-          totalIncomeTax: money(runTotals.incomeTax),
-          totalOtherDeductions: money(runTotals.otherDeductions),
-          totalEmployerSocialSecurity: money(runTotals.employerSocialSecurity),
-          // The old totals are filled from the same roles so screens that still read them show
-          // sensible figures for these runs.
-          totalSSNIT: money(runTotals.employeeSocialSecurity),
-          totalPAYE: money(runTotals.incomeTax),
-          items: {
-            create: payslips.map((p) => ({
+      const created: { id: string }[] = [];
+      for (const currency of currencies) {
+        const inCurrency = payslips.filter(
+          (p) => p.configuration.currency === currency,
+        );
+        const runTotals: RoleTotals = sumRoleTotals(
+          inCurrency.map((p) => p.totals),
+        );
+        const sum = (pick: (p: (typeof payslips)[number]) => number) =>
+          inCurrency.reduce((total, p) => total + pick(p), 0);
+        const totalNet = sum((p) => p.result.net);
+        const totalEmployerCost = sum((p) => p.result.employerCost);
+
+        created.push(
+          await tx.payrollRun.create({
+            data: {
               tenantId,
-              employeeId: p.employee.id,
-              basicSalary: money(p.basic),
-              commissionFigure: money(p.commissionFigure),
-              totalAllowances: money(
-                p.paidAllowances.reduce(
-                  (total, a) => total + Number(a.amount),
-                  0,
-                ),
+              month,
+              year,
+              payslipKey: payslipType,
+              status: 'DRAFT',
+              runBy: actor.id,
+              notes: dto.notes,
+              payrollCurrency: currency,
+              totalGross: money(runTotals.grossPay),
+              totalNet: money(totalNet),
+              totalEmployerCost: money(totalEmployerCost),
+              totalEmployeeSocialSecurity: money(
+                runTotals.employeeSocialSecurity,
               ),
-              otherDeductions: money(p.totals.otherDeductions),
-              grossSalary: money(p.result.gross),
-              totalDeductions: money(p.result.totalDeductions),
-              netSalary: money(p.result.net),
-              taxableIncome: money(p.result.taxable),
-              employeeSocialSecurity: money(p.totals.employeeSocialSecurity),
-              pension: money(p.totals.pension),
-              incomeTax: money(p.totals.incomeTax),
-              employerSocialSecurity: money(p.totals.employerSocialSecurity),
-              employeeSSNIT: money(p.totals.employeeSocialSecurity),
-              employerSSNIT: money(p.totals.employerSocialSecurity),
-              payeTax: money(p.totals.incomeTax),
-              compensationTypeSnapshot: p.employee.compensationType,
-              payrollGroupId: p.group.id,
-              configurationId: p.configuration.id,
-              configurationVersion: p.version.version,
-              allowanceItems: {
-                create: p.paidAllowances.map((a) => ({
+              totalPension: money(runTotals.pension),
+              totalIncomeTax: money(runTotals.incomeTax),
+              totalOtherDeductions: money(runTotals.otherDeductions),
+              totalEmployerSocialSecurity: money(
+                runTotals.employerSocialSecurity,
+              ),
+              // The old totals are filled from the same roles so screens that still read them show
+              // sensible figures for these runs.
+              totalSSNIT: money(runTotals.employeeSocialSecurity),
+              totalPAYE: money(runTotals.incomeTax),
+              items: {
+                create: inCurrency.map((p) => ({
                   tenantId,
-                  name: a.name ?? a.type,
-                  type: a.type,
-                  amount: money(Number(a.amount)),
+                  employeeId: p.employee.id,
+                  basicSalary: money(p.basic),
+                  commissionFigure: money(p.commissionFigure),
+                  totalAllowances: money(
+                    p.paidAllowances.reduce(
+                      (total, a) => total + Number(a.amount),
+                      0,
+                    ),
+                  ),
+                  otherDeductions: money(p.totals.otherDeductions),
+                  grossSalary: money(p.result.gross),
+                  totalDeductions: money(p.result.totalDeductions),
+                  netSalary: money(p.result.net),
+                  taxableIncome: money(p.result.taxable),
+                  employeeSocialSecurity: money(
+                    p.totals.employeeSocialSecurity,
+                  ),
+                  pension: money(p.totals.pension),
+                  incomeTax: money(p.totals.incomeTax),
+                  employerSocialSecurity: money(
+                    p.totals.employerSocialSecurity,
+                  ),
+                  employeeSSNIT: money(p.totals.employeeSocialSecurity),
+                  employerSSNIT: money(p.totals.employerSocialSecurity),
+                  payeTax: money(p.totals.incomeTax),
+                  compensationTypeSnapshot: p.employee.compensationType,
+                  payrollGroupId: p.group.id,
+                  configurationId: p.configuration.id,
+                  configurationVersion: p.version.version,
+                  allowanceItems: {
+                    create: p.paidAllowances.map((a) => ({
+                      tenantId,
+                      name: a.name ?? a.type,
+                      type: a.type,
+                      amount: money(Number(a.amount)),
+                    })),
+                  },
+                  deductionItems: {
+                    create: p.loanLines.map((l) => ({
+                      tenantId,
+                      employeeDeductionId: l.employeeDeductionId,
+                      name: l.name,
+                      amount: money(l.amount),
+                    })),
+                  },
+                  lines: {
+                    create: p.lines.map((line, index) => ({
+                      tenantId,
+                      sortOrder: index,
+                      componentId: line.componentId,
+                      code: line.code,
+                      name: line.name,
+                      kind: line.kind,
+                      role: line.role,
+                      amount: money(line.amount),
+                      relief: money(line.relief),
+                      takenFromPay: line.takenFromPay,
+                    })),
+                  },
                 })),
               },
-              deductionItems: {
-                create: p.loanLines.map((l) => ({
-                  tenantId,
-                  employeeDeductionId: l.employeeDeductionId,
-                  name: l.name,
-                  amount: money(l.amount),
-                })),
-              },
-              lines: {
-                create: p.lines.map((line, index) => ({
-                  tenantId,
-                  sortOrder: index,
-                  componentId: line.componentId,
-                  code: line.code,
-                  name: line.name,
-                  kind: line.kind,
-                  role: line.role,
-                  amount: money(line.amount),
-                  relief: money(line.relief),
-                  takenFromPay: line.takenFromPay,
-                })),
-              },
-            })),
-          },
-        },
-      });
+            },
+          }),
+        );
+      }
+      return created;
     });
 
     // Running sends the payroll straight to approval, with the usual notifications.
-    return this.payroll.submitPayrollForApproval(tenantId, run.id, actor);
+    const submitted = [];
+    for (const run of runs) {
+      submitted.push(
+        await this.payroll.submitPayrollForApproval(tenantId, run.id, actor),
+      );
+    }
+    return submitted;
   }
 
   /**

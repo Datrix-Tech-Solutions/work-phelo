@@ -107,3 +107,21 @@ export function formatPayrollMoney(
 export function getPayrollLabels(country?: string | null) {
   return STATUTORY_LABELS[normalizePayrollCountry(country)];
 }
+
+/**
+ * " · NGN" when the same payslip type was run for the same month in more than one currency, so
+ * the runs can be told apart; empty otherwise.
+ */
+export function currencyTag(
+  run: { month: number; year: number; payslipKey?: string; payrollCurrency?: string },
+  runs: Array<{ month: number; year: number; payslipKey?: string; payrollCurrency?: string }>,
+): string {
+  const sibling = runs.some(
+    (r) =>
+      r.month === run.month &&
+      r.year === run.year &&
+      r.payslipKey === run.payslipKey &&
+      r.payrollCurrency !== run.payrollCurrency,
+  );
+  return sibling && run.payrollCurrency ? ` · ${run.payrollCurrency}` : '';
+}

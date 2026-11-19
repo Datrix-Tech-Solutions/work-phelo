@@ -160,7 +160,7 @@ function build(
   const prisma = {
     payrollRun: {
       findMany: jest.fn().mockResolvedValue(options.runs ?? []),
-      delete: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       create: jest
         .fn()
         .mockImplementation(({ data }) =>
@@ -348,7 +348,7 @@ describe('PayrollRunsService.run', () => {
     expect(data.payrollCountry).toBeUndefined();
   });
 
-  it('refuses a run whose configurations are in different currencies', async () => {
+  it('makes one run for each currency, with totals that are never added across currencies', async () => {
     const second = configRow({ id: 'cfg-2', name: 'Lagos', currency: 'NGN' });
     const { service, prisma } = build({
       employees: [
@@ -359,10 +359,15 @@ describe('PayrollRunsService.run', () => {
       configurations: [configRow(), second],
     });
 
-    await expect(service.run(TENANT, ACTOR, dto())).rejects.toThrow(
-      /different currencies \(GHS, NGN\)/,
-    );
-    expect(prisma.payrollRun.create).not.toHaveBeenCalled();
+    await service.run(TENANT, ACTOR, dto());
+
+    expect(prisma.payrollRun.create).toHaveBeenCalledTimes(2);
+    const runs = prisma.payrollRun.create.mock.calls.map((c) => c[0].data);
+    expect(runs.map((r) => r.payrollCurrency)).toEqual(['GHS', 'NGN']);
+    for (const r of runs) {
+      expect(r.items.create).toHaveLength(1);
+      expect(r.payslipKey).toBe('monthly');
+    }
   });
 
   it('refuses to run while anyone on payroll has no group', async () => {
@@ -433,8 +438,8 @@ describe('PayrollRunsService.run', () => {
         runs: [{ id: 'draft-1', status: 'DRAFT', payslipKey: 'monthly' }],
       });
       await service.run(TENANT, ACTOR, dto());
-      expect(prisma.payrollRun.delete).toHaveBeenCalledWith({
-        where: { id: 'draft-1' },
+      expect(prisma.payrollRun.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['draft-1'] } },
       });
       expect(prisma.payrollRun.create).toHaveBeenCalled();
     });

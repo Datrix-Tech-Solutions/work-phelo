@@ -18,12 +18,16 @@ import {
 } from '@/hooks/hr/usePayroll';
 import { payrollConfigurationError } from '@/hooks/hr/usePayrollConfigurations';
 import { useToast } from '@/hooks/useToast';
+import { currencyTag } from '@/lib/payrollDisplay';
 import { PAYSLIP_TYPES, formatAmount, type PayslipTypeKey } from '@/lib/payroll-engine';
 import type { PayrollItem, PayrollRun } from '@/types/hr';
 import { StoredPayslipPanel } from './StoredPayslipPanel';
 
 const typeLabel = (key: string | undefined) =>
   key && key in PAYSLIP_TYPES ? PAYSLIP_TYPES[key as PayslipTypeKey].label : 'Payroll';
+
+const runName = (run: PayrollRun, all: PayrollRun[]) =>
+  `${typeLabel(run.payslipKey)}${currencyTag(run, all)}`;
 
 const periodLabel = (run: { month: number; year: number }) =>
   new Date(run.year, run.month - 1, 1).toLocaleDateString('en-GB', {
@@ -34,13 +38,21 @@ const periodLabel = (run: { month: number; year: number }) =>
 const n = (value: string | undefined | null) => Number(value ?? 0);
 
 /** One run waiting for approval: its totals, and a way to send it back. */
-function RunCard({ run, onReturn }: { run: PayrollRun; onReturn: (run: PayrollRun) => void }) {
+function RunCard({
+  run,
+  runs,
+  onReturn,
+}: {
+  run: PayrollRun;
+  runs: PayrollRun[];
+  onReturn: (run: PayrollRun) => void;
+}) {
   const currency = run.payrollCurrency;
   const { data: detail } = usePayrollRun(run.id);
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-gray-900">{typeLabel(run.payslipKey)}</span>
+        <span className="text-sm font-semibold text-gray-900">{runName(run, runs)}</span>
         <TypeChip label="Waiting for approval" color="amber" />
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-500">
@@ -174,7 +186,7 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
     if (!returning) return;
     try {
       await returnToDraft.mutateAsync({ id: returning.id, note: returnNote.trim() });
-      toast.success(`${typeLabel(returning.payslipKey)} payroll returned to draft.`);
+      toast.success(`${runName(returning, runs)} payroll returned to draft.`);
       setReturning(null);
       setReturnNote('');
     } catch (e) {
@@ -193,12 +205,12 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {runs.map((run) => (
-          <RunCard key={run.id} run={run} onReturn={setReturning} />
+          <RunCard key={run.id} run={run} runs={runs} onReturn={setReturning} />
         ))}
       </div>
 
       <TabBar
-        tabs={runs.map((r) => ({ key: r.id, label: typeLabel(r.payslipKey) }))}
+        tabs={runs.map((r) => ({ key: r.id, label: runName(r, runs) }))}
         activeTab={active.id}
         onTabChange={setChosen}
       />
@@ -208,7 +220,7 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
         isOpen={approving}
         onClose={closeApproval}
         title="Approve payroll"
-        description={`This approves ${runs.map((r) => typeLabel(r.payslipKey)).join(', ')} for ${periodLabel(first)}. Each posts to accounting if payroll is linked there.`}
+        description={`This approves ${runs.map((r) => runName(r, runs)).join(', ')} for ${periodLabel(first)}. Each posts to accounting if payroll is linked there.`}
         footer={
           <>
             <Button variant="ghost" onClick={closeApproval}>
@@ -247,7 +259,7 @@ function PeriodSection({ runs }: { runs: PayrollRun[] }) {
         isOpen={returning !== null}
         onClose={() => setReturning(null)}
         title="Return to draft"
-        description={`Sends ${typeLabel(returning?.payslipKey)} payroll back to be changed and run again. Say what needs fixing.`}
+        description={`Sends ${returning ? runName(returning, runs) : 'Payroll'} payroll back to be changed and run again. Say what needs fixing.`}
         footer={
           <>
             <Button variant="ghost" onClick={() => setReturning(null)}>
