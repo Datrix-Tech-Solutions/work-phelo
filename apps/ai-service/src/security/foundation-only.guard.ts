@@ -1,8 +1,9 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { HealthController } from '../health/health.controller';
 import { EligibilityController } from '../eligibility/eligibility.controller';
 import { TrustedAuthGuard } from '../auth/trusted-auth.guard';
+import { ConversationAuthorizationService } from './conversation-authorization.service';
 
 // Handler identity is checked as well as the exact verb/path. No reusable Public decorator.
 const probes = Object.freeze([
@@ -23,9 +24,12 @@ const eligibilityHandler = Object.getOwnPropertyDescriptor(
 
 @Injectable()
 export class FoundationOnlyGuard implements CanActivate {
-  constructor(private readonly authentication: TrustedAuthGuard) {}
+  constructor(
+    private readonly authentication: TrustedAuthGuard,
+    private readonly conversations: ConversationAuthorizationService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  canActivate(context: ExecutionContext): boolean | Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     if (
       context.getClass() === HealthController &&
@@ -43,6 +47,6 @@ export class FoundationOnlyGuard implements CanActivate {
       context.switchToHttp().getResponse<Response>().setHeader('Cache-Control', 'no-store');
       return this.authentication.canActivate(context);
     }
-    throw new ForbiddenException();
+    return this.conversations.authorize(context);
   }
 }

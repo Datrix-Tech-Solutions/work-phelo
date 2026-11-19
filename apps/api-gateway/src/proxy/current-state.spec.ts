@@ -112,21 +112,26 @@ describe('Gateway current-state authorization boundary', () => {
     path = '/api/v1/hr/employees',
     extraToken = {},
     headers: Record<string, string> = {},
+    cookies: Record<string, string> = {},
+    omitAuthorization = false,
   ) {
     const requestHeaders: Record<string, string> = {
       authorization: `Bearer ${token(extraToken)}`,
       ...headers,
     };
+    if (omitAuthorization) delete requestHeaders.authorization;
     const req = {
       path: path.split('?')[0],
       url: path,
+      originalUrl: path,
       method: 'GET',
       headers: requestHeaders,
-      cookies: {},
+      cookies,
       on: jest.fn(),
       off: jest.fn(),
     };
     const res = {
+      setHeader: jest.fn(),
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
       on: jest.fn(),
@@ -337,6 +342,88 @@ describe('Gateway current-state authorization boundary', () => {
     beforeEach(() => {
       process.env.AI_SERVICE_URL = 'http://ai.test:4011';
     });
+    it('strips caller integrity proofs without signing eligibility or requiring the new key', async () => {
+      delete process.env.AI_REQUEST_SIGNING_KEY;
+      const { req } = await send(
+        '/api/v1/ai/eligibility',
+        {},
+        { 'x-ai-request-integrity': 'private-forged-proof' },
+      );
+      expect(req.headers['x-ai-request-integrity']).toBeUndefined();
+      expect(outgoing).toHaveBeenCalledTimes(1);
+      const calls = outgoing.mock.calls as unknown as [
+        boolean,
+        http.RequestOptions,
+        unknown,
+      ][];
+      expect(calls[0][1].path).toBe('/api/eligibility');
+      expect(
+        (calls[0][1].headers as Record<string, unknown>)[
+          'x-ai-request-integrity'
+        ],
+      ).toBeUndefined();
+    });
+    it('rejects an empty Authorization header rather than silently switching to a cookie', async () => {
+      const selected = token();
+      const { req } = await send(
+        '/api/v1/ai/eligibility',
+        {},
+        {
+          authorization: '',
+          cookie: `access_token=${selected}; refresh_token=private-refresh`,
+        },
+        { access_token: selected },
+      );
+      // An empty supplied Authorization header is ambiguous, not a second valid credential.
+      expect(outgoing).not.toHaveBeenCalled();
+      expect(req.headers['x-ai-request-integrity']).toBeUndefined();
+    });
+    it('preserves cookie-only eligibility using exactly one canonical forwarded credential', async () => {
+      const selected = token();
+      const { req } = await send(
+        '/api/v1/ai/eligibility',
+        {},
+        { cookie: `access_token=${selected}; refresh_token=private-refresh` },
+        { access_token: selected },
+        true,
+      );
+      expect(outgoing).toHaveBeenCalledTimes(1);
+      expect(req.headers.authorization).toBe(`Bearer ${selected}`);
+      expect(req.headers.cookie).toBeUndefined();
+    });
+    it('rejects conflicting AI cookies/Bearer before Auth lookup without changing ERP credential precedence', async () => {
+      const { res } = await send(
+        '/api/v1/ai/eligibility',
+        {},
+        {},
+        { access_token: 'different-cookie' },
+      );
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(http.request).not.toHaveBeenCalled();
+      expect(outgoing).not.toHaveBeenCalled();
+      await send('/api/v1/hr/employees', {}, {}, { access_token: token() });
+      expect(outgoing).toHaveBeenCalledTimes(1);
+    });
+    it('fails closed for conversation signing without valid key configuration', async () => {
+      process.env.AI_REQUEST_SIGNING_ENABLED = 'true';
+      const { res } = await send('/api/v1/ai/conversations');
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(outgoing).not.toHaveBeenCalled();
+    });
+    it.each([
+      '/api/v1/ai//conversations',
+      '/api/v1/ai/%63onversations',
+      '/api/v1/ai/./conversations',
+      '/api/v1/ai/x/../conversations',
+      '/api/v1/ai/conversations/',
+    ])(
+      'does not forward ambiguous future conversation target %s',
+      async (path) => {
+        const { res } = await send(path);
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(outgoing).not.toHaveBeenCalled();
+      },
+    );
 
     it.each(['success', 'error', 'timeout'] as const)(
       'redacts AI paths, queries, credentials and upstream error details on %s',
@@ -529,7 +616,9 @@ describe('Gateway current-state authorization boundary', () => {
         {},
         { authorization: '' },
       );
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.status).toHaveBeenCalledWith(
+        path === 'conversations' ? 503 : 401,
+      );
       expect(http.request).not.toHaveBeenCalled();
       expect(outgoing).not.toHaveBeenCalled();
     });

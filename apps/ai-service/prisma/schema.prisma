@@ -9,3 +9,97 @@ datasource db {
   url      = env("DATABASE_URL")
   schemas  = ["ai"]
 }
+
+enum AiMessageRole {
+  USER
+
+  @@schema("ai")
+}
+
+enum AiMessageStatus {
+  STORED
+
+  @@schema("ai")
+}
+
+enum AiReceiptOperation {
+  CREATE_CONVERSATION
+  APPEND_MESSAGE
+  DELETE_CONVERSATION
+
+  @@schema("ai")
+}
+
+enum AiReceiptOutcome {
+  STORED
+  DELETED
+
+  @@schema("ai")
+}
+
+model AiConversation {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  tenantId            String
+  ownerUserId         String
+  createdAt           DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime                @updatedAt @db.Timestamptz(3)
+  expiresAt           DateTime                @db.Timestamptz(3)
+  nextMessageSequence Int                     @default(1)
+  messages            AiConversationMessage[]
+
+  @@unique([id, tenantId, ownerUserId], map: "AiConversation_ownership_key")
+  @@index([tenantId, ownerUserId, createdAt(sort: Desc), id(sort: Desc)], map: "AiConversation_owned_list_idx")
+  @@index([expiresAt, id], map: "AiConversation_expiry_idx")
+  @@schema("ai")
+}
+
+model AiConversationMessage {
+  id                String          @id @default(uuid()) @db.Uuid
+  conversationId    String          @db.Uuid
+  tenantId          String
+  ownerUserId       String
+  conversation      AiConversation  @relation(fields: [conversationId, tenantId, ownerUserId], references: [id, tenantId, ownerUserId], onDelete: Cascade, onUpdate: Restrict)
+  sequence          Int
+  role              AiMessageRole   @default(USER)
+  status            AiMessageStatus @default(STORED)
+  encryptionVersion Int             @db.SmallInt
+  keyId             String          @db.VarChar(64)
+  ciphertext        Bytes
+  nonce             Bytes
+  authenticationTag Bytes
+  createdAt         DateTime        @default(now()) @db.Timestamptz(3)
+
+  @@unique([conversationId, sequence], map: "AiMessage_sequence_key")
+  @@unique([keyId, nonce], map: "AiMessage_key_nonce_key")
+  @@index([conversationId, tenantId, ownerUserId], map: "AiMessage_parent_idx")
+  @@schema("ai")
+}
+
+model AiSubmissionReceipt {
+  id                   String             @id @default(uuid()) @db.Uuid
+  tenantId             String
+  ownerUserId          String
+  operation            AiReceiptOperation
+  idempotencyKey       String             @db.VarChar(128)
+  fingerprintVersion   Int                @db.SmallInt
+  fingerprintKeyId     String             @db.VarChar(64)
+  requestFingerprint   Bytes
+  resultConversationId String             @db.Uuid
+  resultMessageId      String?            @db.Uuid
+  outcome              AiReceiptOutcome
+  createdAt            DateTime           @default(now()) @db.Timestamptz(3)
+  expiresAt            DateTime           @db.Timestamptz(3)
+
+  @@unique([tenantId, ownerUserId, operation, idempotencyKey], map: "AiReceipt_idempotency_key")
+  @@index([expiresAt, id], map: "AiReceipt_expiry_idx")
+  @@schema("ai")
+}
+
+model AiRequestNonce {
+  replayDigest Bytes    @id
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt    DateTime @db.Timestamptz(3)
+
+  @@index([expiresAt, replayDigest], map: "AiRequestNonce_expiry_idx")
+  @@schema("ai")
+}

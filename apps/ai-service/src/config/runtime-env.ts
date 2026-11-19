@@ -1,3 +1,7 @@
+import { KeyRingConfigurationError, parseEncryptionKeys } from '../encryption/key-ring.config';
+import { parseFingerprintKeys } from '../persistence/submission-fingerprint.service';
+import { parseVerificationKeys } from '../request-integrity/verification-keys';
+
 export interface AiRuntimeConfig {
   NODE_ENV: 'development' | 'test' | 'production';
   AI_PROVIDER: 'mock';
@@ -8,6 +12,21 @@ export interface AiRuntimeConfig {
   AI_POLICY_VERSION: string;
   AI_AUTHENTICATED_ROUTES_ENABLED: boolean;
   JWT_SECRET?: string;
+  AI_PERSISTENCE_ENABLED: boolean;
+  DATABASE_URL?: string;
+  AI_MESSAGE_ENCRYPTION_ENABLED: boolean;
+  AI_MESSAGE_ENCRYPTION_ACTIVE_KEY_ID?: string;
+  AI_MESSAGE_ENCRYPTION_KEYS?: string;
+  AI_MESSAGE_OPERATIONS_ENABLED: boolean;
+  AI_FINGERPRINT_ACTIVE_KEY_ID?: string;
+  AI_FINGERPRINT_KEYS?: string;
+  AI_RETENTION_CLEANUP_ENABLED: boolean;
+  AI_RETENTION_SCHEDULER_ENABLED: boolean;
+  AI_CLEANUP_BATCH_SIZE: number;
+  AI_CLEANUP_INTERVAL_MS: number;
+  AI_REQUEST_VERIFICATION_ENABLED: boolean;
+  AI_REQUEST_VERIFICATION_KEYS?: string;
+  AI_CONVERSATION_HTTP_ENABLED: boolean;
 }
 
 export class RuntimeConfigurationError extends Error {
@@ -63,6 +82,79 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
   const mockEnabled = booleanValue(env, 'AI_MOCK_ENABLED');
   const authenticatedRoutes = booleanValue(env, 'AI_AUTHENTICATED_ROUTES_ENABLED');
   const secret = env.JWT_SECRET;
+  const persistenceEnabled = booleanValue(env, 'AI_PERSISTENCE_ENABLED');
+  const encryptionEnabled = booleanValue(env, 'AI_MESSAGE_ENCRYPTION_ENABLED');
+  const operationsEnabled = booleanValue(env, 'AI_MESSAGE_OPERATIONS_ENABLED');
+  const cleanupEnabled = booleanValue(env, 'AI_RETENTION_CLEANUP_ENABLED');
+  const schedulerEnabled = booleanValue(env, 'AI_RETENTION_SCHEDULER_ENABLED');
+  const verificationEnabled = booleanValue(env, 'AI_REQUEST_VERIFICATION_ENABLED');
+  const conversationHttpEnabled = booleanValue(env, 'AI_CONVERSATION_HTTP_ENABLED');
+  if (
+    conversationHttpEnabled &&
+    (nodeEnv === 'production' ||
+      !authenticatedRoutes ||
+      !persistenceEnabled ||
+      !encryptionEnabled ||
+      !operationsEnabled ||
+      !verificationEnabled)
+  )
+    throw new RuntimeConfigurationError('AI_CONVERSATION_HTTP_ENABLED');
+  if (verificationEnabled) {
+    if (!persistenceEnabled || !authenticatedRoutes)
+      throw new RuntimeConfigurationError('AI_REQUEST_VERIFICATION_ENABLED');
+    try {
+      for (const key of parseVerificationKeys(env)) key.material.fill(0);
+    } catch {
+      throw new RuntimeConfigurationError('AI_REQUEST_VERIFICATION_KEYS');
+    }
+  }
+  if (
+    (cleanupEnabled && (!persistenceEnabled || nodeEnv === 'production')) ||
+    (schedulerEnabled && !cleanupEnabled)
+  )
+    throw new RuntimeConfigurationError(
+      'AI_RETENTION_CLEANUP_ENABLED/AI_RETENTION_SCHEDULER_ENABLED',
+    );
+  const cleanupInterval = integerValue(env, 'AI_CLEANUP_INTERVAL_MS', 60000, 3600000);
+  if (cleanupInterval < 1000) throw new RuntimeConfigurationError('AI_CLEANUP_INTERVAL_MS');
+  if (operationsEnabled) {
+    if (!persistenceEnabled || !encryptionEnabled)
+      throw new RuntimeConfigurationError('AI_MESSAGE_OPERATIONS_ENABLED');
+    try {
+      const parsed = parseFingerprintKeys(env);
+      for (const { material } of parsed.keys) material.fill(0);
+    } catch {
+      throw new RuntimeConfigurationError('AI_FINGERPRINT_KEYS/AI_FINGERPRINT_ACTIVE_KEY_ID');
+    }
+  }
+  if (encryptionEnabled) {
+    try {
+      const parsed = parseEncryptionKeys(env);
+      for (const { material } of parsed.keys) material.fill(0);
+    } catch (error) {
+      throw new RuntimeConfigurationError(
+        error instanceof KeyRingConfigurationError ? error.field : 'AI_MESSAGE_ENCRYPTION_KEYS',
+      );
+    }
+  }
+  if (persistenceEnabled) {
+    try {
+      if (typeof env.DATABASE_URL !== 'string') throw new Error();
+      const url = new URL(env.DATABASE_URL);
+      if (
+        !['postgres:', 'postgresql:'].includes(url.protocol) ||
+        !url.hostname ||
+        !url.username ||
+        url.pathname.length < 2 ||
+        url.searchParams.getAll('schema').length !== 1 ||
+        url.searchParams.get('schema') !== 'ai' ||
+        url.searchParams.has('options')
+      )
+        throw new Error();
+    } catch {
+      throw new RuntimeConfigurationError('DATABASE_URL');
+    }
+  }
   if (
     authenticatedRoutes &&
     (typeof secret !== 'string' || !secret.trim() || secret !== secret.trim())
@@ -83,5 +175,30 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
     AI_POLICY_VERSION: policy,
     AI_AUTHENTICATED_ROUTES_ENABLED: authenticatedRoutes,
     ...(authenticatedRoutes ? { JWT_SECRET: secret as string } : {}),
+    AI_PERSISTENCE_ENABLED: persistenceEnabled,
+    ...(persistenceEnabled ? { DATABASE_URL: env.DATABASE_URL as string } : {}),
+    AI_MESSAGE_ENCRYPTION_ENABLED: encryptionEnabled,
+    AI_MESSAGE_OPERATIONS_ENABLED: operationsEnabled,
+    AI_RETENTION_CLEANUP_ENABLED: cleanupEnabled,
+    AI_RETENTION_SCHEDULER_ENABLED: schedulerEnabled,
+    AI_REQUEST_VERIFICATION_ENABLED: verificationEnabled,
+    AI_CONVERSATION_HTTP_ENABLED: conversationHttpEnabled,
+    ...(verificationEnabled
+      ? { AI_REQUEST_VERIFICATION_KEYS: env.AI_REQUEST_VERIFICATION_KEYS as string }
+      : {}),
+    AI_CLEANUP_BATCH_SIZE: integerValue(env, 'AI_CLEANUP_BATCH_SIZE', 25, 100),
+    AI_CLEANUP_INTERVAL_MS: cleanupInterval,
+    ...(operationsEnabled
+      ? {
+          AI_FINGERPRINT_ACTIVE_KEY_ID: env.AI_FINGERPRINT_ACTIVE_KEY_ID as string,
+          AI_FINGERPRINT_KEYS: env.AI_FINGERPRINT_KEYS as string,
+        }
+      : {}),
+    ...(encryptionEnabled
+      ? {
+          AI_MESSAGE_ENCRYPTION_ACTIVE_KEY_ID: env.AI_MESSAGE_ENCRYPTION_ACTIVE_KEY_ID as string,
+          AI_MESSAGE_ENCRYPTION_KEYS: env.AI_MESSAGE_ENCRYPTION_KEYS as string,
+        }
+      : {}),
   };
 }

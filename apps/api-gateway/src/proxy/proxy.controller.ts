@@ -7,6 +7,7 @@ import {
   HttpException,
   ServiceUnavailableException,
   ForbiddenException,
+  GatewayTimeoutException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import * as http from 'http';
@@ -22,6 +23,11 @@ import {
   getGatewayServiceUrl,
 } from '../config/runtime-env';
 import { isAllowedForCareersToken } from './careers-scope';
+import {
+  AI_INTEGRITY_HEADER,
+  selectAiAccessCredential,
+} from './ai-request-integrity';
+import { forwardAiConversation } from './ai-conversation-proxy';
 
 const AUTH_LOOKUP_TIMEOUT_MS = 5_000;
 
@@ -114,6 +120,8 @@ export class ProxyController {
   private fetchCurrentState(
     authServiceUrl: string,
     token: string,
+    timeoutMs = AUTH_LOOKUP_TIMEOUT_MS,
+    deadlineTimeout = false,
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -191,11 +199,11 @@ export class ProxyController {
         },
       );
       const timeout = () => {
-        fail();
+        fail(deadlineTimeout ? new GatewayTimeoutException() : undefined);
         req.destroy();
       };
-      timer.deadline = setTimeout(timeout, AUTH_LOOKUP_TIMEOUT_MS);
-      req.setTimeout(AUTH_LOOKUP_TIMEOUT_MS, timeout);
+      timer.deadline = setTimeout(timeout, timeoutMs);
+      req.setTimeout(timeoutMs, timeout);
       req.on('error', () => fail());
       req.end();
     });
@@ -292,6 +300,68 @@ export class ProxyController {
     const { service, consumedPathParts } = this.resolveDownstream(pathParts);
     const serviceUrl = service ? getGatewayServiceUrl(service) : undefined;
 
+    if (
+      service === 'ai' &&
+      pathParts[consumedPathParts]?.toLowerCase() === 'conversations'
+    ) {
+      for (const header of FORWARDED_AUTH_CONTEXT_HEADERS)
+        delete req.headers[header];
+      delete req.headers[AI_INTEGRITY_HEADER];
+      return forwardAiConversation(
+        req,
+        res,
+        serviceUrl,
+        async (token, deadlineAtMs) => {
+          let payload: JwtPayload;
+          try {
+            const value = jwt.verify(token, process.env.JWT_SECRET!, {
+              algorithms: ['HS256'],
+            });
+            if (
+              typeof value === 'string' ||
+              typeof value.sub !== 'string' ||
+              !value.sub.trim() ||
+              typeof value.tenantId !== 'string' ||
+              !value.tenantId.trim() ||
+              !Number.isInteger(value.iat) ||
+              !Number.isInteger(value.exp)
+            )
+              throw new Error();
+            if (
+              value.scope !== undefined ||
+              value.type !== undefined ||
+              value.iss !== undefined ||
+              value.aud !== undefined
+            )
+              throw new ForbiddenException();
+            payload = value as JwtPayload;
+          } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new HttpException('Unauthorized', 401);
+          }
+          const authUrl = getGatewayServiceUrl('auth');
+          if (!authUrl) throw new ServiceUnavailableException();
+          try {
+            return this.currentUser(
+              await this.fetchCurrentState(
+                authUrl,
+                token,
+                Math.max(
+                  1,
+                  Math.min(AUTH_LOOKUP_TIMEOUT_MS, deadlineAtMs - Date.now()),
+                ),
+                true,
+              ),
+              payload,
+            );
+          } catch (error) {
+            if (Date.now() >= deadlineAtMs) throw new GatewayTimeoutException();
+            throw error;
+          }
+        },
+      );
+    }
+
     if (!serviceUrl) {
       const availableServices = Object.keys(this.services);
 
@@ -305,12 +375,13 @@ export class ProxyController {
     for (const header of FORWARDED_AUTH_CONTEXT_HEADERS) {
       delete req.headers[header];
     }
+    if (service === 'ai') delete req.headers[AI_INTEGRITY_HEADER];
 
     const isPublic = this.isPublicPath(req.path);
 
     if (!isPublic) {
       const cookies = req.cookies as Record<string, string> | undefined;
-      const token =
+      let token =
         cookies?.access_token ||
         req.headers.authorization?.replace('Bearer ', '');
 
@@ -321,6 +392,16 @@ export class ProxyController {
       }
 
       try {
+        if (service === 'ai') {
+          try {
+            token = selectAiAccessCredential(req);
+          } catch {
+            throw new HttpException(
+              'Invalid authentication representation',
+              400,
+            );
+          }
+        }
         const payload = jwt.verify(
           token,
           process.env.JWT_SECRET!,
@@ -359,6 +440,10 @@ export class ProxyController {
           );
         }
         const user = this.currentUser(currentState, payload);
+        if (service === 'ai') {
+          req.headers.authorization = `Bearer ${token}`;
+          delete req.headers.cookie;
+        }
         req.headers['x-user-id'] = user.id;
         req.headers['x-user-email'] = user.email;
         req.headers['x-user-role'] = user.role;
@@ -409,6 +494,17 @@ export class ProxyController {
 
     // Foundation probes are internal operational endpoints, not assistant APIs.
     if (service === 'ai' && ['/health', '/ready'].includes(downstreamPath)) {
+      return res.status(404).json({ message: 'Not found', statusCode: 404 });
+    }
+    // Noncanonical eligibility aliases must not bypass the dedicated conversation path.
+    if (
+      service === 'ai' &&
+      (/^\/conversations(?:\/|$)/.test(downstreamPath) ||
+        /[%\\]/.test(req.path) ||
+        req.path.includes('//') ||
+        req.path.endsWith('/') ||
+        req.path.split('/').some((part) => part === '.' || part === '..'))
+    ) {
       return res.status(404).json({ message: 'Not found', statusCode: 404 });
     }
 

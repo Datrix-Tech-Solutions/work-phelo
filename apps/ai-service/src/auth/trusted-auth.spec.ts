@@ -313,7 +313,10 @@ describe('AI verification of signed WorkPhelo Gateway protocol fixtures', () => 
         .get('/api/ready')
         .expect(200, { status: 'ready', service: 'ai-service', inferenceAvailable: false });
       for (const path of ['conversations', 'messages', 'generate']) {
-        await request(app.getHttpServer()).get(`/api/${path}`).set(headers).expect(404);
+        await request(app.getHttpServer())
+          .get(`/api/${path}`)
+          .set(headers)
+          .expect(path === 'conversations' ? 503 : 404);
       }
     } finally {
       await app.close();
