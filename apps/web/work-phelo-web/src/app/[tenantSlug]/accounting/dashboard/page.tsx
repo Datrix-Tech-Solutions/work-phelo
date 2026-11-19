@@ -32,7 +32,7 @@ export default function AccountingDashboardPage() {
         year={filters.year}
         currency={filters.fieldValues.currency ?? ''}
       />
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_14rem] gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_16rem] gap-3">
         <RevenueExpenseChart period={filters.period} />
         <CashFlowTrendChart period={filters.period} />
         <QuickActionsCard fillCell className="h-60 lg:h-auto" />

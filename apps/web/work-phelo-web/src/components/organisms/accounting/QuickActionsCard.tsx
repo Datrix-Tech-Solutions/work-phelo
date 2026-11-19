@@ -53,6 +53,7 @@ export function QuickActionsCard({
       onSelect={(key) => router.push(`/${tenantSlug}/accounting/${PATHS[key]}`)}
       className={className}
       fillCell={fillCell}
+      columns={3}
     />
   );
 }

@@ -149,7 +149,7 @@ describe('PayrollService', () => {
     const dto = { month: 5, year: 2026, notes: null } as any;
 
     it('throws BadRequestException when payroll for the month is already approved or paid', async () => {
-      prisma.payrollRun.findUnique.mockResolvedValueOnce({
+      prisma.payrollRun.findFirst.mockResolvedValueOnce({
         ...draftRun,
         status: 'APPROVED',
       });
@@ -160,7 +160,7 @@ describe('PayrollService', () => {
     });
 
     it('throws BadRequestException when there are no payroll-eligible employees', async () => {
-      prisma.payrollRun.findUnique.mockResolvedValueOnce(null);
+      prisma.payrollRun.findFirst.mockResolvedValueOnce(null);
       prisma.employee.findMany.mockResolvedValueOnce([]);
 
       await expect(

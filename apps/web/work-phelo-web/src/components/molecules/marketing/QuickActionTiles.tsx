@@ -29,6 +29,8 @@ interface Props<K extends string> {
   className?: string;
   /** On wide screens, fill the grid cell instead of adding to its height. */
   fillCell?: boolean;
+  /** Tiles per row (default 4). Use fewer in a narrow card so the tiles aren't squeezed. */
+  columns?: 3 | 4;
 }
 
 /**
@@ -41,6 +43,7 @@ export function QuickActionTiles<K extends string>({
   onSelect,
   className,
   fillCell = false,
+  columns = 4,
 }: Props<K>) {
   const visible = useMemo(() => entries.filter((entry) => entry.allowed), [entries]);
   const { tabs: ordered, recordUse } = useTabUsage(storageKey, visible, { pinFirst: false });
@@ -56,7 +59,12 @@ export function QuickActionTiles<K extends string>({
     // and the tiles scroll if they don't fit.
     <div className={cn('relative', className)}>
       <QuickActionsPanel className={cn(fillCell && 'lg:absolute lg:inset-0')}>
-        <div className="grid grid-cols-4 gap-1.5 min-h-0 overflow-y-auto">
+        <div
+          className={cn(
+            'grid gap-1.5 min-h-0 overflow-y-auto',
+            columns === 3 ? 'grid-cols-3' : 'grid-cols-4',
+          )}
+        >
           {shown.map(({ key, label, icon: Icon, color }) => (
             <button
               key={key}
@@ -93,7 +101,7 @@ export function QuickActionTiles<K extends string>({
             <button
               type="button"
               onClick={() => setExpanded((o) => !o)}
-              className="col-span-4 flex w-full items-center justify-center gap-1.5 rounded-2xl px-3 py-2 text-sm font-medium text-white/85 transition-colors hover:bg-white/10"
+              className="col-span-full flex w-full items-center justify-center gap-1.5 rounded-2xl px-3 py-2 text-sm font-medium text-white/85 transition-colors hover:bg-white/10"
             >
               {expanded ? 'Show less' : `More (${overflow.length})`}
               <ChevronDown
