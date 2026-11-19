@@ -1618,6 +1618,8 @@ export class PayrollService {
                 jobTitle: true,
                 bankName: true,
                 bankAccountNumber: true,
+                ssnit: true,
+                tinNumber: true,
               },
             },
           },
@@ -1642,6 +1644,15 @@ export class PayrollService {
               bankAccountNumber: this.encryption.mask(
                 this.encryption.decrypt(item.employee.bankAccountNumber),
               ),
+              // Social security and tax numbers are returned in full here: the social security and
+              // income tax pages need them for filing, and this is only open to payroll readers.
+              // The pages hide them on screen until someone chooses to show them.
+              ssnit: this.encryption.decrypt(item.employee.ssnit) as
+                | string
+                | null,
+              tinNumber: this.encryption.decrypt(item.employee.tinNumber) as
+                | string
+                | null,
             }
           : item.employee,
       })),

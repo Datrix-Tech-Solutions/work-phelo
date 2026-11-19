@@ -125,3 +125,8 @@ export function currencyTag(
   );
   return sibling && run.payrollCurrency ? ` · ${run.payrollCurrency}` : '';
 }
+
+/** Hides all but the last four characters of an ID number, for showing on screen. */
+export function maskNumber(value: string): string {
+  return value.length <= 4 ? '••••' : `${'•'.repeat(value.length - 4)}${value.slice(-4)}`;
+}

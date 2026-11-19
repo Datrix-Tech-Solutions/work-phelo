@@ -55,7 +55,12 @@ export function PeriodBarChart({
   const isEmpty = !isLoading && series.every((s) => s.data.every((value) => value === 0));
 
   return (
-    <div className={cn(cardClass('flex flex-col gap-2 p-3 h-60', 'glass'), className)}>
+    <div
+      className={cn(
+        cardClass('relative hover:z-20 flex flex-col gap-2 p-3 h-60', 'glass'),
+        className,
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col">
           <h3 className="text-sm font-semibold text-gray-900">{title}</h3>

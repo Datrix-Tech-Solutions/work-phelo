@@ -5,7 +5,7 @@ import {
   History,
   Layers,
   Coins,
-  // BadgePercent
+  BadgePercent,
 } from 'lucide-react';
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import { usePermission } from '@/hooks/hr/usePermission';
@@ -18,7 +18,7 @@ const ApproveIcon = () => <CheckCircle2 className="w-5 h-5" />;
 const HistoryIcon = () => <History className="w-5 h-5" />;
 const PayrollGroupsIcon = () => <Layers className="w-5 h-5" />;
 const PayComponentsIcon = () => <Coins className="w-5 h-5" />;
-// const IncomeTaxIcon = () => <BadgePercent className="w-5 h-5" />;
+const IncomeTaxIcon = () => <BadgePercent className="w-5 h-5" />;
 
 /**
  * Payroll's own sidebar — management-side tabs it used to have on one page
@@ -61,14 +61,14 @@ export function usePayrollSidebarGroups(tenantSlug: string): {
           enabled: canManagePayroll,
           active: true,
         },
-        // {
-        //   key: 'income-tax',
-        //   label: 'Income tax',
-        //   icon: <IncomeTaxIcon />,
-        //   href: `${base}/income-tax`,
-        //   enabled: canManagePayroll,
-        //   active: true,
-        // }
+        {
+          key: 'income-tax',
+          label: 'Income tax',
+          icon: <IncomeTaxIcon />,
+          href: `${base}/income-tax`,
+          enabled: canManagePayroll,
+          active: true,
+        },
       ],
     },
     {

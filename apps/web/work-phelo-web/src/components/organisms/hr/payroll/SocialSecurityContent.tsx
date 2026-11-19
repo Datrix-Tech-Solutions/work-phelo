@@ -6,8 +6,9 @@ import { Button } from '@/components/atoms/Button';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { MaskedNumber } from '@/components/molecules/hr/payroll/MaskedNumber';
 import { Column, DataTable } from '../../shared/DataTable';
-import { usePayrollRuns, usePayrollRun, useAllEmployees, usePayrollSettings } from '@/hooks';
+import { usePayrollRuns, usePayrollRun, usePayrollSettings } from '@/hooks';
 import { PayrollItem, PayrollRun } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 import { currencyTag, formatPayrollMoney } from '@/lib/payrollDisplay';
@@ -76,7 +77,6 @@ interface Row {
 
 export function SocialSecurityContent() {
   const { data: runs = [], isLoading: runsLoading } = usePayrollRuns();
-  const { data: empData } = useAllEmployees();
   const { data: payrollSettings } = usePayrollSettings();
   const [kind, setKind] = useState<Kind>('employee');
   const [selectedRunId, setSelectedRunId] = useState('');
@@ -96,14 +96,6 @@ export function SocialSecurityContent() {
   const money = (value: number) => formatPayrollMoney(value, currency, country);
   const legacy = !runDetail?.payslipKey || runDetail.payslipKey === 'legacy';
 
-  const idMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    (empData?.data ?? []).forEach((e) => {
-      if (e.ssnit) map[e.id] = e.ssnit;
-    });
-    return map;
-  }, [empData]);
-
   const rows = useMemo<Row[]>(
     () =>
       (runDetail?.items ?? [])
@@ -111,12 +103,12 @@ export function SocialSecurityContent() {
           id: item.id,
           name: item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '—',
           employeeNumber: item.employee?.employeeNumber ?? '—',
-          idNumber: idMap[item.employeeId],
+          idNumber: item.employee?.ssnit || undefined,
           basic: num(item.basicSalary),
           amount: amountFor(item, kind, legacy),
         }))
         .filter((r) => r.amount > 0),
-    [runDetail, idMap, kind, legacy],
+    [runDetail, kind, legacy],
   );
 
   const total = rows.reduce((sum, r) => sum + r.amount, 0);
@@ -170,7 +162,7 @@ export function SocialSecurityContent() {
             width: 'minmax(150px, 1.5fr)',
             render: (row: Row) =>
               row.idNumber ? (
-                <span className="font-mono text-sm text-gray-700">{row.idNumber}</span>
+                <MaskedNumber value={row.idNumber} />
               ) : (
                 <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-medium">
                   <AlertCircle className="w-3.5 h-3.5" />
@@ -220,10 +212,12 @@ export function SocialSecurityContent() {
           )}
         </div>
 
-        <Button variant="outline" onClick={handleExport} disabled={!runId || rows.length === 0}>
-          <Download className="w-4 h-4 mr-2" />
-          Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={!runId || rows.length === 0}>
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">

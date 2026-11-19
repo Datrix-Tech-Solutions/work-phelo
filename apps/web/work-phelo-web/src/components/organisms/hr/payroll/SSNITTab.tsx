@@ -5,8 +5,9 @@ import { Download, AlertCircle, User, Building2, Wallet, Landmark } from 'lucide
 import { Button } from '@/components/atoms/Button';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { MaskedNumber } from '@/components/molecules/hr/payroll/MaskedNumber';
 import { Column, DataTable } from '../../shared/DataTable';
-import { usePayrollRuns, usePayrollRun, useAllEmployees, usePayrollSettings } from '@/hooks';
+import { usePayrollRuns, usePayrollRun, usePayrollSettings } from '@/hooks';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 import {
@@ -36,11 +37,7 @@ interface SSNITRow {
   tier3Employee: number;
 }
 
-function buildRows(
-  items: PayrollItem[],
-  ssnitMap: Record<string, string>,
-  payrollCountry: string,
-): SSNITRow[] {
+function buildRows(items: PayrollItem[], payrollCountry: string): SSNITRow[] {
   const country = normalizePayrollCountry(payrollCountry);
 
   return items.map((item) => {
@@ -57,7 +54,7 @@ function buildRows(
       employeeId: item.employeeId,
       name: item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '—',
       employeeNumber: item.employee?.employeeNumber ?? '—',
-      ssnitNumber: ssnitMap[item.employeeId],
+      ssnitNumber: item.employee?.ssnit || undefined,
       insurableEarnings: insurable,
       employeeSSNIT,
       employerSSNIT,
@@ -70,7 +67,6 @@ function buildRows(
 
 export function SSNITTab() {
   const { data: runs = [], isLoading: runsLoading } = usePayrollRuns();
-  const { data: empData } = useAllEmployees();
   const { data: payrollSettings } = usePayrollSettings();
   const [selectedRunId, setSelectedRunId] = useState('');
 
@@ -93,17 +89,9 @@ export function SSNITTab() {
     ? `${payrollSettings.payrollTier2FundName} (5%)`
     : `${payrollLabels.tier2Label} (5%)`;
 
-  const ssnitMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    (empData?.data ?? []).forEach((e) => {
-      if (e.ssnit) map[e.id] = e.ssnit;
-    });
-    return map;
-  }, [empData]);
-
   const rows = useMemo(
-    () => (runDetail?.items ? buildRows(runDetail.items, ssnitMap, payrollCountry) : []),
-    [runDetail, ssnitMap, payrollCountry],
+    () => (runDetail?.items ? buildRows(runDetail.items, payrollCountry) : []),
+    [runDetail, payrollCountry],
   );
 
   const totals = useMemo(
@@ -179,7 +167,7 @@ export function SSNITTab() {
       width: 'minmax(150px, 1.5fr)',
       render: (row) =>
         row.ssnitNumber ? (
-          <span className="font-mono text-sm text-gray-700">{row.ssnitNumber}</span>
+          <MaskedNumber value={row.ssnitNumber} />
         ) : (
           <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-medium">
             <AlertCircle className="w-3.5 h-3.5" />
@@ -258,10 +246,12 @@ export function SSNITTab() {
           )}
         </div>
 
-        <Button variant="outline" onClick={handleExport} disabled={!runId || rows.length === 0}>
-          <Download className="w-4 h-4 mr-2" />
-          Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={!runId || rows.length === 0}>
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
