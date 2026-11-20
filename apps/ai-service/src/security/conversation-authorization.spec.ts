@@ -351,9 +351,10 @@ describe('Exact conversation handler authorization in the actual Nest pipeline',
     const realNow = Date.now.bind(Date);
     let offsetMs = 0;
     const clock = jest.spyOn(Date, 'now').mockImplementation(() => realNow() + offsetMs);
-    h.consume.mockImplementationOnce(async () => {
+    h.consume.mockImplementationOnce(() => {
       // Deterministic: jump the clock past the 5s deadline instead of sleeping.
       offsetMs = 6000;
+      return Promise.resolve();
     });
     try {
       expect((await send('POST', '/api/conversations')).status).toBe(504);
