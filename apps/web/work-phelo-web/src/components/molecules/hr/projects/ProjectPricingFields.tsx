@@ -54,12 +54,12 @@ export function ProjectPricingFields({ type, value, onChange, startDate, endDate
       {type === 'TIMED' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <NumberField
-            label="Rate per Hour (GHS)"
+            label="Rate per Hour (GHS) · optional"
             value={value.hourlyRate}
             onChange={(hourlyRate) => onChange({ ...value, hourlyRate })}
           />
           <NumberField
-            label="Estimated Hours"
+            label="Estimated Hours · optional"
             decimals={0}
             value={value.estimatedHours}
             onChange={(estimatedHours) => onChange({ ...value, estimatedHours })}

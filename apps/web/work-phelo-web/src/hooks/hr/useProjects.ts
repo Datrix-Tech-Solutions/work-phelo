@@ -145,6 +145,32 @@ export function useAddProjectMember() {
   });
 }
 
+/** Sets what a member's logged time is billed at on a project billed by time. */
+export function useUpdateProjectMemberRate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      employeeId,
+      hourlyRate,
+    }: {
+      projectId: string;
+      employeeId: string;
+      hourlyRate: number | null;
+    }) => {
+      const res = await api.patch<ProjectMember>(
+        `/hr/projects/${projectId}/members/${employeeId}`,
+        { hourlyRate },
+      );
+      return res.data;
+    },
+    onSuccess: (_, { projectId }) => {
+      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'members'] });
+    },
+  });
+}
+
 export function useRemoveProjectMember() {
   const queryClient = useQueryClient();
 

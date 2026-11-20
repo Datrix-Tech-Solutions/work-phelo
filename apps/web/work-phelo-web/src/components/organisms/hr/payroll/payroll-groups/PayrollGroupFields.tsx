@@ -18,7 +18,7 @@ import {
   type PayrollGroup,
 } from '@/lib/payroll-groups';
 import { COMPENSATION_PAYSLIP_TYPE, type PayslipTypeKey } from '@/lib/payroll-engine';
-import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
+import { useBranchOptions } from '@/hooks/hr/useBranches';
 import type { Employee, EmploymentType } from '@/types/hr';
 
 const DAY_VALUES = Array.from({ length: 28 }, (_, i) => String(i + 1));
@@ -163,7 +163,7 @@ export function PayrollGroupScheduleFields({
   );
 }
 
-/** Picks a payroll group's members by department, employee type or one by one. */
+/** Picks a payroll group's members by branch, employee type or one by one. */
 export function PayrollGroupMemberFields({
   settings,
   onChange,
@@ -175,20 +175,19 @@ export function PayrollGroupMemberFields({
   const patch = (next: Partial<GroupSettings>) => onChange({ ...settings, ...next });
   const groupName = (id: string | null | undefined) => groups.find((g) => g.id === id)?.name;
 
-  const { data: departments = [] } = useDepartmentOptions();
-  const [department, setDepartment] = useState('');
+  const { data: branches = [] } = useBranchOptions();
+  const [branch, setBranch] = useState('');
   const [employmentType, setEmploymentType] = useState('');
 
   const eligible = eligibleEmployees(employees, payslipType);
   const matching = (dept: string, type: string) =>
     eligible.filter(
       (e) =>
-        (!narrows(dept) || e.departmentId === dept) &&
-        (!narrows(type) || e.employmentType === type),
+        (!narrows(dept) || e.branchId === dept) && (!narrows(type) || e.employmentType === type),
     );
-  // Choosing a department or type picks everyone it covers; the list below then adjusts it.
+  // Choosing a branch or type picks everyone it covers; the list below then adjusts it.
   const pick = (dept: string, type: string) => {
-    setDepartment(dept);
+    setBranch(dept);
     setEmploymentType(type);
     if (dept === '' && type === '') return;
     const picked = matching(dept, type).map((e) => e.id);
@@ -197,49 +196,73 @@ export function PayrollGroupMemberFields({
   // Members who stop fitting after the payslip type changes drop out of the list.
   const validMembers = settings.memberIds.filter((id) => eligible.some((e) => e.id === id));
 
+  const listed = eligible.filter(
+    (e) =>
+      validMembers.includes(e.id) ||
+      ((!narrows(branch) || e.branchId === branch) &&
+        (!narrows(employmentType) || e.employmentType === employmentType)),
+  );
+
   return (
     <>
       <div className="grid grid-cols-1 gap-(--field-stack-gap,0.75rem) sm:grid-cols-2">
-        <SearchSelect
-          label="Department"
-          placeholder="Select a department"
-          options={[
-            { value: 'all', label: 'All departments' },
-            ...departments
-              .filter((d) => eligible.some((e) => e.departmentId === d.id))
-              .map((d) => ({ value: d.id, label: d.name })),
-          ]}
-          value={department}
-          onChange={(v) => pick(v, employmentType)}
-        />
+        {branches.length === 0 ? (
+          <div className="pointer-events-none select-none opacity-50 blur-[1px]" aria-disabled>
+            <SearchSelect
+              label="Branch"
+              clearable={false}
+              disabled
+              options={[{ value: 'head', label: 'Head office' }]}
+              value="head"
+              onChange={() => {}}
+            />
+          </div>
+        ) : (
+          <SearchSelect
+            label="Branch"
+            placeholder="Select a branch"
+            options={[
+              { value: 'all', label: 'All branches' },
+              ...branches
+                .filter((b) => eligible.some((e) => e.branchId === b.id))
+                .map((b) => ({ value: b.id, label: b.name })),
+            ]}
+            value={branch}
+            onChange={(v) => pick(v, employmentType)}
+          />
+        )}
         <SearchSelect
           label="Employee type"
           placeholder="Select a type"
           options={[{ value: 'all', label: 'All types' }, ...EMPLOYMENT_TYPE_OPTIONS]}
           value={employmentType}
-          onChange={(v) => pick(department, v)}
+          onChange={(v) => pick(branch, v)}
         />
       </div>
+      {listed.length > 0 && (
+        <button
+          type="button"
+          className="self-start text-xs font-medium text-blue-600 hover:text-blue-700"
+          onClick={() =>
+            patch({ memberIds: [...new Set([...validMembers, ...listed.map((e) => e.id)])] })
+          }
+        >
+          Select all employees
+        </button>
+      )}
       <MultiSelect
         placeholder={payslipType ? 'Add employees to this group' : 'Choose a configuration first'}
         hideChips
-        options={eligible
-          .filter(
-            (e) =>
-              validMembers.includes(e.id) ||
-              ((!narrows(department) || e.departmentId === department) &&
-                (!narrows(employmentType) || e.employmentType === employmentType)),
-          )
-          .map((e) => {
-            const other = e.payrollGroupId && e.payrollGroupId !== groupId;
-            return {
-              value: e.id,
-              label: `${e.firstName} ${e.lastName}`,
-              sublabel: other
-                ? `Now in ${groupName(e.payrollGroupId) ?? 'another group'}`
-                : e.jobTitle,
-            };
-          })}
+        options={listed.map((e) => {
+          const other = e.payrollGroupId && e.payrollGroupId !== groupId;
+          return {
+            value: e.id,
+            label: `${e.firstName} ${e.lastName}`,
+            sublabel: other
+              ? `Now in ${groupName(e.payrollGroupId) ?? 'another group'}`
+              : e.jobTitle,
+          };
+        })}
         value={validMembers}
         onChange={(memberIds) => patch({ memberIds })}
       />

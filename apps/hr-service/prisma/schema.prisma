@@ -660,6 +660,8 @@ model ProjectMember {
   projectId  String
   employeeId String
   role       ProjectMemberRole @default(MEMBER)
+  /// What this person's logged time is billed at on a project billed by time.
+  hourlyRate Decimal?          @db.Decimal(15, 2)
   joinedAt   DateTime          @default(now())
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt

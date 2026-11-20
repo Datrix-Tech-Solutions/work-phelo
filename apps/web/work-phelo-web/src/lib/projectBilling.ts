@@ -32,7 +32,12 @@ interface Input {
   startDate?: string;
   endDate?: string;
   /** The project's timed tasks and the time logged on each, in ms. */
-  tasks: { id: string; name: string; ms: number }[];
+  tasks: {
+    id: string;
+    name: string;
+    ms: number;
+    /** What the time on it is billed at, from its assignee. */ rate: number;
+  }[];
   invoices: ProjectInvoice[];
 }
 
@@ -62,7 +67,7 @@ export function billingLines({
                 ? ` · ${formatHoursMinutes(unbilled * 60000)} unbilled`
                 : ''
             }`,
-            amount: round2((unbilled / 60) * pricing.hourlyRate),
+            amount: round2((unbilled / 60) * t.rate),
             minutes: unbilled,
             billed: unbilled === 0,
           },

@@ -191,7 +191,7 @@ export function CashAccountsTable() {
       {
         key: 'isActive',
         label: 'Status',
-        width: '100px',
+        width: '130px',
         render: (row) =>
           row.status === 'complete' ? (
             <Badge

@@ -53,6 +53,8 @@ interface Props {
   defaultPriority?: string;
   /** Whether new tasks start as timed, e.g. on a project billed by time. */
   defaultTimed?: boolean;
+  /** Keeps the task timed with no way to turn it off, e.g. on a project billed by time. */
+  lockTimed?: boolean;
 }
 
 export function CreateTaskModal({
@@ -68,6 +70,7 @@ export function CreateTaskModal({
   defaultWorkType = '',
   defaultPriority = '',
   defaultTimed = false,
+  lockTimed = false,
 }: Props) {
   const [objectiveId, setObjectiveId] = useState(defaultObjectiveId ?? '');
   const [workType, setWorkType] = useState(defaultWorkType);
@@ -127,7 +130,7 @@ export function CreateTaskModal({
       objectiveId: objectiveId || undefined,
       workType: workType || undefined,
       priority: priority || undefined,
-      timed,
+      timed: timed || lockTimed,
     });
     reset({ name: '', dueDate: '' });
     setObjectiveId(defaultObjectiveId ?? '');
@@ -226,7 +229,7 @@ export function CreateTaskModal({
             <label className="text-sm font-medium text-gray-700">Timed task</label>
             <p className="text-xs text-gray-400">Assignees can start and pause a timer on it.</p>
           </div>
-          <Toggle enabled={timed} onChange={setTimed} />
+          <Toggle enabled={timed || lockTimed} onChange={lockTimed ? () => {} : setTimed} />
         </div>
 
         {/* Assign to employee */}

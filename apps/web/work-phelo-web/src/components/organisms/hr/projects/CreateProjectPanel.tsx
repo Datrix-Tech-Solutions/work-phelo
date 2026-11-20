@@ -366,8 +366,7 @@ export function CreateProjectPanel({
           )}
         />
 
-        {/* The set-up fields. A blank slate shows them straight away; a template starts them filled in and
-            folded away, for this project only. The fields stay mounted while folded, so they still count. */}
+        {/* The set-up fields. Both a blank slate and a template start them folded away, for this project only. The fields stay mounted while folded, so they still count. */}
         <Controller
           name="config"
           control={control}
@@ -380,7 +379,6 @@ export function CreateProjectPanel({
                 showErrors={isSubmitted}
               />
             );
-            if (!template) return fields;
             // Opens by itself if the set-up is invalid, so the error is never hidden.
             const open = setupOpen || !!errors.config;
             return (
@@ -391,7 +389,9 @@ export function CreateProjectPanel({
                   aria-expanded={open}
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                 >
-                  <span className="text-sm font-semibold text-gray-900">Template set-up</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {template ? 'Template set-up' : 'Set-up'}
+                  </span>
                   <ChevronDown
                     className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
                       open ? '' : '-rotate-90'

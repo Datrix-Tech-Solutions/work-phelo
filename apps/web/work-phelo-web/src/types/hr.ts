@@ -512,7 +512,8 @@ export interface ProjectMilestone {
 /** What a billable client project charges, by how it is billed. */
 export type ProjectPricing =
   | { type: 'FLAT_RATE'; price: number }
-  | { type: 'TIMED'; hourlyRate: number; estimatedHours: number }
+  /** Both are optional: when given they are only a benchmark the logged time and accrued amount are compared with. */
+  | { type: 'TIMED'; hourlyRate?: number; estimatedHours?: number }
   | { type: 'MILESTONE'; milestones: ProjectMilestone[] }
   | { type: 'RETAINER'; monthlyAmount: number };
 
@@ -626,6 +627,8 @@ export interface ProjectMember {
   jobTitle: string;
   department: string | null;
   avatarUrl?: string;
+  /** What this person's logged time is billed at, on a project billed by time. */
+  hourlyRate?: number | null;
 }
 
 export interface ProjectDetail extends Project {
@@ -674,6 +677,7 @@ export type UpdateProjectTaskDto = Omit<Partial<CreateProjectTaskDto>, 'objectiv
 export interface AddProjectMemberDto {
   employeeId: string;
   role?: ProjectMemberRole;
+  hourlyRate?: number;
 }
 
 // ── Dashboard ─────────────────────────────────────────────

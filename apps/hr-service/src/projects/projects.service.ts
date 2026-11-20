@@ -25,6 +25,7 @@ import {
   isCompanyAdminUser,
 } from '../auth/access-scope';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
+import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
 import { ProjectPricingDto } from './dto/project-config.dto';
@@ -243,11 +244,11 @@ export class ProjectsService {
         need(pricing.price, 'Enter the price');
         return { billingType: pricing.type, flatPrice: pricing.price };
       case ProjectBillingType.TIMED:
-        need(pricing.hourlyRate, 'Enter the rate per hour');
+        // The rate and hours are only a benchmark the logged time is compared with, so both are optional.
         return {
           billingType: pricing.type,
-          hourlyRate: pricing.hourlyRate,
-          estimatedHours: pricing.estimatedHours ?? 0,
+          hourlyRate: pricing.hourlyRate ?? null,
+          estimatedHours: pricing.estimatedHours ?? null,
         };
       case ProjectBillingType.RETAINER:
         need(pricing.monthlyAmount, 'Enter the amount per month');
@@ -271,8 +272,8 @@ export class ProjectsService {
       case ProjectBillingType.TIMED:
         return {
           type: project.billingType,
-          hourlyRate: num(project.hourlyRate),
-          estimatedHours: project.estimatedHours ?? 0,
+          hourlyRate: project.hourlyRate?.toNumber() ?? undefined,
+          estimatedHours: project.estimatedHours ?? undefined,
         };
       case ProjectBillingType.RETAINER:
         return {
@@ -328,6 +329,7 @@ export class ProjectsService {
         employeeId: member.employeeId,
         role: member.role,
         joinedAt: member.joinedAt,
+        hourlyRate: member.hourlyRate?.toNumber() ?? null,
         name: `${member.employee.firstName} ${member.employee.lastName}`,
         email: member.employee.email,
         jobTitle: member.employee.jobTitle,
@@ -615,25 +617,50 @@ export class ProjectsService {
       },
       select: {
         projectId: true,
+        employeeId: true,
         source: true,
         startedAt: true,
         endedAt: true,
         seconds: true,
       },
     });
+    const rates = new Map(
+      projects.flatMap((p) =>
+        p.members.map((m) => [
+          `${p.id}:${m.employeeId}`,
+          m.hourlyRate?.toNumber() ?? 0,
+        ]),
+      ),
+    );
     const now = Date.now();
     const logged = new Map<string, number>();
+    // Each person's seconds on a project, so the time can be priced at their own rate.
+    const accrued = new Map<string, number>();
     for (const e of entries) {
       const seconds =
         e.source === ProjectTimeSource.TIMER && !e.endedAt && e.startedAt
           ? Math.max(0, Math.floor((now - e.startedAt.getTime()) / 1000))
           : e.seconds;
       logged.set(e.projectId, (logged.get(e.projectId) ?? 0) + seconds);
+      const key = `${e.projectId}:${e.employeeId}`;
+      accrued.set(key, (accrued.get(key) ?? 0) + seconds);
     }
-    return projects.map((project) => ({
-      ...this.serializeProject(project),
-      loggedSeconds: logged.get(project.id) ?? 0,
-    }));
+    return projects.map((project) => {
+      const amount = project.members.reduce((sum, m) => {
+        const seconds = accrued.get(`${project.id}:${m.employeeId}`) ?? 0;
+        // Counted to the whole minute, like the project's own summary.
+        return (
+          sum +
+          (Math.floor(seconds / 60) / 60) *
+            (rates.get(`${project.id}:${m.employeeId}`) ?? 0)
+        );
+      }, 0);
+      return {
+        ...this.serializeProject(project),
+        loggedSeconds: logged.get(project.id) ?? 0,
+        accruedAmount: Math.round(amount * 100) / 100,
+      };
+    });
   }
 
   /** The timers the caller has running, on any project, so starting another can offer to pause them. */
@@ -897,6 +924,7 @@ export class ProjectsService {
       employeeId: member.employeeId,
       role: member.role,
       joinedAt: member.joinedAt,
+      hourlyRate: member.hourlyRate?.toNumber() ?? null,
       name: `${member.employee.firstName} ${member.employee.lastName}`,
       email: member.employee.email,
       jobTitle: member.employee.jobTitle,
@@ -928,12 +956,18 @@ export class ProjectsService {
         where: {
           projectId_employeeId: { projectId, employeeId: dto.employeeId },
         },
-        update: { role: dto.role ?? ProjectMemberRole.MEMBER },
+        update: {
+          role: dto.role ?? ProjectMemberRole.MEMBER,
+          ...(dto.hourlyRate !== undefined
+            ? { hourlyRate: dto.hourlyRate }
+            : {}),
+        },
         create: {
           tenantId,
           projectId,
           employeeId: dto.employeeId,
           role: dto.role ?? ProjectMemberRole.MEMBER,
+          hourlyRate: dto.hourlyRate ?? null,
         },
         include: {
           employee: {
@@ -962,12 +996,67 @@ export class ProjectsService {
         employeeId: member.employeeId,
         role: member.role,
         joinedAt: member.joinedAt,
+        hourlyRate: member.hourlyRate?.toNumber() ?? null,
         name: `${member.employee.firstName} ${member.employee.lastName}`,
         email: member.employee.email,
         jobTitle: member.employee.jobTitle,
         department: member.employee.department?.name ?? null,
       };
     });
+  }
+
+  /** Sets, or clears with null, what a member's logged time is billed at. */
+  async updateMemberRate(
+    tenantId: string,
+    projectId: string,
+    employeeId: string,
+    user: RequestUser,
+    dto: UpdateProjectMemberDto,
+  ) {
+    await this.assertProjectExists(tenantId, projectId);
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
+    const membership = await this.getProjectMembership(
+      tenantId,
+      projectId,
+      actorEmployeeId,
+    );
+    this.assertAccess(
+      this.canAssignProject(user) || this.isProjectLead(membership?.role),
+    );
+
+    const member = await this.prisma.projectMember.findFirst({
+      where: { tenantId, projectId, employeeId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Project member not found');
+
+    const updated = await this.prisma.projectMember.update({
+      where: { id: member.id },
+      data: { hourlyRate: dto.hourlyRate },
+      include: {
+        employee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            jobTitle: true,
+            department: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      id: updated.id,
+      employeeId: updated.employeeId,
+      role: updated.role,
+      joinedAt: updated.joinedAt,
+      hourlyRate: updated.hourlyRate?.toNumber() ?? null,
+      name: `${updated.employee.firstName} ${updated.employee.lastName}`,
+      email: updated.employee.email,
+      jobTitle: updated.employee.jobTitle,
+      department: updated.employee.department?.name ?? null,
+    };
   }
 
   async removeMember(
