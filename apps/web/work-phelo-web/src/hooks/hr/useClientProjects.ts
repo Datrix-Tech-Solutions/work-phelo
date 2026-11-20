@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { pricingExpectedValue } from '@/lib/projectPricing';
-import { accruedAmount } from '@/lib/taskTime';
 import type { Project, ProjectPricing } from '@/types/hr';
 
 export interface ClientProject {
@@ -22,7 +21,7 @@ export function useClientProjects(clientId: string): ClientProject[] {
   const { data = [] } = useQuery({
     queryKey: ['projects', 'by-client', clientId],
     queryFn: async () => {
-      const res = await api.get<(Project & { loggedSeconds: number })[]>(
+      const res = await api.get<(Project & { loggedSeconds: number; accruedAmount: number })[]>(
         `/hr/projects/by-client/${clientId}`,
       );
       return res.data;
@@ -39,10 +38,8 @@ export function useClientProjects(clientId: string): ClientProject[] {
         expectedValue: p.pricing
           ? pricingExpectedValue(p.pricing, p.startDate.slice(0, 10), p.endDate?.slice(0, 10))
           : null,
-        accrued:
-          p.pricing?.type === 'TIMED'
-            ? accruedAmount(p.loggedSeconds * 1000, p.pricing.hourlyRate)
-            : null,
+        // Each member's time is priced at their own rate, worked out by the server.
+        accrued: p.pricing?.type === 'TIMED' ? p.accruedAmount : null,
         createdAt: p.createdAt,
       })),
     [data],

@@ -56,7 +56,9 @@ export function MakeSourceLedgerPaymentPanel({
 }) {
   const isOpen = !!entry;
   const toast = useToast();
-  const { options: cashAccountOptions, isLoading: isLoadingCashAccounts } = useCashAccountOptions();
+  const { options: cashAccountOptions, isLoading: isLoadingCashAccounts } = useCashAccountOptions({
+    currency: entry?.currency,
+  });
   const makePayment = useMakeSourceLedgerPayment();
 
   const {

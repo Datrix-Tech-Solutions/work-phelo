@@ -204,6 +204,7 @@ export function useTaskDialogs(projectId: string) {
           defaultWorkType={defaultWorkType}
           defaultPriority={defaultPriority}
           defaultTimed={pricing?.type === 'TIMED'}
+          lockTimed={pricing?.type === 'TIMED'}
         />
       )}
 
@@ -259,6 +260,7 @@ export function useTaskDialogs(projectId: string) {
     quickCreate,
     isQuickCreating: createTask.isPending || updateSprint.isPending,
     defaultTimed: pricing?.type === 'TIMED',
+    lockTimed: pricing?.type === 'TIMED',
     openDetails: (taskId: string) => setDetailsTaskId(taskId),
     dialogs,
   };

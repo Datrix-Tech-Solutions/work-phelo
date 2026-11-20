@@ -39,7 +39,9 @@ export function expectedValue(
     case 'FLAT_RATE':
       return draft.price;
     case 'TIMED':
-      return draft.hourlyRate * draft.estimatedHours;
+      return draft.hourlyRate > 0 && draft.estimatedHours > 0
+        ? draft.hourlyRate * draft.estimatedHours
+        : null;
     case 'MILESTONE':
       return draft.milestones.reduce((sum, m) => sum + m.amount, 0);
     case 'RETAINER': {
@@ -59,7 +61,9 @@ export function pricingExpectedValue(
     case 'FLAT_RATE':
       return pricing.price;
     case 'TIMED':
-      return pricing.hourlyRate * pricing.estimatedHours;
+      return pricing.hourlyRate && pricing.estimatedHours
+        ? pricing.hourlyRate * pricing.estimatedHours
+        : null;
     case 'MILESTONE':
       return pricing.milestones.reduce((sum, m) => sum + m.amount, 0);
     case 'RETAINER': {
@@ -80,7 +84,9 @@ export function expectedValueNote(
     case 'FLAT_RATE':
       return 'fixed price';
     case 'TIMED':
-      return `${draft.estimatedHours} h × ${formatMoney(draft.hourlyRate)}`;
+      return draft.hourlyRate > 0 && draft.estimatedHours > 0
+        ? `${draft.estimatedHours} h × ${formatMoney(draft.hourlyRate)}`
+        : 'optional benchmark, billed by each member’s rate';
     case 'MILESTONE':
       return `sum of ${draft.milestones.length} ${draft.milestones.length === 1 ? 'milestone' : 'milestones'}`;
     case 'RETAINER': {
@@ -103,9 +109,10 @@ export function pricingError(
     case 'FLAT_RATE':
       return draft.price > 0 ? undefined : 'Enter the price';
     case 'TIMED':
-      return draft.hourlyRate > 0 && draft.estimatedHours > 0
-        ? undefined
-        : 'Enter the rate per hour and the estimated hours';
+      // Both are optional benchmarks; only a negative number is wrong.
+      return draft.hourlyRate < 0 || draft.estimatedHours < 0
+        ? 'The rate and hours can’t be negative'
+        : undefined;
     case 'MILESTONE':
       return draft.milestones.length > 0 ? undefined : 'Add at least one milestone';
     case 'RETAINER':
@@ -122,7 +129,11 @@ export function buildPricing(type: ProjectBillingType, draft: PricingDraft): Pro
     case 'FLAT_RATE':
       return { type, price: draft.price };
     case 'TIMED':
-      return { type, hourlyRate: draft.hourlyRate, estimatedHours: draft.estimatedHours };
+      return {
+        type,
+        hourlyRate: draft.hourlyRate > 0 ? draft.hourlyRate : undefined,
+        estimatedHours: draft.estimatedHours > 0 ? draft.estimatedHours : undefined,
+      };
     case 'MILESTONE':
       return { type, milestones: draft.milestones };
     case 'RETAINER':

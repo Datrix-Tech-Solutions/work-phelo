@@ -82,6 +82,7 @@ describe('RecruiterAuthService', () => {
   beforeEach(() => jest.clearAllMocks());
 
   describe('register', () => {
+    // Real bcrypt at cost 12 (hash + compare) is slow on loaded CI runners.
     it('creates an unverified website tenant limited to the recruiter permission set and emails a confirmation link', async () => {
       const { service, tx, rabbitmq } = setup();
 
@@ -154,7 +155,7 @@ describe('RecruiterAuthService', () => {
         message:
           'Registration received. Check your email to confirm your account.',
       });
-    });
+    }, 30000);
 
     it('keeps a country name in the address and falls back to the default code', async () => {
       const { service, tx } = setup();

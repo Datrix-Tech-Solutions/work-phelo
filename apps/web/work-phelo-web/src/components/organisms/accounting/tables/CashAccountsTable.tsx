@@ -191,7 +191,7 @@ export function CashAccountsTable() {
       {
         key: 'isActive',
         label: 'Status',
-        width: '100px',
+        width: '130px',
         render: (row) =>
           row.status === 'complete' ? (
             <Badge
@@ -204,7 +204,7 @@ export function CashAccountsTable() {
       },
       {
         key: 'actions',
-        label: 'Actions',
+        label: 'Action',
         width: '170px',
         className: 'pr-6',
         render: (row) =>

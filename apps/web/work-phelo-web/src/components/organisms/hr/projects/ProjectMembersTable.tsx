@@ -8,6 +8,8 @@ import { AssignProjectMemberPanel } from '@/components/organisms/hr/projects/Ass
 import {
   useProjectMembers,
   useAddProjectMember,
+  useUpdateProjectMemberRate,
+  useProjectSetup,
   useRemoveProjectMember,
   useProject,
   useMyProfile,
@@ -16,6 +18,7 @@ import {
 import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
+import { NumberField } from '@/components/atoms/NumberField';
 import type { ProjectMember } from '@/types/hr';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 
@@ -48,6 +51,8 @@ export function ProjectMembersTable({ projectId }: Props) {
   const { data: members = [], isLoading } = useProjectMembers(projectId);
   const addMember = useAddProjectMember();
   const removeMember = useRemoveProjectMember();
+  const updateRate = useUpdateProjectMemberRate();
+  const isTimedProject = useProjectSetup(projectId)?.pricing?.type === 'TIMED';
 
   const assignedIds = useMemo(() => new Set(members.map((m) => m.employeeId)), [members]);
 
@@ -65,6 +70,18 @@ export function ProjectMembersTable({ projectId }: Props) {
         employeeIds.map((employeeId) => addMember.mutateAsync({ projectId, data: { employeeId } })),
       );
       setPanelOpen(false);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
+  const handleRate = async (employeeId: string, hourlyRate: number) => {
+    try {
+      await updateRate.mutateAsync({
+        projectId,
+        employeeId,
+        hourlyRate: hourlyRate > 0 ? hourlyRate : null,
+      });
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
     }
@@ -103,6 +120,33 @@ export function ProjectMembersTable({ projectId }: Props) {
         </span>
       ),
     },
+    ...(isTimedProject
+      ? [
+          {
+            key: 'hourlyRate' as keyof ProjectMember,
+            label: 'Rate / hour (GHS)',
+            width: '170px',
+            render: (row: ProjectMember) =>
+              canAssign ? (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <NumberField
+                    ariaLabel={`Hourly rate for ${row.name}`}
+                    value={row.hourlyRate ?? 0}
+                    onChange={() => {}}
+                    onBlur={(v) => {
+                      if (v !== (row.hourlyRate ?? 0)) handleRate(row.employeeId, v);
+                    }}
+                    placeholder="Set rate"
+                  />
+                </div>
+              ) : (
+                <span className="text-sm text-gray-700">
+                  {row.hourlyRate ? row.hourlyRate : '—'}
+                </span>
+              ),
+          },
+        ]
+      : []),
     ...(canAssign
       ? [
           {

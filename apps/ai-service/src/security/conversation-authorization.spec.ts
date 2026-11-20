@@ -348,18 +348,20 @@ describe('Exact conversation handler authorization in the actual Nest pipeline',
     expect(h.repository.create).not.toHaveBeenCalled();
   });
   it('rechecks deadline after nonce acquisition before minting business authority', async () => {
-    h.consume.mockImplementationOnce(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 60));
+    const realNow = Date.now.bind(Date);
+    let offsetMs = 0;
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => realNow() + offsetMs);
+    h.consume.mockImplementationOnce(() => {
+      // Deterministic: jump the clock past the 5s deadline instead of sleeping.
+      offsetMs = 6000;
+      return Promise.resolve();
     });
-    expect(
-      (
-        await send(
-          'POST',
-          '/api/conversations',
-          signed('POST', '/api/conversations', {}, { deadlineAtMs: Date.now() + 30 }),
-        )
-      ).status,
-    ).toBe(504);
+    try {
+      expect((await send('POST', '/api/conversations')).status).toBe(504);
+    } finally {
+      clock.mockRestore();
+    }
+    expect(h.consume).toHaveBeenCalledTimes(1);
     expect(h.repository.create).not.toHaveBeenCalled();
   });
   it('cannot forge an operation capability or obtain one from raw request properties', () => {

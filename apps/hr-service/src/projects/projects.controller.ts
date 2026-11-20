@@ -23,6 +23,7 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
+import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -227,6 +228,30 @@ export class ProjectsController {
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.addMember(req.user.tenantId, id, req.user, dto);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'ProjectsController.updateMember delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Patch(':id/members/:employeeId')
+  @ApiOperation({ summary: 'Set what a project member’s time is billed at' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
+  @ApiBody({ type: UpdateProjectMemberDto })
+  updateMember(
+    @Param('id') id: string,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: UpdateProjectMemberDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.projectsService.updateMemberRate(
+      req.user.tenantId,
+      id,
+      employeeId,
+      req.user,
+      dto,
+    );
   }
 
   @PermissionExempt(

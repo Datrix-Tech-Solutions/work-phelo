@@ -6,7 +6,13 @@ import { Button } from '@/components/atoms/Button';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { UpdatePriceModal } from '@/components/organisms/hr/projects/UpdatePriceModal';
 import { ProjectInvoiceModal } from '@/components/organisms/hr/projects/ProjectInvoiceModal';
-import { useProject, useProjectSetup, useProjectTasks, useUpdateProject } from '@/hooks';
+import {
+  useProject,
+  useProjectMembers,
+  useProjectSetup,
+  useProjectTasks,
+  useUpdateProject,
+} from '@/hooks';
 import { billingLines } from '@/lib/projectBilling';
 import { formatMoney, pricingExpectedValue } from '@/lib/projectPricing';
 import { formatHoursMinutes, timerElapsedMs, useNow } from '@/lib/taskTime';
@@ -38,6 +44,7 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
   const { data: tasks = [] } = useProjectTasks(projectId);
   const details = useProjectSetup(projectId);
   const { timersByTaskId, timedByTaskId, anyRunning } = useProjectTimers(projectId);
+  const { data: members = [] } = useProjectMembers(projectId);
   const updateProject = useUpdateProject();
   const save = useSaveWithToast();
   // The dates a retainer or milestone project is priced over.
@@ -70,10 +77,16 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
             (sum, timer) => sum + timerElapsedMs(timer, now),
             0,
           ),
+          // Priced at the rate of whoever logged the time; a timed task has one assignee.
+          rate: Object.keys(timersByTaskId[t.id] ?? {}).reduce(
+            (rate, personId) =>
+              rate || (members.find((m) => m.employeeId === personId)?.hourlyRate ?? 0),
+            0,
+          ),
         })),
       invoices: active,
     });
-  }, [pricing, startDate, endDate, tasks, timedByTaskId, timersByTaskId, now, active]);
+  }, [pricing, startDate, endDate, tasks, timedByTaskId, timersByTaskId, members, now, active]);
 
   const stateOf = (transactionId: string) =>
     transactions?.items.find((t) => t.id === transactionId);
