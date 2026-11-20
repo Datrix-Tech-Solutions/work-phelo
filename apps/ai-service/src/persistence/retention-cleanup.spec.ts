@@ -9,6 +9,7 @@ import { AiDatabaseService, createAiClient } from './ai-database.service';
 import { ConversationsRepository } from './conversations.repository';
 import { OwnershipContextFactory } from './ownership-context';
 import { RetentionCleanupService } from './retention-cleanup.service';
+import { RequestNonceStore } from './request-nonce.store';
 import { AI_RETENTION_MS, appendReceiptLockScope, retentionDeadline } from './retention-policy';
 
 const base = { NODE_ENV: 'test', AI_PROVIDER: 'mock', AI_POLICY_VERSION: 'retention-v1' };
@@ -111,9 +112,15 @@ describe('Retention policy, scheduling and safe failures (unit fixtures)', () =>
     );
     const result = {
       conversationsDeleted: 0,
+      messagesDeleted: 0,
       receiptsDeleted: 0,
+      noncesDeleted: 0,
       conversationBacklog: 0,
       backlogCapped: false,
+      receiptBacklog: 0,
+      receiptBacklogCapped: false,
+      nonceBacklog: 0,
+      nonceBacklogCapped: false,
       oldestExpiredAgeSeconds: 0,
       lastSuccessAt: new Date(0).toISOString(),
     };
@@ -143,6 +150,47 @@ describe('Retention policy, scheduling and safe failures (unit fixtures)', () =>
     });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('ai_cleanup_failure'));
     expect(JSON.stringify(warn.mock.calls)).not.toContain('canary');
+  });
+  it('does not overlap scheduled batches and awaits active maintenance before shutdown', async () => {
+    jest.useFakeTimers();
+    const cleanup = new RetentionCleanupService(
+      {} as AiDatabaseService,
+      config({ AI_RETENTION_SCHEDULER_ENABLED: true, AI_CLEANUP_INTERVAL_MS: 1000 }),
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const run = jest.spyOn(cleanup, 'runBatch').mockImplementation(async () => {
+      await gate;
+      return {
+        conversationsDeleted: 0,
+        messagesDeleted: 0,
+        receiptsDeleted: 0,
+        noncesDeleted: 0,
+        conversationBacklog: 0,
+        backlogCapped: false,
+        receiptBacklog: 0,
+        receiptBacklogCapped: false,
+        nonceBacklog: 0,
+        nonceBacklogCapped: false,
+        oldestExpiredAgeSeconds: 0,
+        lastSuccessAt: new Date(0).toISOString(),
+      };
+    });
+    cleanup.onModuleInit();
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(run).toHaveBeenCalledTimes(1);
+    let stopped = false;
+    const stop = cleanup.onModuleDestroy().then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    release();
+    await stop;
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(run).toHaveBeenCalledTimes(1);
   });
   it('caps all retry attempts to a single deadline rather than restarting the budget', async () => {
     const client = { $connect: jest.fn(), $disconnect: jest.fn(), $transaction: jest.fn() };
@@ -211,30 +259,31 @@ const testUrl = process.env.AI_TEST_DATABASE_URL;
       // This suite owns only the isolated disposable test schema. Never use shared DBs.
       await db.aiConversation.deleteMany();
       await db.aiSubmissionReceipt.deleteMany();
+      await db.aiRequestNonce.deleteMany();
     });
     afterAll(async () => {
       log?.mockRestore();
       await database?.onModuleDestroy();
       await db?.$disconnect();
     });
-    async function parent(isExpired = true) {
+    async function parent(isExpired = true, tenantId = randomUUID(), ownerUserId = randomUUID()) {
       const createdAt = new Date(Date.now() - (isExpired ? AI_RETENTION_MS + 120000 : 1000));
       return db.aiConversation.create({
         data: {
-          tenantId: randomUUID(),
-          ownerUserId: randomUUID(),
+          tenantId,
+          ownerUserId,
           createdAt,
           expiresAt: retentionDeadline(createdAt),
         },
       });
     }
-    async function child(conversation: Awaited<ReturnType<typeof parent>>) {
+    async function child(conversation: Awaited<ReturnType<typeof parent>>, sequence = 1) {
       return db.aiConversationMessage.create({
         data: {
           conversationId: conversation.id,
           tenantId: conversation.tenantId,
           ownerUserId: conversation.ownerUserId,
-          sequence: 1,
+          sequence,
           encryptionVersion: 1,
           keyId: 'unavailable-historical-key',
           ciphertext: randomBytes(20),
@@ -283,6 +332,204 @@ const testUrl = process.env.AI_TEST_DATABASE_URL;
       const results = await Promise.all([cleaner.runBatch(), other.runBatch()]);
       expect(results.reduce((n, r) => n + r.conversationsDeleted, 0)).toBe(4);
       expect(await db.aiConversation.count()).toBe(0);
+    });
+    it('drains a dense expired parent in bounded message chunks without a cascading fan-out', async () => {
+      const before = cleaner.status();
+      const conversation = await parent();
+      for (let sequence = 1; sequence <= 7; sequence++) await child(conversation, sequence);
+      const owner = new OwnershipContextFactory({
+        verifyRequest: () => ({ tenantId: conversation.tenantId, id: conversation.ownerUserId }),
+      } as unknown as TrustedContextService).fromRequest({} as Request);
+      const repository = new ConversationsRepository(database);
+      const first = await cleaner.runBatch();
+      expect(first).toMatchObject({ messagesDeleted: 2, conversationsDeleted: 0 });
+      expect(await db.aiConversationMessage.count()).toBe(5);
+      expect(await db.aiConversation.findUnique({ where: { id: conversation.id } })).not.toBeNull();
+      expect(await repository.findOwned(owner, conversation.id)).toBeNull();
+      expect(await repository.listOwned(owner)).toEqual([]);
+      for (let pass = 0; pass < 3; pass++) {
+        const result = await cleaner.runBatch();
+        expect(result.messagesDeleted).toBeLessThanOrEqual(2);
+        expect(result.conversationsDeleted).toBeLessThanOrEqual(2);
+      }
+      expect(await db.aiConversationMessage.count()).toBe(0);
+      expect(await db.aiConversation.count()).toBe(0);
+      expect(cleaner.status()).toMatchObject({
+        messagesDeleted: before.messagesDeleted + 7,
+        conversationsDeleted: before.conversationsDeleted + 1,
+      });
+    });
+    it('skips locked children instead of letting a dense parent stall the whole batch', async () => {
+      const row = await parent();
+      const locked = await child(row, 1);
+      await child(row, 2);
+      await child(row, 3);
+      let acquired!: () => void, release!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        acquired = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const held = db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM ai."AiConversationMessage" WHERE id = ${locked.id}::uuid FOR UPDATE`;
+        acquired();
+        await gate;
+      });
+      await ready;
+      try {
+        expect(await cleaner.runBatch()).toMatchObject({
+          messagesDeleted: 2,
+          conversationsDeleted: 0,
+        });
+        expect(await db.aiConversationMessage.count()).toBe(1);
+      } finally {
+        release();
+        await held;
+      }
+      expect(await cleaner.runBatch()).toMatchObject({
+        messagesDeleted: 1,
+        conversationsDeleted: 1,
+      });
+    });
+    it('preserves live data across users in one tenant and separate tenants while draining expired rows', async () => {
+      const tenant = randomUUID();
+      const live = [await parent(false, tenant), await parent(false, tenant), await parent(false)];
+      for (const row of live) await child(row);
+      const expired = [await parent(true, tenant), await parent(true, tenant), await parent()];
+      for (const row of expired) {
+        await child(row, 1);
+        await child(row, 2);
+        await child(row, 3);
+      }
+      for (let pass = 0; pass < 6; pass++) {
+        const result = await cleaner.runBatch();
+        expect(result.messagesDeleted).toBeLessThanOrEqual(2);
+      }
+      expect(await db.aiConversation.count()).toBe(3);
+      expect(await db.aiConversationMessage.count()).toBe(3);
+      for (const row of live)
+        expect(await db.aiConversation.findUnique({ where: { id: row.id } })).not.toBeNull();
+    });
+    async function nonce(isExpired = true) {
+      const now = Date.now();
+      return db.aiRequestNonce.create({
+        data: {
+          replayDigest: randomBytes(32),
+          createdAt: new Date(now - (isExpired ? 70000 : 0)),
+          expiresAt: new Date(now + (isExpired ? -1000 : 60000)),
+        },
+      });
+    }
+    it('purges bounded expired nonce batches without unspending a valid proof or reviving an expired proof', async () => {
+      const old = await nonce();
+      await nonce();
+      await nonce();
+      const live = await nonce(false);
+      expect(await cleaner.runBatch()).toMatchObject({ noncesDeleted: 2, nonceBacklog: 1 });
+      expect(await cleaner.runBatch()).toMatchObject({ noncesDeleted: 1, nonceBacklog: 0 });
+      expect(await db.aiRequestNonce.count()).toBe(1);
+      const store = new RequestNonceStore(
+        database,
+        config({ AI_REQUEST_VERIFICATION_ENABLED: true }),
+      );
+      const now = Date.now();
+      await expect(
+        store.consume(live.replayDigest, now, now + 4000, now + 3000),
+      ).rejects.toMatchObject({ status: 401 });
+      await expect(
+        store.consume(old.replayDigest, now - 70000, now - 1000, now - 1000),
+      ).rejects.toMatchObject({ status: 504 });
+      expect(await db.aiRequestNonce.count()).toBe(1);
+    });
+    it('keeps message and nonce work bounded across independent database-backed cleanup instances', async () => {
+      for (let parentIndex = 0; parentIndex < 4; parentIndex++) {
+        const row = await parent();
+        for (let sequence = 1; sequence <= 5; sequence++) await child(row, sequence);
+      }
+      for (let index = 0; index < 5; index++) await nonce();
+      const otherDatabase = new AiDatabaseService(
+        config({ DATABASE_URL: testUrl! }),
+        createAiClient,
+      );
+      await otherDatabase.onModuleInit();
+      try {
+        const other = new RetentionCleanupService(otherDatabase, config());
+        const results = await Promise.all([cleaner.runBatch(), other.runBatch()]);
+        expect(results.reduce((sum, result) => sum + result.messagesDeleted, 0)).toBe(4);
+        expect(results.reduce((sum, result) => sum + result.noncesDeleted, 0)).toBe(4);
+        expect(await db.aiConversationMessage.count()).toBe(16);
+        expect(await db.aiRequestNonce.count()).toBe(1);
+      } finally {
+        await otherDatabase.onModuleDestroy();
+      }
+    });
+    it('skips an expired nonce held by another transaction and drains it after release', async () => {
+      const row = await nonce();
+      let acquired!: () => void, release!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        acquired = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const held = db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "replayDigest" FROM ai."AiRequestNonce" WHERE "replayDigest" = ${row.replayDigest} FOR UPDATE`;
+        acquired();
+        await gate;
+      });
+      await ready;
+      try {
+        expect((await cleaner.runBatch()).noncesDeleted).toBe(0);
+      } finally {
+        release();
+        await held;
+      }
+      expect((await cleaner.runBatch()).noncesDeleted).toBe(1);
+    });
+    it('rolls back messages, receipts and nonce removals together when nonce cleanup fails', async () => {
+      const before = cleaner.status();
+      const row = await parent();
+      await child(row, 1);
+      await child(row, 2);
+      await child(row, 3);
+      const oldReceipt = await receipt(row);
+      const oldNonce = await nonce();
+      await db.$executeRawUnsafe(
+        `CREATE FUNCTION ai.test_nonce_cleanup_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'private-nonce-cleanup-canary'; END; $$`,
+      );
+      await db.$executeRawUnsafe(
+        'CREATE TRIGGER test_nonce_cleanup_failure BEFORE DELETE ON ai."AiRequestNonce" FOR EACH ROW EXECUTE FUNCTION ai.test_nonce_cleanup_failure()',
+      );
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      try {
+        await expect(cleaner.runBatch()).rejects.toThrow('Conversation operation unavailable');
+        expect(await db.aiConversationMessage.count()).toBe(3);
+        expect(
+          await db.aiSubmissionReceipt.findUnique({ where: { id: oldReceipt.id } }),
+        ).not.toBeNull();
+        expect(
+          await db.aiRequestNonce.findUnique({ where: { replayDigest: oldNonce.replayDigest } }),
+        ).not.toBeNull();
+        expect(cleaner.status()).toMatchObject({
+          messagesDeleted: before.messagesDeleted,
+          noncesDeleted: before.noncesDeleted,
+          receiptsDeleted: before.receiptsDeleted,
+          failureCount: before.failureCount + 1,
+        });
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('private-nonce-cleanup-canary');
+      } finally {
+        warn.mockRestore();
+        await db.$executeRawUnsafe(
+          'DROP TRIGGER test_nonce_cleanup_failure ON ai."AiRequestNonce"',
+        );
+        await db.$executeRawUnsafe('DROP FUNCTION ai.test_nonce_cleanup_failure()');
+      }
+      expect(await cleaner.runBatch()).toMatchObject({
+        messagesDeleted: 2,
+        noncesDeleted: 1,
+        receiptsDeleted: 1,
+      });
     });
     it('skips a parent actively locked by another operation and removes it after release', async () => {
       const conversation = await parent();
@@ -402,6 +649,13 @@ const testUrl = process.env.AI_TEST_DATABASE_URL;
         );
       });
       expect(JSON.stringify(plan)).toContain('AiConversation_expiry_idx');
+      const noncePlan = await db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
+        return tx.$queryRawUnsafe(
+          'EXPLAIN SELECT "replayDigest" FROM ai."AiRequestNonce" WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", "replayDigest" LIMIT 2 FOR UPDATE SKIP LOCKED',
+        );
+      });
+      expect(JSON.stringify(noncePlan)).toContain('AiRequestNonce_expiry_idx');
     });
     it('treats the exact expiration instant as expired in PostgreSQL and excludes it before physical cleanup', async () => {
       const id = randomUUID();

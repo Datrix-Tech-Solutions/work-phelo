@@ -13,11 +13,17 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
   private diagnostics = {
     lastSuccessAt: null as string | null,
     conversationsDeleted: 0,
+    messagesDeleted: 0,
     receiptsDeleted: 0,
+    noncesDeleted: 0,
     lastDurationMs: 0,
     failureCount: 0,
     conversationBacklog: 0,
     backlogCapped: false,
+    receiptBacklog: 0,
+    receiptBacklogCapped: false,
+    nonceBacklog: 0,
+    nonceBacklogCapped: false,
     oldestExpiredAgeSeconds: 0,
   };
 
@@ -72,8 +78,19 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
       const result = await this.database.transaction(async (tx) => {
         const expired = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM ai."AiConversation"
           WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", id LIMIT ${limit} FOR UPDATE SKIP LOCKED`;
+        const parentIds = expired.map((row) => row.id);
+        // Bound child work too: a parent-only LIMIT does not bound a cascade.
+        const messages = parentIds.length
+          ? await tx.$queryRaw<{ id: string }[]>`
+              SELECT id FROM ai."AiConversationMessage"
+              WHERE "conversationId" = ANY(${parentIds}::uuid[])
+              ORDER BY "conversationId", sequence LIMIT ${limit} FOR UPDATE SKIP LOCKED`
+          : [];
+        const deletedMessages = await tx.aiConversationMessage.deleteMany({
+          where: { id: { in: messages.map((row) => row.id) } },
+        });
         const conversations = await tx.aiConversation.deleteMany({
-          where: { id: { in: expired.map((row) => row.id) } },
+          where: { id: { in: parentIds }, messages: { none: {} } },
         });
         const receipts = await tx.$queryRaw<
           {
@@ -107,17 +124,36 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
         const deletedReceipts = await tx.aiSubmissionReceipt.deleteMany({
           where: { id: { in: removable } },
         });
+        const nonces = await tx.$queryRaw<{ replayDigest: Buffer }[]>`
+          SELECT "replayDigest" FROM ai."AiRequestNonce"
+          WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", "replayDigest"
+          LIMIT ${limit} FOR UPDATE SKIP LOCKED`;
+        const deletedNonces = await tx.aiRequestNonce.deleteMany({
+          where: { replayDigest: { in: nonces.map((row) => row.replayDigest) } },
+        });
         // A bounded indexed sample, not an unbounded count across the AI schema.
         const backlog = await tx.$queryRaw<
           { expiresAt: Date }[]
         >`SELECT "expiresAt" FROM ai."AiConversation"
           WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", id LIMIT 1001`;
+        const receiptBacklog = await tx.$queryRaw<{ expiresAt: Date }[]>`
+          SELECT "expiresAt" FROM ai."AiSubmissionReceipt"
+          WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", id LIMIT 1001`;
+        const nonceBacklog = await tx.$queryRaw<{ expiresAt: Date }[]>`
+          SELECT "expiresAt" FROM ai."AiRequestNonce"
+          WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", "replayDigest" LIMIT 1001`;
         const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
         return {
           conversationsDeleted: conversations.count,
+          messagesDeleted: deletedMessages.count,
           receiptsDeleted: deletedReceipts.count,
+          noncesDeleted: deletedNonces.count,
           conversationBacklog: Math.min(backlog.length, 1000),
           backlogCapped: backlog.length > 1000,
+          receiptBacklog: Math.min(receiptBacklog.length, 1000),
+          receiptBacklogCapped: receiptBacklog.length > 1000,
+          nonceBacklog: Math.min(nonceBacklog.length, 1000),
+          nonceBacklogCapped: nonceBacklog.length > 1000,
           oldestExpiredAgeSeconds: backlog[0]
             ? Math.max(0, Math.floor((clock.now.getTime() - backlog[0].expiresAt.getTime()) / 1000))
             : 0,
@@ -130,7 +166,9 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
         ...result,
         lastDurationMs: duration,
         conversationsDeleted: this.diagnostics.conversationsDeleted + result.conversationsDeleted,
+        messagesDeleted: this.diagnostics.messagesDeleted + result.messagesDeleted,
         receiptsDeleted: this.diagnostics.receiptsDeleted + result.receiptsDeleted,
+        noncesDeleted: this.diagnostics.noncesDeleted + result.noncesDeleted,
       };
       this.logger.log(
         JSON.stringify({ event: 'ai_cleanup_success', ...result, durationMs: duration }),

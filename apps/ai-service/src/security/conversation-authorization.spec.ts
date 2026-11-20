@@ -347,20 +347,49 @@ describe('Exact conversation handler authorization in the actual Nest pipeline',
     }
     expect(h.repository.create).not.toHaveBeenCalled();
   });
+  it('rejects a proof that expires before initial verification without consuming a nonce', async () => {
+    const now = Date.now();
+    const ownerCount = h.owners.length;
+    const deadlineAtMs = now + 5000;
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      const headers = signed('POST', '/api/conversations', {}, { deadlineAtMs });
+      clock.mockReturnValue(deadlineAtMs);
+      expect((await send('POST', '/api/conversations', headers)).status).toBe(401);
+      expect(h.consume).not.toHaveBeenCalled();
+      expect(h.repository.create).not.toHaveBeenCalled();
+      expect(h.owners).toHaveLength(ownerCount);
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it('rechecks deadline after nonce acquisition before minting business authority', async () => {
-    h.consume.mockImplementationOnce(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    });
-    expect(
-      (
-        await send(
-          'POST',
-          '/api/conversations',
-          signed('POST', '/api/conversations', {}, { deadlineAtMs: Date.now() + 30 }),
-        )
-      ).status,
-    ).toBe(504);
-    expect(h.repository.create).not.toHaveBeenCalled();
+    const now = Date.now();
+    const ownerCount = h.owners.length;
+    const deadlineAtMs = now + 5000;
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      h.consume.mockImplementationOnce(() => {
+        expect(Date.now()).toBe(now);
+        // Expire only after initial proof verification has reached nonce acquisition.
+        clock.mockReturnValue(deadlineAtMs);
+        return Promise.resolve();
+      });
+      expect(
+        (
+          await send(
+            'POST',
+            '/api/conversations',
+            signed('POST', '/api/conversations', {}, { deadlineAtMs }),
+          )
+        ).status,
+      ).toBe(504);
+      expect(h.consume).toHaveBeenCalledTimes(1);
+      expect(h.repository.create).not.toHaveBeenCalled();
+      expect(h.owners).toHaveLength(ownerCount);
+    } finally {
+      clock.mockRestore();
+    }
   });
   it('cannot forge an operation capability or obtain one from raw request properties', () => {
     expect(() =>
