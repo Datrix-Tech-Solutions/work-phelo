@@ -204,7 +204,7 @@ export function CashAccountsTable() {
       },
       {
         key: 'actions',
-        label: 'Actions',
+        label: 'Action',
         width: '170px',
         className: 'pr-6',
         render: (row) =>
