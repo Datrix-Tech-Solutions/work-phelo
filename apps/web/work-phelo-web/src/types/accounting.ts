@@ -2324,3 +2324,94 @@ export type TransactionsPageItem =
       settlement: AccountingTradeSettlement;
       linkedDocuments: { id: string; documentNumber: string }[];
     };
+
+// ── Bank reconciliation ──────────────────────────────────────────────────────
+
+export type BankReconciliationStatus = 'DRAFT' | 'COMPLETED' | 'VOID';
+export type BankStatementLineStatus = 'UNMATCHED' | 'MATCHED' | 'IGNORED';
+
+/** A ledger line (journal line on the cash account's GL account) with its entry. */
+export interface BankReconciledLedgerLine {
+  id: string;
+  description: string | null;
+  baseDebit: string;
+  baseCredit: string;
+  transactionDebit: string;
+  transactionCredit: string;
+  journalEntry: {
+    id: string;
+    journalNumber: string;
+    transactionDate: string;
+    reference: string | null;
+    description: string;
+    baseCurrency: string;
+    transactionCurrency: string;
+  };
+}
+
+export interface BankStatementLine {
+  id: string;
+  lineNumber: number;
+  transactionDate: string;
+  valueDate: string | null;
+  /** Signed: money in is positive, money out is negative. */
+  amount: string;
+  currency: string;
+  description: string | null;
+  bankReference: string | null;
+  counterpartyName: string | null;
+  runningBalance: string | null;
+  /** MATCHED means the user ticked the row off as reconciled. */
+  status: BankStatementLineStatus;
+}
+
+export interface BankReconciliation {
+  id: string;
+  cashAccountId: string;
+  statementReference: string;
+  statementStartDate: string;
+  statementEndDate: string;
+  openingBalance: string;
+  closingBalance: string;
+  currency: string;
+  status: BankReconciliationStatus;
+  completedAt: string | null;
+  completedByUserId: string | null;
+  createdAt: string;
+  cashAccount: {
+    id: string;
+    name: string;
+    accountKind: string;
+    currency: string;
+    bankName: string | null;
+    accountNumber: string | null;
+  };
+  _count: { statementLines: number; reconciledEntries: number };
+  /** Only on the list endpoint. */
+  matchedLineCount?: number;
+  unmatchedLineCount?: number;
+}
+
+export interface BankReconciliationDetail extends BankReconciliation {
+  statementLines: BankStatementLine[];
+  reconciledEntries: { id: string; journalLineId: string; journalLine: BankReconciledLedgerLine }[];
+}
+
+export interface CompleteBankReconciliationPayload {
+  cashAccountId: string;
+  statementStartDate: string;
+  statementEndDate: string;
+  openingBalance: number;
+  closingBalance: number;
+  currency: string;
+  statementLines: {
+    transactionDate: string;
+    /** Signed: money in is positive, money out is negative. */
+    amount: number;
+    description?: string;
+    bankReference?: string;
+    runningBalance?: number;
+    reconciled: boolean;
+  }[];
+  reconciledJournalLineIds: string[];
+}

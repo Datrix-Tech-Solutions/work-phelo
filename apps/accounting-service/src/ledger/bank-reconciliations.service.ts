@@ -4,22 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'crypto';
+import { randomUUID } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   BankReconciliationStatus,
   BankStatementLineStatus,
-  CashbookDirection,
-  CashbookTransactionStatus,
+  JournalStatus,
   Prisma,
   RecordStatus,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateBankReconciliationDto,
-  MatchBankStatementLineDto,
+  CompleteBankReconciliationDto,
   QueryBankReconciliationsDto,
-  QueryBankStatementLinesDto,
 } from './dto/bank-reconciliations.dto';
 
 const reconciliationInclude = {
@@ -33,48 +30,38 @@ const reconciliationInclude = {
       accountNumber: true,
     },
   },
-  _count: { select: { statementLines: true } },
+  _count: { select: { statementLines: true, reconciledEntries: true } },
 } satisfies Prisma.BankReconciliationInclude;
 
-type ImportFile = Pick<
-  Express.Multer.File,
-  'buffer' | 'mimetype' | 'originalname' | 'size'
->;
-
-type StatementLineInput = {
-  rowNumber: number;
-  transactionDate: Date;
-  valueDate: Date | null;
-  amount: number;
-  currency: string;
-  description: string | null;
-  bankReference: string | null;
-  counterpartyName: string | null;
-  runningBalance: number | null;
-  sourceFingerprint: string;
-};
-
-const MAX_CSV_BYTES = 1024 * 1024;
-const MAX_CSV_ROWS = 5000;
-const REQUIRED_STATEMENT_COLUMNS = ['transactionDate', 'amount', 'currency'];
-
-const matchedCashbookSelect = {
+const matchedJournalLineSelect = {
   id: true,
-  transactionDate: true,
-  amount: true,
-  currency: true,
-  direction: true,
-  reference: true,
-  externalReference: true,
   description: true,
-} satisfies Prisma.CashbookTransactionSelect;
+  baseDebit: true,
+  baseCredit: true,
+  transactionDebit: true,
+  transactionCredit: true,
+  journalEntry: {
+    select: {
+      id: true,
+      journalNumber: true,
+      transactionDate: true,
+      reference: true,
+      description: true,
+      baseCurrency: true,
+      transactionCurrency: true,
+    },
+  },
+} satisfies Prisma.JournalLineSelect;
+
+/** Rounding slack when comparing a bank amount with a ledger amount. */
+const AMOUNT_TOLERANCE = new Prisma.Decimal('0.005');
 
 @Injectable()
 export class BankReconciliationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(tenantId: string, query: QueryBankReconciliationsDto) {
-    return this.prisma.bankReconciliation.findMany({
+  async list(tenantId: string, query: QueryBankReconciliationsDto) {
+    const reconciliations = await this.prisma.bankReconciliation.findMany({
       where: {
         tenantId,
         ...(query.cashAccountId ? { cashAccountId: query.cashAccountId } : {}),
@@ -93,19 +80,72 @@ export class BankReconciliationsService {
       include: reconciliationInclude,
       orderBy: [{ statementEndDate: 'desc' }, { createdAt: 'desc' }],
     });
+    if (reconciliations.length === 0) return [];
+
+    const grouped = await this.prisma.bankStatementLine.groupBy({
+      by: ['reconciliationId', 'status'],
+      where: {
+        tenantId,
+        reconciliationId: { in: reconciliations.map((item) => item.id) },
+      },
+      _count: { _all: true },
+    });
+    const counts = new Map<string, { matched: number; unmatched: number }>();
+    for (const row of grouped) {
+      const entry = counts.get(row.reconciliationId) ?? {
+        matched: 0,
+        unmatched: 0,
+      };
+      if (row.status === BankStatementLineStatus.MATCHED) {
+        entry.matched += row._count._all;
+      } else {
+        entry.unmatched += row._count._all;
+      }
+      counts.set(row.reconciliationId, entry);
+    }
+    return reconciliations.map((item) => ({
+      ...item,
+      matchedLineCount: counts.get(item.id)?.matched ?? 0,
+      unmatchedLineCount: counts.get(item.id)?.unmatched ?? 0,
+    }));
   }
 
+  /** Ids of the cash account's ledger lines that a completed reconciliation has already covered. */
+  async reconciledJournalLineIds(tenantId: string, cashAccountId: string) {
+    const entries = await this.prisma.bankReconciledEntry.findMany({
+      where: {
+        tenantId,
+        reconciliation: {
+          cashAccountId,
+          status: BankReconciliationStatus.COMPLETED,
+        },
+      },
+      select: { journalLineId: true },
+    });
+    return { journalLineIds: entries.map((entry) => entry.journalLineId) };
+  }
+
+  /** The reconciliation with every statement row and, for matched rows, the ledger line behind it. */
   async get(tenantId: string, reconciliationId: string) {
     const reconciliation = await this.prisma.bankReconciliation.findFirst({
       where: { id: reconciliationId, tenantId },
-      include: reconciliationInclude,
+      include: {
+        ...reconciliationInclude,
+        statementLines: {
+          orderBy: { lineNumber: 'asc' },
+        },
+        reconciledEntries: {
+          orderBy: { createdAt: 'asc' },
+          include: { journalLine: { select: matchedJournalLineSelect } },
+        },
+      },
     });
     if (!reconciliation)
       throw new NotFoundException('Bank reconciliation not found');
     return reconciliation;
   }
 
-  async create(user: RequestUser, dto: CreateBankReconciliationDto) {
+  async complete(user: RequestUser, dto: CompleteBankReconciliationDto) {
     const startDate = this.startOfDay(dto.statementStartDate);
     const endDate = this.endOfDay(dto.statementEndDate);
     if (startDate > endDate) {
@@ -119,6 +159,7 @@ export class BankReconciliationsService {
       select: {
         id: true,
         currency: true,
+        glAccountId: true,
         glAccount: { select: { status: true } },
       },
     });
@@ -130,546 +171,185 @@ export class BankReconciliationsService {
         'Reconciliation currency must match the selected cash account',
       );
     }
+    for (const [index, line] of dto.statementLines.entries()) {
+      if (line.currency && line.currency !== dto.currency) {
+        throw new BadRequestException(
+          `Statement row ${index + 1} is in ${line.currency}, not ${dto.currency}`,
+        );
+      }
+    }
 
-    try {
-      const reconciliation = await this.prisma.bankReconciliation.create({
-        data: {
-          tenantId: user.tenantId,
-          cashAccountId: cashAccount.id,
-          statementReference: dto.statementReference,
-          statementStartDate: startDate,
-          statementEndDate: endDate,
-          openingBalance: dto.openingBalance,
-          closingBalance: dto.closingBalance,
-          currency: dto.currency,
-          createdByUserId: user.id,
-          updatedByUserId: user.id,
-        },
-        include: reconciliationInclude,
+    const entryIds = dto.reconciledJournalLineIds;
+    if (new Set(entryIds).size !== entryIds.length) {
+      throw new BadRequestException(
+        'A ledger entry can only be reconciled once',
+      );
+    }
+    const ledgerLines = await this.loadLedgerLines(
+      user.tenantId,
+      cashAccount.glAccountId,
+      entryIds,
+      startDate,
+      endDate,
+    );
+    let ledgerTotal = new Prisma.Decimal(0);
+    for (const id of entryIds) {
+      const ledgerLine = ledgerLines.get(id);
+      if (!ledgerLine) {
+        throw new BadRequestException(
+          'A reconciled ledger entry is not a posted entry of this account within the statement period',
+        );
+      }
+      const amount = this.ledgerAmount(ledgerLine, dto.currency);
+      if (amount === null) {
+        throw new BadRequestException(
+          `A reconciled ledger entry is not in ${dto.currency}`,
+        );
+      }
+      ledgerTotal = ledgerTotal.plus(amount);
+    }
+    const bankTotal = dto.statementLines
+      .filter((line) => line.reconciled)
+      .reduce((sum, line) => sum.plus(line.amount), new Prisma.Decimal(0));
+    if (ledgerTotal.minus(bankTotal).abs().greaterThan(AMOUNT_TOLERANCE)) {
+      throw new BadRequestException(
+        `The reconciled ledger entries total ${ledgerTotal.toFixed(2)} but the reconciled statement rows total ${bankTotal.toFixed(2)}`,
+      );
+    }
+    if (entryIds.length > 0) {
+      const alreadyReconciled = await this.prisma.bankReconciledEntry.count({
+        where: { tenantId: user.tenantId, journalLineId: { in: entryIds } },
       });
-      await this.recordAudit(
-        user,
-        'BANK_RECONCILIATION_CREATE',
-        reconciliation.id,
-        {
-          cashAccountId: reconciliation.cashAccountId,
-          statementReference: reconciliation.statementReference,
-          statementStartDate: reconciliation.statementStartDate.toISOString(),
-          statementEndDate: reconciliation.statementEndDate.toISOString(),
-          currency: reconciliation.currency,
-        },
-      );
-      return reconciliation;
-    } catch (error) {
-      if (this.isUniqueConstraint(error)) {
+      if (alreadyReconciled > 0) {
         throw new ConflictException(
-          'A bank reconciliation already exists for this cash account and statement reference',
+          'One or more of these ledger entries have already been reconciled',
         );
       }
-      throw error;
     }
-  }
 
-  async listStatementLines(
-    tenantId: string,
-    reconciliationId: string,
-    query: QueryBankStatementLinesDto,
-  ) {
-    await this.get(tenantId, reconciliationId);
-    const page = Math.max(1, query.page ?? 1);
-    const limit = Math.min(Math.max(1, query.limit ?? 25), 100);
-    const where: Prisma.BankStatementLineWhereInput = {
-      tenantId,
-      reconciliationId,
-      ...(query.status ? { status: query.status } : {}),
-    };
-    const [items, total] = await Promise.all([
-      this.prisma.bankStatementLine.findMany({
-        where,
-        include: {
-          matchedCashbookTransaction: { select: matchedCashbookSelect },
-        },
-        orderBy: { lineNumber: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.bankStatementLine.count({ where }),
-    ]);
-    return {
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-    };
-  }
+    const statementReference =
+      dto.statementReference ??
+      `REC-${dto.statementStartDate.slice(0, 10)}-${dto.statementEndDate.slice(0, 10)}-${randomUUID().slice(0, 6).toUpperCase()}`;
+    const now = new Date();
 
-  async listMatchCandidates(
-    tenantId: string,
-    reconciliationId: string,
-    statementLineId: string,
-  ) {
-    const line = await this.findUnmatchedStatementLine(
-      this.prisma,
-      tenantId,
-      reconciliationId,
-      statementLineId,
-    );
-    return this.prisma.cashbookTransaction.findMany({
-      where: this.exactCashbookMatchWhere(line),
-      select: matchedCashbookSelect,
-      orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
-      take: 25,
-    });
-  }
-
-  async matchStatementLine(
-    user: RequestUser,
-    reconciliationId: string,
-    statementLineId: string,
-    dto: MatchBankStatementLineDto,
-  ) {
     try {
-      return await this.prisma.$transaction(
+      const reconciliation = await this.prisma.$transaction(
         async (tx) => {
-          const line = await this.findUnmatchedStatementLine(
-            tx,
-            user.tenantId,
-            reconciliationId,
-            statementLineId,
-          );
-          const cashbookTransaction = await tx.cashbookTransaction.findFirst({
-            where: {
-              ...this.exactCashbookMatchWhere(line),
-              id: dto.cashbookTransactionId,
-            },
-            select: matchedCashbookSelect,
-          });
-          if (!cashbookTransaction) {
-            throw new BadRequestException(
-              'Cashbook transaction is not an exact eligible match for this statement line',
-            );
-          }
-          const claimed = await tx.bankStatementLine.updateMany({
-            where: {
-              id: statementLineId,
-              tenantId: user.tenantId,
-              reconciliationId,
-              status: BankStatementLineStatus.UNMATCHED,
-              matchedCashbookTransactionId: null,
-            },
-            data: {
-              status: BankStatementLineStatus.MATCHED,
-              matchedCashbookTransactionId: cashbookTransaction.id,
-              matchedByUserId: user.id,
-              matchedAt: new Date(),
-            },
-          });
-          if (claimed.count !== 1) {
-            throw new ConflictException(
-              'Statement line was changed by another request',
-            );
-          }
-          await tx.accountingAuditLog.create({
+          const created = await tx.bankReconciliation.create({
             data: {
               tenantId: user.tenantId,
-              actorUserId: user.id,
-              action: 'BANK_STATEMENT_LINE_MATCH',
-              entityType: 'BankStatementLine',
-              entityId: statementLineId,
-              changedFields: {
-                reconciliationId,
-                cashbookTransactionId: cashbookTransaction.id,
-              } as Prisma.InputJsonValue,
+              cashAccountId: cashAccount.id,
+              statementReference,
+              statementStartDate: startDate,
+              statementEndDate: endDate,
+              openingBalance: dto.openingBalance,
+              closingBalance: dto.closingBalance,
+              currency: dto.currency,
+              status: BankReconciliationStatus.COMPLETED,
+              createdByUserId: user.id,
+              updatedByUserId: user.id,
+              completedByUserId: user.id,
+              completedAt: now,
             },
           });
-          return tx.bankStatementLine.findUniqueOrThrow({
-            where: {
-              id_tenantId: { id: statementLineId, tenantId: user.tenantId },
-            },
-            include: {
-              matchedCashbookTransaction: { select: matchedCashbookSelect },
-            },
-          });
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-    } catch (error) {
-      if (this.isUniqueConstraint(error)) {
-        throw new ConflictException(
-          'Cashbook transaction is already matched in this reconciliation',
-        );
-      }
-      throw error;
-    }
-  }
-
-  async importStatementLines(
-    user: RequestUser,
-    reconciliationId: string,
-    file: ImportFile | undefined,
-  ) {
-    this.assertCsvFile(file);
-    const reconciliation = await this.prisma.bankReconciliation.findFirst({
-      where: { id: reconciliationId, tenantId: user.tenantId },
-      select: {
-        id: true,
-        tenantId: true,
-        currency: true,
-        status: true,
-        statementStartDate: true,
-        statementEndDate: true,
-      },
-    });
-    if (!reconciliation)
-      throw new NotFoundException('Bank reconciliation not found');
-    if (reconciliation.status !== BankReconciliationStatus.DRAFT) {
-      throw new ConflictException(
-        'Statement lines can only be imported into a draft reconciliation',
-      );
-    }
-
-    const lines = this.parseStatementCsv(
-      file.buffer.toString('utf8'),
-      reconciliation,
-    );
-    const fingerprints = lines.map((line) => line.sourceFingerprint);
-    try {
-      await this.prisma.$transaction(
-        async (tx) => {
-          const existing = await tx.bankStatementLine.findMany({
-            where: {
-              tenantId: user.tenantId,
-              reconciliationId,
-              sourceFingerprint: { in: fingerprints },
-            },
-            select: { sourceFingerprint: true },
-          });
-          if (existing.length > 0) {
-            throw new ConflictException(
-              'This file contains statement lines that have already been imported into this reconciliation',
-            );
-          }
-          const lastLine = await tx.bankStatementLine.findFirst({
-            where: { tenantId: user.tenantId, reconciliationId },
-            orderBy: { lineNumber: 'desc' },
-            select: { lineNumber: true },
-          });
-          const firstLineNumber = (lastLine?.lineNumber ?? 0) + 1;
-
           await tx.bankStatementLine.createMany({
-            data: lines.map((line, index) => ({
+            data: dto.statementLines.map((line, index) => ({
               tenantId: user.tenantId,
-              reconciliationId,
-              lineNumber: firstLineNumber + index,
-              transactionDate: line.transactionDate,
-              valueDate: line.valueDate,
+              reconciliationId: created.id,
+              lineNumber: index + 1,
+              transactionDate: new Date(line.transactionDate),
+              valueDate: line.valueDate ? new Date(line.valueDate) : null,
               amount: line.amount,
-              currency: line.currency,
-              description: line.description,
-              bankReference: line.bankReference,
-              counterpartyName: line.counterpartyName,
-              runningBalance: line.runningBalance,
-              sourceFingerprint: line.sourceFingerprint,
+              currency: dto.currency,
+              description: line.description ?? null,
+              bankReference: line.bankReference ?? null,
+              counterpartyName: line.counterpartyName ?? null,
+              runningBalance: line.runningBalance ?? null,
+              status: line.reconciled
+                ? BankStatementLineStatus.MATCHED
+                : BankStatementLineStatus.UNMATCHED,
+              matchedByUserId: line.reconciled ? user.id : null,
+              matchedAt: line.reconciled ? now : null,
             })),
           });
-          await tx.bankReconciliation.update({
-            where: {
-              id_tenantId: { id: reconciliationId, tenantId: user.tenantId },
-            },
-            data: { updatedByUserId: user.id },
-          });
+          if (entryIds.length > 0) {
+            await tx.bankReconciledEntry.createMany({
+              data: entryIds.map((journalLineId) => ({
+                tenantId: user.tenantId,
+                reconciliationId: created.id,
+                journalLineId,
+              })),
+            });
+          }
           await tx.accountingAuditLog.create({
             data: {
               tenantId: user.tenantId,
               actorUserId: user.id,
-              action: 'BANK_STATEMENT_LINES_IMPORT',
+              action: 'BANK_RECONCILIATION_COMPLETE',
               entityType: 'BankReconciliation',
-              entityId: reconciliationId,
+              entityId: created.id,
               changedFields: {
-                fileName: file.originalname,
-                lineCount: lines.length,
+                cashAccountId: created.cashAccountId,
+                statementReference: created.statementReference,
+                statementStartDate: created.statementStartDate.toISOString(),
+                statementEndDate: created.statementEndDate.toISOString(),
+                currency: created.currency,
+                statementLineCount: dto.statementLines.length,
+                reconciledStatementLineCount: dto.statementLines.filter(
+                  (line) => line.reconciled,
+                ).length,
+                reconciledEntryCount: entryIds.length,
               } as Prisma.InputJsonValue,
             },
           });
+          return created;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      return this.get(user.tenantId, reconciliation.id);
     } catch (error) {
       if (this.isUniqueConstraint(error)) {
         throw new ConflictException(
-          'A matching statement line already exists; refresh and retry the import',
+          'This statement reference is already used for the account, or a ledger entry was reconciled by someone else; refresh and retry',
         );
       }
       throw error;
     }
-
-    return { reconciliationId, importedLineCount: lines.length };
   }
 
-  private async recordAudit(
-    user: RequestUser,
-    action: string,
-    entityId: string,
-    changedFields: Record<string, unknown>,
-  ) {
-    await this.prisma.accountingAuditLog.create({
-      data: {
-        tenantId: user.tenantId,
-        actorUserId: user.id,
-        action,
-        entityType: 'BankReconciliation',
-        entityId,
-        changedFields: changedFields as Prisma.InputJsonValue,
-      },
-    });
-  }
-
-  private async findUnmatchedStatementLine(
-    client: Pick<Prisma.TransactionClient, 'bankStatementLine'>,
+  /** Posted ledger lines of the cash account's GL account inside the period, keyed by id. */
+  private async loadLedgerLines(
     tenantId: string,
-    reconciliationId: string,
-    statementLineId: string,
+    glAccountId: string,
+    ids: string[],
+    startDate: Date,
+    endDate: Date,
   ) {
-    const line = await client.bankStatementLine.findFirst({
-      where: { id: statementLineId, tenantId, reconciliationId },
-      select: {
-        id: true,
-        tenantId: true,
-        reconciliationId: true,
-        amount: true,
-        currency: true,
-        transactionDate: true,
-        status: true,
-        matchedCashbookTransactionId: true,
-        reconciliation: {
-          select: { cashAccountId: true, status: true },
+    if (ids.length === 0) return new Map<string, LedgerLine>();
+    const lines = await this.prisma.journalLine.findMany({
+      where: {
+        tenantId,
+        id: { in: ids },
+        glAccountId,
+        journalEntry: {
+          status: { in: [JournalStatus.POSTED, JournalStatus.REVERSED] },
+          transactionDate: { gte: startDate, lte: endDate },
         },
       },
+      select: matchedJournalLineSelect,
     });
-    if (!line) throw new NotFoundException('Bank statement line not found');
-    if (line.reconciliation.status !== BankReconciliationStatus.DRAFT) {
-      throw new ConflictException(
-        'Statement lines can only be matched in a draft reconciliation',
-      );
-    }
-    if (
-      line.status !== BankStatementLineStatus.UNMATCHED ||
-      line.matchedCashbookTransactionId
-    ) {
-      throw new ConflictException('Bank statement line is already matched');
-    }
-    return line;
+    return new Map(lines.map((line) => [line.id, line]));
   }
 
-  private exactCashbookMatchWhere(line: {
-    tenantId: string;
-    amount: Prisma.Decimal;
-    currency: string;
-    transactionDate: Date;
-    reconciliation: { cashAccountId: string };
-  }): Prisma.CashbookTransactionWhereInput {
-    const isInflow = line.amount.greaterThan(0);
-    const cashAccountId = line.reconciliation.cashAccountId;
-    return {
-      tenantId: line.tenantId,
-      status: CashbookTransactionStatus.POSTED,
-      currency: line.currency,
-      amount: line.amount.abs(),
-      transactionDate: {
-        gte: this.startOfDay(line.transactionDate.toISOString()),
-        lte: this.endOfDay(line.transactionDate.toISOString()),
-      },
-      OR: isInflow
-        ? [
-            { cashAccountId, direction: CashbookDirection.INFLOW },
-            {
-              destinationCashAccountId: cashAccountId,
-              direction: CashbookDirection.TRANSFER,
-            },
-          ]
-        : [
-            { cashAccountId, direction: CashbookDirection.OUTFLOW },
-            { cashAccountId, direction: CashbookDirection.TRANSFER },
-          ],
-    };
-  }
-
-  private assertCsvFile(
-    file: ImportFile | undefined,
-  ): asserts file is ImportFile {
-    if (!file) throw new BadRequestException('CSV file is required');
-    if (file.size === 0) throw new BadRequestException('CSV file is empty');
-    if (file.size > MAX_CSV_BYTES) {
-      throw new BadRequestException(
-        `CSV file must be ${MAX_CSV_BYTES} bytes or smaller`,
-      );
+  /** Money in is positive. Uses whichever of the entry's two currencies is the account currency. */
+  private ledgerAmount(line: LedgerLine, currency: string) {
+    if (line.journalEntry.baseCurrency === currency) {
+      return line.baseDebit.minus(line.baseCredit);
     }
-    if (!file.originalname.toLowerCase().endsWith('.csv')) {
-      throw new BadRequestException('Only CSV files are supported');
+    if (line.journalEntry.transactionCurrency === currency) {
+      return line.transactionDebit.minus(line.transactionCredit);
     }
-  }
-
-  private parseStatementCsv(
-    csv: string,
-    reconciliation: {
-      currency: string;
-      statementStartDate: Date;
-      statementEndDate: Date;
-    },
-  ): StatementLineInput[] {
-    const rows = this.parseCsvRows(csv.replace(/^\uFEFF/, ''));
-    if (rows.length < 2)
-      throw new BadRequestException(
-        'CSV must contain a header and at least one line',
-      );
-    const headers = rows[0].map((header) => header.trim());
-    const headerIndexes = new Map(
-      headers.map((header, index) => [header.toLowerCase(), index]),
-    );
-    const missing = REQUIRED_STATEMENT_COLUMNS.filter(
-      (column) => !headerIndexes.has(column.toLowerCase()),
-    );
-    if (missing.length > 0) {
-      throw new BadRequestException(
-        `CSV is missing required columns: ${missing.join(', ')}`,
-      );
-    }
-    const dataRows = rows
-      .slice(1)
-      .filter((cells) => cells.some((cell) => cell.trim() !== ''));
-    if (dataRows.length === 0) {
-      throw new BadRequestException(
-        'CSV must contain at least one statement line',
-      );
-    }
-    if (dataRows.length > MAX_CSV_ROWS) {
-      throw new BadRequestException(
-        `CSV can contain at most ${MAX_CSV_ROWS} statement lines`,
-      );
-    }
-    const fingerprints = new Set<string>();
-    return dataRows.map((cells, index) => {
-      const rowNumber = index + 2;
-      const value = (column: string) =>
-        cells[headerIndexes.get(column.toLowerCase()) ?? -1]?.trim() ?? '';
-      const transactionDate = this.parseDate(
-        value('transactionDate'),
-        'transactionDate',
-        rowNumber,
-      );
-      const valueDate = value('valueDate')
-        ? this.parseDate(value('valueDate'), 'valueDate', rowNumber)
-        : null;
-      if (
-        transactionDate < reconciliation.statementStartDate ||
-        transactionDate > reconciliation.statementEndDate
-      ) {
-        throw new BadRequestException(
-          `Row ${rowNumber}: transactionDate is outside the reconciliation statement range`,
-        );
-      }
-      const amount = this.parseAmount(value('amount'), 'amount', rowNumber);
-      if (amount === 0)
-        throw new BadRequestException(
-          `Row ${rowNumber}: amount must not be zero`,
-        );
-      const currency = value('currency').toUpperCase();
-      if (currency !== reconciliation.currency) {
-        throw new BadRequestException(
-          `Row ${rowNumber}: currency must match the reconciliation currency`,
-        );
-      }
-      const runningBalance = value('runningBalance')
-        ? this.parseAmount(value('runningBalance'), 'runningBalance', rowNumber)
-        : null;
-      const description = value('description') || null;
-      const bankReference = value('bankReference') || null;
-      const counterpartyName = value('counterpartyName') || null;
-      const sourceFingerprint = this.fingerprint([
-        transactionDate.toISOString(),
-        valueDate?.toISOString() ?? '',
-        amount.toFixed(4),
-        currency,
-        description ?? '',
-        bankReference ?? '',
-        counterpartyName ?? '',
-        runningBalance?.toFixed(4) ?? '',
-      ]);
-      if (fingerprints.has(sourceFingerprint)) {
-        throw new BadRequestException(
-          `Row ${rowNumber}: duplicate statement line in CSV`,
-        );
-      }
-      fingerprints.add(sourceFingerprint);
-      return {
-        rowNumber,
-        transactionDate,
-        valueDate,
-        amount,
-        currency,
-        description,
-        bankReference,
-        counterpartyName,
-        runningBalance,
-        sourceFingerprint,
-      };
-    });
-  }
-
-  private parseCsvRows(csv: string) {
-    const rows: string[][] = [];
-    let row: string[] = [];
-    let value = '';
-    let inQuotes = false;
-    for (let index = 0; index < csv.length; index += 1) {
-      const char = csv[index];
-      const next = csv[index + 1];
-      if (char === '"') {
-        if (inQuotes && next === '"') {
-          value += '"';
-          index += 1;
-        } else inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        row.push(value);
-        value = '';
-      } else if ((char === '\n' || char === '\r') && !inQuotes) {
-        row.push(value);
-        rows.push(row);
-        row = [];
-        value = '';
-        if (char === '\r' && next === '\n') index += 1;
-      } else value += char;
-    }
-    if (inQuotes)
-      throw new BadRequestException(
-        'CSV contains an unterminated quoted value',
-      );
-    if (value.length > 0 || row.length > 0) rows.push([...row, value]);
-    return rows;
-  }
-
-  private parseDate(value: string, column: string, rowNumber: number) {
-    const date = new Date(value);
-    if (!value || Number.isNaN(date.getTime())) {
-      throw new BadRequestException(
-        `Row ${rowNumber}: ${column} must be a valid ISO date`,
-      );
-    }
-    return date;
-  }
-
-  private parseAmount(value: string, column: string, rowNumber: number) {
-    if (!/^-?\d+(\.\d{1,4})?$/.test(value)) {
-      throw new BadRequestException(
-        `Row ${rowNumber}: ${column} must be a number with at most 4 decimals`,
-      );
-    }
-    return Number(value);
-  }
-
-  private fingerprint(values: string[]) {
-    return createHash('sha256').update(values.join('\u001F')).digest('hex');
+    return null;
   }
 
   private startOfDay(value: string) {
@@ -691,3 +371,7 @@ export class BankReconciliationsService {
     );
   }
 }
+
+type LedgerLine = Prisma.JournalLineGetPayload<{
+  select: typeof matchedJournalLineSelect;
+}>;
