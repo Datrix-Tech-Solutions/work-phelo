@@ -65,6 +65,7 @@ export * from './accounting/useSourceTypes';
 export * from './accounting/useSourceLedger';
 export * from './accounting/useTransactionTypeRules';
 export * from './accounting/useTaxTypes';
+export * from './accounting/useBankReconciliations';
 export * from './accounting/useCashAccounts';
 export * from './accounting/useCashbook';
 export * from './accounting/useTradeDocuments';

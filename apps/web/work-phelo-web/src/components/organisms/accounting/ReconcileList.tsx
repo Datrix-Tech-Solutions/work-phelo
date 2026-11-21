@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
 import { cardClass, cn, inputClass } from '@/lib/utils';
 
@@ -34,6 +33,13 @@ interface Props {
   items: ReconcileItem[];
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
+  /** Rows the user has ticked off as reconciled; they are taken out of view. */
+  reconciledIds: Set<string>;
+  onReconciledChange: (ids: Set<string>) => void;
+  /** Gray out the rows that are not ticked, while the user looks for the equivalent on the other side. */
+  dimUnselected?: boolean;
+  /** The ticked rows agree with the other side: show them grayed, ready to be removed. */
+  matched?: boolean;
   isLoading?: boolean;
   emptyMessage: string;
 }
@@ -44,12 +50,14 @@ export function ReconcileList({
   items,
   selectedIds,
   onSelectionChange,
+  reconciledIds: removedIds,
+  onReconciledChange: setRemovedIds,
+  dimUnselected,
+  matched,
   isLoading,
   emptyMessage,
 }: Props) {
   const [search, setSearch] = useState('');
-  // Ticked rows the user has taken out of view with Remove reconciled.
-  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -72,13 +80,6 @@ export function ReconcileList({
   const ticked = visible.filter((item) => selectedIds.has(item.id));
   const allSelected = visible.length > 0 && ticked.length === visible.length;
 
-  const removeReconciled = () => {
-    setRemovedIds(new Set([...removedIds, ...ticked.map((item) => item.id)]));
-    const next = new Set(selectedIds);
-    ticked.forEach((item) => next.delete(item.id));
-    onSelectionChange(next);
-  };
-
   const toggle = (id: string) => {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
@@ -93,9 +94,9 @@ export function ReconcileList({
           type="checkbox"
           aria-label={`Select all ${title}`}
           checked={allSelected}
-          disabled={items.length === 0}
+          disabled={visible.length === 0}
           onChange={() =>
-            onSelectionChange(allSelected ? new Set() : new Set(items.map((i) => i.id)))
+            onSelectionChange(allSelected ? new Set() : new Set(visible.map((i) => i.id)))
           }
           className="w-4 h-4 accent-orange-500"
         />
@@ -125,14 +126,6 @@ export function ReconcileList({
             Show {removedIds.size} removed
           </button>
         )}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={removeReconciled}
-          disabled={ticked.length === 0}
-        >
-          Remove reconciled
-        </Button>
       </div>
 
       {isLoading ? (
@@ -149,6 +142,9 @@ export function ReconcileList({
                 className={cn(
                   'flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors',
                   selectedIds.has(item.id) && 'bg-gray-50',
+                  // Ticked and agreeing with the other side: grayed, waiting to be removed.
+                  matched && selectedIds.has(item.id) && 'bg-gray-100 opacity-50',
+                  dimUnselected && !selectedIds.has(item.id) && 'opacity-40',
                 )}
               >
                 <input
