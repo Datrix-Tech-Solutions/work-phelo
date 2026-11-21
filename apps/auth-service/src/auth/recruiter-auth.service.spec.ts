@@ -336,7 +336,8 @@ describe('RecruiterAuthService', () => {
         ]),
       ),
     ).toThrow(ForbiddenException);
-  });
+    // Real bcrypt at cost 12 (register hash + login compare) is slow on loaded CI runners.
+  }, 30000);
 
   describe('confirmEmail', () => {
     it('activates the account and clears the token', async () => {
