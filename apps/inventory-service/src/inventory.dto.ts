@@ -810,6 +810,23 @@ export class PaymentAllocationDto {
   amount!: string;
 }
 
+export class PaymentAccountingDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'A payable transaction type linked to Inventory in Accounting.',
+  })
+  @IsUUID()
+  transactionTypeId!: string;
+  @ApiProperty({
+    required: false,
+    format: 'uuid',
+    description: 'Needed the first time this supplier is recorded in Accounting.',
+  })
+  @IsOptional()
+  @IsUUID()
+  entityTypeId?: string;
+}
+
 export class SupplierPaymentDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
@@ -832,6 +849,16 @@ export class SupplierPaymentDto {
   @IsString()
   @MaxLength(500)
   notes?: string | null;
+  @ApiProperty({
+    required: false,
+    type: PaymentAccountingDto,
+    description:
+      'Also record the payment in Accounting. The payment is saved as paid either way; Accounting only reviews and posts it.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaymentAccountingDto)
+  accounting?: PaymentAccountingDto;
   @ApiProperty({
     type: [PaymentAllocationDto],
     description: 'How much of the payment goes to each order. One payment can settle several.',

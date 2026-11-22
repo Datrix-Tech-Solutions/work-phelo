@@ -1779,6 +1779,7 @@ model BudgetLine {
 enum AccountingSourceTransactionKind {
   INVOICE
   RECEIPT
+  PAYMENT
 
   @@schema("accounting")
 }

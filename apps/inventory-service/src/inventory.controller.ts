@@ -548,6 +548,16 @@ export class PurchaseOrdersController {
 @RequireModule('operations')
 export class SupplierPaymentsController {
   constructor(private readonly service: InventoryService) {}
+  @Get('accounting-options')
+  @ApiOperation({ summary: 'Whether payments can be recorded in Accounting, and what it offers' })
+  @RequirePermissions('operations.inventory.stock-in:CREATE')
+  accountingOptions(@Req() req: UserRequest, @Query('supplierId') supplierId?: string) {
+    return this.service.supplierPaymentAccountingOptions(
+      req.user.tenantId,
+      req.user.id,
+      supplierId,
+    );
+  }
   @Post()
   @RequirePermissions('operations.inventory.stock-in:CREATE')
   create(@Req() req: UserRequest, @Body() dto: SupplierPaymentDto) {
