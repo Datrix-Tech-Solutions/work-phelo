@@ -218,15 +218,20 @@ write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.dev" \
   "JWT_SECRET=${JWT_SECRET}" \
   "HR_SERVICE_URL=http://hr-service:4002" \
   "MARKETING_SERVICE_URL=http://marketing-service:4006" \
+  "INVENTORY_SERVICE_URL=http://inventory-service:4009" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
   "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
+
 write_env_file "${DEPLOY_PATH}/apps/inventory-service/.env.dev" \
   "DATABASE_URL=$(db_url_for_schema inventory)" \
   "INVENTORY_SERVICE_PORT=4009" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
   "ENABLE_SWAGGER=true" \
-  "JWT_SECRET=${JWT_SECRET}"
+  "JWT_SECRET=${JWT_SECRET}" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
 log "✓ Service env files written"
 
 section "Compose Validation"

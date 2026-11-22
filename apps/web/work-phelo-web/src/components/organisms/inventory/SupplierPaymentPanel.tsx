@@ -18,6 +18,8 @@ import {
   purchaseOrderAmountOwed,
   purchaseOrderBalance,
   usePurchaseOrders,
+  useSupplierPaymentAccounting,
+  ACCOUNTING_NOT_READY_MESSAGE,
   type PurchaseOrder,
   type SupplierPaymentMethod,
 } from '@/hooks/inventory/usePurchaseOrders';
@@ -65,6 +67,17 @@ export function SupplierPaymentPanel({
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [showErrors, setShowErrors] = useState(false);
+  const [inAccounting, setInAccounting] = useState(false);
+  const [typeId, setTypeId] = useState<string | null>(null);
+  const [entityTypeId, setEntityTypeId] = useState<string | null>(null);
+  const { data: accountingOptions } = useSupplierPaymentAccounting(supplierId, isOpen);
+  const accountingReady = !!accountingOptions?.ready;
+  const knownEntityType = accountingOptions?.supplierEntityTypeId ?? null;
+  const entityTypeChoice = knownEntityType ?? entityTypeId;
+  const accountingTypes = (accountingOptions?.transactionTypes ?? []).filter(
+    (t) => !entityTypeChoice || t.entityTypeIds.includes(entityTypeChoice),
+  );
+  const accountingEntityTypes = accountingOptions?.entityTypes ?? [];
   const [selected, setSelected] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(initialSelectedIds.map((id) => [id, true])),
   );
@@ -90,6 +103,7 @@ export function SupplierPaymentPanel({
       return;
     }
     if (picked.some(errorOf)) return;
+    if (inAccounting && (!typeId || !entityTypeChoice)) return;
     try {
       await makeSupplierPayment({
         supplierId,
@@ -97,6 +111,13 @@ export function SupplierPaymentPanel({
         method,
         reference: reference.trim() || null,
         notes: notes.trim() || null,
+        accounting:
+          inAccounting && typeId
+            ? {
+                transactionTypeId: typeId,
+                ...(knownEntityType ? {} : { entityTypeId: entityTypeChoice ?? undefined }),
+              }
+            : undefined,
         allocations: picked.map((po) => ({ purchaseOrderId: po.id, amount: amountOf(po) })),
       });
       toast.success('Payment recorded');
@@ -170,6 +191,53 @@ export function SupplierPaymentPanel({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            aria-label="Record in accounting"
+            className="mt-1 h-4 w-4 shrink-0 accent-brand"
+            checked={inAccounting}
+            disabled={!accountingReady}
+            onChange={(e) => setInAccounting(e.target.checked)}
+          />
+          <span className="flex flex-col leading-tight">
+            <span className="text-sm font-semibold text-gray-900">Record in accounting</span>
+            <span className="text-xs text-gray-500">
+              {accountingReady
+                ? 'The payment is saved as paid here. Accounting receives it as a draft to review and post.'
+                : (ACCOUNTING_NOT_READY_MESSAGE[accountingOptions?.reason ?? ''] ??
+                  'Checking accounting...')}
+            </span>
+          </span>
+        </label>
+        {inAccounting && accountingReady && (
+          <div className={`grid grid-cols-1 gap-4 ${knownEntityType ? '' : 'sm:grid-cols-2'}`}>
+            {!knownEntityType && (
+              <SearchSelect
+                label="Supplier Entity Type"
+                clearable={false}
+                options={accountingEntityTypes.map((t) => ({ value: t.id, label: t.name }))}
+                value={entityTypeId ?? ''}
+                onChange={(v) => {
+                  setEntityTypeId(v || null);
+                  setTypeId(null);
+                }}
+                error={showErrors && !entityTypeChoice ? 'Choose an entity type' : undefined}
+              />
+            )}
+            <SearchSelect
+              label="Transaction Type"
+              clearable={false}
+              options={accountingTypes.map((t) => ({ value: t.id, label: t.name }))}
+              value={typeId ?? ''}
+              onChange={(v) => setTypeId(v || null)}
+              error={showErrors && !typeId ? 'Choose a transaction type' : undefined}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

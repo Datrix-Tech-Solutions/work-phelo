@@ -125,7 +125,7 @@ describe('SourceTransactionsService', () => {
   let provisioning: { ensure: jest.Mock };
   let masterData: { getConfig: jest.Mock; ensureSourceEntity: jest.Mock };
   let receivables: { createInvoice: jest.Mock };
-  let cashbook: { createReceipt: jest.Mock };
+  let cashbook: { createReceipt: jest.Mock; createPayment: jest.Mock };
   let service: SourceTransactionsService;
 
   beforeEach(() => {
@@ -140,6 +140,7 @@ describe('SourceTransactionsService', () => {
     };
     cashbook = {
       createReceipt: jest.fn().mockResolvedValue({ id: 'receipt-1' }),
+      createPayment: jest.fn().mockResolvedValue({ id: 'payment-1' }),
     };
 
     prisma.sourceType.findFirst.mockResolvedValue({
@@ -744,6 +745,84 @@ describe('SourceTransactionsService', () => {
         expect(prisma.accountingSourceTransaction.delete).toHaveBeenCalledWith({
           where: { id: 'req-1' },
         });
+      });
+    });
+  });
+
+  describe('a module that pays out (Inventory)', () => {
+    const paymentType = (overrides: object = {}) =>
+      receiptType({
+        id: 'tt-payment',
+        name: 'Supplier Payment',
+        category: 'PAYABLE',
+        businessRoles: ['Supplier'],
+        ...overrides,
+      });
+    const supplierType = { id: 'et-sup', name: 'Supplier' };
+    const supplier = {
+      id: 'supplier-entity',
+      name: 'Acme Ltd',
+      type: 'Supplier',
+      externalRef: 'OPERATIONS:supplier-1',
+    };
+
+    beforeEach(() => {
+      prisma.sourceType.findFirst.mockResolvedValue({
+        id: 'source-1',
+        module: 'OPERATIONS',
+        name: 'Inventory Payments',
+        isActive: true,
+      });
+      prisma.transactionType.findMany.mockResolvedValue([paymentType()]);
+      prisma.transactionType.findFirst.mockResolvedValue(paymentType());
+      prisma.entityType.findMany.mockResolvedValue([supplierType]);
+      prisma.entityType.findFirst.mockResolvedValue(supplierType);
+      masterData.ensureSourceEntity.mockResolvedValue({ ...supplier });
+    });
+
+    it('asks for payable types only', async () => {
+      await service.getOptions('tenant-1', 'OPERATIONS');
+      expect(prisma.transactionType.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ category: 'PAYABLE' }),
+        }),
+      );
+    });
+
+    it('leaves out a payable type that is not a direct payment', async () => {
+      prisma.transactionType.findMany.mockResolvedValue([
+        paymentType({ postsToCashbook: false }),
+      ]);
+      const options = await service.getOptions('tenant-1', 'OPERATIONS');
+      expect(options.ready).toBe(false);
+    });
+
+    it('creates a draft cashbook payment to the supplier', async () => {
+      const result = await service.create(
+        'user-1',
+        createDto({
+          sourceModule: 'OPERATIONS',
+          externalRef: 'supplier-1',
+          entityName: 'Acme Ltd',
+          entityTypeId: 'et-sup',
+          transactionTypeId: 'tt-payment',
+        }),
+      );
+
+      expect(cashbook.createReceipt).not.toHaveBeenCalled();
+      expect(cashbook.createPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'user-1' }),
+        expect.objectContaining({
+          amount: 20000,
+          offsetSubledgerAccountId: 'supplier-entity',
+          counterpartyType: 'SUPPLIER',
+          sourceModule: 'OPERATIONS',
+          sourceRecordId: 'supplier-1',
+        }),
+      );
+      expect(result.transactionId).toBe('payment-1');
+      expect(prisma.accountingSourceTransaction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ kind: 'PAYMENT' }),
       });
     });
   });

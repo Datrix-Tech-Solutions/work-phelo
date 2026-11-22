@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { PrismaService } from './prisma/prisma.service';
 import { InventoryService } from './inventory.service';
+import { AccountingModule } from './accounting/accounting.module';
+import { InternalAccountingEventsController } from './internal-accounting-events.controller';
 import {
   CategoriesController,
   UnitsController,
@@ -19,9 +21,10 @@ import {
 } from './inventory.controller';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, AccountingModule],
   providers: [PrismaService, InventoryService],
   controllers: [
+    InternalAccountingEventsController,
     CategoriesController,
     UnitsController,
     LocationsController,

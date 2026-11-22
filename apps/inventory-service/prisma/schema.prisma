@@ -102,6 +102,15 @@ enum StockMovementRequestStatus {
   @@schema("inventory")
 }
 
+// A payment is RECORDED until Accounting turns it down. Only a payment that was linked to Accounting
+// can be rejected, and a rejected one no longer counts as paid.
+enum SupplierPaymentStatus {
+  RECORDED
+  REJECTED
+
+  @@schema("inventory")
+}
+
 enum SupplierPaymentMethod {
   CASH
   BANK_TRANSFER
@@ -285,19 +294,23 @@ model StockMovement {
 }
 
 model InventoryParty {
-  id             String                       @id @default(uuid())
-  tenantId       String
-  kind           PartyKind
-  name           String
-  contactPerson  String?
-  phone          String?
-  email          String?
-  address        String?
-  status         InventoryConfigurationStatus @default(ACTIVE)
-  createdAt      DateTime                     @default(now())
-  updatedAt      DateTime                     @updatedAt
-  purchaseOrders PurchaseOrder[]
-  payments       SupplierPayment[]
+  id                     String                       @id @default(uuid())
+  tenantId               String
+  kind                   PartyKind
+  name                   String
+  contactPerson          String?
+  phone                  String?
+  email                  String?
+  address                String?
+  status                 InventoryConfigurationStatus @default(ACTIVE)
+  // The supplier's entity in Accounting, created by the first payment linked to it. Kept so later
+  // payments go to the same entity.
+  accountingEntityId     String?
+  accountingEntityTypeId String?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  purchaseOrders         PurchaseOrder[]
+  payments               SupplierPayment[]
 
   @@unique([tenantId, kind, name])
   @@unique([tenantId, id])
@@ -473,21 +486,26 @@ model PurchaseOrderLine {
 // Money paid to a supplier. One payment can settle several orders: each order's share is a
 // PurchaseOrderPayment, and an order's amount paid is the sum of its shares.
 model SupplierPayment {
-  id          String                 @id @default(uuid())
-  tenantId    String
-  supplierId  String
-  reference   String?
-  paymentDate DateTime               @db.Date
-  method      SupplierPaymentMethod
-  amount      Decimal                @db.Decimal(18, 4)
-  notes       String?
-  createdBy   String
-  createdAt   DateTime               @default(now())
-  supplier    InventoryParty         @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
-  allocations PurchaseOrderPayment[]
+  id                      String                 @id @default(uuid())
+  tenantId                String
+  supplierId              String
+  reference               String?
+  paymentDate             DateTime               @db.Date
+  method                  SupplierPaymentMethod
+  amount                  Decimal                @db.Decimal(18, 4)
+  notes                   String?
+  createdBy               String
+  createdAt               DateTime               @default(now())
+  status                  SupplierPaymentStatus  @default(RECORDED)
+  rejectedAt              DateTime?
+  // The transaction raised for this payment in Accounting; null when it was not linked.
+  accountingTransactionId String?
+  supplier                InventoryParty         @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  allocations             PurchaseOrderPayment[]
 
   @@unique([tenantId, id])
   @@index([tenantId, supplierId])
+  @@index([tenantId, accountingTransactionId])
   @@schema("inventory")
 }
 
