@@ -21,15 +21,27 @@ function formatMoney(value: number, currency: string) {
   return `${currency} ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function Amount({ item }: { item: ReconcileItem }) {
-  if (item.credit && !item.debit) {
-    return <span className="text-red-600">({formatMoney(item.credit, item.currency)})</span>;
-  }
-  return <span>{formatMoney(item.debit - item.credit, item.currency)}</span>;
+/** Money in is a debit in the ledger but a credit on the bank slip, and the other way round for
+ *  money out, so each side labels the amount the way its own document does. */
+function Amount({ item, perspective }: { item: ReconcileItem; perspective: 'ledger' | 'bank' }) {
+  const moneyOut = item.credit > 0 && item.debit === 0;
+  const label = perspective === 'ledger' ? (moneyOut ? 'Cr' : 'Dr') : moneyOut ? 'Dr' : 'Cr';
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      {moneyOut ? (
+        <span className="text-red-600">({formatMoney(item.credit, item.currency)})</span>
+      ) : (
+        <span>{formatMoney(item.debit - item.credit, item.currency)}</span>
+      )}
+      <span className="w-4 text-left text-xs font-normal text-gray-400">{label}</span>
+    </span>
+  );
 }
 
 interface Props {
   title: string;
+  /** Which document the rows come from, so debits and credits are labelled the way it shows them. */
+  perspective: 'ledger' | 'bank';
   items: ReconcileItem[];
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
@@ -47,6 +59,7 @@ interface Props {
 /** One side of the reconciliation: a tickable list of ledger entries or bank statement lines. */
 export function ReconcileList({
   title,
+  perspective,
   items,
   selectedIds,
   onSelectionChange,
@@ -163,7 +176,7 @@ export function ReconcileList({
                   {item.description}
                 </p>
                 <p className="shrink-0 text-sm font-medium text-gray-900 text-right">
-                  <Amount item={item} />
+                  <Amount item={item} perspective={perspective} />
                 </p>
               </label>
             </li>

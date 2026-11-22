@@ -60,6 +60,8 @@ export default function ReconcileCashAccountPage({
   // Rows the user has ticked off as reconciled on each side.
   const [reconciledSystem, setReconciledSystem] = useState<Set<string>>(new Set());
   const [reconciledBank, setReconciledBank] = useState<Set<string>>(new Set());
+  // Each Remove reconciled click is one group: the rows taken out together, kept as a pair.
+  const [groups, setGroups] = useState<{ systemIds: string[]; bankIds: string[] }[]>([]);
   const base = `/${tenantSlug}/accounting/cashandbank`;
 
   // Running balances are in the base currency, the same figures the ledger table shows.
@@ -142,13 +144,26 @@ export default function ReconcileCashAccountPage({
   const bothSidesSelected = selectedSystem.size > 0 && selectedBank.size > 0;
   const oneSideSelected = selectedSystem.size > 0 !== selectedBank.size > 0;
   const canRemove = bothSidesSelected && selectionBalanced;
+  const removeBlocker = !bothSidesSelected
+    ? 'Tick a row on each side'
+    : !selectionBalanced
+      ? 'The two sides must agree. A system debit pairs with a bank credit, a system credit with a bank debit.'
+      : null;
 
   const removeReconciled = () => {
     if (!canRemove) return;
     setReconciledSystem(new Set([...reconciledSystem, ...selectedSystem]));
     setReconciledBank(new Set([...reconciledBank, ...selectedBank]));
+    setGroups([...groups, { systemIds: [...selectedSystem], bankIds: [...selectedBank] }]);
     setSelectedSystem(new Set());
     setSelectedBank(new Set());
+  };
+
+  // Bringing removed rows back undoes every group, so nothing is left half reconciled.
+  const restoreAll = () => {
+    setReconciledSystem(new Set());
+    setReconciledBank(new Set());
+    setGroups([]);
   };
 
   const reconciledSystemTotal = net(systemItems, reconciledSystem);
@@ -175,6 +190,11 @@ export default function ReconcileCashAccountPage({
         ? 'The reconciled bank and system totals must agree'
         : null;
 
+  const groupOf = (id: string, side: 'systemIds' | 'bankIds') => {
+    const index = groups.findIndex((group) => group[side].includes(id));
+    return index === -1 ? undefined : index + 1;
+  };
+
   const reconcile = async () => {
     if (!account || !canSave || bankOpening === undefined || bankClosing === undefined) return;
     try {
@@ -191,9 +211,11 @@ export default function ReconcileCashAccountPage({
           description: row.description || undefined,
           bankReference: row.reference || undefined,
           runningBalance: row.balance,
-          reconciled: reconciledBank.has(row.id),
+          matchGroup: groupOf(row.id, 'bankIds'),
         })),
-        reconciledJournalLineIds: [...reconciledSystem],
+        reconciledEntries: groups.flatMap((group, index) =>
+          group.systemIds.map((journalLineId) => ({ journalLineId, matchGroup: index + 1 })),
+        ),
       });
       clearRows(cashAccountId);
       toast.success('Account reconciled');
@@ -357,24 +379,25 @@ export default function ReconcileCashAccountPage({
                     ? 'Balanced'
                     : `Diff ${formatAmount(selectionDifference, currency)}`}
             </span>
-            <Button
-              className="ml-auto"
-              variant="secondary"
-              onClick={removeReconciled}
-              disabled={!canRemove}
-            >
-              Remove reconciled
-            </Button>
+            <div className="ml-auto flex items-center gap-3">
+              {removeBlocker && bothSidesSelected && (
+                <span className="max-w-sm text-xs text-gray-400">{removeBlocker}</span>
+              )}
+              <Button variant="secondary" onClick={removeReconciled} disabled={!canRemove}>
+                Remove reconciled
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             <ReconcileList
               title="System"
+              perspective="ledger"
               items={systemItems}
               selectedIds={selectedSystem}
               onSelectionChange={setSelectedSystem}
               reconciledIds={reconciledSystem}
-              onReconciledChange={setReconciledSystem}
+              onReconciledChange={restoreAll}
               dimUnselected={selectedSystem.size > 0 && selectedBank.size === 0}
               matched={canRemove}
               isLoading={!ledger}
@@ -382,11 +405,12 @@ export default function ReconcileCashAccountPage({
             />
             <ReconcileList
               title="Bank Statement"
+              perspective="bank"
               items={bankItems}
               selectedIds={selectedBank}
               onSelectionChange={setSelectedBank}
               reconciledIds={reconciledBank}
-              onReconciledChange={setReconciledBank}
+              onReconciledChange={restoreAll}
               dimUnselected={selectedBank.size > 0 && selectedSystem.size === 0}
               matched={canRemove}
               emptyMessage="No bank statement uploaded — go back and upload one to reconcile"
