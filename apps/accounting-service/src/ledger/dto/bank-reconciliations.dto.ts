@@ -3,7 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsBoolean,
+  IsInt,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -12,6 +12,7 @@ import {
   IsUUID,
   Length,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -85,11 +86,27 @@ export class ReconciledStatementLineDto {
   runningBalance?: number;
 
   @ApiPropertyOptional({
-    description: 'True when the user ticked this row off as reconciled.',
+    minimum: 1,
+    description:
+      'The group this row was reconciled in. Omit for a row left unreconciled.',
   })
   @IsOptional()
-  @IsBoolean()
-  reconciled?: boolean;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  matchGroup?: number;
+}
+
+export class ReconciledEntryDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  journalLineId!: string;
+
+  @ApiProperty({ minimum: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  matchGroup!: number;
 }
 
 export class CompleteBankReconciliationDto {
@@ -144,14 +161,15 @@ export class CompleteBankReconciliationDto {
   statementLines!: ReconciledStatementLineDto[];
 
   @ApiProperty({
-    type: [String],
+    type: () => [ReconciledEntryDto],
     description:
-      'Ledger lines of the cash account the user ticked off as reconciled. Their total must equal the total of the reconciled statement rows.',
+      'Ledger lines of the cash account the user ticked off, each with its group. Within every group the ledger total must equal the statement rows total.',
   })
   @IsArray()
   @ArrayMaxSize(MAX_STATEMENT_LINES)
-  @IsUUID('all', { each: true })
-  reconciledJournalLineIds!: string[];
+  @ValidateNested({ each: true })
+  @Type(() => ReconciledEntryDto)
+  reconciledEntries!: ReconciledEntryDto[];
 }
 
 export class QueryBankReconciliationsDto {

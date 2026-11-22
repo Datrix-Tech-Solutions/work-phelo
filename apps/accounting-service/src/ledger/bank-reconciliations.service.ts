@@ -179,7 +179,7 @@ export class BankReconciliationsService {
       }
     }
 
-    const entryIds = dto.reconciledJournalLineIds;
+    const entryIds = dto.reconciledEntries.map((entry) => entry.journalLineId);
     if (new Set(entryIds).size !== entryIds.length) {
       throw new BadRequestException(
         'A ledger entry can only be reconciled once',
@@ -192,9 +192,28 @@ export class BankReconciliationsService {
       startDate,
       endDate,
     );
-    let ledgerTotal = new Prisma.Decimal(0);
-    for (const id of entryIds) {
-      const ledgerLine = ledgerLines.get(id);
+    // Each group is the rows the user took out together, so each must agree on its own.
+    const groups = new Map<
+      number,
+      {
+        ledger: Prisma.Decimal;
+        bank: Prisma.Decimal;
+        entries: number;
+        rows: number;
+      }
+    >();
+    const group = (id: number) => {
+      const found = groups.get(id) ?? {
+        ledger: new Prisma.Decimal(0),
+        bank: new Prisma.Decimal(0),
+        entries: 0,
+        rows: 0,
+      };
+      groups.set(id, found);
+      return found;
+    };
+    for (const entry of dto.reconciledEntries) {
+      const ledgerLine = ledgerLines.get(entry.journalLineId);
       if (!ledgerLine) {
         throw new BadRequestException(
           'A reconciled ledger entry is not a posted entry of this account within the statement period',
@@ -206,15 +225,29 @@ export class BankReconciliationsService {
           `A reconciled ledger entry is not in ${dto.currency}`,
         );
       }
-      ledgerTotal = ledgerTotal.plus(amount);
+      const target = group(entry.matchGroup);
+      target.ledger = target.ledger.plus(amount);
+      target.entries += 1;
     }
-    const bankTotal = dto.statementLines
-      .filter((line) => line.reconciled)
-      .reduce((sum, line) => sum.plus(line.amount), new Prisma.Decimal(0));
-    if (ledgerTotal.minus(bankTotal).abs().greaterThan(AMOUNT_TOLERANCE)) {
-      throw new BadRequestException(
-        `The reconciled ledger entries total ${ledgerTotal.toFixed(2)} but the reconciled statement rows total ${bankTotal.toFixed(2)}`,
-      );
+    for (const line of dto.statementLines) {
+      if (!line.matchGroup) continue;
+      const target = group(line.matchGroup);
+      target.bank = target.bank.plus(line.amount);
+      target.rows += 1;
+    }
+    for (const [id, totals] of groups) {
+      if (totals.entries === 0 || totals.rows === 0) {
+        throw new BadRequestException(
+          `Reconciled group ${id} needs entries on both the system and the bank side`,
+        );
+      }
+      if (
+        totals.ledger.minus(totals.bank).abs().greaterThan(AMOUNT_TOLERANCE)
+      ) {
+        throw new BadRequestException(
+          `Reconciled group ${id}: the ledger entries total ${totals.ledger.toFixed(2)} but the statement rows total ${totals.bank.toFixed(2)}`,
+        );
+      }
     }
     if (entryIds.length > 0) {
       const alreadyReconciled = await this.prisma.bankReconciledEntry.count({
@@ -265,19 +298,21 @@ export class BankReconciliationsService {
               bankReference: line.bankReference ?? null,
               counterpartyName: line.counterpartyName ?? null,
               runningBalance: line.runningBalance ?? null,
-              status: line.reconciled
+              status: line.matchGroup
                 ? BankStatementLineStatus.MATCHED
                 : BankStatementLineStatus.UNMATCHED,
-              matchedByUserId: line.reconciled ? user.id : null,
-              matchedAt: line.reconciled ? now : null,
+              matchGroup: line.matchGroup ?? null,
+              matchedByUserId: line.matchGroup ? user.id : null,
+              matchedAt: line.matchGroup ? now : null,
             })),
           });
           if (entryIds.length > 0) {
             await tx.bankReconciledEntry.createMany({
-              data: entryIds.map((journalLineId) => ({
+              data: dto.reconciledEntries.map((entry) => ({
                 tenantId: user.tenantId,
                 reconciliationId: created.id,
-                journalLineId,
+                journalLineId: entry.journalLineId,
+                matchGroup: entry.matchGroup,
               })),
             });
           }
@@ -296,7 +331,7 @@ export class BankReconciliationsService {
                 currency: created.currency,
                 statementLineCount: dto.statementLines.length,
                 reconciledStatementLineCount: dto.statementLines.filter(
-                  (line) => line.reconciled,
+                  (line) => line.matchGroup,
                 ).length,
                 reconciledEntryCount: entryIds.length,
               } as Prisma.InputJsonValue,

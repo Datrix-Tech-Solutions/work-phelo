@@ -31,13 +31,13 @@ describe('BankReconciliationsService', () => {
     openingBalance: 1000,
     closingBalance: 1250,
     currency: 'GHS',
-    reconciledJournalLineIds: ['journal-line-1'],
+    reconciledEntries: [{ journalLineId: 'journal-line-1', matchGroup: 1 }],
     statementLines: [
       {
         transactionDate: '2026-08-05',
         amount: 250,
         description: 'Premium receipt',
-        reconciled: true,
+        matchGroup: 1,
       },
       {
         transactionDate: '2026-08-20',
@@ -162,6 +162,7 @@ describe('BankReconciliationsService', () => {
           tenantId: actor.tenantId,
           reconciliationId: 'reconciliation-1',
           journalLineId: 'journal-line-1',
+          matchGroup: 1,
         },
       ],
     });
@@ -211,7 +212,10 @@ describe('BankReconciliationsService', () => {
     await expect(
       service.complete(actor, {
         ...dto,
-        reconciledJournalLineIds: ['journal-line-1', 'journal-line-1'],
+        reconciledEntries: [
+          { journalLineId: 'journal-line-1', matchGroup: 1 },
+          { journalLineId: 'journal-line-1', matchGroup: 2 },
+        ],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -245,8 +249,8 @@ describe('BankReconciliationsService', () => {
       service.complete(actor, {
         ...dto,
         statementLines: [
-          { transactionDate: '2026-08-05', amount: 100, reconciled: true },
-          { transactionDate: '2026-08-05', amount: 150, reconciled: true },
+          { transactionDate: '2026-08-05', amount: 100, matchGroup: 1 },
+          { transactionDate: '2026-08-05', amount: 150, matchGroup: 1 },
         ],
       }),
     ).resolves.toBeDefined();
@@ -265,10 +269,81 @@ describe('BankReconciliationsService', () => {
       service.complete(actor, {
         ...dto,
         statementLines: [
-          { transactionDate: '2026-08-05', amount: -10, reconciled: true },
+          { transactionDate: '2026-08-05', amount: -10, matchGroup: 1 },
         ],
       }),
     ).resolves.toBeDefined();
+  });
+
+  it('checks every group on its own, not only the overall total', async () => {
+    const { prisma, transaction, service } = setup();
+    prisma.journalLine.findMany.mockResolvedValue([
+      ledgerLine(),
+      ledgerLine({
+        id: 'journal-line-2',
+        baseDebit: new Prisma.Decimal('100'),
+        transactionDebit: new Prisma.Decimal('100'),
+      }),
+    ]);
+
+    // 250 + 100 on each side overall, but crossed between the two groups.
+    await expect(
+      service.complete(actor, {
+        ...dto,
+        reconciledEntries: [
+          { journalLineId: 'journal-line-1', matchGroup: 1 },
+          { journalLineId: 'journal-line-2', matchGroup: 2 },
+        ],
+        statementLines: [
+          { transactionDate: '2026-08-05', amount: 100, matchGroup: 1 },
+          { transactionDate: '2026-08-06', amount: 250, matchGroup: 2 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(transaction.bankReconciliation.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps each group number on both sides', async () => {
+    const { prisma, transaction, service } = setup();
+    prisma.journalLine.findMany.mockResolvedValue([
+      ledgerLine(),
+      ledgerLine({
+        id: 'journal-line-2',
+        baseDebit: new Prisma.Decimal('100'),
+        transactionDebit: new Prisma.Decimal('100'),
+      }),
+    ]);
+
+    await service.complete(actor, {
+      ...dto,
+      reconciledEntries: [
+        { journalLineId: 'journal-line-1', matchGroup: 1 },
+        { journalLineId: 'journal-line-2', matchGroup: 2 },
+      ],
+      statementLines: [
+        { transactionDate: '2026-08-05', amount: 250, matchGroup: 1 },
+        { transactionDate: '2026-08-06', amount: 100, matchGroup: 2 },
+      ],
+    });
+
+    const [lines] = transaction.bankStatementLine.createMany.mock.calls[0] as [
+      { data: Array<{ matchGroup: number | null }> },
+    ];
+    expect(lines.data.map((row) => row.matchGroup)).toEqual([1, 2]);
+    const [entries] = transaction.bankReconciledEntry.createMany.mock
+      .calls[0] as [{ data: Array<{ matchGroup: number }> }];
+    expect(entries.data.map((row) => row.matchGroup)).toEqual([1, 2]);
+  });
+
+  it('rejects a group with entries on only one side', async () => {
+    const { service } = setup();
+
+    await expect(
+      service.complete(actor, {
+        ...dto,
+        statementLines: [{ transactionDate: '2026-08-05', amount: 250 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('allows a reconciliation with nothing ticked off', async () => {
@@ -278,7 +353,7 @@ describe('BankReconciliationsService', () => {
     await expect(
       service.complete(actor, {
         ...dto,
-        reconciledJournalLineIds: [],
+        reconciledEntries: [],
         statementLines: [{ transactionDate: '2026-08-05', amount: 5 }],
       }),
     ).resolves.toBeDefined();

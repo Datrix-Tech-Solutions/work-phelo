@@ -813,6 +813,8 @@ model BankReconciledEntry {
   tenantId         String
   reconciliationId String
   journalLineId    String
+  /// The tick-off group this entry was reconciled in, with the statement rows carrying the same number.
+  matchGroup       Int                @default(0)
   createdAt        DateTime           @default(now())
   reconciliation   BankReconciliation @relation(fields: [reconciliationId, tenantId], references: [id, tenantId], onDelete: Restrict)
   journalLine      JournalLine        @relation(fields: [journalLineId, tenantId], references: [id, tenantId], onDelete: Restrict)
@@ -837,6 +839,8 @@ model BankStatementLine {
   counterpartyName String?
   runningBalance   Decimal?                @db.Decimal(20, 4)
   status           BankStatementLineStatus @default(UNMATCHED)
+  /// The tick-off group this row was reconciled in; null while unmatched.
+  matchGroup       Int?
   matchedByUserId  String?
   matchedAt        DateTime?
   createdAt        DateTime                @default(now())

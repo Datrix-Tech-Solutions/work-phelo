@@ -2363,6 +2363,8 @@ export interface BankStatementLine {
   runningBalance: string | null;
   /** MATCHED means the user ticked the row off as reconciled. */
   status: BankStatementLineStatus;
+  /** The group it was reconciled in; null while unmatched. */
+  matchGroup: number | null;
 }
 
 export interface BankReconciliation {
@@ -2394,7 +2396,13 @@ export interface BankReconciliation {
 
 export interface BankReconciliationDetail extends BankReconciliation {
   statementLines: BankStatementLine[];
-  reconciledEntries: { id: string; journalLineId: string; journalLine: BankReconciledLedgerLine }[];
+  reconciledEntries: {
+    id: string;
+    journalLineId: string;
+    /** The group it was reconciled in, with the statement rows carrying the same number. */
+    matchGroup: number;
+    journalLine: BankReconciledLedgerLine;
+  }[];
 }
 
 export interface CompleteBankReconciliationPayload {
@@ -2411,7 +2419,8 @@ export interface CompleteBankReconciliationPayload {
     description?: string;
     bankReference?: string;
     runningBalance?: number;
-    reconciled: boolean;
+    /** The group the row was reconciled in; leave out when it was not reconciled. */
+    matchGroup?: number;
   }[];
-  reconciledJournalLineIds: string[];
+  reconciledEntries: { journalLineId: string; matchGroup: number }[];
 }
