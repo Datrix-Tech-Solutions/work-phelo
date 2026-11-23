@@ -210,23 +210,23 @@ services:
       - ../apps/api-gateway/.env.prod
     depends_on:
       auth-service:
-        condition: service_healthy
+        condition: service_started
       hr-service:
-        condition: service_healthy
+        condition: service_started
       notification-service:
-        condition: service_healthy
+        condition: service_started
       reinsurance-service:
-        condition: service_healthy
+        condition: service_started
       accounting-service:
-        condition: service_healthy
+        condition: service_started
       marketing-service:
-        condition: service_healthy
+        condition: service_started
       inventory-service:
-        condition: service_healthy
+        condition: service_started
       subscription-service:
-        condition: service_healthy
+        condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test:
         [
@@ -255,14 +255,14 @@ services:
       - '127.0.0.1:3001:3000'
     depends_on:
       api-gateway:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test:
         [
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:3000/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3000/health', {redirect:'manual'}).then((res)=>{if(res.status!==200)process.exit(1);}).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s

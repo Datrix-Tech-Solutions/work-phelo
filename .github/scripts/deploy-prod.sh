@@ -30,6 +30,33 @@ log "Ref: ${BUILD_REF:-unknown}"
 log "Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 require_command docker
+require_command flock
+exec 9>"${LIVE_DEPLOY_PATH}/.production-deploy.lock"
+flock -n 9 || die 'Another production deployment is active; no changes made'
+
+DEPLOY_STAGE=PREPARING
+record_release_state() {
+  write_env_file "${LIVE_DEPLOY_PATH}/.deployment-state.prod" \
+    "BUILD_SHA=${BUILD_SHA}" "STAGE=$1" "CANDIDATE_PATH=${DEPLOY_PATH}" \
+    "ROLLBACK_CONFIG_PATH=${ROLLBACK_CONFIG_PATH:-not-created}" \
+    "DATABASE_ROLLBACK=manual-review-required"
+}
+on_deploy_exit() {
+  local status=$?
+  trap - EXIT
+  if (( status != 0 )); then
+    set +e
+    record_release_state "FAILED:${DEPLOY_STAGE}"
+    log "Production release stopped at ${DEPLOY_STAGE}; exit=${status}. Verified configuration is not intentionally replaced before health verification."
+    print_compose_failure_diagnostics
+    log 'Inspect the private deployment-state/candidate/rollback paths. Do not reset migration history or automatically roll back the database.'
+  fi
+  exit "$status"
+}
+trap on_deploy_exit EXIT
+trap 'exit 143' TERM HUP
+trap 'exit 130' INT
+record_release_state PREPARING
 
 validate_required_envs "$DEPLOY_ENV"
 warn_optional_envs
@@ -242,6 +269,9 @@ write_env_file "${DEPLOY_PATH}/apps/subscription-service/.env.prod" \
 log "✓ Service env files written; business activation requires explicit production configuration"
 
 section "Compose Validation"
+validate_production_image_refs "$API_GATEWAY_IMAGE" "$AUTH_SERVICE_IMAGE" "$HR_SERVICE_IMAGE" \
+  "$NOTIFICATION_SERVICE_IMAGE" "$REINSURANCE_SERVICE_IMAGE" "$ACCOUNTING_SERVICE_IMAGE" \
+  "$MARKETING_SERVICE_IMAGE" "$INVENTORY_SERVICE_IMAGE" "$SUBSCRIPTION_SERVICE_IMAGE" "$NEXTJS_IMAGE"
 validate_compose_render
 log "✓ docker compose config"
 
@@ -274,16 +304,32 @@ preflight_runtime_env "$MARKETING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/marketing-
 preflight_runtime_env "$INVENTORY_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/inventory-service/.env.prod" "dist/config/runtime-env.js" "inventory-service"
 log "✓ Runtime env validation passed"
 
-section "Read-only Database Migration Preflight"
-# SQL application and seeding require a separately approved, backed-up operation.
-for service in auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service; do
-  if ! docker_compose run --rm --no-deps "$service" sh -c "npx prisma@5.22.0 migrate status --schema /app/apps/$service/prisma/schema.prisma"; then
-    die "$service migration history requires review; no migrations or seeds were run. Obtain backup/schema approval and prepare the database separately."
+section "Snapshot Verified Configuration"
+ROLLBACK_CONFIG_PATH="$(mktemp -d "${LIVE_DEPLOY_PATH}/.rollback-config-${BUILD_SHA}.XXXXXX")"
+for relative in .compose.prod.env infrastructure/docker-compose.prod.yml .github/scripts/deploy-common.sh \
+  apps/api-gateway/.env.prod apps/auth-service/.env.prod apps/hr-service/.env.prod \
+  apps/notification-service/.env.prod apps/reinsurance-service/.env.prod apps/accounting-service/.env.prod \
+  apps/marketing-service/.env.prod apps/inventory-service/.env.prod apps/subscription-service/.env.prod; do
+  if [[ -f "${LIVE_DEPLOY_PATH}/${relative}" ]]; then
+    mkdir -p "${ROLLBACK_CONFIG_PATH}/$(dirname "$relative")"
+    install -m 600 "${LIVE_DEPLOY_PATH}/${relative}" "${ROLLBACK_CONFIG_PATH}/${relative}"
   fi
 done
 
+section "Approved Database Migration Stage"
+DEPLOY_STAGE=MIGRATIONS
+record_release_state MIGRATIONS
+run_production_migrations || die 'Migration verification/execution stopped; application rollout has not started. Review history, approved plan and backup evidence.'
+
 section "Deploy"
-if docker_compose up -d --no-build; then
+DEPLOY_STAGE=ROLLOUT
+record_release_state ROLLOUT
+changed_services_text="$(production_changed_services)" || die 'Cannot safely select changed production services'
+changed_services=()
+while IFS= read -r service; do [[ -z "$service" ]] || changed_services+=("$service"); done <<< "$changed_services_text"
+if (( ${#changed_services[@]} == 0 )); then
+  log 'All service configurations are unchanged and running; no containers recreated'
+elif docker_compose up -d --no-build --no-deps "${changed_services[@]}"; then
   :
 else
   print_compose_failure_diagnostics
@@ -292,6 +338,8 @@ fi
 log "✓ Compose rollout finished"
 
 section "Container Health"
+DEPLOY_STAGE=HEALTH
+record_release_state HEALTH
 wait_for_container_health redis
 wait_for_container_health auth-service
 wait_for_container_health hr-service
@@ -304,9 +352,11 @@ wait_for_container_health subscription-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
-log "Automatic production seeding is disabled; permission/data changes require separate approval."
+log "Full production seeds and permission backfills are never run by deployment."
 
 section "Reachability"
+DEPLOY_STAGE=REACHABILITY
+record_release_state REACHABILITY
 wait_for_http_ok "prod auth-service" "http://127.0.0.1:4101/health"
 wait_for_http_ok "prod hr-service" "http://127.0.0.1:4102/health"
 wait_for_http_ok "prod notification-service" "http://127.0.0.1:4104/api/health"
@@ -322,19 +372,10 @@ wait_for_http_ok "prod gateway reinsurance route" "http://127.0.0.1:4110/api/v1/
 wait_for_http_ok "prod nextjs" "http://127.0.0.1:3001/health"
 
 section "Publish Verified Deployment Configuration"
-ROLLBACK_CONFIG_PATH="$(mktemp -d "${LIVE_DEPLOY_PATH}/.rollback-config-${BUILD_SHA}.XXXXXX")"
-for relative in .compose.prod.env infrastructure/docker-compose.prod.yml .github/scripts/deploy-common.sh; do
-  if [[ -f "${LIVE_DEPLOY_PATH}/${relative}" ]]; then
-    mkdir -p "${ROLLBACK_CONFIG_PATH}/$(dirname "$relative")"
-    install -m 600 "${LIVE_DEPLOY_PATH}/${relative}" "${ROLLBACK_CONFIG_PATH}/${relative}"
-  fi
-done
+DEPLOY_STAGE=PUBLISHING
+record_release_state PUBLISHING
 for service in api-gateway auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service subscription-service; do
   mkdir -p "${LIVE_DEPLOY_PATH}/apps/${service}"
-  if [[ -f "${LIVE_DEPLOY_PATH}/apps/${service}/.env.prod" ]]; then
-    mkdir -p "${ROLLBACK_CONFIG_PATH}/apps/${service}"
-    install -m 600 "${LIVE_DEPLOY_PATH}/apps/${service}/.env.prod" "${ROLLBACK_CONFIG_PATH}/apps/${service}/.env.prod"
-  fi
   install -m 600 "${DEPLOY_PATH}/apps/${service}/.env.prod" "${LIVE_DEPLOY_PATH}/apps/${service}/.env.prod"
 done
 install -m 600 "$COMPOSE_ENV_FILE" "$PREVIOUS_COMPOSE_ENV_FILE"
@@ -344,6 +385,8 @@ COMPOSE_ENV_FILE="$PREVIOUS_COMPOSE_ENV_FILE"
 COMPOSE_FILE="${LIVE_DEPLOY_PATH}/infrastructure/docker-compose.prod.yml"
 log "Previous configuration retained privately at ${ROLLBACK_CONFIG_PATH}; do not print its contents."
 record_successful_deploy_images
+record_release_state VERIFIED
+DEPLOY_STAGE=VERIFIED
 
 section "Container Status"
 docker_compose ps

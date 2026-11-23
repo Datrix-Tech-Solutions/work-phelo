@@ -4,6 +4,8 @@ const PUBLIC_ROUTES = ['/login', '/platform/login'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // Exact process-liveness route; do not exempt tenant pages or arbitrary suffixes.
+  if (pathname === '/health') return NextResponse.next();
   const accessToken = request.cookies.get('access_token')?.value;
   const refreshToken = request.cookies.get('refresh_token')?.value;
 

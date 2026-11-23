@@ -28,6 +28,11 @@ jobs:
       - name: Tests
         run: npm run test
 
+      - name: Production migration and deployment safety tests
+        run: |
+          node --test .github/scripts/production-migrations.spec.mjs
+          node .github/scripts/deploy-prod-safety.spec.mjs
+
       - name: Build
         run: npm run build
 
@@ -82,6 +87,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Unauthenticated direct health regression
+        run: node scripts/health-route.spec.mjs
 
       - name: Build
         run: npm run build

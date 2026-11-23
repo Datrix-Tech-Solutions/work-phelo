@@ -280,6 +280,282 @@ npm run build
 Do not merge directly to `prod` casually. Production changes require an
 explicit release plan, migration review, environment review and rollback notes.
 
+### Production Startup and Migration Safeguards
+
+The original resilience implementation was based on DEV and carried the current
+PROD deployment assets forward. This scoped production backport is based on PROD;
+it does not promote unrelated DEV application code.
+Promote only the reviewed fix against the current production implementation;
+Accounting/Marketing activation policy must remain explicit and unchanged.
+
+Auth permission reconciliation is now an explicit operator command rather than
+HTTP startup work; see `apps/auth-service/README.md`. `/health` on Next.js is a
+public, lightweight, direct HTTP 200 with no authentication redirect. Other
+routes retain authentication. Production probes reject redirects.
+
+Production deployments are serialized both by GitHub concurrency and a host
+`flock`. Application images must be immutable SHA tags/digests. Compose config
+hashes select changed/not-running services; unchanged running containers are
+not restarted. Gateway/Next.js no longer wait for every backend to be healthy
+before they can start. All service health and reachability checks still have
+to pass before staged configuration and successful image history are published.
+The existing 120-second health bound is retained, including bounded recovery
+from a temporary unhealthy state. This is not a readiness bypass.
+
+#### Approved Migration Plan
+
+`.github/scripts/production-migrations.mjs` runs before application rollout in
+candidate service images with their service-specific environment, without
+starting application providers, schedulers or consumers. Order and schemas are:
+Auth `w_auth`, HR `hr`, Notification `notify`, Reinsurance `reinsurance`, Accounting
+`accounting`, Marketing `marketing`, Inventory `inventory`. Subscription has no
+migration stage. AI is excluded.
+
+Two new **production Actions variables** are required:
+
+- `PROD_MIGRATION_PLAN_FILE`: absolute path to a privately provisioned, reviewed
+  JSON plan on the deployment host (not an environment file or secret dump).
+- `PROD_MIGRATION_PLAN_SHA256`: SHA-256 of the approved exact plan bytes.
+
+No new credential secret is introduced. Existing service database secrets remain
+inside service env files. The workflow also requires the `prod` GitHub Environment
+to have required reviewers and its token to be able to read that environment's
+protection metadata. Missing variables, metadata access or required reviewers
+fail closed. At implementation-time inspection, both new variables and required
+reviewers were absent; configuring them is a separate authorized operator action.
+No GitHub environment settings were changed by this implementation.
+
+The deploy job requests only `contents: read`, `packages: read` and `actions: read`.
+The last permission permits the Get Environment API metadata check; no admin-write
+token or new PAT is required. Configuring protection rules is a separate repository
+administrator operation. Normal protected-environment deployment approval still
+applies to every release. A zero-pending deployment reuses the existing pinned
+schema baseline without new migration-specific approval, backup or release/expiry
+binding. It does not accept an absent baseline, because that would silently bless
+unknown schema drift. Initial baseline adoption therefore remains an explicit gate.
+
+Permission reference: [Get an environment API](https://docs.github.com/en/rest/deployments/environments#get-an-environment).
+
+Version 1 plan fields (repeat the service entry for all seven services):
+
+```text
+version: 1
+approvalRef: approved change/review reference
+releaseSha: exact 40-character candidate SHA
+expiresAt: operator-approved expiry for pending DDL
+backup:
+  reference: actual recoverable backup reference
+  verificationRef: evidence that the backup completed and is usable
+  restoreTestRef: isolated restore verification evidence
+  releaseSha: exact candidate SHA
+  serviceScopes: databaseScopeHash values covered by this backup
+  verifiedAt: ISO timestamp
+  validUntil: operator-approved recovery evidence expiry
+services:
+  inventory-service:
+    schema: inventory
+    postgresMajor: actual server major
+    databaseScopeHash: inspected host/port/database/schema fingerprint
+    snapshotEvidenceRef: trusted schema-prefix replay/restore evidence
+    compatibilityEvidenceRef: old/new application compatibility test evidence
+    fromMigrations: ordered list of {name, checksum} before pending DDL
+    targetMigrations: ordered list of {name, checksum} in candidate image
+    beforeDigest: trusted pre-DDL catalog fingerprint
+    afterDigest: trusted expected post-DDL catalog fingerprint
+    backwardCompatible: true
+    destructiveApprovalRef: required when pending SQL is classified high-risk
+```
+
+This is an **operator attestation gate**, not an integration with a backup
+provider API. Reviewers must verify the referenced backup, restore and binary
+compatibility evidence before approving plan bytes. Placeholder references do
+not prove recovery. Database scope hashes exclude credentials, but plan/evidence
+files still belong in restricted operator storage. Choose backup freshness and
+approval expiry under the production recovery policy; the code does not invent
+a retention/RPO policy. A schema fingerprint must come from trusted migration
+replay or a verified restore, not merely blessing whatever happens to be live.
+
+For inspection, invoke the runner inside the intended service image with its
+existing secure env and working directory, setting `MIGRATION_SERVICE`:
+`node /mounted/production-migrations.mjs --manifest` lists immutable SQL checksums;
+`--inspect` reads catalog/history metadata only. Neither runs DDL. Do not paste
+database URLs into shell history. These commands are operator procedures, not
+permission to inspect production in an unapproved session.
+
+Execution requires `--execute`, the pinned plan and a database advisory lock.
+It rejects unknown/non-prefix/failed/duplicate histories, changed checksums,
+wrong schema/search path, engine/scope mismatches and catalog drift. It verifies
+tables, columns/defaults, constraints, indexes, enums, views, triggers, routines,
+sequence definitions and RLS policies, not business data. It does not claim to
+audit every possible PostgreSQL object, privileges, extensions or external
+service state. Conservative SQL classification requires extra review for
+potentially destructive statements; it is not a SQL safety proof.
+
+Only pending migrations are passed to native `prisma migrate deploy`. Final
+history/fingerprint and native `prisma migrate status` are checked. Existing
+complete schemas use the approved target baseline without rerunning DDL or
+requiring a fresh backup; pending DDL requires release-bound unexpired approval,
+backup evidence and backward compatibility. Unknown drift never causes an
+automatic baseline, seed, reset, `db push`, resolve or repair.
+
+The existing 124 Accounting/Marketing/Inventory migrations and Inventory's
+rolled-back max-stock attempt must remain unchanged. SQL bytes are immutable.
+Fresh-environment testing replays the original Inventory SQL using the correct
+`schema=inventory` Prisma connection/search path. An existing failed/untracked
+history requires separately reviewed manual reconciliation, not invented
+successful records. No migration files were changed in this fix.
+
+#### Failure and Recovery Procedure
+
+1. Before pending DDL, verify a real backup and isolated restore; test the old
+   running binaries and candidate against the expected resulting schema.
+2. Provision the approved plan securely, configure its pinned Actions variables
+   and environment reviewers, then approve only the exact release/evidence.
+3. On failure, stop competing deployments. Inspect private
+   `.deployment-state.prod`, its candidate path and rollback-config path. Logs
+   expose state/health/exit metadata, not raw app logs, env values or health
+   command output. Inspect detailed errors privately with credential redaction.
+4. If migration fails, application rollout has not started. Inspect history and
+   actual schema; some DDL may already have committed. Never automatically
+   resolve/reset/replay or assume transaction rollback undid native migrations.
+5. If DDL succeeds but rollout fails, canonical configuration/history are not
+   published as successful. Existing private config snapshots are retained.
+   Restore only reviewed application images/config compatible with the new
+   schema, or finish rollout from the verified candidate. Database restore is a
+   separate approved recovery action and can lose writes since backup.
+6. Interrupted publication is recorded as failed; compare all canonical files
+   with the retained candidate/snapshot before resuming. Multi-file publication
+   is not a filesystem-wide atomic transaction. Do not prune recovery snapshots
+   until the release is verified.
+
+Breaking DDL is refused by this rolling-deploy path; use an approved maintenance
+or expand/contract plan instead. Local tests use disposable PostgreSQL only.
+First validate startup, reconciliation dry-run, fresh/history/no-op migrations,
+lock/backup/drift failures, redirected health rejection and partial deployment
+in DEV/staging. Production adoption requires its own reviewed baseline plan and
+backup/restore evidence. No production migrations, seeds, permission changes,
+activation flags, containers or secrets were modified by these local checks.
+
+#### Final Adoption Review (2026-11-23)
+
+Fetched DEV remains `597e87f420f6820fb331652c70713b57d84e2d02`; PROD remains the
+deployed `4e65c3f08da105c0e636ebe2e7c16cd032d8618e`. The original implementation
+branch is based on DEV, which is 208 commits ahead and 20 behind PROD. This
+production branch instead starts directly from that PROD baseline and contains
+only the scoped backport. No DEV merge or automatic rebase occurred.
+
+The production release needs a fresh PROD-based branch containing only the
+reviewed resilience patch. A disposable scoped backport applied cleanly, passed
+351 Auth tests and built an Auth image for Linux/AMD64. Its source preserves
+PROD's older Auth/HR/Notification contracts, guarded Accounting/Marketing
+activation, credential-safe Docker contexts, Gateway routes and Subscription
+shutdown behavior. The fix changes no Gateway routing or domain-service code.
+All eleven Compose services, ports, env-file paths, networks and existing workflow
+env sources were compared against PROD; only the reviewed startup/health behavior
+and two new plan variables differ. Do not replace PROD application directories,
+package manifests or lockfiles with their full DEV versions.
+
+Migration directory counts are Auth 35/32, HR 91/77, Notification 17/16 for
+DEV/PROD respectively; Reinsurance 47, Accounting 65, Marketing 40 and Inventory
+19 match. These are repository counts, not a fresh live database inventory.
+The extra DEV migrations are not part of this release. Build a production plan
+from the actual retained production image manifests, not DEV's larger histories.
+
+DEV/staging validation should first exercise Auth startup/new tenant/invite
+baseline assignment and direct Next health, then the migration runner using
+disposable databases and production-like staged/canonical config directories.
+After review, make the narrow PROD-based release PR, provision the approved
+baseline/backup evidence and required reviewers, and let the approved production
+pipeline run only after separate merge/deployment authorization. Forward-port
+the common Auth/health fixes to DEV without using a whole-DEV production merge.
+
+Local validation includes native Prisma additive migration execution with
+existing-row preservation; seven independent schema histories unchanged during
+zero-pending verification; retained rolled-back attempts; drift/lock/backup/plan
+failures; and real Auth tenant-scoped repeat, concurrent-lock and rollback/resume
+cases. Run database tests only against an owned disposable fixture named
+`resilience_fixture` on loopback, with user `fixture`, after building Auth and
+generating the Inventory client. The test creates random databases inside that
+fixture; remove the owned fixture container/volume afterward, not shared schemas.
+Set `MIGRATION_TEST_DATABASE_URL` securely and run
+`node --test .github/scripts/production-migrations.database.spec.mjs`.
+The other safety checks use `node --test .github/scripts/production-migrations.spec.mjs .github/scripts/deploy-prod-safety.spec.mjs apps/web/work-phelo-web/scripts/health-route.spec.mjs`.
+
+Original DEV-based local evidence: forced root build 16/16 tasks, typecheck 32/32, lint 32/32
+(existing warnings, no errors), and tests 18/18 tasks, all with zero cache hits.
+Root tests passed 5,370 cases with 198 database-dependent AI/Inventory skips;
+the separate adoption PostgreSQL suite passed 11 tests with no skips. Safety
+tests passed 34 cases. DEV-based Auth passed 416 tests; the scoped PROD backport
+passed 351. Both Auth candidates built clean Linux/AMD64 images, and the PROD
+image contained the generated Prisma client/compiled reconciliation command with
+no startup backfill hook. Root validation reused local dependency installations;
+the image builds used clean npm installations. Only Auth Docker images were
+rebuilt; other backend builds passed through the root graph. The frontend is
+not in that graph; its preceding webpack build and direct-health HTTP smoke
+passed separately. No live GitHub workflow/deployment was triggered to validate
+the narrowed workflow token, and no full-stack container smoke is claimed.
+
+The actual PROD-based handoff was revalidated separately: forced serialized root
+tests passed 4,182 cases with 112 optional Inventory database skips, 17/17 tasks,
+zero cache hits. Its 11 disposable PostgreSQL adoption tests and 34 safety tests
+passed. PROD's smaller test graph is intentional: unrelated DEV application
+features and migrations are not included. Initial host harness attempts exposed
+a borrowed DEV payroll-engine build and a concurrent Prisma-generation/test race;
+workspace dependency resolution was isolated and the successful final test pass
+was serialized, without changing application code or weakening assertions.
+
+Required review still includes a real production restore/compatibility exercise,
+the first trusted baseline plan, environment protection and a workflow run proving
+the narrowed token permission in GitHub. No live database or full eleven-service
+container-stack test was performed. Backup references are attestations, not
+automatic provider verification. A separate local Auth README contains
+credential-bearing text outside this worktree; it is excluded, must not be staged,
+and requires owner-led credential rotation/exposure review. No credentials or
+secret hashes belong in review evidence.
+
+Intended patch inventory (19 files; no schema or migration SQL changes):
+
+```text
+.github/scripts/deploy-common.sh
+.github/scripts/deploy-prod.sh
+.github/scripts/deploy-prod-safety.spec.mjs
+.github/scripts/production-migrations.mjs
+.github/scripts/production-migrations.spec.mjs
+.github/scripts/production-migrations.database.spec.mjs
+.github/workflows/ci.yml
+.github/workflows/deploy-prod.yml
+infrastructure/docker-compose.prod.yml
+README.md
+apps/auth-service/README.md
+apps/auth-service/package.json
+apps/auth-service/src/permissions/system-permission-backfill.service.ts
+apps/auth-service/src/permissions/system-permission-backfill.service.spec.ts
+apps/auth-service/src/permissions/system-permission-sets.ts
+apps/auth-service/src/scripts/reconcile-system-permissions.ts
+apps/web/work-phelo-web/src/middleware.ts
+apps/web/work-phelo-web/src/app/health/route.ts
+apps/web/work-phelo-web/scripts/health-route.spec.mjs
+```
+
+Proposed production PR title: `fix(deploy): harden startup and approved production migrations`.
+
+Proposed PR description:
+
+- Remove full permission reconciliation from Auth HTTP startup; provide an
+  explicit scoped, transactional, resumable operator command.
+- Preserve the deployed eleven-service production release and business activation
+  controls; recreate only changed/stopped services and verify before publication.
+- Require pinned trusted migration baselines, immutable history, database locks,
+  backup/restore and compatibility evidence for pending DDL. Reuse unchanged
+  baselines without fresh migration-specific approval. Never reset, seed, repair
+  history or automatically roll back a database.
+- Return direct unauthenticated Next health 200; keep protected routes protected.
+- Include unit, disposable PostgreSQL, Auth and Linux/AMD64 build evidence, with
+  the final validation report attached. No credentials, unrelated DEV features,
+  schema changes, existing permissions or activation settings are promoted.
+- Deployment remains blocked on operator configuration and recovery evidence.
+  This review is not merge, deployment or shared-database migration authorization.
+
 ## Contribution Workflow
 
 1. Branch from latest `origin/dev` unless a release task says otherwise.

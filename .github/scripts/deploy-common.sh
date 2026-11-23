@@ -327,6 +327,55 @@ docker_compose_exec() {
   docker_compose exec -T "$@"
 }
 
+production_service_running() {
+  local id
+  id="$(docker_compose ps --all -q "$1" | head -1)"
+  [[ -n "$id" && "$(docker inspect --format '{{.State.Status}}' "$id" 2>/dev/null)" == running ]]
+}
+
+validate_production_image_refs() {
+  local image
+  for image in "$@"; do
+    [[ "$image" =~ :[a-f0-9]{40}$ || "$image" =~ @sha256:[a-f0-9]{64}$ ]] || die 'Production application images must use immutable commit tags or digests; restore verified image references instead of falling back to a floating tag'
+  done
+}
+
+production_changed_services() {
+  local candidate previous="" service digest old_digest
+  candidate="$(docker_compose config --hash '*')" || die 'Cannot inspect candidate service configuration'
+  if [[ -f "${LIVE_DEPLOY_PATH}/.compose.prod.env" && -f "${LIVE_DEPLOY_PATH}/infrastructure/docker-compose.prod.yml" ]]; then
+    previous="$(
+      local COMPOSE_FILE="${LIVE_DEPLOY_PATH}/infrastructure/docker-compose.prod.yml"
+      local COMPOSE_ENV_FILE="${LIVE_DEPLOY_PATH}/.compose.prod.env"
+      docker_compose config --hash '*'
+    )" || die 'Cannot inspect verified live service configuration'
+  fi
+  [[ -n "$candidate" ]] || die 'Candidate service inventory is empty'
+  while read -r service digest; do
+    [[ "$service" =~ ^[a-z0-9-]+$ && -n "$digest" ]] || die 'Invalid service configuration inventory'
+    old_digest="$(printf '%s\n' "$previous" | awk -v name="$service" '$1 == name {print $2}')"
+    if [[ "$digest" != "$old_digest" ]] || ! production_service_running "$service"; then
+      printf '%s\n' "$service"
+    fi
+  done <<< "$candidate"
+}
+
+run_production_migrations() {
+  [[ "${PROD_MIGRATION_PLAN_FILE:-}" == /* && "$PROD_MIGRATION_PLAN_FILE" != *:* && -r "$PROD_MIGRATION_PLAN_FILE" ]] || die 'An approved production migration/baseline plan file is required'
+  [[ "${PROD_MIGRATION_PLAN_SHA256:-}" =~ ^[a-f0-9]{64}$ ]] || die 'Approved migration plan digest is required'
+  local service
+  for service in auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service; do
+    log "Migration verification: ${service}"
+    docker_compose run -T --rm --no-deps \
+      --volume "${DEPLOY_PATH}/.github/scripts/production-migrations.mjs:/production-migrations.mjs:ro" \
+      --volume "${PROD_MIGRATION_PLAN_FILE}:/approved-migrations.json:ro" \
+      -e "MIGRATION_SERVICE=${service}" -e "BUILD_SHA=${BUILD_SHA}" \
+      -e MIGRATION_PLAN_FILE=/approved-migrations.json \
+      -e "MIGRATION_PLAN_SHA256=${PROD_MIGRATION_PLAN_SHA256}" \
+      --entrypoint node "$service" /production-migrations.mjs --execute || return 1
+  done
+}
+
 deploy_path_for_env() {
   local deploy_env="$1"
 
@@ -685,7 +734,7 @@ wait_for_container_health() {
       return 0
     fi
 
-    if [[ "$status" == "exited" || "$status" == "dead" || "$health" == "unhealthy" ]]; then
+    if [[ "$status" == "exited" || "$status" == "dead" || ( "$health" == "unhealthy" && "${DEPLOY_ENV:-}" != "prod" ) ]]; then
       print_service_diagnostics "$service_name" "$container_id"
       die "${service_name}: container status=${status} health=${health}"
     fi
@@ -701,6 +750,14 @@ wait_for_container_health() {
 
 http_get_ok() {
   local url="$1"
+
+  if [[ "${DEPLOY_ENV:-}" == "prod" ]]; then
+    require_command curl
+    local code
+    code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 10 "$url")" || return 1
+    [[ "$code" == 200 ]]
+    return
+  fi
 
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL --max-time 10 "$url" >/dev/null
@@ -750,6 +807,10 @@ wait_for_http_ok() {
 
 print_service_logs() {
   local service_name="$1"
+  if [[ "${DEPLOY_ENV:-}" == "prod" ]]; then
+    log "${service_name}: raw application logs omitted from deployment output; inspect privately using the recovery procedure."
+    return
+  fi
   log ""
   log "Recent logs for ${service_name}:"
   docker_compose logs --no-color --tail 120 "$service_name" || true
@@ -757,6 +818,10 @@ print_service_logs() {
 
 print_service_health_inspect() {
   local container_id="$1"
+  if [[ "${DEPLOY_ENV:-}" == "prod" ]]; then
+    docker inspect --format='Container={{.Name}} Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} ExitCode={{.State.ExitCode}}' "$container_id" || true
+    return
+  fi
 
   log ""
   log "Health inspection for ${container_id}:"

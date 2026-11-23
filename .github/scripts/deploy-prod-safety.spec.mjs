@@ -19,6 +19,17 @@ const source = readFileSync(join(repo, '.github/scripts/deploy-prod.sh'), 'utf8'
 const helper = readFileSync(join(repo, '.github/scripts/deploy-common.sh'), 'utf8');
 const sha = 'a'.repeat(40);
 
+test('production application image selection rejects floating tags', () => {
+  const check = (image) =>
+    spawnSync('bash', ['-c', helper + '\nvalidate_production_image_refs "$IMAGE"'], {
+      env: { ...process.env, IMAGE: image },
+      encoding: 'utf8',
+    }).status;
+  assert.equal(check('fixture/auth:' + sha), 0);
+  assert.equal(check('fixture/auth@sha256:' + 'b'.repeat(64)), 0);
+  assert.notEqual(check('fixture/auth:prod'), 0);
+});
+
 test('schema-specific URLs override an existing schema while preserving other options', () => {
   const base = 'postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=legacy&sslmode=require';
   const result = spawnSync('bash', ['-c', helper + '\ndb_url_for_schema inventory'], {
@@ -29,6 +40,52 @@ test('schema-specific URLs override an existing schema while preserving other op
   const url = new URL(result.stdout);
   assert.deepEqual(url.searchParams.getAll('schema'), ['inventory']);
   assert.equal(url.searchParams.get('sslmode'), 'require');
+});
+
+test('production HTTP checks accept direct 200 but reject login redirects', () => {
+  for (const code of ['200', '307']) {
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        helper +
+          `
+require_command() { :; }
+curl() { printf '%s' "$CODE"; }
+DEPLOY_ENV=prod
+http_get_ok http://fixture/health
+`,
+      ],
+      { env: { ...process.env, CODE: code }, encoding: 'utf8' },
+    );
+    assert.equal(result.status === 0, code === '200');
+  }
+});
+
+test('production waits for temporary unhealthy recovery within the original bound', () => {
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      helper +
+        `
+DEPLOY_ENV=prod
+recovered=false
+docker_compose() { printf fixture; }
+docker() {
+  if [[ "$*" == *State.Status* ]]; then printf running;
+  elif [[ "$recovered" == true ]]; then printf healthy;
+  else printf unhealthy; fi
+}
+sleep() { recovered=true; }
+print_service_diagnostics() { :; }
+wait_for_container_health auth-service 10
+`,
+    ],
+    { env: process.env, encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /container healthy/);
 });
 
 test('explicitly approved production activation is forwarded rather than hard-disabled', () => {
@@ -84,6 +141,7 @@ function fixture(failure = '', activation = {}) {
   writeFileSync(join(root, '.compose.prod.env'), 'AUTH_SERVICE_IMAGE=fixture/auth:previous\n');
   writeFileSync(join(root, 'infrastructure/docker-compose.prod.yml'), 'previous-compose\n');
   writeFileSync(join(root, 'bin/docker'), '#!/bin/sh\ncat >/dev/null\nexit 0\n', { mode: 0o755 });
+  writeFileSync(join(root, 'bin/flock'), '#!/bin/sh\n[ "$FAILURE" != lock ]\n', { mode: 0o755 });
   writeFileSync(join(candidate, 'infrastructure/docker-compose.prod.yml'), 'candidate-compose\n');
   writeFileSync(
     join(candidate, '.github/scripts/deploy-common.sh'),
@@ -94,10 +152,24 @@ warn_optional_envs() { :; }
 validate_compose_render() { :; }
 ensure_image_available() { :; }
 preflight_runtime_env() { :; }
+validate_production_image_refs() { :; }
 print_compose_failure_diagnostics() { :; }
 wait_for_container_health() { :; }
+production_service_running() { return 0; }
+run_production_migrations() {
+  printf 'MIGRATIONS\\n' >> "$TRACE"
+  [[ "$FAILURE" != migration ]]
+}
 docker_compose() {
   printf 'COMPOSE %s\\n' "$*" >> "$TRACE"
+  if [[ "$1" == config && "$2" == --hash ]]; then
+    if [[ "$COMPOSE_FILE" == *".incoming-"* && "$FAILURE" != unchanged ]]; then
+      printf 'accounting-service candidate\\nmarketing-service candidate\\n'
+    else
+      printf 'accounting-service previous\\nmarketing-service previous\\n'
+    fi
+    return 0
+  fi
   if [[ "$*" == *"accounting-service"* && "$*" == *"migrate status"* && "$FAILURE" == migration ]]; then return 1; fi
   if [[ "$1" == up && "$FAILURE" == rollout ]]; then return 1; fi
 }
@@ -136,7 +208,7 @@ post_deploy_capacity_maintenance() { :; }
   return { root, candidate, result, trace: readFileSync(join(root, 'trace'), 'utf8') };
 }
 
-for (const failure of ['migration', 'rollout', 'reachability']) {
+for (const failure of ['migration', 'rollout', 'reachability', 'lock']) {
   test(`${failure} failure preserves canonical config and never records successful history`, () => {
     const f = fixture(failure);
     try {
@@ -156,6 +228,19 @@ for (const failure of ['migration', 'rollout', 'reachability']) {
         ),
       );
       if (failure === 'migration') assert(!f.trace.includes('COMPOSE up'));
+      if (failure !== 'lock') {
+        const stage =
+          failure === 'migration'
+            ? 'MIGRATIONS'
+            : failure === 'rollout'
+              ? 'ROLLOUT'
+              : 'REACHABILITY';
+        assert(
+          readFileSync(join(f.root, '.deployment-state.prod'), 'utf8').includes(
+            'STAGE=FAILED:' + stage,
+          ),
+        );
+      }
     } finally {
       rmSync(f.root, { recursive: true, force: true });
     }
@@ -173,6 +258,7 @@ test('successful rollout preserves old image refs, defaults business flags off a
       'AUTH_SERVICE_IMAGE=fixture/auth:previous\n',
     );
     assert(f.trace.indexOf('HISTORY') > f.trace.lastIndexOf('HTTP '));
+    assert(f.trace.indexOf('MIGRATIONS') < f.trace.indexOf('COMPOSE up'));
     assert(
       !/migrate (deploy|reset|resolve)|db push|seed\.js|--remove-orphans|volume prune/.test(
         f.trace,
@@ -205,6 +291,18 @@ test('successful rollout preserves old image refs, defaults business flags off a
         'AUTH_SERVICE_IMAGE=fixture/auth:previous',
       ),
     );
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('unchanged running services are verified without recreation', () => {
+  const f = fixture('unchanged');
+  try {
+    assert.equal(f.result.status, 0, f.result.stderr);
+    assert(!f.trace.includes('COMPOSE up'));
+    assert(f.trace.includes('HTTP '));
+    assert(f.trace.includes('HISTORY'));
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }
