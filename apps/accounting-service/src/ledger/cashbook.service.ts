@@ -847,7 +847,6 @@ export class CashbookService {
         ...cashbookInclude,
         receivableReceipt: { select: { id: true } },
         payablePayment: { select: { id: true } },
-        bankStatementMatches: { select: { id: true } },
         sourceLedgerAllocations: { select: { id: true } },
       },
     });
@@ -890,9 +889,21 @@ export class CashbookService {
         );
       }
     }
-    if (transaction.bankStatementMatches.length > 0) {
+    const journalIds = [
+      transaction.postedJournalEntryId,
+      transaction.reversalJournalEntryId,
+    ].filter((id): id is string => !!id);
+    if (
+      journalIds.length > 0 &&
+      (await tx.bankReconciledEntry.count({
+        where: {
+          tenantId,
+          journalLine: { journalEntryId: { in: journalIds } },
+        },
+      })) > 0
+    ) {
       throw new ConflictException(
-        'This entry is matched to a bank statement. Unmatch it in the reconciliation first.',
+        'This entry has been reconciled against a bank statement and can no longer be changed.',
       );
     }
     if (transaction.sourceLedgerAllocations.length > 0) {

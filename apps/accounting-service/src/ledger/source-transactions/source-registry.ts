@@ -22,6 +22,11 @@ export interface SourceRegistration {
    * keeps its own flow (payroll). The generic source-transaction routes then do not serve it.
    */
   raisesTransactions?: boolean;
+  /**
+   * Which way the money goes for what this module raises. Receivable (the default) is an invoice or
+   * a direct receipt; payable is a direct payment to the record (e.g. a supplier).
+   */
+  direction?: 'RECEIVABLE' | 'PAYABLE';
 }
 
 export const SOURCE_REGISTRY: Partial<
@@ -36,6 +41,17 @@ export const SOURCE_REGISTRY: Partial<
       baseUrlEnv: 'MARKETING_SERVICE_URL',
       path: '/internal/accounting-events',
     },
+  },
+  OPERATIONS: {
+    module: 'OPERATIONS',
+    moduleConfigKey: 'operations',
+    sourceName: 'Inventory Payments',
+    serviceName: 'inventory-service',
+    callback: {
+      baseUrlEnv: 'INVENTORY_SERVICE_URL',
+      path: '/internal/accounting-events',
+    },
+    direction: 'PAYABLE',
   },
   HR: {
     module: 'HR',

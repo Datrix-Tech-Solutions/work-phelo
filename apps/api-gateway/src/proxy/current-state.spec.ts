@@ -234,6 +234,44 @@ describe('Gateway current-state authorization boundary', () => {
     expect(outgoing).toHaveBeenCalledTimes(1);
     expect(http.request).toHaveBeenCalledTimes(2);
   });
+  it('routes Inventory through its namespace with a fresh Inventory-bound assertion', async () => {
+    process.env.INVENTORY_SERVICE_URL = 'http://inventory.test:4009';
+    controller = new ProxyController();
+    outgoing = jest
+      .spyOn(
+        controller as unknown as { createProxyRequest: () => unknown },
+        'createProxyRequest',
+      )
+      .mockReturnValue({
+        setTimeout: jest.fn(),
+        on: jest.fn(),
+        setHeader: jest.fn(),
+        end: jest.fn(),
+        write: jest.fn(),
+      });
+    authBody = {
+      user: { ...currentUser(), moduleConfig: { operations: true } },
+      permissions: ['operations.inventory.items:VIEW'],
+    };
+    const { req } = await send(
+      '/api/v1/operations/inventory/items',
+      {},
+      { 'x-user-role': 'SUPER_ADMIN' },
+    );
+    expect(outgoing).toHaveBeenCalledTimes(1);
+    expect(outgoing.mock.calls[0][1]).toMatchObject({
+      hostname: 'inventory.test',
+      path: '/api/items',
+    });
+    const signed = jwt.verify(req.headers['x-gateway-auth-context'], secret, {
+      issuer: 'workphelo-gateway',
+      audience: 'inventory',
+    }) as jwt.JwtPayload;
+    expect(signed.user.role).toBe('EMPLOYEE');
+    expect(req.headers['x-user-permissions']).toBe(
+      '["operations.inventory.items:VIEW"]',
+    );
+  });
   it('forwards enabled current integration flags in the Reinsurance audience context', async () => {
     process.env.REINSURANCE_SERVICE_URL = 'http://reinsurance.test:4007';
     const integrationConfig = { 'operations.reinsuranceAccounting': true };

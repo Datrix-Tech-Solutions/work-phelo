@@ -32,6 +32,7 @@ work-phelo/
 │   ├── marketing-service/
 │   ├── reinsurance-service/
 │   ├── accounting-service/
+│   ├── inventory-service/
 │   └── web/
 │       └── work-phelo-web/
 ├── packages/
@@ -44,17 +45,18 @@ work-phelo/
 
 ## Services and Ports
 
-| Service              | Local port | Gateway prefix                     | Dev deploy | Prod deploy |
-| -------------------- | ---------: | ---------------------------------- | ---------- | ----------- |
-| API Gateway          |     `4000` | `/api/v1/*`                        | Yes        | Yes         |
-| Auth Service         |     `4001` | `/api/v1/auth/*`                   | Yes        | Yes         |
-| HR Service           |     `4002` | `/api/v1/hr/*`                     | Yes        | Yes         |
-| Notification Service |     `4004` | `/api/v1/notification/*`           | Yes        | Yes         |
-| Subscription Service |     `4005` | `/api/v1/subscription/*`           | Yes        | No          |
-| Marketing Service    |     `4006` | `/api/v1/marketing/*`              | Yes        | No          |
-| Reinsurance Service  |     `4007` | `/api/v1/operations/reinsurance/*` | Yes        | No          |
-| Accounting Service   |     `4008` | `/api/v1/accounting/*`             | Yes        | No          |
-| Web app              |     `3000` | same-origin `/api/v1/*`            | Yes        | Yes         |
+| Service              | Local port | Gateway prefix                     | Dev deploy | Prod deploy          |
+| -------------------- | ---------: | ---------------------------------- | ---------- | -------------------- |
+| API Gateway          |     `4000` | `/api/v1/*`                        | Yes        | Yes                  |
+| Auth Service         |     `4001` | `/api/v1/auth/*`                   | Yes        | Yes                  |
+| HR Service           |     `4002` | `/api/v1/hr/*`                     | Yes        | Yes                  |
+| Notification Service |     `4004` | `/api/v1/notification/*`           | Yes        | Yes                  |
+| Subscription Service |     `4005` | `/api/v1/subscription/*`           | Yes        | Candidate (scaffold) |
+| Marketing Service    |     `4006` | `/api/v1/marketing/*`              | Yes        | Candidate            |
+| Reinsurance Service  |     `4007` | `/api/v1/operations/reinsurance/*` | Yes        | Yes                  |
+| Accounting Service   |     `4008` | `/api/v1/accounting/*`             | Yes        | Candidate            |
+| Inventory Service    |     `4009` | `/api/v1/operations/inventory/*`   | Yes        | Candidate            |
+| Web app              |     `3000` | same-origin `/api/v1/*`            | Yes        | Yes                  |
 
 Production exposure is intentionally narrower than development. Check
 [`infrastructure/docker-compose.prod.yml`](infrastructure/docker-compose.prod.yml)
@@ -195,8 +197,8 @@ npm run db:migrate --workspace=apps/reinsurance-service
 npm run db:migrate --workspace=apps/accounting-service
 ```
 
-Subscription and Marketing currently have no Prisma models and their
-`db:generate` scripts intentionally no-op.
+Subscription has no Prisma application models and its generation script no-ops.
+Marketing and Inventory own separate Prisma schemas and migration histories.
 
 ## Running Locally
 
@@ -297,116 +299,144 @@ Directories named `docs/` are local working/reference areas and are not the
 canonical delivery surface for fresh clones after the local-docs policy is
 merged.
 
-## Accounting and Marketing Production Candidate
+## Full DEV Service Promotion Candidate
 
-This is preparation for review, not deployment approval. The source baseline is
-PROD `42c5256381e997ea4eeff9e3022420ffd77c2a07`; reviewed DEV is
-`597e87f420f6820fb331652c70713b57d84e2d02`. The exact migration inventory and
-checksums are in `.github/production-rollout-manifest.json`. No newer DEV
-Accounting or Marketing migrations are promoted. Production migration history,
-schema drift, backups and restore evidence remain unverified.
+Review baseline: PROD `42c5256381e997ea4eeff9e3022420ffd77c2a07` and DEV
+`597e87f420f6820fb331652c70713b57d84e2d02`. PR #804 promotes service functionality,
+not the entire DEV branch. AI, frontend convergence, unfinished Auth corrections
+and unrelated employee-access/appraisal changes are excluded.
 
-### Independent Business Activation
+### Included Functionality
 
-These strict boolean flags default to false in production. Deployment writes
-every flag explicitly as false; activation needs a separate approval:
+- Accounting: all DEV manual workflows, completed ledger-based bank reconciliation,
+  reconciliation groups, source payments (including Inventory), source-payment
+  currency validation, recurring posting and service integrations.
+- Marketing: DEV CRM, campaigns, sender identities, wallets and credit-request
+  submission/fulfillment/rejection, messaging/scheduling/consumer functionality,
+  Accounting integration and HR directory/fleet integrations.
+- Inventory: complete implemented DEV settings, item/party/variant management,
+  stock/lot/batch operations, adjustments/transfers, approvals, purchase orders,
+  invoices, damaged goods and Accounting-linked supplier payments.
+- Subscription: only the existing health/Swagger scaffold. DEV has no implemented
+  subscription models, billing, checkout or payment-provider flow. Deploying this
+  container does not create such functionality.
+- Gateway: Inventory namespace and audience, Idempotency-Key CORS, existing
+  Accounting/Marketing/Subscription routes. No AI registration or proxy is copied.
+- Auth: Inventory resource/seed definitions and entitlement regressions. HR:
+  production internal secret/allowlist forwarding. Existing current-context,
+  tenant isolation, entitlement and granular permission guards remain enforced.
 
-| Flag                                       | Disabled behavior                                                                                                  |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `ACCOUNTING_RECURRING_JOURNALS_ENABLED`    | No automatic recurring generation/posting; manual APIs retain their existing controls                              |
-| `ACCOUNTING_INTERNAL_INTEGRATION_ENABLED`  | Internal integration routes reject with 503 before processing                                                      |
-| `MARKETING_OUTBOUND_COMMUNICATION_ENABLED` | Campaign/provider submissions reject before dispatch or credit mutation; optional in-app notifications are skipped |
-| `MARKETING_AUTOMATIC_PROCESSING_ENABLED`   | No campaign scheduler timer or scheduled dispatch                                                                  |
-| `MARKETING_RABBITMQ_CONSUMER_ENABLED`      | No consumer binding, consumption or acknowledgement                                                                |
-| `MARKETING_ACCOUNTING_INTEGRATION_ENABLED` | No Accounting client calls, even if a URL exists                                                                   |
+### Production Activation Is Explicit, Not Hard-Disabled
 
-Marketing CRM remains authenticated, tenant-scoped and usable with these flags
-off. Production defaults to `SMS_SENDER_READINESS_MODE=strict`; outbound
-activation with another mode fails startup. Enabled consumers require RabbitMQ
-and startup closes safely if consumer initialization fails. Neither new service
-requires a working broker or external provider while these controls are off.
-Non-production defaults preserve existing behavior; optional Marketing consumers
-still require a configured broker URL. No SMS/email provider is enabled here.
+Each workflow variable below is passed to the identically named runtime flag
+without the `PROD_` prefix. Unset variables safely resolve to false. Production
+operators can enable the implemented features after approval without editing code.
 
-### Deployment and Rollback Boundaries
+| Production GitHub variable                      | Capability                                    |
+| ----------------------------------------------- | --------------------------------------------- |
+| `PROD_ACCOUNTING_RECURRING_JOURNALS_ENABLED`    | Automatic recurring generation/posting        |
+| `PROD_ACCOUNTING_INTERNAL_INTEGRATION_ENABLED`  | Authenticated internal financial integrations |
+| `PROD_MARKETING_OUTBOUND_COMMUNICATION_ENABLED` | Notifications and campaign delivery           |
+| `PROD_MARKETING_AUTOMATIC_PROCESSING_ENABLED`   | Scheduled campaign processing                 |
+| `PROD_MARKETING_RABBITMQ_CONSUMER_ENABLED`      | Marketing queue consumers                     |
+| `PROD_MARKETING_ACCOUNTING_INTEGRATION_ENABLED` | Marketing Accounting calls                    |
 
-Only Accounting and Marketing are added to the executable production build and
-Compose matrix, on loopback ports 4108 and 4106. Subscription and Inventory
-are excluded from this PR, including their Docker-ignore templates.
-Gateway receives their internal URLs; its existing proxy code is unchanged.
+No production setting was changed during preparation. Credentials, approved
+sender identities, wallet balances, transport readiness and financial-posting
+policy must be verified before activation. Disabled consumers do not bind or
+acknowledge. Sender readiness remains strict in production. Outbound messaging
+still belongs to Notification; provider credentials are not copied into Marketing.
+Read/write CRM and standalone manual Accounting APIs remain available independently.
+After approval, validate consumers/result processing before enabling campaign
+dispatch; enable scheduling last. Approve recurring AUTO_POST policy separately
+from internal Accounting APIs and verify callbacks before accepting integration traffic.
 
-Uploaded assets and generated private env files use `.incoming-<SHA>` until
-health and reachability pass. All six service migration checks are read-only
-`prisma migrate status`: pending migrations stop deployment before rollout.
-There is no automatic SQL application, baseline resolve or production seed.
-This intentionally changes the previous automatic migration/seed policy and
-requires explicit release review. Any required SQL/seed must be approved and
-performed separately after backup/drift verification; do not blindly baseline.
-Orphan removal is disabled to avoid removing unrelated live containers.
+### Production Wiring And Configuration
 
-Before canonical config publication, a private `.rollback-config-<SHA>.*`
-directory saves previous env files, Compose config, image refs and helper.
-Successful image history is recorded only after all reachability checks.
-Existing per-environment rollback image retention remains unchanged.
-Failure preserves canonical config but does NOT automatically restore containers
-already changed by Compose, or undo database work. Operators must use the saved
-Compose/env files and retained prior images to recreate affected services after
-checking schema compatibility. Do not prune volumes or roll back schema blindly.
+Compose/build/change detection include Accounting (loopback 4108), Marketing
+(4106), Inventory (4109) and the health-only Subscription scaffold (4105).
+Gateway receives their Docker-network URLs. Accounting receives HR, Marketing
+and Inventory callback URLs; Marketing and Inventory receive Accounting URLs.
+Auth, HR, Accounting, Marketing and Inventory receive the existing internal
+secret and approved caller allowlist where needed. The allowlist must include
+marketing-service, accounting-service and inventory-service.
 
-### Validation and Remaining Gates
+GitHub prod secret names verified present: PROD_DATABASE_URL, PROD_JWT_SECRET,
+PROD_RABBITMQ_URL, PROD_REDIS_PASSWORD, INTERNAL_SERVICE_AUTH_SECRET,
+PROD_NOTIFY_RESEND_API_KEY, PROD_NOTIFY_TERMII_API_KEY, PROD_NOTIFY_PILOSMS_API_KEY,
+AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, CLOUDINARY_CLOUD_NAME,
+CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET. Configured sender/from-email,
+Auth/frontend and object-storage variable names are present. Name presence is
+not verification of credential validity, sender approval or live connectivity.
+SasuSync/AgooSMS production API-key names and the six activation variables are
+absent; those alternatives/activation need operator configuration before use.
+No payment-provider secret is consumed by the health-only Subscription scaffold.
 
-`node .github/scripts/deploy-prod-safety.spec.mjs` checks migration, rollout and
-reachability failures plus successful config publication with synthetic inputs.
-`node .github/scripts/verify-service-build-contexts.mjs` exercises both included
-Dockerfile-specific allowlists using synthetic credentials, builder/final
-layers and exported maximum-mode cache. This synthetic COPY probe is not a
-byte-for-byte audit of full production image archives. Full clean AMD64 builds
-and disposable PostgreSQL startup checks are separate validation evidence.
+### Migrations And Rollback
 
-Auth, HR, Notification, Reinsurance and Gateway still have existing PROD Docker
-context exposure risks; this patch does not silently alter those builds. Review
-and harden them separately before rebuilding those images. Existing image reuse
-does not prove that older images are free of historical credentials.
+The exact migration sequence/checksums and complete changed-file inventory live
+in `.github/production-rollout-manifest.json`: 65 Accounting, 40 Marketing and
+19 Inventory migrations. Subscription has no application models/migrations.
+The previously excluded DEV migrations are now included with matching source
+and Prisma schemas. Disposable migration validation is not production drift proof.
 
-Production is NO-GO until an authorized read-only host audit confirms capacity,
-current images, migration history/drift, backups/restore evidence, rollback
-images and required configuration presence. The prepared host script has NOT
-been executed. No live host target or access authorization was supplied. GHCR
-image availability also remains unverified. Required platform configuration
-includes database/JWT credentials, existing Auth/internal-service secrets and
-Gateway URLs; do not place real values in this repository. Review container
-resource budgets on the shared host before approving rollout.
+**Destructive migration gate:** Accounting's
+`20261121100000_bank_reconciliation_ledger_matching` drops old matching columns
+and indexes without a data-preserving backfill. Before application, verify actual
+production history/data, recoverable backups and any required reconciliation
+preservation plan. Do not assume tables are empty or baseline migrations blindly.
 
-Planning evidence only, not actual Jira updates:
+Deployment runs only read-only Prisma migration status, never automatic SQL or
+explicit seeds. Existing Auth startup permission-catalog/system-set backfill is
+unchanged and can write resources/system sets when Auth starts; review/approve
+that existing behavior with the Inventory catalog addition. Required migrations
+and any additional Inventory RBAC seeding need separately approved
+execution. Pending migrations intentionally block rollout. Do not apply only the
+new application image to an older schema.
 
-| Item                                                 | State                                                                       |
-| ---------------------------------------------------- | --------------------------------------------------------------------------- |
-| PROD-01 inventory; host/backup verification          | Blocked on authorized host evidence                                         |
-| PROD-02 recurring-posting and integration safeguards | Implemented locally; awaiting review and host gates                         |
-| PROD-04 outbound, scheduler and consumer safeguards  | Implemented locally; awaiting review and host gates                         |
-| PROD-09 Gateway/env/pipeline/failure handling        | Implemented locally; awaiting review and host gates                         |
-| Docker-context hardening subtask                     | Locally tested for scoped services; legacy service remediation remains open |
-| Migration compatibility subtask                      | Disposable clean-schema validation only; production drift review blocked    |
+Assets/env files remain in `.incoming-<SHA>` until health/reachability pass;
+private previous configuration backups and canonical per-environment image
+history are retained. Orphan removal is disabled. This is not automatic container
+or database rollback. Use previous images/configuration only after schema
+compatibility review. Once destructive migrations are applied, old image rollback
+may require restoring the verified database backup.
 
-No item is marked merged, deployed or Done. AI planning and implementation are
-unchanged. Controlled Git handoff requires separate approval after reviewing
-this candidate, its manifest and all outstanding gates.
+### Validation And Release Gates
 
-Local validation on 2026-11-23: Accounting 801 tests / 58 suites, Marketing
-972 / 43, unchanged PROD Gateway 67 / 5, deployment safety 5 tests, and the
-Accounting/Marketing synthetic AMD64 context probes passed. Tenant/permission regressions are included
-in the service suites. Prisma 5.22 validation/generation, service typechecks and
-lint, shell syntax, YAML parsing, Compose syntax rendering and RBAC alignment
-passed. All 62 Accounting and 39 Marketing migrations applied to an empty
-disposable PostgreSQL database. These are not production drift checks.
+Full Accounting and Marketing unit suites, full Inventory suite with opt-in
+local PostgreSQL tests, Gateway/internal-auth regressions, focused Auth/HR signed
+HTTP integration tests, Prisma validation/generation, typechecks, lint, image
+builds and deployment failure tests provide local evidence. Subscription's health
+test covers only its scaffold; this is not evidence of billing implementation.
+Local totals: Accounting 814; Marketing 982; Inventory 374 (all database tests
+enabled); Gateway 68; internal-auth 40; focused Auth 50; focused HR 14;
+Subscription health 1; deployment safety 7; synthetic context probes 9.
+Accounting, Marketing, Inventory, Subscription, Gateway, Auth and HR local builds
+and typechecks pass. Auth lint retains existing non-blocking warnings. Clean
+Linux/AMD64 builds include service-owned Prisma generation. Docker Hub TLS and
+initial local dependency-resolution failures were retried, not hidden by code changes.
+Inventory test-only corrections await async rejections, create the required
+variant fixture and align invoice-aware fixtures without weakening assertions.
 
-Unit checks used existing local dependencies via temporary symlinks, not a fresh
-host install (Node 25.8.1 / npm 11.11.0). Separate clean Node 20 Alpine AMD64
-Docker builds validated the lockfile and runtime dependency closure. Database
-integration evidence is limited to migration application, container startup,
-health, default-disabled behavior and protected-route smoke tests; no full
-authenticated CRM/financial business workflow was exercised against PostgreSQL.
-The Accounting image install reported 47 existing dependency vulnerabilities,
-including 3 critical and 20 high. Exploitability is not established by that
-install summary; dependency remediation is not part of this patch and remains
-an explicit security-review item.
+One unchanged DEV Inventory migration has a trailing blank line. Its bytes are
+preserved for Prisma checksum compatibility rather than reformatted; default
+git whitespace checking reports that inherited EOF warning. Other whitespace
+checks must remain clean.
+
+Dockerfile-specific credential allowlists cover all backend images rebuilt by
+the workspace/deployment changes. Synthetic builder/final/max-cache tests use
+no real secrets. They are not a bytewise audit of full production images.
+Dependency vulnerabilities remain a security-review item; no broad dependency
+upgrade was performed. Install summaries report 47 findings in the Accounting
+build, 91 in Marketing, 80 in Subscription, 91 in Gateway and 88 in Auth,
+including critical findings. These are package-install summaries, not proof of
+exploitability or production-only runtime exposure, and require security disposition.
+
+Production history/drift, host capacity, registry images, backup/restore evidence
+and actual authenticated production integrations remain unverified. No authorized
+host target/access was supplied, so the prepared audit script was not executed.
+This candidate is for PR review, not permission to merge, deploy or enable jobs.
+
+Planning evidence only: PROD-02, PROD-04 and PROD-09 In Review after Git handoff;
+PROD-03 and PROD-05 Awaiting deployment. No actual Jira updates, Done claims or
+AI subtask changes are made.

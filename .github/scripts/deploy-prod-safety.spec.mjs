@@ -19,6 +19,43 @@ const source = readFileSync(join(repo, '.github/scripts/deploy-prod.sh'), 'utf8'
 const helper = readFileSync(join(repo, '.github/scripts/deploy-common.sh'), 'utf8');
 const sha = 'a'.repeat(40);
 
+test('schema-specific URLs override an existing schema while preserving other options', () => {
+  const base = 'postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=legacy&sslmode=require';
+  const result = spawnSync('bash', ['-c', helper + '\ndb_url_for_schema inventory'], {
+    env: { ...process.env, DATABASE_URL: base },
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const url = new URL(result.stdout);
+  assert.deepEqual(url.searchParams.getAll('schema'), ['inventory']);
+  assert.equal(url.searchParams.get('sslmode'), 'require');
+});
+
+test('explicitly approved production activation is forwarded rather than hard-disabled', () => {
+  const flags = Object.fromEntries(
+    [
+      'ACCOUNTING_RECURRING_JOURNALS_ENABLED',
+      'ACCOUNTING_INTERNAL_INTEGRATION_ENABLED',
+      'MARKETING_OUTBOUND_COMMUNICATION_ENABLED',
+      'MARKETING_AUTOMATIC_PROCESSING_ENABLED',
+      'MARKETING_RABBITMQ_CONSUMER_ENABLED',
+      'MARKETING_ACCOUNTING_INTEGRATION_ENABLED',
+    ].map((name) => [name, 'true']),
+  );
+  const f = fixture('', flags);
+  try {
+    assert.equal(f.result.status, 0, f.result.stderr);
+    for (const [name] of Object.entries(flags)) {
+      const service = name.startsWith('ACCOUNTING_') ? 'accounting-service' : 'marketing-service';
+      assert(
+        readFileSync(join(f.root, 'apps', service, '.env.prod'), 'utf8').includes(name + '=true'),
+      );
+    }
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 test('staged production deployments resolve rollback history from the canonical directory', () => {
   const result = spawnSync('bash', ['-c', helper + '\ndeploy_image_history_file_for_env prod'], {
     env: {
@@ -33,7 +70,7 @@ test('staged production deployments resolve rollback history from the canonical 
   assert.equal(result.stdout.trim(), '/fixture/.deploy-image-history.prod');
 });
 
-function fixture(failure = '') {
+function fixture(failure = '', activation = {}) {
   const root = mkdtempSync(join(tmpdir(), 'workphelo-rollout-test-'));
   const candidate = join(root, `.incoming-${sha}`);
   for (const path of [
@@ -92,6 +129,7 @@ post_deploy_capacity_maintenance() { :; }
     CHANGED_SERVICES: '["accounting-service","marketing-service"]',
     FAILURE: failure,
     TRACE: join(root, 'trace'),
+    ...activation,
   });
   writeFileSync(env.TRACE, '');
   const result = spawnSync('bash', [script], { cwd: root, env, encoding: 'utf8' });
@@ -124,7 +162,7 @@ for (const failure of ['migration', 'rollout', 'reachability']) {
   });
 }
 
-test('successful rollout preserves old image refs, hard-disables business flags and publishes only after reachability', () => {
+test('successful rollout preserves old image refs, defaults business flags off and publishes only after reachability', () => {
   const f = fixture();
   try {
     assert.equal(f.result.status, 0, f.result.stderr + f.result.stdout);
@@ -155,6 +193,12 @@ test('successful rollout preserves old image refs, hard-disables business flags 
     ])
       assert(marketing.includes(flag + '=false'));
     assert(marketing.includes('SMS_SENDER_READINESS_MODE=strict'));
+    const hr = readFileSync(join(f.root, 'apps/hr-service/.env.prod'), 'utf8');
+    assert(hr.includes('INTERNAL_SERVICE_AUTH_SECRET='));
+    assert(hr.includes('INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES='));
+    const inventory = readFileSync(join(f.root, 'apps/inventory-service/.env.prod'), 'utf8');
+    assert(inventory.includes('INVENTORY_SERVICE_PORT=4009'));
+    assert(inventory.includes('ACCOUNTING_SERVICE_URL='));
     assert.equal(statSync(join(f.root, 'apps/marketing-service/.env.prod')).mode & 0o777, 0o600);
     assert(
       readFileSync(join(f.root, '.compose.prod.env'), 'utf8').includes(

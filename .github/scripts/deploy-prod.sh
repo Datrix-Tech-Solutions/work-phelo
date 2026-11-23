@@ -42,6 +42,8 @@ NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "NO
 REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "prod")"
 ACCOUNTING_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service" "prod")"
 MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "prod")"
+INVENTORY_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service" "prod")"
+SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "prod")"
 NEXTJS_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "prod")"
 
 section "Compose Env"
@@ -57,6 +59,8 @@ write_env_file "$COMPOSE_ENV_FILE" \
   "REINSURANCE_SERVICE_IMAGE=${REINSURANCE_SERVICE_IMAGE}" \
   "ACCOUNTING_SERVICE_IMAGE=${ACCOUNTING_SERVICE_IMAGE}" \
   "MARKETING_SERVICE_IMAGE=${MARKETING_SERVICE_IMAGE}" \
+  "INVENTORY_SERVICE_IMAGE=${INVENTORY_SERVICE_IMAGE}" \
+  "SUBSCRIPTION_SERVICE_IMAGE=${SUBSCRIPTION_SERVICE_IMAGE}" \
   "NEXTJS_IMAGE=${NEXTJS_IMAGE}" \
   "WEB_PUBLIC_API_URL=${WEB_PUBLIC_API_URL:-https://api.workphelo.com/api/v1}" \
   "WEB_PUBLIC_APP_BASE_URL=${WEB_PUBLIC_APP_BASE_URL:-https://app.workphelo.com}"
@@ -74,7 +78,9 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.prod" \
   "NOTIFICATION_SERVICE_URL=http://notification-service:4004" \
   "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007" \
   "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
-  "MARKETING_SERVICE_URL=http://marketing-service:4006"
+  "MARKETING_SERVICE_URL=http://marketing-service:4006" \
+  "INVENTORY_SERVICE_URL=http://inventory-service:4009" \
+  "SUBSCRIPTION_SERVICE_URL=http://subscription-service:4005"
 
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.prod" \
   "PORT=4001" \
@@ -124,6 +130,8 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}" \
   "FIELD_ENCRYPTION_KEY=${HR_FIELD_ENCRYPTION_KEY}" \
   "FIELD_HMAC_KEY=${HR_FIELD_HMAC_KEY}" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}" \
   "AUTH_TENANT_ASSET_STORAGE_PROVIDER=${AUTH_TENANT_ASSET_STORAGE_PROVIDER}" \
   "AUTH_TENANT_ASSET_S3_BUCKET=${AUTH_TENANT_ASSET_S3_BUCKET}" \
   "AUTH_TENANT_ASSET_S3_REGION=${AUTH_TENANT_ASSET_S3_REGION}" \
@@ -190,8 +198,13 @@ write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.prod" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema accounting)" \
   "JWT_SECRET=${JWT_SECRET}" \
-  "ACCOUNTING_RECURRING_JOURNALS_ENABLED=false" \
-  "ACCOUNTING_INTERNAL_INTEGRATION_ENABLED=false"
+  "HR_SERVICE_URL=http://hr-service:4002" \
+  "MARKETING_SERVICE_URL=http://marketing-service:4006" \
+  "INVENTORY_SERVICE_URL=http://inventory-service:4009" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}" \
+  "ACCOUNTING_RECURRING_JOURNALS_ENABLED=${ACCOUNTING_RECURRING_JOURNALS_ENABLED:-false}" \
+  "ACCOUNTING_INTERNAL_INTEGRATION_ENABLED=${ACCOUNTING_INTERNAL_INTEGRATION_ENABLED:-false}"
 
 write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.prod" \
   "PORT=4006" \
@@ -201,14 +214,32 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.prod" \
   "JWT_SECRET=${JWT_SECRET}" \
   "AUTH_SERVICE_URL=http://auth-service:4001" \
   "HR_SERVICE_URL=http://hr-service:4002" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
   "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
-  "MARKETING_OUTBOUND_COMMUNICATION_ENABLED=false" \
-  "MARKETING_AUTOMATIC_PROCESSING_ENABLED=false" \
-  "MARKETING_RABBITMQ_CONSUMER_ENABLED=false" \
-  "MARKETING_ACCOUNTING_INTEGRATION_ENABLED=false" \
+  "SMS_PROVIDER=${NOTIFY_SMS_PROVIDER:-termii}" \
+  "MARKETING_OUTBOUND_COMMUNICATION_ENABLED=${MARKETING_OUTBOUND_COMMUNICATION_ENABLED:-false}" \
+  "MARKETING_AUTOMATIC_PROCESSING_ENABLED=${MARKETING_AUTOMATIC_PROCESSING_ENABLED:-false}" \
+  "MARKETING_RABBITMQ_CONSUMER_ENABLED=${MARKETING_RABBITMQ_CONSUMER_ENABLED:-false}" \
+  "MARKETING_ACCOUNTING_INTEGRATION_ENABLED=${MARKETING_ACCOUNTING_INTEGRATION_ENABLED:-false}" \
   "SMS_SENDER_READINESS_MODE=strict"
-log "✓ Service env files written; new service business activation remains disabled"
+
+write_env_file "${DEPLOY_PATH}/apps/inventory-service/.env.prod" \
+  "INVENTORY_SERVICE_PORT=4009" \
+  "DEPLOY_ENV=prod" \
+  "NODE_ENV=production" \
+  "DATABASE_URL=$(db_url_for_schema inventory)" \
+  "JWT_SECRET=${JWT_SECRET}" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
+
+write_env_file "${DEPLOY_PATH}/apps/subscription-service/.env.prod" \
+  "PORT=4005" \
+  "NODE_ENV=production" \
+  "DEPLOY_ENV=prod"
+log "✓ Service env files written; business activation requires explicit production configuration"
 
 section "Compose Validation"
 validate_compose_render
@@ -227,6 +258,8 @@ ensure_image_available "$NOTIFICATION_SERVICE_IMAGE" "notification-service" "not
 ensure_image_available "$REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service"
 ensure_image_available "$ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service"
 ensure_image_available "$MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service"
+ensure_image_available "$INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service"
+ensure_image_available "$SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service"
 ensure_image_available "$NEXTJS_IMAGE" "nextjs-web" "nextjs-web"
 log "✓ Required images available"
 
@@ -238,11 +271,12 @@ preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notific
 preflight_runtime_env "$REINSURANCE_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/reinsurance-service/.env.prod" "dist/config/runtime-env.js" "reinsurance-service"
 preflight_runtime_env "$ACCOUNTING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/accounting-service/.env.prod" "dist/config/runtime-env.js" "accounting-service"
 preflight_runtime_env "$MARKETING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/marketing-service/.env.prod" "dist/config/runtime-env.js" "marketing-service"
+preflight_runtime_env "$INVENTORY_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/inventory-service/.env.prod" "dist/config/runtime-env.js" "inventory-service"
 log "✓ Runtime env validation passed"
 
 section "Read-only Database Migration Preflight"
 # SQL application and seeding require a separately approved, backed-up operation.
-for service in auth-service hr-service notification-service reinsurance-service accounting-service marketing-service; do
+for service in auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service; do
   if ! docker_compose run --rm --no-deps "$service" sh -c "npx prisma@5.22.0 migrate status --schema /app/apps/$service/prisma/schema.prisma"; then
     die "$service migration history requires review; no migrations or seeds were run. Obtain backup/schema approval and prepare the database separately."
   fi
@@ -265,6 +299,8 @@ wait_for_container_health notification-service
 wait_for_container_health reinsurance-service
 wait_for_container_health accounting-service
 wait_for_container_health marketing-service
+wait_for_container_health inventory-service
+wait_for_container_health subscription-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
@@ -277,6 +313,9 @@ wait_for_http_ok "prod notification-service" "http://127.0.0.1:4104/api/health"
 wait_for_http_ok "prod reinsurance-service" "http://127.0.0.1:4107/api/health"
 wait_for_http_ok "prod accounting-service" "http://127.0.0.1:4108/api/health"
 wait_for_http_ok "prod marketing-service" "http://127.0.0.1:4106/api/health"
+wait_for_http_ok "prod inventory-service" "http://127.0.0.1:4109/api/health"
+wait_for_http_ok "prod subscription-service" "http://127.0.0.1:4105/api/health"
+wait_for_http_ok "prod gateway inventory route" "http://127.0.0.1:4110/api/v1/operations/inventory/health"
 wait_for_http_ok "prod gateway accounting route" "http://127.0.0.1:4110/api/v1/accounting/health"
 wait_for_http_ok "prod api-gateway" "http://127.0.0.1:4110/health"
 wait_for_http_ok "prod gateway reinsurance route" "http://127.0.0.1:4110/api/v1/operations/reinsurance/health"
@@ -290,7 +329,7 @@ for relative in .compose.prod.env infrastructure/docker-compose.prod.yml .github
     install -m 600 "${LIVE_DEPLOY_PATH}/${relative}" "${ROLLBACK_CONFIG_PATH}/${relative}"
   fi
 done
-for service in api-gateway auth-service hr-service notification-service reinsurance-service accounting-service marketing-service; do
+for service in api-gateway auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service subscription-service; do
   mkdir -p "${LIVE_DEPLOY_PATH}/apps/${service}"
   if [[ -f "${LIVE_DEPLOY_PATH}/apps/${service}/.env.prod" ]]; then
     mkdir -p "${ROLLBACK_CONFIG_PATH}/apps/${service}"

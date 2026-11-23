@@ -248,6 +248,16 @@ export class SourceLedgerService {
       );
     }
 
+    const cashAccount = await this.prisma.accountingCashAccount.findFirst({
+      where: { id: dto.cashAccountId, tenantId: user.tenantId },
+      select: { currency: true },
+    });
+    if (cashAccount && cashAccount.currency !== entry.currency) {
+      throw new BadRequestException(
+        `This entry is in ${entry.currency}; pick a ${entry.currency} cash/bank account (selected account is ${cashAccount.currency}).`,
+      );
+    }
+
     const draft = await this.cashbook.createPayment(user, {
       cashAccountId: dto.cashAccountId,
       amount: dto.amount,

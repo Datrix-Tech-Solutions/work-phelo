@@ -29,6 +29,13 @@ function walk(root) {
 for (const service of [
   'accounting-service',
   'marketing-service',
+  'inventory-service',
+  'subscription-service',
+  'api-gateway',
+  'auth-service',
+  'hr-service',
+  'notification-service',
+  'reinsurance-service',
 ]) {
   const root = mkdtempSync(join(tmpdir(), 'workphelo-context-test-'));
   const context = join(root, 'context');

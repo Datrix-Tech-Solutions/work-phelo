@@ -8,6 +8,7 @@ export function httpCorsOptions() {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'Idempotency-Key',
       'x-application-access-token',
     ],
   };

@@ -29,6 +29,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { MarketingCrmSettingsPermission } from '../crm-settings/crm-settings.permissions';
 import { ApiErrorResponseDto } from '../crm-settings/dto/prospecting-setting.dto';
 import {
+  CreateSmsCreditRequestDto,
   GrantSmsCreditsDto,
   QuerySmsLedgerDto,
 } from './dto/sms-sender-identity.dto';
@@ -68,6 +69,26 @@ export class SmsWalletController {
   @ApiOperation({ summary: 'List immutable tenant SMS credit ledger entries' })
   listLedger(@Query() query: QuerySmsLedgerDto, @Req() request: AuthedRequest) {
     return this.service.listLedger(request.user.tenantId, query);
+  }
+
+  @Get('requests')
+  @RequireAnyPermission(SMS_WALLET_VIEW)
+  @ApiOperation({ summary: 'List the tenant’s SMS credit requests' })
+  listRequests(@Req() request: AuthedRequest) {
+    return this.service.listCreditRequests(request.user.tenantId);
+  }
+
+  @Post('requests')
+  @RequireAnyPermission(SMS_WALLET_VIEW)
+  @ApiOperation({
+    summary: 'Ask the platform for more SMS credits',
+    description: 'One pending request is allowed per tenant at a time.',
+  })
+  createRequest(
+    @Body() dto: CreateSmsCreditRequestDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.createCreditRequest(request.user, dto);
   }
 
   @Post('admin-grants')

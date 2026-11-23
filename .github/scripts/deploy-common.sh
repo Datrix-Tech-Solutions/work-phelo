@@ -229,7 +229,9 @@ warn_optional_envs() {
 
 db_url_for_schema() {
   local schema="$1"
-  if [[ "$DATABASE_URL" == *"?"* ]]; then
+  if [[ "$DATABASE_URL" =~ [\?\&]schema= ]]; then
+    printf '%s' "$DATABASE_URL" | sed -E "s/([?&])schema=[^&]*/\1schema=${schema}/g"
+  elif [[ "$DATABASE_URL" == *"?"* ]]; then
     printf '%s&schema=%s' "$DATABASE_URL" "$schema"
   else
     printf '%s?schema=%s' "$DATABASE_URL" "$schema"
@@ -245,7 +247,9 @@ ensure_deploy_dirs() {
     "$DEPLOY_PATH/apps/notification-service" \
     "$DEPLOY_PATH/apps/reinsurance-service" \
     "$DEPLOY_PATH/apps/accounting-service" \
-    "$DEPLOY_PATH/apps/marketing-service"
+    "$DEPLOY_PATH/apps/marketing-service" \
+    "$DEPLOY_PATH/apps/inventory-service" \
+    "$DEPLOY_PATH/apps/subscription-service"
 
   if [[ "${DEPLOY_ENV}" == "dev" ]]; then
     mkdir -p \

@@ -1,6 +1,35 @@
 import { isResourceEnabledForTenant } from './permission-entitlements';
 
 describe('permission entitlements', () => {
+  it.each([
+    'categories',
+    'units',
+    'locations',
+    'items',
+    'stock-in',
+    'stock-out',
+    'transfers',
+    'adjustments',
+  ])(
+    'scopes Inventory %s to Operations without inventing a feature flag',
+    (name) => {
+      const resource = {
+        name: `operations.inventory.${name}`,
+        module: 'OPERATIONS',
+      };
+      expect(
+        isResourceEnabledForTenant(resource, {
+          moduleConfig: { operations: true },
+        }),
+      ).toBe(true);
+      expect(
+        isResourceEnabledForTenant(resource, {
+          moduleConfig: { operations: false },
+        }),
+      ).toBe(false);
+      expect(isResourceEnabledForTenant(resource, {})).toBe(false);
+    },
+  );
   const marketingEnabledConfig = {
     moduleConfig: { marketing: true },
     featureConfig: { marketing: { 'sales-crm': true } },

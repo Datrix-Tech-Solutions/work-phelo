@@ -215,7 +215,7 @@ describe('voiding invoices, credit notes and receipts', () => {
 });
 
 describe('voiding cashbook entries', () => {
-  function setup(overrides: Record<string, unknown> = {}) {
+  function setup(overrides: Record<string, unknown> = {}, reconciledLines = 0) {
     const transaction = {
       id: 'cb-1',
       tenantId: 'tenant-1',
@@ -227,13 +227,15 @@ describe('voiding cashbook entries', () => {
       reversalOfTransactionId: null,
       receivableReceipt: null,
       payablePayment: null,
-      bankStatementMatches: [],
       sourceLedgerAllocations: [],
       lines: [],
       ...overrides,
     };
     const tx: Record<string, any> = {
       $executeRaw: jest.fn(),
+      bankReconciledEntry: {
+        count: jest.fn().mockResolvedValue(reconciledLines),
+      },
       cashbookTransaction: {
         findFirst: jest.fn().mockResolvedValue(transaction),
         updateMany: jest.fn(),
@@ -295,7 +297,6 @@ describe('voiding cashbook entries', () => {
         reversalOfTransactionId: 'cb-0',
         receivableReceipt: null,
         payablePayment: null,
-        bankStatementMatches: [],
         sourceLedgerAllocations: [],
         lines: [],
       })
@@ -335,7 +336,6 @@ describe('voiding cashbook entries', () => {
         reversalOfTransactionId: 'cb-0',
         receivableReceipt: null,
         payablePayment: null,
-        bankStatementMatches: [],
         sourceLedgerAllocations: [],
         lines: [],
       })
@@ -346,13 +346,11 @@ describe('voiding cashbook entries', () => {
     expect(journals.voidSystemJournalInTransaction).not.toHaveBeenCalled();
   });
 
-  it('holds entries matched to a bank statement', async () => {
-    const { journals, service } = setup({
-      bankStatementMatches: [{ id: 'm-1' }],
-    });
+  it('holds entries reconciled against a bank statement', async () => {
+    const { journals, service } = setup({}, 1);
     await expect(
       service.voidPostedTransaction(actor, 'cb-1', { reason: 'x' }),
-    ).rejects.toThrow(/matched to a bank statement/);
+    ).rejects.toThrow(/reconciled against a bank statement/);
     expect(journals.voidSystemJournalInTransaction).not.toHaveBeenCalled();
   });
 
