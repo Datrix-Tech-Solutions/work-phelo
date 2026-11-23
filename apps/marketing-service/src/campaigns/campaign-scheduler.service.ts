@@ -5,6 +5,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { CampaignsService } from './campaigns.service';
+import { marketingScheduledDispatchEnabled } from '../config/activation';
 
 @Injectable()
 export class CampaignSchedulerService
@@ -13,10 +14,12 @@ export class CampaignSchedulerService
   private readonly logger = new Logger(CampaignSchedulerService.name);
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private pending?: Promise<void>;
 
   constructor(private readonly campaigns: CampaignsService) {}
 
   onApplicationBootstrap() {
+    if (!marketingScheduledDispatchEnabled()) return;
     const intervalMs = Number(
       process.env.MARKETING_CAMPAIGN_SCHEDULER_INTERVAL_MS ?? 60000,
     );
@@ -24,16 +27,23 @@ export class CampaignSchedulerService
       this.logger.warn('Campaign scheduler disabled by invalid interval');
       return;
     }
-    this.timer = setInterval(() => void this.tick(), intervalMs);
+    this.timer = setInterval(() => {
+      if (this.pending !== undefined) return;
+      this.pending = this.tick().finally(() => {
+        this.pending = undefined;
+      });
+    }, intervalMs);
     this.timer.unref?.();
   }
 
-  onModuleDestroy() {
+  async onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await this.pending;
   }
 
   private async tick() {
+    if (!marketingScheduledDispatchEnabled()) return;
     if (this.running) return;
     this.running = true;
     try {

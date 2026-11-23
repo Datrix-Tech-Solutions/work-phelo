@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InternalServiceClient } from '@work-phelo/internal-auth';
+import {
+  marketingActivation,
+  requireMarketingAccounting,
+} from '../config/activation';
 
 /** Which module a transaction is raised for. Accounting treats this as a parameter, not a constant. */
 export const SOURCE_MODULE = 'MARKETING';
@@ -86,10 +90,14 @@ export class AccountingClient {
   });
 
   isConfigured() {
-    return this.http.isConfigured();
+    return (
+      marketingActivation('MARKETING_ACCOUNTING_INTEGRATION_ENABLED') &&
+      this.http.isConfigured()
+    );
   }
 
   getOptions(tenantId: string, actingUserId: string) {
+    requireMarketingAccounting();
     return this.http.get<AccountingBillingOptions>(`${BASE}/options`, {
       query: { tenantId, sourceModule: SOURCE_MODULE },
       actingUserId,
@@ -97,6 +105,7 @@ export class AccountingClient {
   }
 
   createTransaction(input: CreateSourceTransactionInput, actingUserId: string) {
+    requireMarketingAccounting();
     return this.http.post<SourceTransactionCreated>(BASE, {
       body: { ...input, sourceModule: SOURCE_MODULE },
       actingUserId,
@@ -109,6 +118,7 @@ export class AccountingClient {
     paging: { page?: number; limit?: number },
     actingUserId: string,
   ) {
+    requireMarketingAccounting();
     return this.http.get<SourceTransactionsPage>(BASE, {
       query: {
         tenantId,

@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { Prisma } from '../../prisma/generated/client';
 import { RequestUser } from '@work-phelo/types';
 import { SmsWalletService } from './sms-wallet.service';
 
@@ -35,6 +40,10 @@ describe('SmsWalletService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    marketingSmsCreditRequest: {
+      findUniqueOrThrow: jest.fn(),
+      update: jest.fn(),
+    },
     $queryRaw: jest.fn(),
   };
   const prisma = {
@@ -43,6 +52,10 @@ describe('SmsWalletService', () => {
     },
     marketingSmsCreditLedgerEntry: {
       count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    marketingSmsCreditRequest: {
+      create: jest.fn(),
       findMany: jest.fn(),
     },
     $transaction: jest.fn(),
@@ -74,6 +87,7 @@ describe('SmsWalletService', () => {
 
   it('grants credits and writes an immutable ledger entry', async () => {
     tx.marketingSmsWallet.update.mockResolvedValue(wallet(150));
+    tx.marketingSmsCreditLedgerEntry.create.mockResolvedValue({ id: 'l-1' });
 
     const result = await service.grantCredits(platformUser, {
       credits: 50,
@@ -119,6 +133,146 @@ describe('SmsWalletService', () => {
       }),
     ).rejects.toThrow(ForbiddenException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  describe('credit requests', () => {
+    const pending = {
+      id: 'req-1',
+      tenantId: TENANT,
+      requestedCredits: 500,
+      note: null,
+      status: 'PENDING',
+      requestedBy: 'user-1',
+      requestedAt: new Date('2026-11-13T00:00:00.000Z'),
+      grantedCredits: null,
+      resolvedBy: null,
+      resolvedAt: null,
+      rejectionReason: null,
+    };
+
+    it('creates a pending request for the caller’s tenant', async () => {
+      prisma.marketingSmsCreditRequest.create.mockResolvedValue(pending);
+
+      const result = await service.createCreditRequest(user, {
+        credits: 500,
+      });
+
+      expect(prisma.marketingSmsCreditRequest.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: TENANT,
+          requestedCredits: 500,
+          note: null,
+          requestedBy: 'user-1',
+        },
+      });
+      expect(result).toEqual(like({ id: 'req-1', status: 'PENDING' }));
+    });
+
+    it('refuses a second pending request', async () => {
+      prisma.marketingSmsCreditRequest.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+
+      await expect(
+        service.createCreditRequest(user, { credits: 500 }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('fulfils a request by granting credits and linking the ledger entry', async () => {
+      tx.$queryRaw
+        .mockResolvedValueOnce([{ id: 'req-1' }])
+        .mockResolvedValueOnce([wallet()]);
+      tx.marketingSmsCreditRequest.findUniqueOrThrow.mockResolvedValue(pending);
+      tx.marketingSmsCreditLedgerEntry.findUnique.mockResolvedValue(null);
+      tx.marketingSmsWallet.update.mockResolvedValue(wallet(600));
+      tx.marketingSmsCreditLedgerEntry.create.mockResolvedValue({
+        id: 'ledger-9',
+      });
+      tx.marketingSmsCreditRequest.update.mockResolvedValue({
+        ...pending,
+        status: 'FULFILLED',
+        grantedCredits: 500,
+      });
+
+      await service.fulfillCreditRequest(platformUser, 'req-1', {});
+
+      expect(tx.marketingSmsWallet.update).toHaveBeenCalledWith({
+        where: { id: 'wallet-1' },
+        data: { availableCredits: { increment: 500 } },
+      });
+      expect(tx.marketingSmsCreditRequest.update).toHaveBeenCalledWith({
+        where: { id: 'req-1' },
+        data: like({
+          status: 'FULFILLED',
+          grantedCredits: 500,
+          ledgerEntryId: 'ledger-9',
+        }),
+      });
+    });
+
+    it('grants an overridden amount', async () => {
+      tx.$queryRaw
+        .mockResolvedValueOnce([{ id: 'req-1' }])
+        .mockResolvedValueOnce([wallet()]);
+      tx.marketingSmsCreditRequest.findUniqueOrThrow.mockResolvedValue(pending);
+      tx.marketingSmsCreditLedgerEntry.findUnique.mockResolvedValue(null);
+      tx.marketingSmsWallet.update.mockResolvedValue(wallet(300));
+      tx.marketingSmsCreditLedgerEntry.create.mockResolvedValue({ id: 'l' });
+      tx.marketingSmsCreditRequest.update.mockResolvedValue(pending);
+
+      await service.fulfillCreditRequest(platformUser, 'req-1', {
+        credits: 200,
+      });
+
+      expect(tx.marketingSmsWallet.update).toHaveBeenCalledWith({
+        where: { id: 'wallet-1' },
+        data: { availableCredits: { increment: 200 } },
+      });
+    });
+
+    it('cannot resolve a request twice', async () => {
+      tx.$queryRaw.mockResolvedValueOnce([{ id: 'req-1' }]);
+      tx.marketingSmsCreditRequest.findUniqueOrThrow.mockResolvedValue({
+        ...pending,
+        status: 'FULFILLED',
+      });
+
+      await expect(
+        service.fulfillCreditRequest(platformUser, 'req-1', {}),
+      ).rejects.toThrow(ConflictException);
+      expect(tx.marketingSmsWallet.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a request without touching the wallet', async () => {
+      tx.$queryRaw.mockResolvedValueOnce([{ id: 'req-1' }]);
+      tx.marketingSmsCreditRequest.findUniqueOrThrow.mockResolvedValue(pending);
+      tx.marketingSmsCreditRequest.update.mockResolvedValue({
+        ...pending,
+        status: 'REJECTED',
+      });
+
+      await service.rejectCreditRequest(platformUser, 'req-1', {
+        reason: 'unpaid',
+      });
+
+      expect(tx.marketingSmsCreditRequest.update).toHaveBeenCalledWith({
+        where: { id: 'req-1' },
+        data: like({ status: 'REJECTED', rejectionReason: 'unpaid' }),
+      });
+      expect(tx.marketingSmsWallet.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks tenant users from resolving requests', async () => {
+      await expect(
+        service.fulfillCreditRequest(user, 'req-1', {}),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.rejectCreditRequest(user, 'req-1', {}),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 
   it('reserves credits atomically when balance is sufficient', async () => {

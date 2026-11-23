@@ -40,6 +40,9 @@ describe('PlatformSmsController', () => {
     getBalance: jest.fn(),
     listLedger: jest.fn(),
     grantCredits: jest.fn(),
+    listCreditRequests: jest.fn(),
+    fulfillCreditRequest: jest.fn(),
+    rejectCreditRequest: jest.fn(),
   };
   const controller = new PlatformSmsController(
     senders as never,
@@ -110,6 +113,22 @@ describe('PlatformSmsController', () => {
     expect(wallet.grantCredits).toHaveBeenCalledWith(
       { ...admin, tenantId: TENANT },
       { credits: 50 },
+    );
+  });
+
+  it('fulfils and rejects credit requests as the path tenant', async () => {
+    await controller.fulfillCreditRequest(TENANT, ID, { credits: 10 }, request);
+    await controller.rejectCreditRequest(TENANT, ID, { reason: 'no' }, request);
+
+    expect(wallet.fulfillCreditRequest).toHaveBeenCalledWith(
+      { ...admin, tenantId: TENANT },
+      ID,
+      { credits: 10 },
+    );
+    expect(wallet.rejectCreditRequest).toHaveBeenCalledWith(
+      { ...admin, tenantId: TENANT },
+      ID,
+      { reason: 'no' },
     );
   });
 });

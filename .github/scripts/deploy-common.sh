@@ -229,7 +229,9 @@ warn_optional_envs() {
 
 db_url_for_schema() {
   local schema="$1"
-  if [[ "$DATABASE_URL" == *"?"* ]]; then
+  if [[ "$DATABASE_URL" =~ [\?\&]schema= ]]; then
+    printf '%s' "$DATABASE_URL" | sed -E "s/([?&])schema=[^&]*/\1schema=${schema}/g"
+  elif [[ "$DATABASE_URL" == *"?"* ]]; then
     printf '%s&schema=%s' "$DATABASE_URL" "$schema"
   else
     printf '%s?schema=%s' "$DATABASE_URL" "$schema"
@@ -243,7 +245,11 @@ ensure_deploy_dirs() {
     "$DEPLOY_PATH/apps/auth-service" \
     "$DEPLOY_PATH/apps/hr-service" \
     "$DEPLOY_PATH/apps/notification-service" \
-    "$DEPLOY_PATH/apps/reinsurance-service"
+    "$DEPLOY_PATH/apps/reinsurance-service" \
+    "$DEPLOY_PATH/apps/accounting-service" \
+    "$DEPLOY_PATH/apps/marketing-service" \
+    "$DEPLOY_PATH/apps/inventory-service" \
+    "$DEPLOY_PATH/apps/subscription-service"
 
   if [[ "${DEPLOY_ENV}" == "dev" ]]; then
     mkdir -p \
@@ -334,7 +340,7 @@ deploy_path_for_env() {
       ;;
     prod)
       if [[ "${DEPLOY_ENV:-}" == "prod" && -n "${DEPLOY_PATH:-}" ]]; then
-        printf '%s\n' "$DEPLOY_PATH"
+        printf '%s\n' "${LIVE_DEPLOY_PATH:-$DEPLOY_PATH}"
       else
         printf '%s\n' "${WORKPHELO_PROD_DEPLOY_PATH:-/var/www/apps/workphelo.com/work-phelo}"
       fi

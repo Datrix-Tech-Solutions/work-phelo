@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
@@ -12,8 +14,11 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  CreateSmsCreditRequestDto,
+  FulfillSmsCreditRequestDto,
   GrantSmsCreditsDto,
   QuerySmsLedgerDto,
+  RejectSmsCreditRequestDto,
 } from './dto/sms-sender-identity.dto';
 
 type WalletBalances = Pick<
@@ -76,42 +81,187 @@ export class SmsWalletService {
   }
 
   async grantCredits(user: RequestUser, dto: GrantSmsCreditsDto) {
+    this.assertSuperAdmin(user);
+    return this.prisma.$transaction(async (tx) => {
+      const { balance } = await this.grantInTransaction(tx, user, dto);
+      return balance;
+    });
+  }
+
+  async createCreditRequest(user: RequestUser, dto: CreateSmsCreditRequestDto) {
+    try {
+      const request = await this.prisma.marketingSmsCreditRequest.create({
+        data: {
+          tenantId: user.tenantId,
+          requestedCredits: dto.credits,
+          note: dto.note || null,
+          requestedBy: user.id,
+        },
+      });
+      return this.toRequest(request);
+    } catch (error) {
+      // The partial unique index allows one PENDING request per tenant.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'You already have a pending credit request',
+        );
+      }
+      throw error;
+    }
+  }
+
+  async listCreditRequests(tenantId: string) {
+    const requests = await this.prisma.marketingSmsCreditRequest.findMany({
+      where: { tenantId },
+      orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
+      take: 50,
+    });
+    return requests.map((request) => this.toRequest(request));
+  }
+
+  async fulfillCreditRequest(
+    user: RequestUser,
+    id: string,
+    dto: FulfillSmsCreditRequestDto,
+  ) {
+    this.assertSuperAdmin(user);
+    return this.prisma.$transaction(async (tx) => {
+      const request = await this.claimPendingRequest(tx, user.tenantId, id);
+      const credits = dto.credits ?? request.requestedCredits;
+      const { entryId } = await this.grantInTransaction(tx, user, {
+        credits,
+        reason: `Credit request ${request.id}`,
+        idempotencyKey: `credit-request:${request.id}`,
+      });
+      const updated = await tx.marketingSmsCreditRequest.update({
+        where: { id: request.id },
+        data: {
+          status: 'FULFILLED',
+          grantedCredits: credits,
+          resolvedBy: user.id,
+          resolvedAt: new Date(),
+          ledgerEntryId: entryId,
+        },
+      });
+      return this.toRequest(updated);
+    });
+  }
+
+  async rejectCreditRequest(
+    user: RequestUser,
+    id: string,
+    dto: RejectSmsCreditRequestDto,
+  ) {
+    this.assertSuperAdmin(user);
+    return this.prisma.$transaction(async (tx) => {
+      const request = await this.claimPendingRequest(tx, user.tenantId, id);
+      const updated = await tx.marketingSmsCreditRequest.update({
+        where: { id: request.id },
+        data: {
+          status: 'REJECTED',
+          resolvedBy: user.id,
+          resolvedAt: new Date(),
+          rejectionReason: dto.reason || null,
+        },
+      });
+      return this.toRequest(updated);
+    });
+  }
+
+  private assertSuperAdmin(user: RequestUser) {
     if (user.role !== 'SUPER_ADMIN') {
       throw new ForbiddenException(PLATFORM_GRANT_MESSAGE);
     }
-    return this.prisma.$transaction(async (tx) => {
-      const wallet = await this.ensureWallet(user.tenantId, tx);
-      if (dto.idempotencyKey) {
-        const existing = await tx.marketingSmsCreditLedgerEntry.findUnique({
-          where: {
-            tenantId_idempotencyKey: {
-              tenantId: user.tenantId,
-              idempotencyKey: dto.idempotencyKey,
-            },
-          },
-        });
-        if (existing)
-          return this.toBalance(await this.lockWallet(tx, wallet.id));
-      }
+  }
 
-      const locked = await this.lockWallet(tx, wallet.id);
-      const updated = await tx.marketingSmsWallet.update({
-        where: { id: wallet.id },
-        data: { availableCredits: { increment: dto.credits } },
-      });
-      await this.createLedger(tx, {
-        tenantId: user.tenantId,
-        walletId: wallet.id,
-        type: 'ADMIN_GRANT',
-        credits: dto.credits,
-        before: locked,
-        after: updated,
-        idempotencyKey: dto.idempotencyKey,
-        reason: dto.reason,
-        createdBy: user.id,
-      });
-      return this.toBalance(updated);
+  /** Locks the request row and requires it to still be pending. */
+  private async claimPendingRequest(tx: Tx, tenantId: string, id: string) {
+    const rows = await tx.$queryRaw<{ id: string }[]>(
+      Prisma.sql`SELECT "id" FROM "marketing"."MarketingSmsCreditRequest" WHERE "id" = ${id} AND "tenantId" = ${tenantId} FOR UPDATE`,
+    );
+    if (!rows[0]) throw new NotFoundException('Credit request not found');
+    const request = await tx.marketingSmsCreditRequest.findUniqueOrThrow({
+      where: { id },
     });
+    if (request.status !== 'PENDING') {
+      throw new ConflictException(
+        'This credit request has already been resolved',
+      );
+    }
+    return request;
+  }
+
+  private async grantInTransaction(
+    tx: Tx,
+    user: RequestUser,
+    dto: GrantSmsCreditsDto,
+  ) {
+    const wallet = await this.ensureWallet(user.tenantId, tx);
+    if (dto.idempotencyKey) {
+      const existing = await tx.marketingSmsCreditLedgerEntry.findUnique({
+        where: {
+          tenantId_idempotencyKey: {
+            tenantId: user.tenantId,
+            idempotencyKey: dto.idempotencyKey,
+          },
+        },
+      });
+      if (existing) {
+        return {
+          entryId: existing.id,
+          balance: this.toBalance(await this.lockWallet(tx, wallet.id)),
+        };
+      }
+    }
+
+    const locked = await this.lockWallet(tx, wallet.id);
+    const updated = await tx.marketingSmsWallet.update({
+      where: { id: wallet.id },
+      data: { availableCredits: { increment: dto.credits } },
+    });
+    const entry = await this.createLedger(tx, {
+      tenantId: user.tenantId,
+      walletId: wallet.id,
+      type: 'ADMIN_GRANT',
+      credits: dto.credits,
+      before: locked,
+      after: updated,
+      idempotencyKey: dto.idempotencyKey,
+      reason: dto.reason,
+      createdBy: user.id,
+    });
+    return { entryId: entry.id, balance: this.toBalance(updated) };
+  }
+
+  private toRequest(request: {
+    id: string;
+    tenantId: string;
+    requestedCredits: number;
+    note: string | null;
+    status: string;
+    requestedBy: string;
+    requestedAt: Date;
+    grantedCredits: number | null;
+    resolvedBy: string | null;
+    resolvedAt: Date | null;
+    rejectionReason: string | null;
+  }) {
+    return {
+      id: request.id,
+      tenantId: request.tenantId,
+      requestedCredits: request.requestedCredits,
+      note: request.note,
+      status: request.status,
+      requestedBy: request.requestedBy,
+      requestedAt: request.requestedAt.toISOString(),
+      grantedCredits: request.grantedCredits,
+      resolvedBy: request.resolvedBy,
+      resolvedAt: request.resolvedAt?.toISOString() ?? null,
+      rejectionReason: request.rejectionReason,
+    };
   }
 
   async reserveCredits(input: {

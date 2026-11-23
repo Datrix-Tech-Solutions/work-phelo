@@ -1,3 +1,5 @@
+import { accountingActivation } from './activation';
+
 export const accountingRequiredEnvVars = [
   'DATABASE_URL',
   'JWT_SECRET',
@@ -9,6 +11,8 @@ export const accountingInternalIntegrationRequiredEnvVars = [
 ] as const;
 
 export function assertAccountingRuntimeEnv(): void {
+  accountingActivation('ACCOUNTING_RECURRING_JOURNALS_ENABLED');
+  accountingActivation('ACCOUNTING_INTERNAL_INTEGRATION_ENABLED');
   const required = [
     ...accountingRequiredEnvVars,
     ...(isInternalIntegrationExpected()
@@ -30,7 +34,7 @@ export function assertAccountingRuntimeEnv(): void {
 }
 
 function isInternalIntegrationExpected(): boolean {
-  if (process.env.ACCOUNTING_INTERNAL_INTEGRATION_ENABLED === 'false') {
+  if (!accountingActivation('ACCOUNTING_INTERNAL_INTEGRATION_ENABLED')) {
     return false;
   }
   return (

@@ -21,6 +21,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AccountingMasterDataService } from '../accounting-master-data.service';
 import { CashbookService } from '../cashbook.service';
+import { CreateCashbookReceiptDto } from '../dto/cashbook.dto';
 import { ReceivablesService } from '../receivables.service';
 import {
   CreateSourceTransactionDto,
@@ -102,6 +103,7 @@ export class SourceTransactionsService {
       source.id,
       baseCurrency,
       true,
+      registration.direction,
     );
     const usable = linked.filter((t) => !t.problem).map((t) => t.type);
     if (usable.length === 0)
@@ -136,6 +138,7 @@ export class SourceTransactionsService {
       source.id,
       baseCurrency ?? '',
       false,
+      registration.direction,
     );
     const usable = linkedTypes.filter((t) => !t.problem).map((t) => t.type);
     const { entityTypes, transactionTypes } = await this.offered(
@@ -220,10 +223,15 @@ export class SourceTransactionsService {
       );
     }
 
+    const payable = registration.direction === 'PAYABLE';
     const reservation = await this.reserve(
       dto,
       actingUserId,
-      transactionType.postsToCashbook,
+      payable
+        ? AccountingSourceTransactionKind.PAYMENT
+        : transactionType.postsToCashbook
+          ? AccountingSourceTransactionKind.RECEIPT
+          : AccountingSourceTransactionKind.INVOICE,
     );
     if (reservation.existing)
       return this.existingResult(dto.tenantId, reservation.existing);
@@ -247,21 +255,31 @@ export class SourceTransactionsService {
         );
       }
 
-      const documentId = transactionType.postsToCashbook
-        ? await this.createReceiptDraft(
+      const documentId = payable
+        ? await this.createCashDraft(
             user,
             dto,
             entity,
             transactionType,
             baseCurrency,
+            'PAYMENT',
           )
-        : await this.createInvoiceDraft(
-            user,
-            dto,
-            entity,
-            transactionType,
-            baseCurrency,
-          );
+        : transactionType.postsToCashbook
+          ? await this.createCashDraft(
+              user,
+              dto,
+              entity,
+              transactionType,
+              baseCurrency,
+              'RECEIPT',
+            )
+          : await this.createInvoiceDraft(
+              user,
+              dto,
+              entity,
+              transactionType,
+              baseCurrency,
+            );
 
       await this.prisma.accountingSourceTransaction.update({
         where: { id: reservation.id },
@@ -578,13 +596,14 @@ export class SourceTransactionsService {
     sourceTypeId: string,
     baseCurrency: string,
     onlyCandidates: boolean,
+    direction: SourceRegistration['direction'] = 'RECEIVABLE',
   ): Promise<Array<{ type: TransactionTypeWithRule; problem: string | null }>> {
     const types = await this.prisma.transactionType.findMany({
       where: {
         tenantId,
         sourceTypeId,
         ...(onlyCandidates
-          ? { category: TransactionTypeCategory.RECEIVABLE, isLinked: false }
+          ? { category: this.categoryFor(direction), isLinked: false }
           : {}),
       },
       include: {
@@ -614,19 +633,35 @@ export class SourceTransactionsService {
 
     return types.map((type) => ({
       type,
-      problem: this.problemFor(type, usableCashAccounts),
+      problem: this.problemFor(type, usableCashAccounts, direction),
     }));
+  }
+
+  private categoryFor(direction: SourceRegistration['direction']) {
+    return direction === 'PAYABLE'
+      ? TransactionTypeCategory.PAYABLE
+      : TransactionTypeCategory.RECEIVABLE;
   }
 
   private problemFor(
     type: TransactionTypeWithRule,
     usableCashAccounts: Set<string>,
+    direction: SourceRegistration['direction'] = 'RECEIVABLE',
   ): string | null {
-    if (type.category !== TransactionTypeCategory.RECEIVABLE) {
-      return 'Only receivable transaction types can be used';
+    const payable = direction === 'PAYABLE';
+    if (type.category !== this.categoryFor(direction)) {
+      return payable
+        ? 'Only payable transaction types can be used'
+        : 'Only receivable transaction types can be used';
     }
     if (type.isLinked) {
-      return 'Credit-note types cannot be used - they need an original invoice';
+      return payable
+        ? 'Debit-note types cannot be used - they need an original bill'
+        : 'Credit-note types cannot be used - they need an original invoice';
+    }
+    // A payable module pays straight out of a cash or bank account; there is no bill to raise first.
+    if (payable && !type.postsToCashbook) {
+      return 'Only direct payment types (posting to the cashbook) can be used';
     }
     // Settlement lines apply when the invoice is paid, so they play no part in raising it.
     const lines = (type.rule?.lines ?? []).filter((l) => !l.settlementKind);
@@ -750,12 +785,14 @@ export class SourceTransactionsService {
     return invoice.id;
   }
 
-  private async createReceiptDraft(
+  /** A draft direct receipt (money in from a customer) or payment (money out to a supplier). */
+  private async createCashDraft(
     user: RequestUser,
     dto: CreateSourceTransactionDto,
     entity: { id: string; name: string },
     transactionType: TransactionTypeWithRule,
     baseCurrency: string,
+    kind: 'RECEIPT' | 'PAYMENT',
   ) {
     const rule = transactionType.rule;
     const cashAccountId = rule?.defaultCashAccountId;
@@ -765,7 +802,11 @@ export class SourceTransactionsService {
         `${transactionType.name} has no default cash account or account to credit`,
       );
     }
-    const receipt = await this.cashbook.createReceipt(user, {
+    const create = (input: CreateCashbookReceiptDto) =>
+      kind === 'PAYMENT'
+        ? this.cashbook.createPayment(user, input)
+        : this.cashbook.createReceipt(user, input);
+    const receipt = await create({
       cashAccountId,
       transactionTypeId: transactionType.id,
       amount: dto.amount,
@@ -779,7 +820,7 @@ export class SourceTransactionsService {
         dto.description ?? `${transactionType.name} — ${entity.name}`,
       offsetGlAccountId: offset.accountId,
       offsetSubledgerAccountId: entity.id,
-      counterpartyType: 'CUSTOMER',
+      counterpartyType: kind === 'PAYMENT' ? 'SUPPLIER' : 'CUSTOMER',
       counterpartyId: entity.id,
       sourceModule: dto.sourceModule,
       sourceRecordId: dto.externalRef,
@@ -791,7 +832,7 @@ export class SourceTransactionsService {
   private async reserve(
     dto: CreateSourceTransactionDto,
     actingUserId: string,
-    isReceipt: boolean,
+    kind: AccountingSourceTransactionKind,
   ): Promise<{
     id: string;
     existing?: { documentId: string | null; entityId: string; id: string };
@@ -805,9 +846,7 @@ export class SourceTransactionsService {
           sourceRecordId: dto.externalRef,
           entityId: dto.entityId ?? '',
           transactionTypeId: dto.transactionTypeId,
-          kind: isReceipt
-            ? AccountingSourceTransactionKind.RECEIPT
-            : AccountingSourceTransactionKind.INVOICE,
+          kind,
           amount: dto.amount,
           requestedByUserId: actingUserId,
         },

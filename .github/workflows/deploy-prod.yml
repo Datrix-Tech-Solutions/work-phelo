@@ -76,6 +76,10 @@ jobs:
       hr-service: ${{ steps.filter.outputs.hr-service }}
       notification-service: ${{ steps.filter.outputs.notification-service }}
       reinsurance-service: ${{ steps.filter.outputs.reinsurance-service }}
+      accounting-service: ${{ steps.filter.outputs.accounting-service }}
+      marketing-service: ${{ steps.filter.outputs.marketing-service }}
+      inventory-service: ${{ steps.filter.outputs.inventory-service }}
+      subscription-service: ${{ steps.filter.outputs.subscription-service }}
       nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
 
     steps:
@@ -115,8 +119,44 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+            accounting-service:
+              - 'apps/accounting-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - 'infrastructure/docker-compose.prod.yml'
+              - '.github/scripts/deploy-prod.sh'
+              - '.github/scripts/deploy-common.sh'
+              - '.github/workflows/deploy-prod.yml'
+            marketing-service:
+              - 'apps/marketing-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - 'infrastructure/docker-compose.prod.yml'
+              - '.github/scripts/deploy-prod.sh'
+              - '.github/scripts/deploy-common.sh'
+              - '.github/workflows/deploy-prod.yml'
             nextjs-web:
               - 'apps/web/work-phelo-web/**'
+            inventory-service:
+              - 'apps/inventory-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - 'infrastructure/docker-compose.prod.yml'
+              - '.github/scripts/deploy-prod.sh'
+              - '.github/scripts/deploy-common.sh'
+              - '.github/workflows/deploy-prod.yml'
+            subscription-service:
+              - 'apps/subscription-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - 'infrastructure/docker-compose.prod.yml'
+              - '.github/scripts/deploy-prod.sh'
+              - '.github/scripts/deploy-common.sh'
+              - '.github/workflows/deploy-prod.yml'
           list-files: none
 
   build-and-push:
@@ -149,6 +189,14 @@ jobs:
             dockerfile: apps/notification-service/Dockerfile
           - service: reinsurance-service
             dockerfile: apps/reinsurance-service/Dockerfile
+          - service: accounting-service
+            dockerfile: apps/accounting-service/Dockerfile
+          - service: marketing-service
+            dockerfile: apps/marketing-service/Dockerfile
+          - service: inventory-service
+            dockerfile: apps/inventory-service/Dockerfile
+          - service: subscription-service
+            dockerfile: apps/subscription-service/Dockerfile
           - service: nextjs-web
             dockerfile: apps/web/work-phelo-web/Dockerfile
 
@@ -238,6 +286,12 @@ jobs:
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       RABBITMQ_URL: ${{ secrets.PROD_RABBITMQ_URL }}
       JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+      ACCOUNTING_RECURRING_JOURNALS_ENABLED: ${{ vars.PROD_ACCOUNTING_RECURRING_JOURNALS_ENABLED || 'false' }}
+      ACCOUNTING_INTERNAL_INTEGRATION_ENABLED: ${{ vars.PROD_ACCOUNTING_INTERNAL_INTEGRATION_ENABLED || 'false' }}
+      MARKETING_OUTBOUND_COMMUNICATION_ENABLED: ${{ vars.PROD_MARKETING_OUTBOUND_COMMUNICATION_ENABLED || 'false' }}
+      MARKETING_AUTOMATIC_PROCESSING_ENABLED: ${{ vars.PROD_MARKETING_AUTOMATIC_PROCESSING_ENABLED || 'false' }}
+      MARKETING_RABBITMQ_CONSUMER_ENABLED: ${{ vars.PROD_MARKETING_RABBITMQ_CONSUMER_ENABLED || 'false' }}
+      MARKETING_ACCOUNTING_INTEGRATION_ENABLED: ${{ vars.PROD_MARKETING_ACCOUNTING_INTEGRATION_ENABLED || 'false' }}
       REDIS_PASSWORD: ${{ secrets.PROD_REDIS_PASSWORD }}
       ALLOWED_ORIGINS: ${{ vars.PROD_ALLOWED_ORIGINS }}
       AUTH_FRONTEND_BASE_URL: ${{ vars.PROD_AUTH_FRONTEND_BASE_URL }}
@@ -336,7 +390,7 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           port: 22
           source: .github/scripts/deploy-common.sh,infrastructure/docker-compose.prod.yml
-          target: ${{ env.DEPLOY_PATH }}/
+          target: ${{ env.DEPLOY_PATH }}/.incoming-${{ env.BUILD_SHA }}/
           strip_components: 0
 
       - name: Deploy via SSH
@@ -348,4 +402,4 @@ jobs:
           port: 22
           command_timeout: 60m
           script_path: .github/scripts/deploy-prod.sh
-          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,REDIS_PASSWORD,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_CAREERS_SITE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,HR_FIELD_ENCRYPTION_KEY,HR_FIELD_HMAC_KEY,WEB_PUBLIC_API_URL,WEB_PUBLIC_APP_BASE_URL,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES,AUTH_TENANT_ASSET_STORAGE_PROVIDER,AUTH_TENANT_ASSET_S3_BUCKET,AUTH_TENANT_ASSET_S3_REGION,AUTH_TENANT_ASSET_S3_PREFIX,AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS,AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,INTERNAL_SERVICE_AUTH_SECRET,INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,REINSURANCE_DOCUMENT_STORAGE_PROVIDER,REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER,REINSURANCE_DOCUMENT_S3_BUCKET,REINSURANCE_DOCUMENT_S3_REGION,REINSURANCE_DOCUMENT_S3_PREFIX,REINSURANCE_DOCUMENT_S3_ENDPOINT,REINSURANCE_DOCUMENT_S3_FORCE_PATH_STYLE,REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS,AUTH_SERVICE_URL,REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS,NOTIFY_SMS_PROVIDER,NOTIFY_PILOSMS_API_KEY,NOTIFY_PILOSMS_SENDER_ID,NOTIFY_SASUSYNC_API_KEY,NOTIFY_SASUSYNC_SENDER_ID,NOTIFY_SASUSYNC_BASE_URL,NOTIFY_SASUSYNC_SANDBOX,NOTIFY_AGOOSMS_API_KEY,NOTIFY_AGOOSMS_BASE_URL,NOTIFY_AGOOSMS_SANDBOX,NOTIFY_AGOOSMS_SANDBOX_PATH,NOTIFY_AGOOSMS_LIVE_PATH
+          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,REDIS_PASSWORD,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_CAREERS_SITE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,HR_FIELD_ENCRYPTION_KEY,HR_FIELD_HMAC_KEY,WEB_PUBLIC_API_URL,WEB_PUBLIC_APP_BASE_URL,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES,AUTH_TENANT_ASSET_STORAGE_PROVIDER,AUTH_TENANT_ASSET_S3_BUCKET,AUTH_TENANT_ASSET_S3_REGION,AUTH_TENANT_ASSET_S3_PREFIX,AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS,AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,INTERNAL_SERVICE_AUTH_SECRET,INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,REINSURANCE_DOCUMENT_STORAGE_PROVIDER,REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER,REINSURANCE_DOCUMENT_S3_BUCKET,REINSURANCE_DOCUMENT_S3_REGION,REINSURANCE_DOCUMENT_S3_PREFIX,REINSURANCE_DOCUMENT_S3_ENDPOINT,REINSURANCE_DOCUMENT_S3_FORCE_PATH_STYLE,REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS,AUTH_SERVICE_URL,REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS,NOTIFY_SMS_PROVIDER,NOTIFY_PILOSMS_API_KEY,NOTIFY_PILOSMS_SENDER_ID,NOTIFY_SASUSYNC_API_KEY,NOTIFY_SASUSYNC_SENDER_ID,NOTIFY_SASUSYNC_BASE_URL,NOTIFY_SASUSYNC_SANDBOX,NOTIFY_AGOOSMS_API_KEY,NOTIFY_AGOOSMS_BASE_URL,NOTIFY_AGOOSMS_SANDBOX,NOTIFY_AGOOSMS_SANDBOX_PATH,NOTIFY_AGOOSMS_LIVE_PATH,ACCOUNTING_RECURRING_JOURNALS_ENABLED,ACCOUNTING_INTERNAL_INTEGRATION_ENABLED,MARKETING_OUTBOUND_COMMUNICATION_ENABLED,MARKETING_AUTOMATIC_PROCESSING_ENABLED,MARKETING_RABBITMQ_CONSUMER_ENABLED,MARKETING_ACCOUNTING_INTEGRATION_ENABLED

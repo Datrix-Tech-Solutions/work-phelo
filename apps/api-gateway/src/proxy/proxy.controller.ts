@@ -56,6 +56,7 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/hr\/recruitment\/public\/applications\/[^/]+\/documents\/[^/]+$/,
   /^\/api\/v1\/operations\/reinsurance\/health$/,
   /^\/api\/v1\/accounting\/health$/,
+  /^\/api\/v1\/operations\/inventory\/health$/,
 ];
 
 const SWAGGER_PUBLIC_PATTERNS = [
@@ -66,6 +67,7 @@ const SWAGGER_PUBLIC_PATTERNS = [
   /^\/api\/v1\/marketing\/docs(?:\/.*|-json|-yaml)?$/,
   /^\/api\/v1\/operations\/reinsurance\/docs(?:\/.*|-json|-yaml)?$/,
   /^\/api\/v1\/accounting\/docs(?:\/.*|-json|-yaml)?$/,
+  /^\/api\/v1\/operations\/inventory\/docs(?:\/.*|-json|-yaml)?$/,
 ];
 
 const FORWARDED_AUTH_CONTEXT_HEADERS = [
@@ -98,6 +100,9 @@ export class ProxyController {
     // the deployable downstream service boundary.
     if (pathParts[2] === 'operations' && pathParts[3] === 'reinsurance') {
       return { service: 'reinsurance', consumedPathParts: 4 };
+    }
+    if (pathParts[2] === 'operations' && pathParts[3] === 'inventory') {
+      return { service: 'inventory', consumedPathParts: 4 };
     }
 
     return {

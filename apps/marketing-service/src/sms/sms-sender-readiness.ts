@@ -81,7 +81,11 @@ const REASON_MESSAGES: Record<SmsSenderReadinessReasonCode, string> = {
 export function parseSmsSenderReadinessMode(
   value = process.env.SMS_SENDER_READINESS_MODE,
 ): SmsSenderReadinessMode {
-  const mode = (value ?? 'legacy').trim().toLowerCase();
+  const mode = (
+    value ?? (process.env.NODE_ENV === 'production' ? 'strict' : 'legacy')
+  )
+    .trim()
+    .toLowerCase();
   if (SMS_SENDER_READINESS_MODES.includes(mode as SmsSenderReadinessMode)) {
     return mode as SmsSenderReadinessMode;
   }

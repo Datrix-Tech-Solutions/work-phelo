@@ -31,13 +31,18 @@ describe('Gateway applicant CORS', () => {
       .set('Access-Control-Request-Method', 'PATCH')
       .set(
         'Access-Control-Request-Headers',
-        'content-type,authorization,x-application-access-token',
+        'content-type,authorization,idempotency-key,x-application-access-token',
       )
       .expect(204);
     expect(res.headers['access-control-allow-origin']).toBe(origin);
     expect(
       res.headers['access-control-allow-headers'].toLowerCase().split(','),
-    ).toEqual(['content-type', 'authorization', 'x-application-access-token']);
+    ).toEqual([
+      'content-type',
+      'authorization',
+      'idempotency-key',
+      'x-application-access-token',
+    ]);
     expect(res.headers['access-control-allow-headers']).not.toContain('*');
   });
   it('does not grant cross-origin access to an unconfigured origin', async () => {

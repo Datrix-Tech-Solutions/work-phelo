@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+umask 077
 
 DEPLOY_ENV="prod"
-DEPLOY_PATH="/var/www/apps/workphelo.com/work-phelo"
+LIVE_DEPLOY_PATH="/var/www/apps/workphelo.com/work-phelo"
+[[ "${BUILD_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid production BUILD_SHA' >&2; exit 1; }
+# Uploaded assets and generated env files stay isolated until health/reachability pass.
+DEPLOY_PATH="${LIVE_DEPLOY_PATH}/.incoming-${BUILD_SHA}"
+[[ -d "$DEPLOY_PATH" ]] || { echo 'Missing staged deployment assets' >&2; exit 1; }
+chmod 700 "$DEPLOY_PATH"
 COMPOSE_FILE="${DEPLOY_PATH}/infrastructure/docker-compose.prod.yml"
 COMPOSE_ENV_FILE="${DEPLOY_PATH}/.compose.prod.env"
+PREVIOUS_COMPOSE_ENV_FILE="${LIVE_DEPLOY_PATH}/.compose.prod.env"
 COMPOSE_PROJECT_NAME="workphelo-prod"
 HELPER_FILE="${DEPLOY_PATH}/.github/scripts/deploy-common.sh"
 
@@ -28,12 +35,16 @@ validate_required_envs "$DEPLOY_ENV"
 warn_optional_envs
 ensure_deploy_dirs
 
-API_GATEWAY_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "API_GATEWAY_IMAGE" "api-gateway" "api-gateway" "prod")"
-AUTH_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "AUTH_SERVICE_IMAGE" "auth-service" "auth-service" "prod")"
-HR_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "HR_SERVICE_IMAGE" "hr-service" "hr-service" "prod")"
-NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "prod")"
-REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "prod")"
-NEXTJS_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "prod")"
+API_GATEWAY_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "API_GATEWAY_IMAGE" "api-gateway" "api-gateway" "prod")"
+AUTH_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "AUTH_SERVICE_IMAGE" "auth-service" "auth-service" "prod")"
+HR_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "HR_SERVICE_IMAGE" "hr-service" "hr-service" "prod")"
+NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "prod")"
+REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "prod")"
+ACCOUNTING_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service" "prod")"
+MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "prod")"
+INVENTORY_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service" "prod")"
+SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "prod")"
+NEXTJS_IMAGE="$(resolve_image_ref "$PREVIOUS_COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "prod")"
 
 section "Compose Env"
 write_env_file "$COMPOSE_ENV_FILE" \
@@ -46,6 +57,10 @@ write_env_file "$COMPOSE_ENV_FILE" \
   "HR_SERVICE_IMAGE=${HR_SERVICE_IMAGE}" \
   "NOTIFICATION_SERVICE_IMAGE=${NOTIFICATION_SERVICE_IMAGE}" \
   "REINSURANCE_SERVICE_IMAGE=${REINSURANCE_SERVICE_IMAGE}" \
+  "ACCOUNTING_SERVICE_IMAGE=${ACCOUNTING_SERVICE_IMAGE}" \
+  "MARKETING_SERVICE_IMAGE=${MARKETING_SERVICE_IMAGE}" \
+  "INVENTORY_SERVICE_IMAGE=${INVENTORY_SERVICE_IMAGE}" \
+  "SUBSCRIPTION_SERVICE_IMAGE=${SUBSCRIPTION_SERVICE_IMAGE}" \
   "NEXTJS_IMAGE=${NEXTJS_IMAGE}" \
   "WEB_PUBLIC_API_URL=${WEB_PUBLIC_API_URL:-https://api.workphelo.com/api/v1}" \
   "WEB_PUBLIC_APP_BASE_URL=${WEB_PUBLIC_APP_BASE_URL:-https://app.workphelo.com}"
@@ -61,7 +76,11 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.prod" \
   "AUTH_SERVICE_URL=http://auth-service:4001" \
   "HR_SERVICE_URL=http://hr-service:4002" \
   "NOTIFICATION_SERVICE_URL=http://notification-service:4004" \
-  "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007"
+  "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "MARKETING_SERVICE_URL=http://marketing-service:4006" \
+  "INVENTORY_SERVICE_URL=http://inventory-service:4009" \
+  "SUBSCRIPTION_SERVICE_URL=http://subscription-service:4005"
 
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.prod" \
   "PORT=4001" \
@@ -111,6 +130,8 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}" \
   "FIELD_ENCRYPTION_KEY=${HR_FIELD_ENCRYPTION_KEY}" \
   "FIELD_HMAC_KEY=${HR_FIELD_HMAC_KEY}" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}" \
   "AUTH_TENANT_ASSET_STORAGE_PROVIDER=${AUTH_TENANT_ASSET_STORAGE_PROVIDER}" \
   "AUTH_TENANT_ASSET_S3_BUCKET=${AUTH_TENANT_ASSET_S3_BUCKET}" \
   "AUTH_TENANT_ASSET_S3_REGION=${AUTH_TENANT_ASSET_S3_REGION}" \
@@ -171,7 +192,54 @@ write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.prod" \
   "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}" \
   "REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS=${REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS:-}" \
   "REINSURANCE_ACCOUNTING_OUTBOX_DISPATCHER_ENABLED=false"
-log "✓ Service env files written"
+write_env_file "${DEPLOY_PATH}/apps/accounting-service/.env.prod" \
+  "PORT=4008" \
+  "DEPLOY_ENV=prod" \
+  "NODE_ENV=production" \
+  "DATABASE_URL=$(db_url_for_schema accounting)" \
+  "JWT_SECRET=${JWT_SECRET}" \
+  "HR_SERVICE_URL=http://hr-service:4002" \
+  "MARKETING_SERVICE_URL=http://marketing-service:4006" \
+  "INVENTORY_SERVICE_URL=http://inventory-service:4009" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}" \
+  "ACCOUNTING_RECURRING_JOURNALS_ENABLED=${ACCOUNTING_RECURRING_JOURNALS_ENABLED:-false}" \
+  "ACCOUNTING_INTERNAL_INTEGRATION_ENABLED=${ACCOUNTING_INTERNAL_INTEGRATION_ENABLED:-false}"
+
+write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.prod" \
+  "PORT=4006" \
+  "DEPLOY_ENV=prod" \
+  "NODE_ENV=production" \
+  "DATABASE_URL=$(db_url_for_schema marketing)" \
+  "JWT_SECRET=${JWT_SECRET}" \
+  "AUTH_SERVICE_URL=http://auth-service:4001" \
+  "HR_SERVICE_URL=http://hr-service:4002" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}" \
+  "RABBITMQ_URL=${RABBITMQ_URL}" \
+  "SMS_PROVIDER=${NOTIFY_SMS_PROVIDER:-termii}" \
+  "MARKETING_OUTBOUND_COMMUNICATION_ENABLED=${MARKETING_OUTBOUND_COMMUNICATION_ENABLED:-false}" \
+  "MARKETING_AUTOMATIC_PROCESSING_ENABLED=${MARKETING_AUTOMATIC_PROCESSING_ENABLED:-false}" \
+  "MARKETING_RABBITMQ_CONSUMER_ENABLED=${MARKETING_RABBITMQ_CONSUMER_ENABLED:-false}" \
+  "MARKETING_ACCOUNTING_INTEGRATION_ENABLED=${MARKETING_ACCOUNTING_INTEGRATION_ENABLED:-false}" \
+  "SMS_SENDER_READINESS_MODE=strict"
+
+write_env_file "${DEPLOY_PATH}/apps/inventory-service/.env.prod" \
+  "INVENTORY_SERVICE_PORT=4009" \
+  "DEPLOY_ENV=prod" \
+  "NODE_ENV=production" \
+  "DATABASE_URL=$(db_url_for_schema inventory)" \
+  "JWT_SECRET=${JWT_SECRET}" \
+  "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
+  "INTERNAL_SERVICE_AUTH_SECRET=${INTERNAL_SERVICE_AUTH_SECRET}" \
+  "INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES=${INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES}"
+
+write_env_file "${DEPLOY_PATH}/apps/subscription-service/.env.prod" \
+  "PORT=4005" \
+  "NODE_ENV=production" \
+  "DEPLOY_ENV=prod"
+log "✓ Service env files written; business activation requires explicit production configuration"
 
 section "Compose Validation"
 validate_compose_render
@@ -188,6 +256,10 @@ ensure_image_available "$AUTH_SERVICE_IMAGE" "auth-service" "auth-service"
 ensure_image_available "$HR_SERVICE_IMAGE" "hr-service" "hr-service"
 ensure_image_available "$NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service"
 ensure_image_available "$REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service"
+ensure_image_available "$ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service"
+ensure_image_available "$MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service"
+ensure_image_available "$INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service"
+ensure_image_available "$SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service"
 ensure_image_available "$NEXTJS_IMAGE" "nextjs-web" "nextjs-web"
 log "✓ Required images available"
 
@@ -197,20 +269,21 @@ preflight_runtime_env "$AUTH_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/auth-service/.e
 preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.prod" "dist/config/runtime-env.js" "hr-service"
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.prod" "dist/config/runtime-env.js" "notification-service"
 preflight_runtime_env "$REINSURANCE_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/reinsurance-service/.env.prod" "dist/config/runtime-env.js" "reinsurance-service"
+preflight_runtime_env "$ACCOUNTING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/accounting-service/.env.prod" "dist/config/runtime-env.js" "accounting-service"
+preflight_runtime_env "$MARKETING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/marketing-service/.env.prod" "dist/config/runtime-env.js" "marketing-service"
+preflight_runtime_env "$INVENTORY_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/inventory-service/.env.prod" "dist/config/runtime-env.js" "inventory-service"
 log "✓ Runtime env validation passed"
 
-section "Database Migrations"
-# Run migrations before the health-gated rollout. New service images can require
-# tables/columns that do not exist yet, so waiting for app health first can
-# deadlock deployments when startup hooks query the database.
-docker_compose run --rm --no-deps auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
-docker_compose run --rm --no-deps hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
-docker_compose run --rm --no-deps notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
-docker_compose run --rm --no-deps reinsurance-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/reinsurance-service/prisma/schema.prisma"
-log "✓ Migrations complete"
+section "Read-only Database Migration Preflight"
+# SQL application and seeding require a separately approved, backed-up operation.
+for service in auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service; do
+  if ! docker_compose run --rm --no-deps "$service" sh -c "npx prisma@5.22.0 migrate status --schema /app/apps/$service/prisma/schema.prisma"; then
+    die "$service migration history requires review; no migrations or seeds were run. Obtain backup/schema approval and prepare the database separately."
+  fi
+done
 
 section "Deploy"
-if docker_compose up -d --remove-orphans --no-build; then
+if docker_compose up -d --no-build; then
   :
 else
   print_compose_failure_diagnostics
@@ -224,31 +297,52 @@ wait_for_container_health auth-service
 wait_for_container_health hr-service
 wait_for_container_health notification-service
 wait_for_container_health reinsurance-service
+wait_for_container_health accounting-service
+wait_for_container_health marketing-service
+wait_for_container_health inventory-service
+wait_for_container_health subscription-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
-section "Database Seed"
-if docker_compose_exec \
-  -e SUPER_ADMIN_EMAIL="${SUPER_ADMIN_EMAIL}" \
-  -e SUPER_ADMIN_PASSWORD="${SUPER_ADMIN_PASSWORD}" \
-  -e NODE_ENV=production \
-  auth-service \
-  node /app/apps/auth-service/dist/prisma/seed.js; then
-  log "✓ Seed complete"
-else
-  log "✗ Seed FAILED: database not seeded with super admin user"
-  exit 1
-fi
+log "Automatic production seeding is disabled; permission/data changes require separate approval."
 
 section "Reachability"
 wait_for_http_ok "prod auth-service" "http://127.0.0.1:4101/health"
 wait_for_http_ok "prod hr-service" "http://127.0.0.1:4102/health"
 wait_for_http_ok "prod notification-service" "http://127.0.0.1:4104/api/health"
 wait_for_http_ok "prod reinsurance-service" "http://127.0.0.1:4107/api/health"
+wait_for_http_ok "prod accounting-service" "http://127.0.0.1:4108/api/health"
+wait_for_http_ok "prod marketing-service" "http://127.0.0.1:4106/api/health"
+wait_for_http_ok "prod inventory-service" "http://127.0.0.1:4109/api/health"
+wait_for_http_ok "prod subscription-service" "http://127.0.0.1:4105/api/health"
+wait_for_http_ok "prod gateway inventory route" "http://127.0.0.1:4110/api/v1/operations/inventory/health"
+wait_for_http_ok "prod gateway accounting route" "http://127.0.0.1:4110/api/v1/accounting/health"
 wait_for_http_ok "prod api-gateway" "http://127.0.0.1:4110/health"
 wait_for_http_ok "prod gateway reinsurance route" "http://127.0.0.1:4110/api/v1/operations/reinsurance/health"
 wait_for_http_ok "prod nextjs" "http://127.0.0.1:3001/health"
 
+section "Publish Verified Deployment Configuration"
+ROLLBACK_CONFIG_PATH="$(mktemp -d "${LIVE_DEPLOY_PATH}/.rollback-config-${BUILD_SHA}.XXXXXX")"
+for relative in .compose.prod.env infrastructure/docker-compose.prod.yml .github/scripts/deploy-common.sh; do
+  if [[ -f "${LIVE_DEPLOY_PATH}/${relative}" ]]; then
+    mkdir -p "${ROLLBACK_CONFIG_PATH}/$(dirname "$relative")"
+    install -m 600 "${LIVE_DEPLOY_PATH}/${relative}" "${ROLLBACK_CONFIG_PATH}/${relative}"
+  fi
+done
+for service in api-gateway auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service subscription-service; do
+  mkdir -p "${LIVE_DEPLOY_PATH}/apps/${service}"
+  if [[ -f "${LIVE_DEPLOY_PATH}/apps/${service}/.env.prod" ]]; then
+    mkdir -p "${ROLLBACK_CONFIG_PATH}/apps/${service}"
+    install -m 600 "${LIVE_DEPLOY_PATH}/apps/${service}/.env.prod" "${ROLLBACK_CONFIG_PATH}/apps/${service}/.env.prod"
+  fi
+  install -m 600 "${DEPLOY_PATH}/apps/${service}/.env.prod" "${LIVE_DEPLOY_PATH}/apps/${service}/.env.prod"
+done
+install -m 600 "$COMPOSE_ENV_FILE" "$PREVIOUS_COMPOSE_ENV_FILE"
+install -m 644 "$COMPOSE_FILE" "${LIVE_DEPLOY_PATH}/infrastructure/docker-compose.prod.yml"
+install -m 644 "$HELPER_FILE" "${LIVE_DEPLOY_PATH}/.github/scripts/deploy-common.sh"
+COMPOSE_ENV_FILE="$PREVIOUS_COMPOSE_ENV_FILE"
+COMPOSE_FILE="${LIVE_DEPLOY_PATH}/infrastructure/docker-compose.prod.yml"
+log "Previous configuration retained privately at ${ROLLBACK_CONFIG_PATH}; do not print its contents."
 record_successful_deploy_images
 
 section "Container Status"
