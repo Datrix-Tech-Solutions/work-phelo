@@ -328,7 +328,13 @@ export type UpdateTransactionTypePayload = Partial<CreateTransactionTypePayload>
 
 /** The module a source type belongs to. Fixed to real product modules — this is never a
  *  free-text tag, since it's meant to reflect an actual integration, not an arbitrary label. */
-export type SourceModule = 'HR' | 'MARKETING' | 'ACCOUNTING' | 'RECRUITMENT' | 'OPERATIONS';
+export type SourceModule =
+  | 'HR'
+  | 'MARKETING'
+  | 'ACCOUNTING'
+  | 'RECRUITMENT'
+  | 'OPERATIONS'
+  | 'PROJECTS';
 
 /** A source type is never created from this side — it's populated automatically once a
  *  module's own integration setup with Accounting is completed (e.g. HR's "Link Payroll to
@@ -1417,6 +1423,7 @@ export interface AccountingTradeSettlement {
     id: string;
     status: string;
     reference: string | null;
+    settlementMethod?: AccountingCashbookSettlementMethod | null;
     postedJournalEntryId: string | null;
     reversalJournalEntryId: string | null;
     /** The cash entry that reverses this one, while the receipt or payment is reversed. */

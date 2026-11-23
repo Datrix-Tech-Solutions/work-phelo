@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { UpdatePriceModal } from '@/components/organisms/hr/projects/UpdatePriceModal';
 import { ProjectInvoiceModal } from '@/components/organisms/hr/projects/ProjectInvoiceModal';
+import { ProjectClientInvoiceModal } from '@/components/organisms/hr/projects/ProjectClientInvoiceModal';
 import {
   useProject,
   useProjectMembers,
@@ -58,7 +59,7 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
 
   const client = details?.client;
   const pricing = details?.pricing;
-  const { invoices, active, transactions } = useProjectInvoices(projectId);
+  const { invoices, active, statusOf } = useProjectInvoices(projectId);
 
   const now = useNow(anyRunning);
 
@@ -87,9 +88,6 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
       invoices: active,
     });
   }, [pricing, startDate, endDate, tasks, timedByTaskId, timersByTaskId, members, now, active]);
-
-  const stateOf = (transactionId: string) =>
-    transactions?.items.find((t) => t.id === transactionId);
 
   if (!pricing || !project) return null;
 
@@ -242,7 +240,7 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
               </thead>
               <tbody>
                 {invoices.map((inv) => {
-                  const tx = stateOf(inv.transactionId);
+                  const tx = statusOf(inv);
                   return (
                     <tr key={inv.id} className="border-t border-gray-100 align-top">
                       <td className="px-5 py-3 whitespace-nowrap text-gray-700">
@@ -303,24 +301,42 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
         />
       )}
 
-      {invoiceOpen && (
-        <ProjectInvoiceModal
-          // A new form (and submission id) each time it opens.
-          key={chosen.map((l) => l.key).join(',')}
-          projectId={projectId}
-          projectName={project.name}
-          clientId={client.id}
-          clientName={client.name}
-          lines={chosen}
-          isOpen
-          onClose={() => setInvoiceOpen(false)}
-          onSent={() => {
-            setInvoiceOpen(false);
-            setSelected(new Set());
-            setTab('history');
-          }}
-        />
-      )}
+      {invoiceOpen &&
+        (client.source === 'PROJECT' ? (
+          // A client made from project management goes straight to Accounting.
+          <ProjectClientInvoiceModal
+            // A new form (and submission id) each time it opens.
+            key={chosen.map((l) => l.key).join(',')}
+            projectId={projectId}
+            projectName={project.name}
+            clientName={client.name}
+            lines={chosen}
+            isOpen
+            onClose={() => setInvoiceOpen(false)}
+            onSent={() => {
+              setInvoiceOpen(false);
+              setSelected(new Set());
+              setTab('history');
+            }}
+          />
+        ) : (
+          <ProjectInvoiceModal
+            // A new form (and submission id) each time it opens.
+            key={chosen.map((l) => l.key).join(',')}
+            projectId={projectId}
+            projectName={project.name}
+            clientId={client.id}
+            clientName={client.name}
+            lines={chosen}
+            isOpen
+            onClose={() => setInvoiceOpen(false)}
+            onSent={() => {
+              setInvoiceOpen(false);
+              setSelected(new Set());
+              setTab('history');
+            }}
+          />
+        ))}
     </div>
   );
 }

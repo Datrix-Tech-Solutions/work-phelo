@@ -1,4 +1,10 @@
-import type { Project, ProjectConfig, ProjectPricing, ProjectType } from '@/types/hr';
+import type {
+  Project,
+  ProjectClientSource,
+  ProjectConfig,
+  ProjectPricing,
+  ProjectType,
+} from '@/types/hr';
 
 /** What a project was set up with, read from the project itself. */
 export interface ProjectSetup {
@@ -8,7 +14,7 @@ export interface ProjectSetup {
   templateName: string | null;
   billable: boolean;
   pricing?: ProjectPricing;
-  client?: { id: string; name: string };
+  client?: { id: string; name: string; source: ProjectClientSource };
 }
 
 /** A project's set-up, or undefined while the project is still loading. */
@@ -32,6 +38,12 @@ export function projectSetup(project: Project | undefined): ProjectSetup | undef
     templateName: project.templateName ?? null,
     billable: !!project.billable,
     pricing: project.pricing,
-    client: project.clientId ? { id: project.clientId, name: project.clientName ?? '' } : undefined,
+    client: project.clientId
+      ? {
+          id: project.clientId,
+          name: project.clientName ?? '',
+          source: project.clientSource ?? 'MARKETING',
+        }
+      : undefined,
   };
 }

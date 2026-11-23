@@ -32,6 +32,7 @@ import { extractError } from '@/lib/extractError';
 import { seedProjectFromTemplate } from '@/lib/seedProjectFromTemplate';
 import { useToastStore } from '@/store/toast.store';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
+import type { PickedProjectClient } from '@/components/molecules/hr/projects/ProjectClientSelect';
 
 const PAGE_SIZE = 12;
 
@@ -168,7 +169,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
     clientInfo?: {
       billable: boolean;
       pricing?: ProjectPricing;
-      client?: { id: string; name: string };
+      client?: PickedProjectClient;
     },
   ) => {
     try {
@@ -179,7 +180,14 @@ export function ProjectsContent({ tenantSlug }: Props) {
         config: withFeatureLabels(config),
         ...(selectedTemplate ? { templateName: selectedTemplate.name } : {}),
         ...(clientInfo?.client
-          ? { clientId: clientInfo.client.id, clientName: clientInfo.client.name }
+          ? {
+              clientId: clientInfo.client.id,
+              clientName: clientInfo.client.name,
+              // A marketing client is the default, so only the other list is named.
+              ...(clientInfo.client.source === 'PROJECT'
+                ? { clientSource: 'PROJECT' as const }
+                : {}),
+            }
           : {}),
         ...(clientInfo ? { billable: clientInfo.billable } : {}),
         ...(pricing

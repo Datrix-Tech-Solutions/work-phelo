@@ -7,6 +7,7 @@ import { DataCard, DataCardAction } from '@/components/organisms/shared/DataCard
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { projectProgress } from '@/lib/projectProgress';
 import { ObjectiveTreePanel } from '@/components/organisms/hr/projects/ObjectiveTreePanel';
+import { ConfirmModal } from '@/components/organisms/hr/payroll/pay-components/ConfirmModal';
 import { ObjectiveModal } from '@/components/organisms/hr/projects/ObjectiveModal';
 import { useProjectTasks, useProject, useProjectSetup, useMyProfile, usePermission } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
@@ -30,6 +31,8 @@ export function ProjectObjectives({ projectId }: Props) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProjectObjective | undefined>();
+  const [deleting, setDeleting] = useState<ProjectObjective | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data: allObjectives = [] } = useProjectObjectives(projectId);
   const { data: subtasks = [] } = useProjectSubtasks(projectId);
@@ -94,7 +97,7 @@ export function ProjectObjectives({ projectId }: Props) {
                 },
                 {
                   label: 'Delete',
-                  onClick: () => save(removeObjective.mutateAsync(objective.id)),
+                  onClick: () => setDeleting(objective),
                   className: 'bg-red-50 text-red-600 hover:bg-red-100',
                 },
               ]
@@ -148,6 +151,26 @@ export function ProjectObjectives({ projectId }: Props) {
           )
         }
         objective={editing}
+      />
+
+      <ConfirmModal
+        isOpen={deleting !== null}
+        title="Delete objective"
+        description={`Delete "${deleting?.name ?? ''}"? This can't be undone.`}
+        confirmLabel="Delete"
+        danger
+        isLoading={isDeleting}
+        onCancel={() => setDeleting(null)}
+        onConfirm={async () => {
+          if (!deleting) return;
+          setIsDeleting(true);
+          try {
+            await save(removeObjective.mutateAsync(deleting.id));
+          } finally {
+            setIsDeleting(false);
+            setDeleting(null);
+          }
+        }}
       />
     </>
   );

@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ProjectInvoicesService } from './project-invoices.service';
+import { ProjectAccountingClient } from './billing/project-accounting.client';
 import { ProjectTimeService } from './project-time.service';
 import { ProjectWorkService } from './project-work.service';
 import { ProjectsService } from './projects.service';
@@ -113,7 +114,11 @@ describe('Projects tenant-scoped parent validation', () => {
     projects = new ProjectsService(db, {} as NotificationsService);
     work = new ProjectWorkService(db, projects);
     time = new ProjectTimeService(db, projects);
-    invoices = new ProjectInvoicesService(db, projects);
+    invoices = new ProjectInvoicesService(
+      db,
+      projects,
+      {} as ProjectAccountingClient,
+    );
   });
 
   const sprint = {

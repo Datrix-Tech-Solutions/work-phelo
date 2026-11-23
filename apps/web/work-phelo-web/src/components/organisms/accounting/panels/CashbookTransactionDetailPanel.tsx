@@ -30,6 +30,7 @@ import {
   useVoidCashbook,
 } from '@/hooks';
 import { transactionTypeCodeFromNumber } from '@/lib/accounting/transactionTypeCode';
+import { SETTLEMENT_METHOD_OPTIONS } from '@/lib/accounting/settlementMethod';
 import { SOURCE_MODULE_LABELS } from '@/lib/accounting/sourceModules';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -462,6 +463,15 @@ export function CashbookTransactionDetailPanel({
               )
             )}
             <Row label="Transaction Date" value={fmtDate(transaction.transactionDate)} />
+            {transaction.settlementMethod && (
+              <Row
+                label="Mode of Payment"
+                value={
+                  SETTLEMENT_METHOD_OPTIONS.find((o) => o.value === transaction.settlementMethod)
+                    ?.label ?? transaction.settlementMethod
+                }
+              />
+            )}
             {transaction.postedJournalEntry && (
               <Row label="Journal #" value={transaction.postedJournalEntry.journalNumber} />
             )}

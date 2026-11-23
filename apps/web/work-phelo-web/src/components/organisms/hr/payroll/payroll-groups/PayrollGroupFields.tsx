@@ -239,17 +239,6 @@ export function PayrollGroupMemberFields({
           onChange={(v) => pick(branch, v)}
         />
       </div>
-      {listed.length > 0 && (
-        <button
-          type="button"
-          className="self-start text-xs font-medium text-blue-600 hover:text-blue-700"
-          onClick={() =>
-            patch({ memberIds: [...new Set([...validMembers, ...listed.map((e) => e.id)])] })
-          }
-        >
-          Select all employees
-        </button>
-      )}
       <MultiSelect
         placeholder={payslipType ? 'Add employees to this group' : 'Choose a configuration first'}
         hideChips

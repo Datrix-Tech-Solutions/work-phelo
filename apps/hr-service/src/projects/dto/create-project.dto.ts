@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -73,6 +74,15 @@ export class CreateProjectDto {
   @IsOptional()
   @IsString()
   clientId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['MARKETING', 'PROJECT'],
+    description:
+      'Where clientId points: a marketing client (the default) or a client made from project management',
+  })
+  @IsOptional()
+  @IsIn(['MARKETING', 'PROJECT'])
+  clientSource?: 'MARKETING' | 'PROJECT';
 
   @ApiPropertyOptional({ description: 'The client name as shown now' })
   @IsOptional()

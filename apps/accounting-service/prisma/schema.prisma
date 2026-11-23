@@ -1614,6 +1614,7 @@ enum SourceModule {
   ACCOUNTING
   RECRUITMENT
   OPERATIONS
+  PROJECTS
 
   @@schema("accounting")
 }

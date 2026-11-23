@@ -31,22 +31,60 @@ export function useRecordProjectInvoice(projectId: string) {
   });
 }
 
-/** A project's invoices, and the ones still standing. An invoice voided in Accounting no longer counts as billed. */
+const STATE_LABELS: Record<string, string> = {
+  DRAFT: 'Sent',
+  POSTED: 'Posted',
+  REVERSED: 'Reversed',
+  REJECTED: 'Rejected',
+};
+
+/** An invoice's state and what to call it, and its document number once Accounting has one. */
+export interface ProjectInvoiceStatus {
+  state: string;
+  stateLabel: string;
+  documentNumber: string | null;
+}
+
+/**
+ * A project's invoices, and the ones still standing. An invoice voided in Accounting no longer counts
+ * as billed. A project client's invoice carries the state Accounting reported to us; a marketing
+ * client's is read back through marketing.
+ */
 export function useProjectInvoices(projectId: string) {
   const { data, isLoading } = useProjectInvoiceList(projectId);
   const invoices = useMemo(() => data ?? [], [data]);
-  const clientId = invoices[0]?.clientId ?? '';
+  const marketingInvoice = invoices.find((inv) => !inv.state);
+  const clientId = marketingInvoice?.clientId ?? '';
   const { data: transactions } = useClientBillingTransactions(clientId, 1, !!clientId);
 
-  // Only the client's latest transactions are read, so an invoice not found there counts as standing.
+  const statusOf = useMemo(
+    () =>
+      (inv: ProjectInvoice): ProjectInvoiceStatus | undefined => {
+        if (inv.state) {
+          return {
+            state: inv.state,
+            stateLabel: STATE_LABELS[inv.state.toUpperCase()] ?? inv.state,
+            documentNumber: null,
+          };
+        }
+        const tx = transactions?.items.find((t) => t.id === inv.transactionId);
+        return tx
+          ? { state: tx.state, stateLabel: tx.stateLabel, documentNumber: tx.documentNumber }
+          : undefined;
+      },
+    [transactions],
+  );
+
+  // A marketing client's invoices are only looked up among the client's latest transactions, so one
+  // not found there counts as standing.
   const active = useMemo<ProjectInvoice[]>(
     () =>
       invoices.filter((inv) => {
-        const state = transactions?.items.find((t) => t.id === inv.transactionId)?.state;
+        const state = statusOf(inv)?.state;
         return !(state && VOIDED_STATES.includes(state.toUpperCase()));
       }),
-    [invoices, transactions],
+    [invoices, statusOf],
   );
 
-  return { invoices, active, transactions, isLoading };
+  return { invoices, active, statusOf, isLoading };
 }
