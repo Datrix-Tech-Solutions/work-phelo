@@ -1,0 +1,751 @@
+{
+  "sourceProd": "42c5256381e997ea4eeff9e3022420ffd77c2a07",
+  "reviewedDev": "597e87f420f6820fb331652c70713b57d84e2d02",
+  "deploymentAuthorized": false,
+  "automaticMigrationOrSeed": false,
+  "excludedDevMigrations": [
+    "accounting/20261121100000_bank_reconciliation_ledger_matching",
+    "accounting/20261122100000_bank_reconciliation_match_groups",
+    "accounting/20261123100000_source_payment_kind",
+    "marketing/20261113120000_add_sms_credit_requests"
+  ],
+  "migrations": [
+    {
+      "service": "accounting-service",
+      "migration": "20260703180000_accounting_core_ledger_foundation",
+      "sha256": "9e9565d2ae00155af4b364ef1ee8ae473d1dc531cfe474d9a1f2ad3a5f4c382a",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260705100000_accounting_posting_rules_and_source_events",
+      "sha256": "920ca4d976daea8162a582b0ddf478f3bf091aab7be1ae4987845fe6904f308d",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260710120000_accounting_customer_vendor_master",
+      "sha256": "721d524829cc805feb36a414adabb66cf8f6f1cfe2890669d98a21231b1ed008",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260710133000_accounting_account_hierarchy",
+      "sha256": "6ad1406e0419f05be142d758d79c2152e72f08305ff8269dda50f4b8138e3c6c",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260810120000_accounting_cashbook_foundation",
+      "sha256": "7d443dbabed421e18f20d8c5a83aad0d8bfe75adb8bea89d5bb318ae0ca6b3cf",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260810130000_accounting_standalone_ar",
+      "sha256": "61802dc4c830271f176836138c1ca8608015a5450420a2d89203cb07dfe23c2c",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260811100000_accounting_standalone_ap",
+      "sha256": "4ba35cebc347c41649cb891982e01c33ebd4af9431927b50ae90f925749317e1",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260811120000_accounting_source_cashbook_bridge",
+      "sha256": "049bc913bb6006225f249ae2ee99890a208d0454ccd21521ed899608287d1226",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260811130000_accounting_obligation_subledger_dimensions",
+      "sha256": "a2075778e8a23b8416a49908d740128daf1d76fb77648ec9432e36cde18063c7",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260814094806_accounting_bank_reconciliation_foundation",
+      "sha256": "444ece5ce6d71372e9dee9afdf7a0ff1e0d7c529438803070ad3c9473896ac67",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260814113000_accounting_bank_statement_matching",
+      "sha256": "3bfb5b3fb96495ba9a1dc59cc2e616c18710da33761b14946a2e73703e4f3aa3",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260914120000_accounting_transaction_types",
+      "sha256": "038a29c9b929bfe70ec10ae2bd906afbb42a8db9a743953610675cf97e861f7d",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260915100000_accounting_transaction_type_rules",
+      "sha256": "72d096f899b490f4e3815a65364ea5074ee20a6fe58923085239bc8df53836f4",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260915120000_accounting_entity_types",
+      "sha256": "d6f27f932108e173f7589e047b1de59d790a00549fd0c268117a7b4db9bc9c9b",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260915130000_accounting_subledger_contact_address",
+      "sha256": "6c1c5d9e4c84803b0a1d8c5d580bc1659afb935a124670e78749b6919ab31bad",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260915140000_accounting_dynamic_entity_types",
+      "sha256": "f9d618c675aebf0f355916e4deb96f66e53223a40561089c1f68a0690ff1a86e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260916100000_accounting_document_rule_posting",
+      "sha256": "4d60a240fdb9614cba00760f20680b71c123d0037ca18586020d1c21d1556c35",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260917100000_accounting_merge_customer_vendor_into_entities",
+      "sha256": "196e4112f48538b1a78e2af4820c8dd1f2eca0a7f14f96cc65446a629ea3ca7c",
+      "destructive_review": "REVIEW",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260917150000_accounting_tax_type_code_effective_dates",
+      "sha256": "f6a999667baaa4f22f21e5623a680e306737f0d47785118c0c1aacde0b94e50d",
+      "destructive_review": "REVIEW",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260918100000_accounting_rule_driven_control_accounts",
+      "sha256": "7f8e19756fe1ad4ef79a2913f354fb01bb829be581c927648dff238c89b7ddc0",
+      "destructive_review": "REVIEW",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260919100000_accounting_document_cost_centre",
+      "sha256": "58001c76cef8d6649576c6dc13b1eb2870d083eb136e514b197fe4561a72f001",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260919110000_accounting_budgets",
+      "sha256": "cb48c6d36fa5b3e8ae8b48ca18dfe22de6dfe4f51cfc3662b00c42b052c486e8",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260919120000_accounting_fiscal_period_soft_close",
+      "sha256": "6565af5b5de971f094193839a7319f6425fee9861cc1d57e0e96463198bd80b1",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260919130000_accounting_fiscal_year",
+      "sha256": "19faa21ebf16ac6e859b09a71ad2515b9cf0ce915e18a158df00fa488d9f1bb1",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260920100000_accounting_gl_account_classification",
+      "sha256": "3f73dcd68d4227ef36c00a7d166c1bef6aaeedd38f1dfc585b045b908b405230",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260920110000_accounting_journal_entry_type_and_sequence",
+      "sha256": "0e78a380c3326fe346cc2e60d071b45ff376c15c4865e2a2d721dc922d4d97d2",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260921100000_accounting_recurring_journals",
+      "sha256": "c647508e182a6421842d073452d6b6455722701328bca2b2a34e70627ef536a3",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260922100000_accounting_adjustment_category",
+      "sha256": "5e07cbd748a5648573a47ac989dc825bcaf7f13b89ba7cba13e994e0b07d9ac2",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260923100000_accounting_cash_flow_category",
+      "sha256": "56293165553a940f8178f0c3637302a48599f33330540bbb10e0940dfb1d93be",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260924100000_transaction_type_rule_default_cash_account",
+      "sha256": "ebba249e541c4625cac82d78e07a736dcafc9265916f649d04c4e521e8ac9826",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260924110000_transaction_type_posts_to_cashbook",
+      "sha256": "7781ecb63ea24631cdb0c163189fd5e6fab06b50e0d42f8e970ab74c09759f1c",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260925100000_cashbook_transfer_charge",
+      "sha256": "425dd49bc444c0f535df670fbfbf185cd9fbaae5aab345b90f8b51d238197e1c",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260926160000_add_source_type",
+      "sha256": "f3e2c6caa9c80b4fa37323e2c81bb52fb45b4cbaf5cb22e0ff021650c634485f",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260926223934_add_source_ledger",
+      "sha256": "ef00b27efd7f1ee21b04f73b3cfbb1611c42e14b8a8b0c34ec9a21a99e2bdc9d",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260926233454_transaction_type_source",
+      "sha256": "46cd2f87cfbdb7e847a70b02e1bb39484f3d7de35ff741a8b66f88cfeda614db",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260929100000_entity_type_code_and_entity_phone",
+      "sha256": "247f5dc778c123ea627c8fb1682a9de354dd727aa15d7cedbd1a286431e6596e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260929110000_entity_description",
+      "sha256": "1fde0f1ea0af490c5a49a8bd1b2cfbba98e6ac13810eb19500a3aff37d5e32d3",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260929120000_transaction_quantity_unit_price",
+      "sha256": "145d4445ed1ac294045018adbde36f5e2d7ff0fc2661a99c0b5db9b8eb476a0e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260929130000_cashbook_transaction_number",
+      "sha256": "8021756b6e00b1a2d79d6639b5cf83b49fefd44c8fe95db750984d39b257e93c",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20260929140000_transaction_type_is_linked",
+      "sha256": "3315d9140f9316bd8cc37df81dc2c936ed3c0aafc270e94118719d713d0e3e12",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261004150000_source_transactions_and_rejection",
+      "sha256": "28f0022f41f05bc8962eca93e604ccb49d9a0b8d784cc0ce8ae9cf8b89b27cd3",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261005100000_release_provisioned_entity_types",
+      "sha256": "036512d2c65779e43628e9fbdbfdba54b748e6734949ac798b249fe5f7b7c453",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261005120000_payment_requests",
+      "sha256": "712854df0c47e0b6e5e5ad0fdc47a7a803441e6b86142f835e727ce60050b36d",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261005140000_payroll_account_mapping",
+      "sha256": "fcdd613f17c6320ea8d03a9db7c7ae95f539f01a0a616a62a0ccc990960ef5df",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261006100000_rule_line_account_scope",
+      "sha256": "36e68a49b4ee51c7bbd844055053d0946bf54b14949e71461bf6051b3e70175e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261007090000_transaction_type_quantity_price",
+      "sha256": "8397ac961e1e4132981805ba5bdc25c5761f8eb6d907f94bb43e3003c12b35f0",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261007100000_cashbook_transaction_lines",
+      "sha256": "5c162d2c5ecbfb7cb72e17361416ea6ddc14ccd6abf736ae07bbe356d0eab5b9",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261007110000_cashbook_line_kind",
+      "sha256": "0184eedebff1fd91fbb35586c7331a87c9f4075d78408d9ee2630ef1f5dfc3aa",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261007120000_rule_line_settlement_kind",
+      "sha256": "e333912b6c073f1e17083ab29293424e0e3bbe8ed1ee94957dd9cdfaff0e68f1",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261007130000_classification_group_description",
+      "sha256": "6b7beab0425ed273eeb9dada3f5dfa535c37b2787b2afbbb6e358e2e1292d1c0",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261007140000_tax_type_default_accounts",
+      "sha256": "140ee7e8b94d1483c73e329ef100f76312a4173b19cde7c31d3ad82e0b5e2b04",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261007150000_document_lines",
+      "sha256": "849b2625c7f5a04dc099f1c22722ea25927a90966961f28507b1a826c8252eb0",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261009120000_untag_direct_cashbook_entity_lines",
+      "sha256": "3c610e0e51710aa2946e55613e1557e251effe91f861f9ec835fad23f96e8150",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261010100000_void_posted_entries",
+      "sha256": "4c20a6db690d1207d39165fa08ab94414064d44dc7f2412137b9e4125219e086",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261011100000_rule_line_multiple_scopes",
+      "sha256": "f2f0c9753c7fb4c83aad426faae01f63653fe922f5a45e00564579f7704e289d",
+      "destructive_review": "REVIEW",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261011110000_void_reversed_documents",
+      "sha256": "ccce3ce55d322305d48be536763c407ef5f652bdf44fafea482e1c3bf1cdaa32",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261011120000_archive_delete",
+      "sha256": "8d6c955e212b4384ea84d74a77742de9008bd4dc681be5f9edba55e6faf7878d",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261017100000_cashbook_line_tax_type",
+      "sha256": "537bb72825dac011a15b9bd0b57232c1b943bf28d8cf5ff73afe14058122ef9e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261018100000_tax_type_payment_reminder",
+      "sha256": "64199de023fa402ba86345854de0231bcc354ac03f9a2af94ba650647ae3e792",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261019100000_cash_flow_cash_equivalent",
+      "sha256": "859484bf64c355585f67af5c390e077c8b7cf26b565faf57590175803c1e38b8",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261019110000_credit_sale_purchase_defaults",
+      "sha256": "f208aa9599be80edb2ff58c5751b59d33bed9d2671f9171f196a95e13dd941c0",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "accounting-service",
+      "migration": "20261020100000_entity_aml_monitoring",
+      "sha256": "3e3099fef6683f8518d2918ccf92ad2bf8cafae8a884dee0760bce7542a45d19",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20260924160000_add_marketing_crm_settings_foundation",
+      "sha256": "4aedf7982f7d2fccd993eef1ad019b080d00f4bc53de42d170d41ff14aba5a65",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20260928120000_add_marketing_prospects",
+      "sha256": "ed51fea351c57c1121c287b4aa7418daf265d7455be480881a51b47f8dc87278",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20260930120000_add_prospect_interaction_participants",
+      "sha256": "57438ef4d44fdfc759f45e0f228656cde2f146e3b1009af59fa21090e14ca3dc",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20260930130000_add_marketing_prospect_follow_ups",
+      "sha256": "8cd2020a7382a632c719e9311ed4a1dcb27094f3518467f51dc8519c4f087c32",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261002120000_add_marketing_clients",
+      "sha256": "64ecbc412b543f8dab0c3d3b4c41ee2114f5c5bef0c7cbd1b1e513d26bd9dfa6",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261002130000_add_marketing_fleet_vehicles",
+      "sha256": "8a35fe1fb5f767341e1d0cb303e8fc3e8ae04ca462fbe588279f3c18ea03ca64",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261002140000_add_client_product_terms",
+      "sha256": "5b1fece0841b13bf5d6f1ddf1dd5d3f09a6d868582be585756d527c2050b91c1",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261003120000_make_fleet_mileage_optional",
+      "sha256": "94a590f46d67fa4d1007023c851fbd3b4d2cd54b8d29a9abb0c7fccea86d6752",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261003130000_add_marketing_transport_requests",
+      "sha256": "21cb5989c0a5c4bfaba2000b8ce81b6c5cbedd4aedec0ad06f3c2eccf1771f03",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261003140000_add_transport_request_allocation",
+      "sha256": "8bdf1b69f1c38cced5b9d91662252ea53aab0eeb46ff4641f0532db904e9e566",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261003150000_add_marketing_transport_officers",
+      "sha256": "f29fd8687ab05badf1781ead88524da7ff896f31b861eb2511e94d3c895637b2",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261003160000_add_transport_request_self_driven",
+      "sha256": "ef78f67780f2cdec6a1f146a359ea4b41e785d8c652ac040b769ed6a4557479e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261004100000_add_transport_request_completion",
+      "sha256": "1a052323eb1887321cd23d35e1259a51bfcfe719944432da19d075c6e05fc7b7",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261004100100_backfill_completed_transport_requests",
+      "sha256": "7253063e938a9021dd428fd13243c99cda8efbda0f41a678e11e8c9646e8ca4e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261004120000_add_client_billing",
+      "sha256": "26ffec8917a407e1e459064966a7a6bf9d80ac8bb87319efac00762a655462d8",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261005090000_add_marketing_campaigns",
+      "sha256": "ab4f13b57ef77e1f80b53e8a5d76515e0235555f03df1dca2726457122e25971",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261005100000_campaign_multiple_business_types",
+      "sha256": "cb9eba0eca28de2674d55727ca7522fd74c5c73c2714bdfaa47f07f156fd8847",
+      "destructive_review": "REVIEW",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261005100000_transport_request_purpose_stops_optional_return",
+      "sha256": "3d434564da55bf418782f4c68bd8d3d94041eb49d7beb73ce97d6507848f09af",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261006090000_add_marketing_appointments",
+      "sha256": "1096505f164930765b8c029be31ffff93485531a47a22c12a3fc96fa7d5ad1e3",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261006100000_backfill_client_product_terms",
+      "sha256": "230669e1c458a553936dce39d5b64571324a6301cdf67486297e466f524aa24c",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261006120000_add_marketing_sms_campaign_foundation",
+      "sha256": "87c5affb201ec6c6379433c65d315aa030f6a94edac8bf27cc65fdf4fffca928",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261007120000_add_marketing_sms_campaign_dispatch",
+      "sha256": "be4d7023105b83c6ad54b717666e060e3be84d49a627987af07428cf5ced3cff",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261007130000_transport_purpose_marketing_operations",
+      "sha256": "dfe54e3dabe10190db0b74ff03d54a42a7ebef09e5a6205985bddbedfc06abee",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261007140000_add_transport_request_start",
+      "sha256": "517b3201dabb0b8db3f50c574d0cfc3925512f83c6de9fb24b21d586f46cf0b6",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261007150000_add_transport_request_return_details",
+      "sha256": "3ca40412a966bf704e79eaa33393522c112a4335d2488c246c293780eb07bb0e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261007160000_add_transport_request_appointment",
+      "sha256": "5b7b3b64f8b7ed33cad05277c767c71d50d733d6ac96473b153c7f8ba036a7b0",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261007170000_add_campaign_segments",
+      "sha256": "723ea9446533ec7ba5ba1893161e3a85a895c94ce2c74aae56e196544c27a90e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261008090000_campaign_client_recipients",
+      "sha256": "8721afad1db03cdcf5219052bf33591764335fc0cb0e1d4e7c410e840c47da7b",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261008100000_fix_contact_phone_trunk_zero",
+      "sha256": "9bfd3bca73d1f3f38bde7d0d336621c3f433cddcbf6800fadb2949c5cc1a568b",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261008110000_campaign_segment_products",
+      "sha256": "eacc46c678fa0cc9f882dfc1fc91b6cdeb5535ddad5c895db7610c29e26f0b16",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261008120000_add_communication_identity_foundation",
+      "sha256": "4df808609bbafbc39839139616fbfeb02f41f2bc96d4e4fb74f168590ae4e60d",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261008120000_client_product_expected_close_date",
+      "sha256": "68439bb1a46b53c63e0cff7d5a9c4c10b7085041a5d400ce936eb11e6f53d2d8",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261008130000_add_sales_targets",
+      "sha256": "d899900b8dc4722274e242bf43d82cfbfa353a111a7c60237708731020615b36",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261010120000_add_sales_target_name",
+      "sha256": "bb0fa3397dd2b34c2cda76e5d370a8c755031c7e5a8b59c5a0d84d38b682df19",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261012140000_add_transport_request_preferences",
+      "sha256": "2e4a5a5203578dc0fc085c331ab8a8323afd82a0b83fb783d8bd9b2c21009cb5",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261016120000_add_crm_preferences",
+      "sha256": "1e90dcbfa6659eb62060623d0490b6518159d1ff99e09d13fa80711e79b47bcb",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261016130000_add_fleet_vehicle_documents",
+      "sha256": "3b5b0ae473f60f8c1d379abd1ad205436591687c4647180ac4d50ddc2cc0184c",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261020120000_add_contact_date_of_birth",
+      "sha256": "1363ec424471d050c230076d07439c17be025a77490abdd708c0b73d9b54537a",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    },
+    {
+      "service": "marketing-service",
+      "migration": "20261027120000_optional_client_prospect_location",
+      "sha256": "0dfd82a97120a8ca76fec4421bdd6e5bdd9a08c68318ed2b5a021e528742970e",
+      "destructive_review": "",
+      "production_applied_status": "UNKNOWN"
+    }
+  ],
+  "changedFiles": [
+    ".github/production-rollout-manifest.json",
+    ".github/scripts/deploy-common.sh",
+    ".github/scripts/deploy-prod-safety.spec.mjs",
+    ".github/scripts/deploy-prod.sh",
+    ".github/scripts/verify-service-build-contexts.mjs",
+    ".github/workflows/deploy-prod.yml",
+    "README.md",
+    "apps/accounting-service/Dockerfile.dockerignore",
+    "apps/accounting-service/src/auth/guards/internal-service-auth.guard.ts",
+    "apps/accounting-service/src/config/activation.spec.ts",
+    "apps/accounting-service/src/config/activation.ts",
+    "apps/accounting-service/src/config/runtime-env.ts",
+    "apps/accounting-service/src/ledger/recurring-journals.cron.ts",
+    "apps/accounting-service/src/ledger/recurring-journals.service.ts",
+    "apps/marketing-service/Dockerfile",
+    "apps/marketing-service/Dockerfile.dockerignore",
+    "apps/marketing-service/src/accounting/accounting.client.ts",
+    "apps/marketing-service/src/campaigns/campaign-dispatcher.ts",
+    "apps/marketing-service/src/campaigns/campaign-scheduler.service.ts",
+    "apps/marketing-service/src/campaigns/campaigns.service.ts",
+    "apps/marketing-service/src/config/activation.spec.ts",
+    "apps/marketing-service/src/config/activation.ts",
+    "apps/marketing-service/src/config/runtime-env.ts",
+    "apps/marketing-service/src/main.ts",
+    "apps/marketing-service/src/messaging/consumer-lifecycle.ts",
+    "apps/marketing-service/src/messaging/rabbitmq.publisher.ts",
+    "apps/marketing-service/src/sms/sms-sender-readiness.ts",
+    "infrastructure/docker-compose.prod.yml"
+  ]
+}

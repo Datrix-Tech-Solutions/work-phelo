@@ -5,6 +5,10 @@ import {
   Transport,
 } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
+import {
+  marketingActivation,
+  requireMarketingOutbound,
+} from '../config/activation';
 import { firstValueFrom, timeout } from 'rxjs';
 import {
   CampaignDispatchBatchEvent,
@@ -38,6 +42,7 @@ export class MarketingRabbitPublisher implements OnModuleDestroy {
   private readonly clients = new Map<string, ClientProxy>();
 
   private client(queue: string): ClientProxy | null {
+    if (queue === 'notification_queue') requireMarketingOutbound();
     const url = process.env.RABBITMQ_URL;
     if (!url) return null;
     let client = this.clients.get(queue);
@@ -66,6 +71,8 @@ export class MarketingRabbitPublisher implements OnModuleDestroy {
   async resolvePermissionRecipients(
     data: ResolvePermissionRecipientsCommand,
   ): Promise<PermissionRecipient[]> {
+    if (!marketingActivation('MARKETING_OUTBOUND_COMMUNICATION_ENABLED'))
+      return [];
     const client = this.client('auth_queue');
     if (!client) {
       this.logger.warn(
@@ -84,6 +91,8 @@ export class MarketingRabbitPublisher implements OnModuleDestroy {
   }
 
   async inAppCreate(data: InAppNotificationCreateEvent): Promise<void> {
+    if (!marketingActivation('MARKETING_OUTBOUND_COMMUNICATION_ENABLED'))
+      return;
     const client = this.client('notification_queue');
     if (!client) {
       this.logger.warn('RABBITMQ_URL is not set; skipping in-app notification');
@@ -152,7 +161,12 @@ export class MarketingRabbitPublisher implements OnModuleDestroy {
     );
   }
 
-  onModuleDestroy() {
-    for (const client of this.clients.values()) void client.close();
+  async onModuleDestroy() {
+    await Promise.all(
+      [...this.clients.values()].map(async (client) => {
+        await client.close();
+      }),
+    );
+    this.clients.clear();
   }
 }

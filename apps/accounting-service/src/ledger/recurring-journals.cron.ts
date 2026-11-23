@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { RecurringJournalsService } from './recurring-journals.service';
+import { accountingActivation } from '../config/activation';
 
 @Injectable()
 export class RecurringJournalsCron {
@@ -12,6 +13,7 @@ export class RecurringJournalsCron {
    *  missed while the service was down). */
   @Cron('0 5 0 * * *', { timeZone: 'UTC' })
   async generateDueEntries() {
+    if (!accountingActivation('ACCOUNTING_RECURRING_JOURNALS_ENABLED')) return;
     try {
       await this.recurring.generateDue();
     } catch (error) {

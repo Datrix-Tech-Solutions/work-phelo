@@ -3,6 +3,7 @@ import { CampaignDeliveryChannel } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingRabbitPublisher } from '../messaging/rabbitmq.publisher';
 import { campaignSmsText } from '../sms/sms-segments';
+import { requireMarketingOutbound } from '../config/activation';
 
 /**
  * Hands a saved campaign to whatever actually sends it. The campaigns service
@@ -54,6 +55,7 @@ export class RabbitMqCampaignDispatcher implements CampaignDispatcher {
   ) {}
 
   async dispatch(campaignId: string): Promise<void> {
+    requireMarketingOutbound();
     const campaign = await this.prisma.marketingCampaign.findUnique({
       where: { id: campaignId },
       select: {

@@ -76,6 +76,8 @@ jobs:
       hr-service: ${{ steps.filter.outputs.hr-service }}
       notification-service: ${{ steps.filter.outputs.notification-service }}
       reinsurance-service: ${{ steps.filter.outputs.reinsurance-service }}
+      accounting-service: ${{ steps.filter.outputs.accounting-service }}
+      marketing-service: ${{ steps.filter.outputs.marketing-service }}
       nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
 
     steps:
@@ -115,6 +117,24 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+            accounting-service:
+              - 'apps/accounting-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - 'infrastructure/docker-compose.prod.yml'
+              - '.github/scripts/deploy-prod.sh'
+              - '.github/scripts/deploy-common.sh'
+              - '.github/workflows/deploy-prod.yml'
+            marketing-service:
+              - 'apps/marketing-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - 'infrastructure/docker-compose.prod.yml'
+              - '.github/scripts/deploy-prod.sh'
+              - '.github/scripts/deploy-common.sh'
+              - '.github/workflows/deploy-prod.yml'
             nextjs-web:
               - 'apps/web/work-phelo-web/**'
           list-files: none
@@ -149,6 +169,10 @@ jobs:
             dockerfile: apps/notification-service/Dockerfile
           - service: reinsurance-service
             dockerfile: apps/reinsurance-service/Dockerfile
+          - service: accounting-service
+            dockerfile: apps/accounting-service/Dockerfile
+          - service: marketing-service
+            dockerfile: apps/marketing-service/Dockerfile
           - service: nextjs-web
             dockerfile: apps/web/work-phelo-web/Dockerfile
 
@@ -336,7 +360,7 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           port: 22
           source: .github/scripts/deploy-common.sh,infrastructure/docker-compose.prod.yml
-          target: ${{ env.DEPLOY_PATH }}/
+          target: ${{ env.DEPLOY_PATH }}/.incoming-${{ env.BUILD_SHA }}/
           strip_components: 0
 
       - name: Deploy via SSH

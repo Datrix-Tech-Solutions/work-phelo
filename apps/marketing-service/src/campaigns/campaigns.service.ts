@@ -12,6 +12,10 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  requireMarketingOutbound,
+  marketingScheduledDispatchEnabled,
+} from '../config/activation';
 import { campaignSmsText, estimateSmsSegments } from '../sms/sms-segments';
 import { SmsSenderIdentitiesService } from '../sms/sms-sender-identities.service';
 import { SmsWalletService } from '../sms/sms-wallet.service';
@@ -495,12 +499,14 @@ export class CampaignsService {
   }
 
   async send(user: RequestUser, id: string) {
+    requireMarketingOutbound();
     const campaign = await this.dispatchCampaign(user.tenantId, id);
     const counts = await this.countRecipients(user.tenantId, [id]);
     return this.toResponse(campaign, counts.get(id));
   }
 
   async dispatchDueScheduledCampaigns(limit = 25) {
+    if (!marketingScheduledDispatchEnabled()) return;
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
     const dueCampaigns = await this.prisma.marketingCampaign.findMany({
@@ -703,6 +709,7 @@ export class CampaignsService {
   }
 
   private async dispatchCampaign(tenantId: string, campaignId: string) {
+    requireMarketingOutbound();
     const campaign = await this.findOwned(tenantId, campaignId);
     if (!ACTIVE_SEND_STATUSES.includes(campaign.status)) {
       return campaign;

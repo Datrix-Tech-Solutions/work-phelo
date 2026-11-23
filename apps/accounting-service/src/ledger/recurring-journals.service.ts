@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
+import { accountingActivation } from '../config/activation';
 import {
   FiscalPeriodStatus,
   JournalEntryType,
@@ -263,6 +264,8 @@ export class RecurringJournalsService {
    */
   async generateDue(today: Date = new Date()): Promise<RecurringRunResult> {
     const result: RecurringRunResult = { generated: 0, failed: 0 };
+    if (!accountingActivation('ACCOUNTING_RECURRING_JOURNALS_ENABLED'))
+      return result;
     const todayIso = isoDay(today);
     const due = await this.prisma.recurringJournal.findMany({
       where: {
