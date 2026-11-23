@@ -25,7 +25,10 @@ import {
   SprintDto,
   UpdateSubtaskDto,
 } from './dto/project-work.dto';
-import { RecordProjectInvoiceDto } from './dto/project-invoice.dto';
+import {
+  RaiseProjectInvoiceDto,
+  RecordProjectInvoiceDto,
+} from './dto/project-invoice.dto';
 import { ProjectInvoicesService } from './project-invoices.service';
 import { StartTimerDto, TimeAmountDto } from './dto/project-time.dto';
 import { ProjectTimeService } from './project-time.service';
@@ -69,6 +72,34 @@ export class ProjectWorkController {
     @Req() req: Req_,
   ) {
     return this.invoices.record(req.user.tenantId, id, req.user, dto);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.invoiceOptions delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('invoices/options')
+  @ApiOperation({
+    summary: "What the invoice form offers for a project client's project",
+  })
+  invoiceOptions(@Param('id') id: string, @Req() req: Req_) {
+    return this.invoices.billingOptions(req.user.tenantId, id, req.user);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'ProjectWorkController.raiseInvoice delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Post('invoices/raise')
+  @ApiOperation({
+    summary: "Raise an invoice for a project client's project in Accounting",
+  })
+  raiseInvoice(
+    @Param('id') id: string,
+    @Body() dto: RaiseProjectInvoiceDto,
+    @Req() req: Req_,
+  ) {
+    return this.invoices.raise(req.user.tenantId, id, req.user, dto);
   }
 
   // Objectives

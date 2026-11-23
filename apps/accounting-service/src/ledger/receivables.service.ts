@@ -117,6 +117,7 @@ const receivableReceiptInclude = {
       id: true,
       status: true,
       reference: true,
+      settlementMethod: true,
       postedJournalEntryId: true,
       reversalJournalEntryId: true,
       reversalTransaction: {

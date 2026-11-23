@@ -20,6 +20,7 @@ export function SourceTypeManagePanel({
     <SidePanel
       isOpen={!!sourceType}
       onClose={onClose}
+      width="sm:w-[480px]"
       title={sourceType ? `Manage ${sourceType.name}` : 'Manage'}
       description={
         sourceType

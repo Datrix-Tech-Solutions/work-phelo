@@ -77,19 +77,58 @@ export function useProjectSubtasks(projectId: string) {
   });
 }
 
-export function useAddSubtask(projectId: string) {
+/** Changes the cached subtasks straight away and hands back what's needed to undo it. */
+function useSubtaskCache(projectId: string) {
   const queryClient = useQueryClient();
+  const key = [KEY, projectId, 'subtasks'];
+  return {
+    key,
+    queryClient,
+    /** Applies `change` to the cached list at once and returns the previous list for rolling back. */
+    async apply(change: (rows: ProjectSubtask[]) => ProjectSubtask[]) {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ProjectSubtask[]>(key);
+      queryClient.setQueryData<ProjectSubtask[]>(key, (old = []) => change(old));
+      return { previous };
+    },
+    rollback(context?: { previous?: ProjectSubtask[] }) {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+    },
+  };
+}
+
+// The subtask shows up, ticks or goes at once; the server's answer replaces it, and a failure puts it back.
+export function useAddSubtask(projectId: string) {
+  const cache = useSubtaskCache(projectId);
   return useMutation({
     mutationFn: async (dto: { taskId: string; name: string }) => {
       const res = await api.post<ProjectSubtask>(`/hr/projects/${projectId}/subtasks`, dto);
       return res.data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'subtasks'] }),
+    onMutate: (dto) => {
+      const now = new Date().toISOString();
+      const pending: ProjectSubtask = {
+        id: `pending-${Date.now()}`,
+        projectId,
+        taskId: dto.taskId,
+        name: dto.name,
+        done: false,
+        createdAt: now,
+      };
+      return cache
+        .apply((rows) => [...rows, pending])
+        .then((ctx) => ({ ...ctx, pendingId: pending.id }));
+    },
+    onSuccess: (created, _dto, ctx) =>
+      cache.queryClient.setQueryData<ProjectSubtask[]>(cache.key, (old = []) =>
+        old.map((st) => (st.id === ctx?.pendingId ? created : st)),
+      ),
+    onError: (_err, _dto, ctx) => cache.rollback(ctx),
   });
 }
 
 export function useUpdateSubtask(projectId: string) {
-  const queryClient = useQueryClient();
+  const cache = useSubtaskCache(projectId);
   return useMutation({
     mutationFn: async ({
       id,
@@ -104,17 +143,24 @@ export function useUpdateSubtask(projectId: string) {
       );
       return res.data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'subtasks'] }),
+    onMutate: ({ id, patch }) =>
+      cache.apply((rows) => rows.map((st) => (st.id === id ? { ...st, ...patch } : st))),
+    onSuccess: (updated) =>
+      cache.queryClient.setQueryData<ProjectSubtask[]>(cache.key, (old = []) =>
+        old.map((st) => (st.id === updated.id ? updated : st)),
+      ),
+    onError: (_err, _vars, ctx) => cache.rollback(ctx),
   });
 }
 
 export function useRemoveSubtask(projectId: string) {
-  const queryClient = useQueryClient();
+  const cache = useSubtaskCache(projectId);
   return useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/hr/projects/${projectId}/subtasks/${id}`);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'subtasks'] }),
+    onMutate: (id) => cache.apply((rows) => rows.filter((st) => st.id !== id)),
+    onError: (_err, _id, ctx) => cache.rollback(ctx),
   });
 }
 

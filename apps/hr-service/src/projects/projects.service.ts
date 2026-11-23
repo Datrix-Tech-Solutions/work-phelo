@@ -10,6 +10,7 @@ import {
   Prisma,
   ProjectActivityType,
   ProjectBillingType,
+  ProjectClientSource,
   ProjectKind,
   ProjectMemberRole,
   ProjectStatus,
@@ -401,31 +402,26 @@ export class ProjectsService {
     );
   }
 
-  private async canAccessProject(
+  /** Whether the employee is the project's manager, a member, or assigned to one of its tasks. */
+  private async isLinkedToProject(
     tenantId: string,
     projectId: string,
-    user: RequestUser,
+    employeeId: string,
   ) {
-    await this.assertProjectExists(tenantId, projectId);
-    if (this.canViewAllProjects(user)) return true;
-
-    const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
-    if (!actorEmployeeId) return false;
-
     const project = await this.prisma.project.findFirst({
       where: {
         id: projectId,
         tenantId,
         isArchived: false,
         OR: [
-          { managerId: actorEmployeeId },
-          { members: { some: { employeeId: actorEmployeeId } } },
+          { managerId: employeeId },
+          { members: { some: { employeeId } } },
           {
             tasks: {
               some: {
                 OR: [
-                  { assignedEmployeeId: actorEmployeeId },
-                  { assignees: { some: { employeeId: actorEmployeeId } } },
+                  { assignedEmployeeId: employeeId },
+                  { assignees: { some: { employeeId } } },
                 ],
               },
             },
@@ -434,8 +430,22 @@ export class ProjectsService {
       },
       select: { id: true },
     });
-
     return Boolean(project);
+  }
+
+  private async canAccessProject(
+    tenantId: string,
+    projectId: string,
+    user: RequestUser,
+  ) {
+    if (this.canViewAllProjects(user)) {
+      await this.assertProjectExists(tenantId, projectId);
+      return true;
+    }
+    await this.assertProjectExists(tenantId, projectId);
+    const actorEmployeeId = await this.getActorEmployeeId(tenantId, user);
+    if (!actorEmployeeId) return false;
+    return this.isLinkedToProject(tenantId, projectId, actorEmployeeId);
   }
 
   /** For other project services: the caller must be able to see the project. */
@@ -445,13 +455,21 @@ export class ProjectsService {
 
   /** For other project services: who the caller is on the project, and whether they manage its work. */
   async getWorkAccess(tenantId: string, projectId: string, user: RequestUser) {
-    await this.assertCanView(tenantId, projectId, user);
+    // A missing project is rejected before anything else is looked up.
+    await this.assertProjectExists(tenantId, projectId);
     const employeeId = await this.getActorEmployeeId(tenantId, user);
     const membership = await this.getProjectMembership(
       tenantId,
       projectId,
       employeeId,
     );
+    // A member can always see the project; only someone else needs the wider check.
+    if (!membership && !this.canViewAllProjects(user)) {
+      this.assertAccess(
+        !!employeeId &&
+          (await this.isLinkedToProject(tenantId, projectId, employeeId)),
+      );
+    }
     return {
       employeeId,
       canManage: this.canEditTask(user) || this.isProjectLead(membership?.role),
@@ -690,6 +708,31 @@ export class ProjectsService {
     );
   }
 
+  /**
+   * The client a client project is for. A project client is checked against the tenant's own list
+   * and named from it; a marketing client keeps the id and name the form sent (null source).
+   */
+  private async resolveClient(tenantId: string, dto: CreateProjectDto) {
+    if (dto.kind !== ProjectKind.CLIENT || !dto.clientId) return null;
+    if (dto.clientSource !== 'PROJECT') {
+      return {
+        id: dto.clientId,
+        name: dto.clientName || null,
+        source: null,
+      };
+    }
+    const client = await this.prisma.projectClient.findFirst({
+      where: { id: dto.clientId, tenantId },
+      select: { id: true, name: true },
+    });
+    if (!client) throw new BadRequestException('Choose an existing client');
+    return {
+      id: client.id,
+      name: client.name,
+      source: ProjectClientSource.PROJECT,
+    };
+  }
+
   async create(tenantId: string, user: RequestUser, dto: CreateProjectDto) {
     this.assertAccess(this.canCreateProject(user));
 
@@ -701,6 +744,7 @@ export class ProjectsService {
       await this.ensureEmployee(tenantId, dto.managerId);
     }
 
+    const client = await this.resolveClient(tenantId, dto);
     const pricingColumns = this.pricingColumns(
       dto.kind,
       dto.billable,
@@ -722,10 +766,9 @@ export class ProjectsService {
           kind: dto.kind,
           templateName: dto.templateName?.trim() || null,
           config: dto.config as unknown as Prisma.InputJsonValue,
-          clientId:
-            dto.kind === ProjectKind.CLIENT ? dto.clientId || null : null,
-          clientName:
-            dto.kind === ProjectKind.CLIENT ? dto.clientName || null : null,
+          clientId: client?.id ?? null,
+          clientName: client?.name ?? null,
+          clientSource: client?.source ?? null,
           billable: pricingColumns ? true : false,
           ...(pricingColumns ?? {}),
         },

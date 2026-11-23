@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useCreateEntityType, useUpdateEntityType } from '@/hooks';
@@ -64,11 +64,12 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
   };
 
   return (
-    <SidePanel
+    <Modal
       isOpen={isOpen}
       onClose={handleClose}
       title={isEditing ? 'Update Type' : 'Add Type'}
       description="Define a new entity type available in the Type field."
+      width="max-w-md"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
@@ -80,7 +81,7 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
         </div>
       }
     >
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 mt-4">
         <FormField
           label="Name"
           registration={register('name', { required: 'Name is required' })}
@@ -97,6 +98,6 @@ export function AddEntityTypePanel({ isOpen, onClose, entityType }: AddEntityTyp
           placeholder="e.g. SUP"
         />
       </div>
-    </SidePanel>
+    </Modal>
   );
 }

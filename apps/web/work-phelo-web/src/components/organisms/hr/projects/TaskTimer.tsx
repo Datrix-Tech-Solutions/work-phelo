@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Pause, Pencil, Play, Plus } from 'lucide-react';
+import { CheckCircle2, Pause, Pencil, Play, Plus } from 'lucide-react';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { ConfirmModal } from '@/components/organisms/hr/payroll/pay-components/ConfirmModal';
 import { Button } from '@/components/atoms/Button';
-import { useMyProfile } from '@/hooks';
+import { useMyProfile, useProjectSetup, useUpdateTaskStatus } from '@/hooks';
 import { TimeEntryModal } from '@/components/organisms/hr/projects/TimeEntryModal';
 import { useProjectInvoices } from '@/hooks/hr/useProjectInvoices';
 import {
@@ -32,7 +33,10 @@ export function TaskTimer({ taskId, projectId, canTrack, finished }: Props) {
   const { data: myRunning = [] } = useMyRunningTimers();
   const { start, pause, add, setMine } = useTaskTimeActions(projectId);
   const save = useSaveWithToast();
+  const updateStatus = useUpdateTaskStatus();
+  const workflow = useProjectSetup(projectId)?.config?.workflow;
   const { active: invoices } = useProjectInvoices(projectId);
+  const [completing, setCompleting] = useState(false);
   const [entry, setEntry] = useState<'add' | 'set' | null>(null);
   const [asking, setAsking] = useState<{ taskId: string; taskName: string }[] | null>(null);
 
@@ -47,6 +51,18 @@ export function TaskTimer({ taskId, projectId, canTrack, finished }: Props) {
   // Once the task's time is on an invoice that still stands, the time is locked.
   const locked = invoices.some((i) => i.lines.some((l) => l.key === taskId));
   const myMs = mine ? timerElapsedMs(mine, now) : 0;
+
+  // Ending the task moves it to Done (the last stage of a workflow); the server stops everyone's timer.
+  const handleComplete = async () => {
+    await save(
+      updateStatus.mutateAsync(
+        workflow?.length
+          ? { taskId, stage: workflow[workflow.length - 1] }
+          : { taskId, status: 'DONE' },
+      ),
+    );
+    setCompleting(false);
+  };
 
   const handleStart = () => {
     const others = othersRunning();
@@ -83,14 +99,24 @@ export function TaskTimer({ taskId, projectId, canTrack, finished }: Props) {
         </p>
       )}
 
-      {canTrack && !locked && (
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setEntry('add')} disabled={!me}>
-            <Plus className="w-4 h-4 mr-1.5" /> Add Time
-          </Button>
-          {mine && (
+      {canTrack && (!locked || !finished) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {!locked && (
+            <Button variant="outline" onClick={() => setEntry('add')} disabled={!me}>
+              <Plus className="w-4 h-4 mr-1.5" /> Add Time
+            </Button>
+          )}
+          {!locked && mine && (
             <Button variant="outline" onClick={() => setEntry('set')}>
               <Pencil className="w-4 h-4 mr-1.5" /> Edit My Time
+            </Button>
+          )}
+          {!finished && (
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white border-green-600"
+              onClick={() => setCompleting(true)}
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5" /> Complete Task
             </Button>
           )}
         </div>
@@ -127,6 +153,16 @@ export function TaskTimer({ taskId, projectId, canTrack, finished }: Props) {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={completing}
+        title="Complete task"
+        description="Mark this task as done? Any running timers will stop, and the task can't be timed any more."
+        confirmLabel="Complete Task"
+        isLoading={updateStatus.isPending}
+        onCancel={() => setCompleting(false)}
+        onConfirm={handleComplete}
+      />
 
       <Modal
         isOpen={!!asking}

@@ -53,6 +53,19 @@ export const SOURCE_REGISTRY: Partial<
     },
     direction: 'PAYABLE',
   },
+  // Invoices raised from project management for its own (project) clients. Marketing's clients are
+  // still billed through MARKETING, so each client's entity is only ever touched by one source.
+  PROJECTS: {
+    module: 'PROJECTS',
+    // Projects live in the HR module, so the tenant's HR switch turns this source on.
+    moduleConfigKey: 'hr',
+    sourceName: 'Project Billing',
+    serviceName: 'hr-service',
+    callback: {
+      baseUrlEnv: 'HR_SERVICE_URL',
+      path: '/internal/accounting-events',
+    },
+  },
   HR: {
     module: 'HR',
     moduleConfigKey: 'hr',

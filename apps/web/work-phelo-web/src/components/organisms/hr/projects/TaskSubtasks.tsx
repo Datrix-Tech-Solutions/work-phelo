@@ -62,7 +62,7 @@ export function TaskSubtasks({ projectId, taskId, canModify }: Props) {
               <input
                 type="checkbox"
                 checked={st.done}
-                disabled={!canModify}
+                disabled={!canModify || st.id.startsWith('pending-')}
                 onChange={() =>
                   save(updateSubtask.mutateAsync({ id: st.id, patch: { done: !st.done } }))
                 }
@@ -81,6 +81,7 @@ export function TaskSubtasks({ projectId, taskId, canModify }: Props) {
                 <button
                   type="button"
                   aria-label={`Remove ${st.name}`}
+                  disabled={st.id.startsWith('pending-')}
                   onClick={() => save(removeSubtask.mutateAsync(st.id))}
                   className="p-0.5 text-gray-400 hover:text-red-600 transition-colors"
                 >

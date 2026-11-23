@@ -12,6 +12,8 @@ interface ConfirmModalProps {
   cancelLabel?: string;
   /** Destructive actions use the red button. */
   danger?: boolean;
+  /** Keeps the confirm button spinning while the action runs. */
+  isLoading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: React.ReactNode;
@@ -25,6 +27,7 @@ export function ConfirmModal({
   confirmLabel,
   cancelLabel = 'Cancel',
   danger = false,
+  isLoading = false,
   onConfirm,
   onCancel,
   children,
@@ -37,10 +40,10 @@ export function ConfirmModal({
       description={description}
       footer={
         <>
-          <Button variant="ghost" onClick={onCancel}>
+          <Button variant="ghost" onClick={onCancel} disabled={isLoading}>
             {cancelLabel}
           </Button>
-          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>
+          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} isLoading={isLoading}>
             {confirmLabel}
           </Button>
         </>
