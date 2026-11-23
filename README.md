@@ -410,13 +410,15 @@ builds and deployment failure tests provide local evidence. Subscription's healt
 test covers only its scaffold; this is not evidence of billing implementation.
 Local totals: Accounting 814; Marketing 982; Inventory 374 (all database tests
 enabled); Gateway 68; internal-auth 40; focused Auth 50; focused HR 14;
-Subscription health 1; deployment safety 7; synthetic context probes 9.
+Subscription health/startup 2; deployment safety 7; synthetic context probes 9.
 Accounting, Marketing, Inventory, Subscription, Gateway, Auth and HR local builds
 and typechecks pass. Auth lint retains existing non-blocking warnings. Clean
 Linux/AMD64 builds include service-owned Prisma generation. Docker Hub TLS and
 initial local dependency-resolution failures were retried, not hidden by code changes.
 Inventory test-only corrections await async rejections, create the required
 variant fixture and align invoice-aware fixtures without weakening assertions.
+Subscription registers shutdown hooks: its original bootstrap required forced
+container termination; a focused lifecycle regression protects the correction.
 
 One unchanged DEV Inventory migration has a trailing blank line. Its bytes are
 preserved for Prisma checksum compatibility rather than reformatted; default

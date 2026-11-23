@@ -1023,6 +1023,8 @@
     "apps/reinsurance-service/Dockerfile.dockerignore",
     "apps/subscription-service/Dockerfile.dockerignore",
     "apps/subscription-service/src/health/health.controller.spec.ts",
+    "apps/subscription-service/src/main.spec.ts",
+    "apps/subscription-service/src/main.ts",
     "infrastructure/docker-compose.prod.yml",
     "package-lock.json",
     "package.json"
@@ -1036,11 +1038,12 @@
     "internalAuthTests": 40,
     "focusedAuthTests": 50,
     "focusedHrTests": 14,
-    "subscriptionHealthTests": 1,
+    "subscriptionHealthTests": 2,
     "deploymentSafetyTests": 7,
     "contextProbes": 9,
     "productionDatabaseVerified": false,
-    "whitespace": "One inherited trailing blank line in immutable DEV Inventory migration; preserved to match DEV checksum"
+    "whitespace": "One inherited trailing blank line in immutable DEV Inventory migration; preserved to match DEV checksum",
+    "subscriptionShutdown": "Original scaffold required forced stop; corrected with Nest shutdown hooks and bootstrap regression"
   },
   "productionConfiguration": {
     "coreSecrets": "Names verified present; validity/connectivity unverified",
