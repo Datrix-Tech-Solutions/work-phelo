@@ -181,12 +181,13 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
 
 /**
  * The top-nav tabs. Each one owns the sidebar group whose label matches `groupLabel`; every other
- * group in MARKETING_NAV_GROUPS is a constant that always shows.
+ * group in MARKETING_NAV_GROUPS is a constant that always shows. `featureKey` is the tenant feature
+ * switch (superadmin module configuration) that turns the whole tab, and its pages, on or off.
  */
 export const MARKETING_TABS = [
-  { key: 'campaign', label: 'Campaign', groupLabel: 'Campaign' },
-  { key: 'prospecting', label: 'Sales CRM', groupLabel: 'Sales CRM' },
-  { key: 'transport', label: 'Transport', groupLabel: 'Transport' },
+  { key: 'campaign', label: 'Campaign', groupLabel: 'Campaign', featureKey: 'campaign' },
+  { key: 'prospecting', label: 'Sales CRM', groupLabel: 'Sales CRM', featureKey: 'sales-crm' },
+  { key: 'transport', label: 'Transport', groupLabel: 'Transport', featureKey: 'transport' },
 ] as const;
 
 export type MarketingTabKey = (typeof MARKETING_TABS)[number]['key'];

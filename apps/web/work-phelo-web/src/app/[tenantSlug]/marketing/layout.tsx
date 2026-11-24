@@ -45,11 +45,20 @@ export default function MarketingLayout({
 
   // A page shows in the menu only when the user can open at least one of its tabs.
   const { canSeePage, canSeeTab, tabsOf, isResolving, isMarketer } = useMarketingAccess();
+  // A feature the tenant has switched off loses its whole group, so none of its pages are offered.
+  const featureConfig = user?.featureConfig?.marketing;
+  const offGroupLabels: string[] = MARKETING_TABS.filter((t) => !featureConfig?.[t.featureKey]).map(
+    (t) => t.groupLabel,
+  );
+  const offPages = MARKETING_NAV_GROUPS.filter((g) => offGroupLabels.includes(g.label)).flatMap(
+    (g) => g.items.map((item) => item.key),
+  );
   const allGroups = MARKETING_NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.map(prefixItem).map((item) => ({
       ...item,
-      enabled: item.enabled !== false && canSeePage(item.key),
+      enabled:
+        item.enabled !== false && !offGroupLabels.includes(group.label) && canSeePage(item.key),
     })),
   }));
 
@@ -91,7 +100,9 @@ export default function MarketingLayout({
   const blocked =
     !isResolving &&
     !!page &&
-    (!canSeePage(page) || (!!tab && tabsOf(page).includes(tab) && !canSeeTab(page, tab)));
+    (offPages.includes(page) ||
+      !canSeePage(page) ||
+      (!!tab && tabsOf(page).includes(tab) && !canSeeTab(page, tab)));
 
   // Anyone who is not a module user lands on, and stays within, the pages open to every employee.
   const router = useRouter();
