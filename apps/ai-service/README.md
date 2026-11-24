@@ -618,14 +618,18 @@ keys. Unknown or unavailable historical keys cannot block deletion.
 - `AI_RETENTION_SCHEDULER_ENABLED=false` by default; additionally enables the
   process timer only when cleanup is enabled. No eager startup cleanup runs.
 - `AI_CLEANUP_BATCH_SIZE=25`, integer 1..100: each batch deletes at most this
-  many parent rows and separately this many receipt candidates.
+  many message, parent, receipt and expired nonce rows separately. This is a
+  maintenance work budget, not a tenant/user business quota.
 - `AI_CLEANUP_INTERVAL_MS=60000`, integer 1000..3600000: timer interval.
 - Production cleanup is rejected even if flags are supplied. A separately
   reviewed policy/enablement change is required before production activation.
 
 Each batch is one bounded AI-only transaction. Expired parents are selected by
-`(expiresAt,id)` with `FOR UPDATE SKIP LOCKED`, then deleted with the FK message
-cascade. Multiple workers claim disjoint locked rows; no process-local flag is
+`(expiresAt,id)` with `FOR UPDATE SKIP LOCKED`. At most batch-size child messages
+are locked with `SKIP LOCKED` and deleted before selected empty parents. A dense
+expired parent may remain over several passes, still hidden from all user APIs;
+deleting a parent has no remaining child cascade to amplify the work. Multiple
+workers claim disjoint locked rows; no process-local flag is
 used as the cross-replica safety mechanism. A local timer overlap guard merely
 avoids redundant calls. Locked rows may remain until a later batch, including
 rows briefly locked by an owner deletion that ultimately returns 404.
@@ -633,14 +637,18 @@ rows briefly locked by an owner deletion that ultimately returns 404.
 Expired receipt rows are also selected with `FOR UPDATE SKIP LOCKED`. Append
 receipts additionally require a nonblocking try-lock of the exact existing
 receipt-key advisory scope. A key held by an in-flight append is skipped rather
-than waiting in reversed lock order. Other receipt enum values have no live
-writers/replay handlers today; future handlers must establish compatible locking
-before use. Live receipts and nonexpired parents are preserved.
+than waiting in reversed lock order. CREATE receipts expire with their parent;
+expired-key reuse after purge is a new operation. Live receipts and nonexpired
+parents are preserved. Expired nonce rows are independently claimed with
+`FOR UPDATE SKIP LOCKED`; their existing proof/deadline-plus-margin expiry is
+unchanged. Still-valid replay digests are never removed.
 
-Batch bounds count parent rows, not their cascaded child fanout. SQL and overall
-transaction deadlines bound execution, but an oversized aggregate could repeatedly
-time out; per-conversation storage limits or another approved deletion strategy
-remain a pre-production capacity decision. No unbounded drain loop is installed.
+Batch mutation bounds apply separately to all four row families. SQL and overall
+transaction deadlines still bound execution, and no unbounded drain loop is
+installed. Aggregate live storage, request volume and shared concurrency remain
+unlimited by this maintenance change; see
+[Operational Readiness Phase 1](./OPERATIONAL_READINESS_PHASE1.md) for the explicit
+shared-throttling and capacity decisions still awaiting approval.
 Failure rolls back the whole current batch; previously committed batches remain
 committed. Interrupted batches can be retried explicitly without duplicate
 effects. Arbitrary failures do not retry indefinitely.
@@ -648,8 +656,9 @@ effects. Arbitrary failures do not retry indefinitely.
 ### Content-free observability
 
 Per-process diagnostics expose last successful batch database timestamp, cumulative
-parent/receipt deletion counts, last duration, failure count, conversation backlog
-sample and oldest expired age. The backlog sample is index-ordered and capped at
+parent/message/receipt/nonce deletion counts, last duration, failure count,
+conversation/receipt/nonce backlog samples and oldest expired conversation age.
+Each backlog sample is index-ordered and capped at
 1000 with an explicit capped indicator; it is not an exact unbounded COUNT or a
 physical-erasure guarantee. Success/failure logs use fixed event names and only
 these scalar counts/times. No tenant/user/conversation identifiers, message text,
