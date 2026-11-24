@@ -3,6 +3,7 @@ import type { SourceModule } from '@/types/accounting';
 /** What a record from each module is called, shown instead of the raw reference stored on its entity. */
 const SOURCE_RECORD_LABELS: Partial<Record<SourceModule, string>> = {
   MARKETING: 'Marketing client',
+  PROJECTS: 'Project client',
 };
 
 /**
@@ -22,4 +23,5 @@ export const SOURCE_MODULE_LABELS: Record<SourceModule, string> = {
   ACCOUNTING: 'Accounting',
   RECRUITMENT: 'Recruitment',
   OPERATIONS: 'Operations',
+  PROJECTS: 'Projects',
 };

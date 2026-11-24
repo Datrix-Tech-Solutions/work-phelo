@@ -8,6 +8,9 @@ import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { CashAccountOverview } from '@/components/molecules/accounting/CashAccountOverview';
 import { ReconcileCashAccountModal } from '@/components/organisms/accounting/panels/ReconcileCashAccountModal';
 import { GLAccountLedger } from '@/components/organisms/accounting/GLAccountLedger';
+import { BankReconciliationsTab } from '@/components/organisms/accounting/BankReconciliationsTab';
+import { TabBar } from '@/components/molecules/shared/TabBar';
+import { useBankStatementDraftStore } from '@/store/bankStatementDraft.store';
 import { useCashAccount, useCashAccountStats } from '@/hooks';
 
 function formatTotals(totals: Record<string, number> | undefined) {
@@ -22,6 +25,11 @@ function formatTotals(totals: Record<string, number> | undefined) {
     .join(' · ');
 }
 
+const TABS = [
+  { key: 'ledger', label: 'Ledger' },
+  { key: 'reconciliations', label: 'Reconciliations' },
+];
+
 export default function CashAccountDetailPage({
   params,
 }: {
@@ -32,6 +40,8 @@ export default function CashAccountDetailPage({
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('ledger');
+  const setStatementRows = useBankStatementDraftStore((state) => state.setRows);
 
   const { data: account, isLoading } = useCashAccount(cashAccountId);
   const { data: stats, isLoading: isLoadingStats } = useCashAccountStats(account?.glAccountId, {
@@ -85,23 +95,41 @@ export default function CashAccountDetailPage({
             />
           </div>
 
-          <GLAccountLedger
-            accountId={account.glAccountId}
-            fromDate={fromDate}
-            toDate={toDate}
-            onFromDateChange={setFromDate}
-            onToDateChange={setToDate}
-            onReconcile={() => setReconcileOpen(true)}
-          />
+          <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+
+          {activeTab === 'ledger' ? (
+            <GLAccountLedger
+              accountId={account.glAccountId}
+              fromDate={fromDate}
+              toDate={toDate}
+              onFromDateChange={setFromDate}
+              onToDateChange={setToDate}
+              onReconcile={() => setReconcileOpen(true)}
+            />
+          ) : (
+            <BankReconciliationsTab
+              cashAccountId={cashAccountId}
+              detailBase={`${base}/${cashAccountId}/reconciliations`}
+              onReconcile={() => setReconcileOpen(true)}
+            />
+          )}
           {reconcileOpen && (
             <ReconcileCashAccountModal
               accountName={account.name}
               onClose={() => setReconcileOpen(false)}
-              onReconcile={({ fromDate, toDate, bankOpeningBalance, bankClosingBalance }) =>
+              onReconcile={({
+                fromDate,
+                toDate,
+                bankOpeningBalance,
+                bankClosingBalance,
+                statementRows,
+              }) => {
+                // The values go to the reconcile page in memory; the file is not kept.
+                setStatementRows(cashAccountId, statementRows);
                 router.push(
                   `${base}/${cashAccountId}/reconcile?from=${fromDate}&to=${toDate}&bankOpening=${encodeURIComponent(bankOpeningBalance)}&bankClosing=${encodeURIComponent(bankClosingBalance)}`,
-                )
-              }
+                );
+              }}
             />
           )}
         </>

@@ -100,7 +100,8 @@ export class CreateSourceTransactionDto extends SourceTransactionsQueryDto {
 
   @ApiProperty({
     format: 'uuid',
-    description: 'A Receivable transaction type linked to the source.',
+    description:
+      'A transaction type linked to the source: receivable, or payable for a module that pays out.',
   })
   @IsUUID()
   transactionTypeId!: string;

@@ -1,8 +1,11 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
@@ -13,6 +16,8 @@ import {
   StockMovementType,
 } from '../prisma/generated/client';
 import { PrismaService } from './prisma/prisma.service';
+import { AccountingClient } from './accounting/accounting.client';
+import { callAccounting } from './accounting/call-accounting';
 import {
   ItemDto,
   BulkImportItemsDto,
@@ -90,6 +95,9 @@ const PAYMENT_SHARES = {
         notes: true,
         createdBy: true,
         createdAt: true,
+        // A payment Accounting rejected stays in the history but no longer counts as paid.
+        status: true,
+        accountingTransactionId: true,
       },
     },
   },
@@ -108,7 +116,12 @@ const PAID_ON_RECEIPT = ['due on receipt', 'cash on delivery'];
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(InventoryService.name);
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional so the service still works where Accounting is not wired in.
+    @Optional() private readonly accounting?: AccountingClient,
+  ) {}
   private async write<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -1157,7 +1170,7 @@ export class InventoryService {
             'An order that has received stock cannot be cancelled: close it instead',
           );
         const paid = await tx.purchaseOrderPayment.count({
-          where: { tenantId, purchaseOrderId: order.id },
+          where: { tenantId, purchaseOrderId: order.id, payment: { status: 'RECORDED' } },
         });
         if (paid > 0)
           throw new ConflictException(
@@ -1331,7 +1344,12 @@ export class InventoryService {
         async (tx) => {
           const supplier = await tx.inventoryParty.findFirst({
             where: { tenantId, id: dto.supplierId },
-            select: { kind: true },
+            select: {
+              kind: true,
+              name: true,
+              accountingEntityId: true,
+              accountingEntityTypeId: true,
+            },
           });
           if (!supplier || supplier.kind !== 'SUPPLIER')
             throw new NotFoundException('Supplier not found');
@@ -1340,7 +1358,11 @@ export class InventoryService {
           await tx.$queryRaw`SELECT "id" FROM "inventory"."PurchaseOrder" WHERE "tenantId" = ${tenantId} AND "id" IN (${Prisma.join(sorted)}) ORDER BY "id" FOR UPDATE`;
           const orders = await tx.purchaseOrder.findMany({
             where: { tenantId, id: { in: ids } },
-            include: { lines: true, payments: { select: { amount: true } } },
+            include: {
+              lines: true,
+              // A payment Accounting rejected no longer counts as paid.
+              payments: { where: { payment: { status: 'RECORDED' } }, select: { amount: true } },
+            },
           });
           if (orders.length !== ids.length) throw new NotFoundException('Purchase order not found');
           let total = new StockDecimal(0);
@@ -1360,8 +1382,35 @@ export class InventoryService {
               );
             total = total.plus(amount);
           }
+          const paymentId = randomUUID();
+          // Linked payments are told to Accounting while the orders are still locked, so nothing is
+          // saved here unless Accounting took it.
+          const link = dto.accounting
+            ? await this.raiseInAccounting(userId, {
+                tenantId,
+                paymentId,
+                supplierId: dto.supplierId,
+                supplier,
+                total,
+                orderReferences: dto.allocations.map(
+                  (a) => orders.find((o) => o.id === a.purchaseOrderId)!.reference,
+                ),
+                dto,
+              })
+            : null;
+          if (link && !supplier.accountingEntityId) {
+            await tx.inventoryParty.update({
+              where: { tenantId_id: { tenantId, id: dto.supplierId } },
+              data: {
+                accountingEntityId: link.entityId,
+                accountingEntityTypeId: link.entityTypeId || null,
+              },
+            });
+          }
           return tx.supplierPayment.create({
             data: {
+              id: paymentId,
+              accountingTransactionId: link?.transactionId ?? null,
               tenantId,
               supplierId: dto.supplierId,
               reference: dto.reference ?? null,
@@ -1385,6 +1434,110 @@ export class InventoryService {
       ),
     );
   }
+  /**
+   * Whether supplier payments can be recorded in Accounting, and what the form should offer. Never
+   * fails: when Accounting is unavailable the payment form simply works without the link.
+   */
+  async supplierPaymentAccountingOptions(tenantId: string, userId: string, supplierId?: string) {
+    const unavailable = (reason: string) => ({
+      ready: false,
+      reason,
+      entityTypes: [],
+      transactionTypes: [],
+      supplierEntityTypeId: null as string | null,
+    });
+    if (!this.accounting?.isConfigured()) return unavailable('NOT_CONFIGURED');
+    try {
+      const options = await callAccounting(this.logger, () =>
+        this.accounting!.getOptions(tenantId, userId),
+      );
+      const supplier = supplierId
+        ? await this.prisma.inventoryParty.findFirst({
+            where: { tenantId, id: supplierId },
+            select: { accountingEntityTypeId: true },
+          })
+        : null;
+      return { ...options, supplierEntityTypeId: supplier?.accountingEntityTypeId ?? null };
+    } catch (error) {
+      if (error instanceof BadGatewayException) return unavailable('UNAVAILABLE');
+      throw error;
+    }
+  }
+
+  private async raiseInAccounting(
+    userId: string,
+    input: {
+      tenantId: string;
+      paymentId: string;
+      supplierId: string;
+      supplier: {
+        name: string;
+        accountingEntityId: string | null;
+        accountingEntityTypeId: string | null;
+      };
+      total: Prisma.Decimal;
+      orderReferences: string[];
+      dto: SupplierPaymentDto;
+    },
+  ) {
+    const { dto, supplier, total } = input;
+    const accounting = dto.accounting!;
+    if (!this.accounting?.isConfigured())
+      throw new ConflictException('Accounting is not set up for this workspace');
+    // Accounting keeps money to the cent, inventory to a tenth of a cent.
+    if (!total.mul(100).isInteger())
+      throw new BadRequestException(
+        'A payment recorded in Accounting cannot have more than two decimal places',
+      );
+    if (!supplier.accountingEntityId && !accounting.entityTypeId)
+      throw new BadRequestException(
+        'Choose which Accounting entity type this supplier is recorded under',
+      );
+    const note = dto.reference ? ` (${dto.reference})` : '';
+    return callAccounting(this.logger, () =>
+      this.accounting!.createTransaction(
+        {
+          tenantId: input.tenantId,
+          idempotencyKey: `supplier-payment:${input.paymentId}`,
+          externalRef: input.supplierId,
+          entityName: supplier.name,
+          ...(supplier.accountingEntityId
+            ? { entityId: supplier.accountingEntityId }
+            : { entityTypeId: accounting.entityTypeId }),
+          transactionTypeId: accounting.transactionTypeId,
+          amount: Number(total.toFixed(2)),
+          description: `Payment for ${input.orderReferences.join(', ')}${note}`.slice(0, 500),
+        },
+        userId,
+      ),
+    );
+  }
+
+  /**
+   * Accounting tells us what happened to a payment it was given. Only a rejection matters here: the
+   * payment then no longer counts as paid. Posting or reversing in Accounting leaves inventory as
+   * it is. Safe to receive more than once.
+   */
+  async handleAccountingEvent(dto: {
+    tenantId: string;
+    transactionId: string;
+    event: 'POSTED' | 'REVERSED' | 'REJECTED';
+  }) {
+    const where = { tenantId: dto.tenantId, accountingTransactionId: dto.transactionId };
+    const payment = await this.prisma.supplierPayment.findFirst({
+      where,
+      select: { id: true },
+    });
+    if (!payment) return { handled: false };
+    if (dto.event === 'REJECTED') {
+      await this.prisma.supplierPayment.updateMany({
+        where: { ...where, status: 'RECORDED' },
+        data: { status: 'REJECTED', rejectedAt: new Date() },
+      });
+    }
+    return { handled: true };
+  }
+
   private async requireLocations(tx: Prisma.TransactionClient, tenantId: string, ids: string[]) {
     const rows = await tx.stockLocation.findMany({
       where: { tenantId, id: { in: ids } },

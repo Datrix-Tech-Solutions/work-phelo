@@ -797,6 +797,7 @@ model BankReconciliation {
   updatedAt          DateTime                 @updatedAt
   cashAccount        AccountingCashAccount    @relation(fields: [cashAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   statementLines     BankStatementLine[]
+  reconciledEntries  BankReconciledEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, cashAccountId, statementReference])
@@ -805,33 +806,49 @@ model BankReconciliation {
   @@schema("accounting")
 }
 
+/// A ledger line (on the cash account's GL account) the user ticked off as reconciled. Reconciling
+/// is a tick-off: the reconciled bank rows and these entries must total the same, with no pairing.
+model BankReconciledEntry {
+  id               String             @id @default(uuid())
+  tenantId         String
+  reconciliationId String
+  journalLineId    String
+  /// The tick-off group this entry was reconciled in, with the statement rows carrying the same number.
+  matchGroup       Int                @default(0)
+  createdAt        DateTime           @default(now())
+  reconciliation   BankReconciliation @relation(fields: [reconciliationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalLine      JournalLine        @relation(fields: [journalLineId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, journalLineId])
+  @@index([tenantId, reconciliationId])
+  @@schema("accounting")
+}
+
 model BankStatementLine {
-  id                           String                  @id @default(uuid())
-  tenantId                     String
-  reconciliationId             String
-  lineNumber                   Int
-  transactionDate              DateTime
-  valueDate                    DateTime?
-  amount                       Decimal                 @db.Decimal(20, 4)
-  currency                     String
-  description                  String?
-  bankReference                String?
-  counterpartyName             String?
-  runningBalance               Decimal?                @db.Decimal(20, 4)
-  sourceFingerprint            String
-  status                       BankStatementLineStatus @default(UNMATCHED)
-  matchedCashbookTransactionId String?
-  matchedByUserId              String?
-  matchedAt                    DateTime?
-  createdAt                    DateTime                @default(now())
-  updatedAt                    DateTime                @updatedAt
-  reconciliation               BankReconciliation      @relation(fields: [reconciliationId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  matchedCashbookTransaction   CashbookTransaction?    @relation("BankStatementLineMatchedCashbook", fields: [matchedCashbookTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  id               String                  @id @default(uuid())
+  tenantId         String
+  reconciliationId String
+  lineNumber       Int
+  transactionDate  DateTime
+  valueDate        DateTime?
+  amount           Decimal                 @db.Decimal(20, 4)
+  currency         String
+  description      String?
+  bankReference    String?
+  counterpartyName String?
+  runningBalance   Decimal?                @db.Decimal(20, 4)
+  status           BankStatementLineStatus @default(UNMATCHED)
+  /// The tick-off group this row was reconciled in; null while unmatched.
+  matchGroup       Int?
+  matchedByUserId  String?
+  matchedAt        DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  reconciliation   BankReconciliation      @relation(fields: [reconciliationId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([reconciliationId, lineNumber])
-  @@unique([reconciliationId, matchedCashbookTransactionId])
-  @@unique([tenantId, reconciliationId, sourceFingerprint])
   @@index([tenantId, reconciliationId, status, transactionDate])
   @@index([tenantId, bankReference])
   @@schema("accounting")
@@ -902,7 +919,6 @@ model CashbookTransaction {
   reversalJournalEntry          JournalEntry?                @relation("CashbookReversalJournal", fields: [reversalJournalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalOfTransaction         CashbookTransaction?         @relation("CashbookTransactionReversal", fields: [reversalOfTransactionId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalTransaction           CashbookTransaction?         @relation("CashbookTransactionReversal")
-  bankStatementMatches          BankStatementLine[]          @relation("BankStatementLineMatchedCashbook")
   receivableReceipt             AccountingReceivableReceipt? @relation("ReceivableCashbookTransaction")
   payablePayment                AccountingPayablePayment?    @relation("PayableCashbookTransaction")
   sourceLedgerAllocations       SourceLedgerAllocation[]
@@ -1463,24 +1479,25 @@ model AccountingPayableAllocation {
 }
 
 model JournalLine {
-  id                 String            @id @default(uuid())
-  tenantId           String
-  journalEntryId     String
-  lineNumber         Int
-  glAccountId        String
-  subledgerAccountId String?
-  costCentreId       String?
-  description        String?
-  transactionDebit   Decimal           @default(0) @db.Decimal(20, 4)
-  transactionCredit  Decimal           @default(0) @db.Decimal(20, 4)
-  baseDebit          Decimal           @default(0) @db.Decimal(20, 4)
-  baseCredit         Decimal           @default(0) @db.Decimal(20, 4)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  journalEntry       JournalEntry      @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  glAccount          GLAccount         @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  subledgerAccount   SubledgerAccount? @relation(fields: [subledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  costCentre         CostCentre?       @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  id                    String                @id @default(uuid())
+  tenantId              String
+  journalEntryId        String
+  lineNumber            Int
+  glAccountId           String
+  subledgerAccountId    String?
+  costCentreId          String?
+  description           String?
+  transactionDebit      Decimal               @default(0) @db.Decimal(20, 4)
+  transactionCredit     Decimal               @default(0) @db.Decimal(20, 4)
+  baseDebit             Decimal               @default(0) @db.Decimal(20, 4)
+  baseCredit            Decimal               @default(0) @db.Decimal(20, 4)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  journalEntry          JournalEntry          @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount             GLAccount             @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  subledgerAccount      SubledgerAccount?     @relation(fields: [subledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre            CostCentre?           @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  bankReconciledEntries BankReconciledEntry[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, journalEntryId, lineNumber])
@@ -1597,6 +1614,7 @@ enum SourceModule {
   ACCOUNTING
   RECRUITMENT
   OPERATIONS
+  PROJECTS
 
   @@schema("accounting")
 }
@@ -1762,6 +1780,7 @@ model BudgetLine {
 enum AccountingSourceTransactionKind {
   INVOICE
   RECEIPT
+  PAYMENT
 
   @@schema("accounting")
 }

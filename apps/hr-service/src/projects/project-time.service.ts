@@ -29,6 +29,11 @@ export class ProjectTimeService {
    *  `seconds`: its `runningSince` is sent so the stretch since then can be counted live. */
   async summary(tenantId: string, projectId: string, user: RequestUser) {
     await this.projects.assertCanView(tenantId, projectId, user);
+    return this.loadSummary(tenantId, projectId);
+  }
+
+  /** The summary without the access check, for the actions that have just checked it themselves. */
+  private async loadSummary(tenantId: string, projectId: string) {
     const entries = await this.prisma.projectTimeEntry.findMany({
       where: { tenantId, projectId },
       include: {
@@ -146,12 +151,11 @@ export class ProjectTimeService {
       throw new BadRequestException('A finished task can no longer be timed');
     }
     if ((await this.runningEntries(tenantId, employeeId, taskId)).length > 0) {
-      return this.summary(tenantId, projectId, user);
+      return this.loadSummary(tenantId, projectId);
     }
     if (dto.pauseOthers) {
-      for (const entry of await this.runningEntries(tenantId, employeeId)) {
-        await this.stop(entry);
-      }
+      const running = await this.runningEntries(tenantId, employeeId);
+      await Promise.all(running.map((entry) => this.stop(entry)));
     }
     await this.prisma.projectTimeEntry.create({
       data: {
@@ -163,7 +167,7 @@ export class ProjectTimeService {
         startedAt: new Date(),
       },
     });
-    return this.summary(tenantId, projectId, user);
+    return this.loadSummary(tenantId, projectId);
   }
 
   async pause(
@@ -178,14 +182,9 @@ export class ProjectTimeService {
       taskId,
       user,
     );
-    for (const entry of await this.runningEntries(
-      tenantId,
-      employeeId,
-      taskId,
-    )) {
-      await this.stop(entry);
-    }
-    return this.summary(tenantId, projectId, user);
+    const running = await this.runningEntries(tenantId, employeeId, taskId);
+    await Promise.all(running.map((entry) => this.stop(entry)));
+    return this.loadSummary(tenantId, projectId);
   }
 
   /** The caller's time on the task, a running timer counted to now. */
@@ -235,7 +234,7 @@ export class ProjectTimeService {
         note: 'Added by hand',
       },
     });
-    return this.summary(tenantId, projectId, user);
+    return this.loadSummary(tenantId, projectId);
   }
 
   /** Sets the caller's total time on the task by recording the difference as a correction. */
@@ -267,6 +266,6 @@ export class ProjectTimeService {
         },
       });
     }
-    return this.summary(tenantId, projectId, user);
+    return this.loadSummary(tenantId, projectId);
   }
 }

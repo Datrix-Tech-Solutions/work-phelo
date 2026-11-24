@@ -20,6 +20,7 @@ export function SourceTypeManagePanel({
     <SidePanel
       isOpen={!!sourceType}
       onClose={onClose}
+      width="sm:w-[480px]"
       title={sourceType ? `Manage ${sourceType.name}` : 'Manage'}
       description={
         sourceType
@@ -29,7 +30,7 @@ export function SourceTypeManagePanel({
     >
       {sourceType?.module === 'HR' ? (
         <PayrollAccountingSetup sourceType={sourceType} />
-      ) : sourceType?.module === 'MARKETING' ? (
+      ) : sourceType?.module === 'MARKETING' || sourceType?.module === 'OPERATIONS' ? (
         <SourceBillingSetup sourceType={sourceType} />
       ) : (
         <p className="text-sm text-gray-500">

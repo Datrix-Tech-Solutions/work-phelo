@@ -27,6 +27,9 @@ interface SupplierPayment {
   /** The orders this payment was for, and how much went to each. */
   allocations: { orderId: string; orderReference: string; amount: number }[];
   total: number;
+  /** Accounting turned it down: it no longer counts as paid. */
+  rejected: boolean;
+  inAccounting: boolean;
 }
 
 interface SupplierPaymentsTableProps {
@@ -74,6 +77,8 @@ export function SupplierPaymentsTable({
             notes: share.notes,
             allocations: [allocation],
             total: share.amount,
+            rejected: share.rejected,
+            inAccounting: share.inAccounting,
           });
         }
       }
@@ -169,7 +174,18 @@ export function SupplierPaymentsTable({
       width: '130px',
       className: 'text-right pr-4',
       render: (p) => (
-        <span className="text-sm font-semibold text-gray-900">{formatInventoryValue(p.total)}</span>
+        <div className="flex flex-col items-end leading-tight">
+          <span
+            className={`text-sm font-semibold ${p.rejected ? 'text-gray-400 line-through' : 'text-gray-900'}`}
+          >
+            {formatInventoryValue(p.total)}
+          </span>
+          {p.rejected ? (
+            <span className="text-xs font-semibold text-red-600">Rejected in accounting</span>
+          ) : (
+            p.inAccounting && <span className="text-xs text-gray-500">In accounting</span>
+          )}
+        </div>
       ),
     },
   ];

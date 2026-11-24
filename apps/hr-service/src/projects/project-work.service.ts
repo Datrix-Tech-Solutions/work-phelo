@@ -155,6 +155,7 @@ export class ProjectWorkService {
     taskId: string,
     user: RequestUser,
   ) {
+    // Access is settled before the task is looked at, so a caller who can't see the project learns nothing.
     const access = await this.projects.getWorkAccess(tenantId, projectId, user);
     const task = await this.prisma.projectTask.findFirst({
       where: { id: taskId, tenantId, projectId },

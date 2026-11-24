@@ -59,6 +59,10 @@ export interface PurchaseOrderPayment {
   /** User id of who recorded the payment, and when (ISO date-time). */
   recordedBy: string;
   recordedAt: string;
+  /** Accounting turned the payment down: it no longer counts as paid. */
+  rejected: boolean;
+  /** The payment was also recorded in Accounting. */
+  inAccounting: boolean;
 }
 
 export interface PurchaseInvoice {
@@ -268,6 +272,8 @@ interface ApiPurchaseOrder {
       notes: string | null;
       createdBy: string;
       createdAt: string;
+      status?: 'RECORDED' | 'REJECTED';
+      accountingTransactionId?: string | null;
     };
   }[];
 }
@@ -284,6 +290,8 @@ function fromApi(o: ApiPurchaseOrder): PurchaseOrder {
     notes: p.payment.notes,
     recordedBy: p.payment.createdBy,
     recordedAt: p.payment.createdAt,
+    rejected: p.payment.status === 'REJECTED',
+    inAccounting: !!p.payment.accountingTransactionId,
   }));
   return {
     id: o.id,
@@ -315,7 +323,7 @@ function fromApi(o: ApiPurchaseOrder): PurchaseOrder {
         total: lines.reduce((sum, l) => sum + l.quantity * l.unitCost, 0),
       };
     }),
-    amountPaid: payments.reduce((sum, p) => sum + p.amount, 0),
+    amountPaid: payments.reduce((sum, p) => sum + (p.rejected ? 0 : p.amount), 0),
     status: o.status,
     createdBy: o.createdBy,
     createdAt: o.createdAt,
@@ -367,6 +375,8 @@ export interface NewSupplierPayment {
   notes: string | null;
   /** How much of the payment goes to each order. */
   allocations: { purchaseOrderId: string; amount: number }[];
+  /** Also record the payment in Accounting. It is saved as paid here either way. */
+  accounting?: { transactionTypeId: string; entityTypeId?: string };
 }
 
 export interface PurchaseOrderReceipt {
@@ -453,6 +463,7 @@ export function usePurchaseOrders() {
         method: p.method,
         reference: p.reference,
         notes: p.notes,
+        accounting: p.accounting,
         allocations: p.allocations.map((a) => ({
           purchaseOrderId: a.purchaseOrderId,
           amount: a.amount.toFixed(4),
@@ -513,4 +524,35 @@ export function usePurchaseOrders() {
     closePurchaseOrder: close.mutateAsync,
     isClosing: close.isPending,
   };
+}
+
+/** What Accounting offers for recording a supplier payment, and why it cannot when it cannot. */
+export interface SupplierPaymentAccountingOptions {
+  ready: boolean;
+  reason?: string;
+  entityTypes: { id: string; name: string }[];
+  transactionTypes: { id: string; name: string; entityTypeIds: string[] }[];
+  /** The type the supplier is already recorded under in Accounting, once it has one. */
+  supplierEntityTypeId: string | null;
+}
+
+export const ACCOUNTING_NOT_READY_MESSAGE: Record<string, string> = {
+  SOURCE_NOT_LINKED: 'Accounting is not set up for supplier payments yet.',
+  NO_BASE_CURRENCY: 'Accounting has no base currency yet.',
+  NO_TRANSACTION_TYPES: 'Accounting has no payment transaction type for suppliers yet.',
+  NO_ENTITY_TYPE: 'Accounting has no supplier entity type yet.',
+  NOT_CONFIGURED: 'Accounting is not available for this workspace.',
+  UNAVAILABLE: 'Accounting is temporarily unavailable.',
+};
+
+export function useSupplierPaymentAccounting(supplierId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['inventory', 'supplier-payment-accounting', supplierId],
+    queryFn: () =>
+      inventoryApi.get<SupplierPaymentAccountingOptions>(
+        `/supplier-payments/accounting-options?supplierId=${encodeURIComponent(supplierId)}`,
+      ),
+    enabled,
+    staleTime: 30_000,
+  });
 }

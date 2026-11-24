@@ -22,6 +22,11 @@ export interface SourceRegistration {
    * keeps its own flow (payroll). The generic source-transaction routes then do not serve it.
    */
   raisesTransactions?: boolean;
+  /**
+   * Which way the money goes for what this module raises. Receivable (the default) is an invoice or
+   * a direct receipt; payable is a direct payment to the record (e.g. a supplier).
+   */
+  direction?: 'RECEIVABLE' | 'PAYABLE';
 }
 
 export const SOURCE_REGISTRY: Partial<
@@ -34,6 +39,30 @@ export const SOURCE_REGISTRY: Partial<
     serviceName: 'marketing-service',
     callback: {
       baseUrlEnv: 'MARKETING_SERVICE_URL',
+      path: '/internal/accounting-events',
+    },
+  },
+  OPERATIONS: {
+    module: 'OPERATIONS',
+    moduleConfigKey: 'operations',
+    sourceName: 'Inventory Payments',
+    serviceName: 'inventory-service',
+    callback: {
+      baseUrlEnv: 'INVENTORY_SERVICE_URL',
+      path: '/internal/accounting-events',
+    },
+    direction: 'PAYABLE',
+  },
+  // Invoices raised from project management for its own (project) clients. Marketing's clients are
+  // still billed through MARKETING, so each client's entity is only ever touched by one source.
+  PROJECTS: {
+    module: 'PROJECTS',
+    // Projects live in the HR module, so the tenant's HR switch turns this source on.
+    moduleConfigKey: 'hr',
+    sourceName: 'Project Billing',
+    serviceName: 'hr-service',
+    callback: {
+      baseUrlEnv: 'HR_SERVICE_URL',
       path: '/internal/accounting-events',
     },
   },

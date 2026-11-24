@@ -1,5 +1,6 @@
 'use client';
 
+import { SETTLEMENT_METHOD_OPTIONS } from '@/lib/accounting/settlementMethod';
 import { useState, ChangeEvent } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -299,6 +300,16 @@ export function TradeSettlementDetailPanel({
               />
               <Field label="Date" value={fmtDate(settlement.settlementDate)} />
               <Field label="Amount" value={fmtAmount(settlement.amount, settlement.currency)} />
+              {settlement.cashbookTransaction?.settlementMethod && (
+                <Field
+                  label="Mode of Payment"
+                  value={
+                    SETTLEMENT_METHOD_OPTIONS.find(
+                      (o) => o.value === settlement.cashbookTransaction.settlementMethod,
+                    )?.label ?? settlement.cashbookTransaction.settlementMethod
+                  }
+                />
+              )}
               {settlement.exchangeRate && (
                 <Field label="Exchange Rate" value={settlement.exchangeRate} />
               )}

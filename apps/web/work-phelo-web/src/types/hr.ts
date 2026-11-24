@@ -512,7 +512,8 @@ export interface ProjectMilestone {
 /** What a billable client project charges, by how it is billed. */
 export type ProjectPricing =
   | { type: 'FLAT_RATE'; price: number }
-  | { type: 'TIMED'; hourlyRate: number; estimatedHours: number }
+  /** Both are optional: when given they are only a benchmark the logged time and accrued amount are compared with. */
+  | { type: 'TIMED'; hourlyRate?: number; estimatedHours?: number }
   | { type: 'MILESTONE'; milestones: ProjectMilestone[] }
   | { type: 'RETAINER'; monthlyAmount: number };
 
@@ -546,12 +547,24 @@ export interface Project {
   templateName?: string | null;
   /** The project's own workflow, work types, tabs and priority levels. `{}` for one made before set-ups existed. */
   config?: Partial<ProjectConfig>;
-  /** The marketing client a client project is for, with its name as it was last read. */
+  /** The client a client project is for, with its name as it was last read. */
   clientId?: string | null;
   clientName?: string | null;
+  /** Where `clientId` points. Missing or null is a marketing client. */
+  clientSource?: ProjectClientSource | null;
   billable?: boolean;
   /** How a billable client project is charged. */
   pricing?: ProjectPricing;
+}
+
+/** Which list a project's client comes from: marketing's, or the one made from project management. */
+export type ProjectClientSource = 'MARKETING' | 'PROJECT';
+
+/** A client made from project management. */
+export interface ProjectClient {
+  id: string;
+  name: string;
+  source: 'PROJECT';
 }
 
 export interface CreateProjectDto {
@@ -566,6 +579,8 @@ export interface CreateProjectDto {
   templateName?: string;
   clientId?: string;
   clientName?: string;
+  /** Leave out for a marketing client. */
+  clientSource?: ProjectClientSource;
   billable?: boolean;
   /** Milestones are sent without their local ids. */
   pricing?:
@@ -626,6 +641,8 @@ export interface ProjectMember {
   jobTitle: string;
   department: string | null;
   avatarUrl?: string;
+  /** What this person's logged time is billed at, on a project billed by time. */
+  hourlyRate?: number | null;
 }
 
 export interface ProjectDetail extends Project {
@@ -674,6 +691,7 @@ export type UpdateProjectTaskDto = Omit<Partial<CreateProjectTaskDto>, 'objectiv
 export interface AddProjectMemberDto {
   employeeId: string;
   role?: ProjectMemberRole;
+  hourlyRate?: number;
 }
 
 // ── Dashboard ─────────────────────────────────────────────
@@ -1481,7 +1499,31 @@ export interface ProjectInvoice {
   description: string;
   amount: number;
   lines: ProjectInvoiceLine[];
+  /** What Accounting last reported (DRAFT, POSTED, REVERSED, REJECTED). Null for a marketing client's invoice, which is read back through marketing. */
+  state?: string | null;
   createdAt: string;
+}
+
+/** What the invoice form offers for a project client, and whether Accounting can take it. */
+export interface ProjectInvoiceBillingOptions {
+  ready: boolean;
+  reason?: string;
+  message?: string;
+  baseCurrency?: string;
+  entityTypes: { id: string; name: string }[];
+  transactionTypes: { id: string; name: string; entityTypeIds: string[] }[];
+  /** Set once the client has an entity in Accounting: the type can no longer change. */
+  entityTypeId?: string | null;
+}
+
+export interface RaiseProjectInvoiceDto {
+  /** One per open form, so sending it again never creates a second invoice. */
+  submissionId: string;
+  entityTypeId?: string;
+  transactionTypeId: string;
+  amount: number;
+  description: string;
+  lines: ProjectInvoiceLine[];
 }
 
 export type RecordProjectInvoiceDto = Pick<

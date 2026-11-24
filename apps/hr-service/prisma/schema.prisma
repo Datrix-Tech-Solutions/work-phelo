@@ -625,9 +625,11 @@ model Project {
   templateName    String?
   /// The project's own workflow, work types, features and priority levels (a copy of the template).
   config          Json                @default("{}")
-  /// The marketing client a client project is for, with its name as it was last read.
+  /// The client a client project is for, with its name as it was last read.
   clientId        String?
   clientName      String?
+  /// Where `clientId` points. Null is a marketing client (every project made before project clients existed).
+  clientSource    ProjectClientSource?
   billable        Boolean             @default(false)
   billingType     ProjectBillingType?
   flatPrice       Decimal?            @db.Decimal(15, 2)
@@ -660,6 +662,8 @@ model ProjectMember {
   projectId  String
   employeeId String
   role       ProjectMemberRole @default(MEMBER)
+  /// What this person's logged time is billed at on a project billed by time.
+  hourlyRate Decimal?          @db.Decimal(15, 2)
   joinedAt   DateTime          @default(now())
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
@@ -832,12 +836,43 @@ model ProjectInvoice {
   description     String
   amount          Decimal  @db.Decimal(15, 2)
   lines           Json     @default("[]")
+  /// What Accounting last told us happened to it (POSTED, REVERSED, REJECTED). Only kept for invoices
+  /// raised to a project client; a marketing client's invoices are read back through marketing.
+  state           String?
   createdByUserId String?
   createdAt       DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, projectId])
+  @@index([tenantId, transactionId])
+  @@schema("hr")
+}
+
+/// Which list a project's client comes from.
+enum ProjectClientSource {
+  MARKETING
+  PROJECT
+
+  @@schema("hr")
+}
+
+/// A client created from project management, for companies marketing does not know. Only the name is
+/// needed; the Accounting entity is made on the first invoice and kept here.
+model ProjectClient {
+  id                     String   @id @default(uuid())
+  tenantId               String
+  name                   String
+  /// The name trimmed, collapsed and lower-cased, so the same company is never added twice.
+  nameKey                String
+  accountingEntityId     String?
+  accountingEntityTypeId String?
+  createdByUserId        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([tenantId, nameKey])
+  @@index([tenantId, name])
   @@schema("hr")
 }
 

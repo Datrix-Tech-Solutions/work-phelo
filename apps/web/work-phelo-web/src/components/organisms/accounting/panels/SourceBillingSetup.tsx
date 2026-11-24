@@ -115,10 +115,12 @@ export function SourceBillingSetup({ sourceType }: { sourceType: SourceTypeDefin
 
       <Step done={usable.length > 0 && setup.entityTypes.length > 0} title="Link transaction types">
         <p className="text-xs text-gray-500">
-          Create an entity type for these records — or use one you already have — then link
-          receivable transaction types (invoices or direct receipts) to this source and name that
-          entity type in each one&apos;s business roles. {moduleLabel} users pick from the entity
-          types you name here.
+          Create an entity type for these records — or use one you already have — then link{' '}
+          {sourceType.module === 'OPERATIONS'
+            ? 'payable transaction types (direct payments posting to the cashbook)'
+            : 'receivable transaction types (invoices or direct receipts)'}{' '}
+          to this source and name that entity type in each one&apos;s business roles. {moduleLabel}{' '}
+          users pick from the entity types you name here.
         </p>
 
         {setup.transactionTypes.length === 0 ? (

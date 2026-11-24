@@ -299,25 +299,39 @@ function ObjectiveProgress({ projectId, tasks }: { projectId: string; tasks: Pro
   );
 }
 
-/** For a project billed by time: the hours logged on its timed tasks against the estimate, and what they are worth. */
+/** For a project billed by time: the hours logged and what they have accrued at each member's rate. The
+ *  estimate, when the project has one, is only shown alongside; nothing else depends on it. */
 function TimeAndBilling({
   projectId,
   hourlyRate,
   estimatedHours,
 }: {
   projectId: string;
-  hourlyRate: number;
-  estimatedHours: number;
+  hourlyRate?: number;
+  estimatedHours?: number;
 }) {
   const { totalMs, people } = useProjectTime(projectId);
-  const estimatedMs = estimatedHours * 3_600_000;
-  const accrued = accruedAmount(totalMs, hourlyRate);
-  const expected = hourlyRate * estimatedHours;
-  const over = totalMs > estimatedMs;
+  const { data: members = [] } = useProjectMembers(projectId);
+  const rateById = new Map(members.map((m) => [m.employeeId, m.hourlyRate ?? 0]));
+
+  const rows = people.map((p) => {
+    const rate = rateById.get(p.personId) ?? 0;
+    return { ...p, rate, amount: accruedAmount(p.ms, rate) };
+  });
+  const accrued = rows.reduce((sum, r) => sum + r.amount, 0);
+  const unrated = rows.filter((r) => r.rate <= 0 && r.ms > 0);
+
+  const estimatedMs = (estimatedHours ?? 0) * 3_600_000;
+  const budget = hourlyRate && estimatedHours ? hourlyRate * estimatedHours : null;
+
+  const over = estimatedMs > 0 && totalMs > estimatedMs;
+
+  const maxMs = Math.max(1, ...rows.map((r) => r.ms));
+  const avatarById = new Map(members.map((m) => [m.employeeId, m.avatarUrl]));
 
   return (
-    <SummaryCard title="Time & billing">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <SummaryCard title="Time & billing">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between gap-3">
@@ -325,13 +339,13 @@ function TimeAndBilling({
               <p className="text-xs text-gray-400">
                 <span className="text-sm font-bold text-gray-900">
                   {formatHoursMinutes(totalMs)}
-                </span>{' '}
-                of {estimatedHours} h estimated
+                </span>
+                {estimatedMs > 0 && <> of {estimatedHours} h estimated</>}
               </p>
             </div>
-            <ProgressBar
-              value={estimatedMs > 0 ? Math.min(100, Math.round((totalMs / estimatedMs) * 100)) : 0}
-            />
+            {estimatedMs > 0 && (
+              <ProgressBar value={Math.min(100, Math.round((totalMs / estimatedMs) * 100))} />
+            )}
             {over && (
               <p className="text-xs font-medium text-red-600">
                 {formatHoursMinutes(totalMs - estimatedMs)} over the estimate
@@ -343,33 +357,52 @@ function TimeAndBilling({
               Accrued so far
             </p>
             <p className="text-sm text-gray-500">
-              <span className="text-lg font-bold text-gray-900">{formatMoney(accrued)}</span> of{' '}
-              {formatMoney(expected)} expected · {formatMoney(hourlyRate)} per hour
+              <span className="text-lg font-bold text-gray-900">{formatMoney(accrued)}</span>
+              {budget !== null && <> of {formatMoney(budget)} expected</>}
+              {hourlyRate ? <> · {formatMoney(hourlyRate)} per hour</> : null}
             </p>
+            {budget !== null && accrued > budget && (
+              <p className="text-xs font-medium text-red-600">
+                {formatMoney(accrued - budget)} over the expected amount
+              </p>
+            )}
+            {unrated.length > 0 && (
+              <p className="text-xs text-amber-600">
+                No rate set for {unrated.map((r) => r.personName).join(', ')}, so their time isn’t
+                priced.
+              </p>
+            )}
           </div>
         </div>
+      </SummaryCard>
 
-        <div className="flex flex-col gap-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-            Hours by person
-          </p>
-          {people.length === 0 ? (
-            <p className="text-sm text-gray-400">No time logged yet.</p>
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {people.map((p) => (
-                <li key={p.personId} className="flex items-center justify-between text-sm">
-                  <span className="truncate text-gray-900">{p.personName}</span>
-                  <span className="tabular-nums font-semibold text-gray-700">
-                    {formatHoursMinutes(p.ms)}
+      <SummaryCard title="Hours by person">
+        {rows.length === 0 ? (
+          <p className="text-sm text-gray-400">No time logged yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {rows.map((r) => (
+              <li key={r.personId} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2.5">
+                  <Avatar name={r.personName} avatarUrl={avatarById.get(r.personId)} size={24} />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
+                    {r.personName}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </SummaryCard>
+                  <span className="shrink-0 text-xs text-gray-400">
+                    <span className="text-sm font-bold text-gray-900">
+                      {formatHoursMinutes(r.ms)}
+                    </span>
+                    {' · '}
+                    {r.rate > 0 ? formatMoney(r.amount) : 'no rate'}
+                  </span>
+                </div>
+                <ProgressBar value={Math.round((r.ms / maxMs) * 100)} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </SummaryCard>
+    </div>
   );
 }
 

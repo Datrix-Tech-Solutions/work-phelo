@@ -23,6 +23,8 @@ interface Props {
   }) => Promise<boolean>;
   /** Whether new tasks start as timed, e.g. on a project billed by time. */
   defaultTimed?: boolean;
+  /** Keeps the task timed with no way to turn it off. */
+  lockTimed?: boolean;
   /** The project's objectives; the picker only shows when there are some. */
   objectiveOptions?: TypeChipOption[];
   isCreating?: boolean;
@@ -35,6 +37,7 @@ export function QuickAddTaskRow({
   isCreating,
   objectiveOptions = [],
   defaultTimed = false,
+  lockTimed = false,
 }: Props) {
   const [timed, setTimed] = useState(defaultTimed);
   // Just a button until it is pressed, then the field and its icons appear.
@@ -67,7 +70,7 @@ export function QuickAddTaskRow({
       dueDate: dueDate || undefined,
       assignees,
       objectiveId: objectiveId || undefined,
-      timed,
+      timed: timed || lockTimed,
     });
     if (!ok) return;
     setName('');
@@ -149,12 +152,22 @@ export function QuickAddTaskRow({
         </button>
         <button
           type="button"
-          title={timed ? 'Timed: click to turn off' : 'Not timed: click to make it timed'}
+          title={
+            lockTimed
+              ? 'Every task on this project is timed'
+              : timed
+                ? 'Timed: click to turn off'
+                : 'Not timed: click to make it timed'
+          }
           aria-label="Timed task"
-          aria-pressed={timed}
-          onClick={() => setTimed((t) => !t)}
+          aria-pressed={timed || lockTimed}
+          onClick={() => {
+            if (!lockTimed) setTimed((t) => !t);
+          }}
           className={`inline-flex items-center justify-center h-9 w-9 rounded-input transition-colors ${
-            timed ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'text-gray-600 hover:bg-gray-100'
+            timed || lockTimed
+              ? `bg-blue-50 text-blue-600 ${lockTimed ? 'cursor-default' : 'hover:bg-blue-100'}`
+              : 'text-gray-600 hover:bg-gray-100'
           }`}
         >
           <Timer className="w-6 h-6" strokeWidth={2.25} />

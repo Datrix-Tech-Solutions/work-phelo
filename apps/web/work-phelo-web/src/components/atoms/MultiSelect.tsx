@@ -147,15 +147,34 @@ export function MultiSelect({
 
   /* keep the highlighted option in range as the filtered list changes — adjusted during
      render (rather than an effect) per React's guidance for state that mirrors a prop/derived value */
-  const [prevFiltered, setPrevFiltered] = useState(filtered);
-  if (filtered !== prevFiltered) {
-    setPrevFiltered(filtered);
+  /* "Select all" (default variant only — inline already has its "All" row) acts on what is visible,
+     so with a search typed it selects just the matches; if they are all selected it clears them */
+  const showSelectAll = variant !== 'inline' && filtered.length > 1;
+  const allVisibleSelected = filtered.length > 0 && filtered.every((o) => value.includes(o.value));
+  const toggleSelectAll = () => {
+    const visible = new Set(filtered.map((o) => o.value));
+    onChange(
+      allVisibleSelected
+        ? value.filter((v) => !visible.has(v))
+        : [...value, ...filtered.map((o) => o.value).filter((v) => !value.includes(v))],
+    );
+  };
+
+  /* keyed on the option values, not the array identity: callers often rebuild `options` every
+     render, and toggling an item must not reset the highlight (and with it the scroll position) */
+  const filteredKey = filtered.map((o) => o.value).join('\u0000');
+  const [prevFilteredKey, setPrevFilteredKey] = useState(filteredKey);
+  if (filteredKey !== prevFilteredKey) {
+    setPrevFilteredKey(filteredKey);
     setHighlightedIndex(filtered.length > 0 ? 0 : -1);
   }
 
-  /* scroll the highlighted option into view as it moves via keyboard */
+  /* scroll the highlighted option into view only when the keyboard moved it — hover and
+     selection leave the list where the user scrolled it */
+  const keyboardNavRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    if (!open || !keyboardNavRef.current) return;
+    keyboardNavRef.current = false;
     optionRefs.current[highlightedIndex]?.scrollIntoView({ block: 'nearest' });
   }, [highlightedIndex, open]);
 
@@ -189,10 +208,12 @@ export function MultiSelect({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
+        keyboardNavRef.current = true;
         setHighlightedIndex((i) => (filtered.length ? (i + 1) % filtered.length : -1));
         break;
       case 'ArrowUp':
         e.preventDefault();
+        keyboardNavRef.current = true;
         setHighlightedIndex((i) =>
           filtered.length ? (i - 1 + filtered.length) % filtered.length : -1,
         );
@@ -212,12 +233,14 @@ export function MultiSelect({
       case 'Home':
         if (filtered.length) {
           e.preventDefault();
+          keyboardNavRef.current = true;
           setHighlightedIndex(0);
         }
         break;
       case 'End':
         if (filtered.length) {
           e.preventDefault();
+          keyboardNavRef.current = true;
           setHighlightedIndex(filtered.length - 1);
         }
         break;
@@ -359,12 +382,32 @@ export function MultiSelect({
                   )}
                 </div>
               </div>
+              {showSelectAll && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={toggleSelectAll}
+                  className="w-full flex shrink-0 items-center gap-3 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-300 text-left border-b border-gray-100 transition-colors"
+                >
+                  <span
+                    className={cn(
+                      'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                      allVisibleSelected ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
+                    )}
+                  >
+                    {allVisibleSelected && <Icons.Check className="w-2.5 h-2.5 text-white" />}
+                  </span>
+                  {allVisibleSelected ? 'Deselect all' : 'Select all'}
+                </button>
+              )}
               <div
                 id={listboxId}
                 role="listbox"
                 aria-multiselectable="true"
                 className="overflow-y-auto py-1"
-                style={{ maxHeight: Math.min(208, dropdownPos.maxHeight - 56) }}
+                style={{
+                  maxHeight: Math.min(208, dropdownPos.maxHeight - 56 - (showSelectAll ? 40 : 0)),
+                }}
               >
                 {filtered.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { projectSetup } from '@/lib/projectSetup';
 import {
@@ -17,6 +17,27 @@ import {
 } from '@/types/hr';
 
 const KEY = 'projects';
+
+/** Refetches what a change to a project's tasks can touch, not every query under 'projects': its task
+ *  list, activity, its own record (status and progress), the list cards and the person's own tasks. */
+function invalidateTaskChange(
+  queryClient: QueryClient,
+  projectId: string,
+  also: ('sprints' | 'time' | 'subtasks')[] = [],
+) {
+  const keys = [
+    [KEY, projectId, 'tasks'],
+    [KEY, projectId, 'activities'],
+    [KEY, 'my-tasks'],
+    ...also.map((k) => [KEY, projectId, k]),
+  ];
+  keys.forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
+  queryClient.invalidateQueries({ queryKey: [KEY, projectId], exact: true });
+  queryClient.invalidateQueries({ queryKey: [KEY], exact: true });
+  if (also.includes('time')) {
+    queryClient.invalidateQueries({ queryKey: [KEY, 'my-running-timers'] });
+  }
+}
 
 export function useProjects() {
   return useQuery({
@@ -145,6 +166,32 @@ export function useAddProjectMember() {
   });
 }
 
+/** Sets what a member's logged time is billed at on a project billed by time. */
+export function useUpdateProjectMemberRate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      employeeId,
+      hourlyRate,
+    }: {
+      projectId: string;
+      employeeId: string;
+      hourlyRate: number | null;
+    }) => {
+      const res = await api.patch<ProjectMember>(
+        `/hr/projects/${projectId}/members/${employeeId}`,
+        { hourlyRate },
+      );
+      return res.data;
+    },
+    onSuccess: (_, { projectId }) => {
+      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'members'] });
+    },
+  });
+}
+
 export function useRemoveProjectMember() {
   const queryClient = useQueryClient();
 
@@ -181,10 +228,7 @@ export function useCreateProjectTask() {
       const res = await api.post<ProjectTask>(`/hr/projects/${projectId}/tasks`, data);
       return res.data;
     },
-    onSuccess: (_, { projectId }) => {
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId] });
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'tasks'] });
-    },
+    onSuccess: (_, { projectId }) => invalidateTaskChange(queryClient, projectId),
   });
 }
 
@@ -204,13 +248,9 @@ export function useUpdateProjectTask() {
       const res = await api.patch<ProjectTask>(`/hr/projects/${projectId}/tasks/${taskId}`, data);
       return res.data;
     },
-    onSuccess: (_, { projectId }) => {
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId] });
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'tasks'] });
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'sprints'] });
-      // A finished task stops its timers on the server.
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'time'] });
-    },
+    // Sprints hold tasks, and a finished task stops its timers on the server.
+    onSuccess: (_, { projectId }) =>
+      invalidateTaskChange(queryClient, projectId, ['sprints', 'time']),
   });
 }
 
@@ -244,7 +284,12 @@ export function useUpdateTaskStatus() {
             t.id === taskId ? { ...t, status: updated.status, stage: updated.stage } : t,
           ),
       );
-      queryClient.invalidateQueries({ queryKey: [KEY] });
+      // Going to Done stops the task's timers on the server.
+      invalidateTaskChange(
+        queryClient,
+        updated.projectId,
+        updated.status === 'DONE' ? ['time', 'sprints'] : ['sprints'],
+      );
     },
   });
 }
@@ -259,10 +304,9 @@ export function useDeleteProjectTask() {
       );
       return res.data;
     },
-    onSuccess: (_, { projectId }) => {
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId] });
-      queryClient.invalidateQueries({ queryKey: [KEY, projectId, 'tasks'] });
-    },
+    // The task's subtasks go with it.
+    onSuccess: (_, { projectId }) =>
+      invalidateTaskChange(queryClient, projectId, ['sprints', 'time', 'subtasks']),
   });
 }
 

@@ -424,11 +424,20 @@ describe('Production conversation controllers: actual Nest guards, DTOs and inte
     expect(JSON.stringify(h.logs)).not.toContain('private-canary');
   });
   it('keeps deadline expiry structured and blocks business execution after nonce wait', async () => {
-    h.consume.mockImplementationOnce(() => new Promise((resolve) => setTimeout(resolve, 100)));
-    safe(
-      await send(h.app, wire({ ...createInput(), proof: { deadlineAtMs: Date.now() + 60 } })),
-      504,
-    );
+    const realNow = Date.now.bind(Date);
+    let offsetMs = 0;
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => realNow() + offsetMs);
+    h.consume.mockImplementationOnce(() => {
+      // Deterministic: jump the clock past the default 5s deadline instead of sleeping.
+      offsetMs = 6000;
+      return Promise.resolve();
+    });
+    try {
+      safe(await send(h.app, wire(createInput())), 504);
+    } finally {
+      clock.mockRestore();
+    }
+    expect(h.consume).toHaveBeenCalledTimes(1);
     expect(h.facade.createIdempotent).not.toHaveBeenCalled();
   });
   it('retains unchanged probes and eligibility without proof or storage', async () => {

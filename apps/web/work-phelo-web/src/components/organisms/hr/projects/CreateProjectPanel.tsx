@@ -10,7 +10,10 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Toggle } from '@/components/atoms/Toggle';
-import { useClients } from '@/hooks/marketing/useClients';
+import {
+  ProjectClientSelect,
+  type PickedProjectClient,
+} from '@/components/molecules/hr/projects/ProjectClientSelect';
 import { inputClass } from '@/lib/utils';
 import {
   CreateProjectDto,
@@ -50,7 +53,7 @@ interface CreateProjectPanelProps {
     clientInfo?: {
       billable: boolean;
       pricing?: ProjectPricing;
-      client?: { id: string; name: string };
+      client?: PickedProjectClient;
     },
   ) => void;
   isSubmitting?: boolean;
@@ -112,10 +115,8 @@ export function CreateProjectPanel({
   const billingType = useWatch({ control, name: 'billingType' });
   const startDate = useWatch({ control, name: 'startDate' });
   const endDate = useWatch({ control, name: 'endDate' });
-  // Just a pick-list of the marketing clients, so it isn't held back by the person's marketing access.
-  const { data: clientList } = useClients({ limit: 100 }, isClientProject);
-  const clients = clientList?.data ?? [];
-  const clientOptions = clients.map((c) => ({ value: c.id, label: c.companyName }));
+  // The client picked, whichever list it came from (the form only holds the select's value).
+  const [pickedClient, setPickedClient] = useState<PickedProjectClient | undefined>();
 
   const handleClose = useCallback(() => {
     onClose();
@@ -140,9 +141,7 @@ export function CreateProjectPanel({
               values.billable && values.billingType
                 ? buildPricing(values.billingType, values.pricing)
                 : undefined,
-            client: clients
-              .filter((c) => c.id === values.clientId)
-              .map((c) => ({ id: c.id, name: c.companyName }))[0],
+            client: values.clientId ? pickedClient : undefined,
           }
         : undefined,
     );
@@ -227,12 +226,12 @@ export function CreateProjectPanel({
               name="clientId"
               control={control}
               render={({ field }) => (
-                <SearchSelect
-                  label="Client"
-                  placeholder="Select client (optional)"
-                  options={clientOptions}
+                <ProjectClientSelect
                   value={field.value}
-                  onChange={field.onChange}
+                  onChange={(value, client) => {
+                    field.onChange(value);
+                    setPickedClient(client);
+                  }}
                 />
               )}
             />
@@ -366,8 +365,7 @@ export function CreateProjectPanel({
           )}
         />
 
-        {/* The set-up fields. A blank slate shows them straight away; a template starts them filled in and
-            folded away, for this project only. The fields stay mounted while folded, so they still count. */}
+        {/* The set-up fields. Both a blank slate and a template start them folded away, for this project only. The fields stay mounted while folded, so they still count. */}
         <Controller
           name="config"
           control={control}
@@ -380,7 +378,6 @@ export function CreateProjectPanel({
                 showErrors={isSubmitted}
               />
             );
-            if (!template) return fields;
             // Opens by itself if the set-up is invalid, so the error is never hidden.
             const open = setupOpen || !!errors.config;
             return (
@@ -391,7 +388,9 @@ export function CreateProjectPanel({
                   aria-expanded={open}
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                 >
-                  <span className="text-sm font-semibold text-gray-900">Template set-up</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {template ? 'Template set-up' : 'Set-up'}
+                  </span>
                   <ChevronDown
                     className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
                       open ? '' : '-rotate-90'

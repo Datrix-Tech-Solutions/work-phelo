@@ -152,6 +152,7 @@ export function ProjectBacklog({ projectId, layout = 'backlog', viewToggle }: Pr
     quickCreate,
     isQuickCreating,
     defaultTimed,
+    lockTimed,
     dialogs,
   } = useTaskDialogs(projectId);
   const { data: tasks = [], isLoading } = useProjectTasks(projectId);
@@ -313,6 +314,7 @@ export function ProjectBacklog({ projectId, layout = 'backlog', viewToggle }: Pr
         isCreating={isQuickCreating}
         objectiveOptions={objectiveChipChoices}
         defaultTimed={defaultTimed}
+        lockTimed={lockTimed}
         onCreate={(values) => quickCreate({ ...values, sprintId })}
       />
     ) : null;

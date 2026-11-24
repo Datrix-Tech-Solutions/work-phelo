@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
 import { ProjectMemberRole } from '../../../prisma/generated/client';
 
 export class AddProjectMemberDto {
@@ -14,4 +14,12 @@ export class AddProjectMemberDto {
   @IsOptional()
   @IsEnum(ProjectMemberRole)
   role?: ProjectMemberRole;
+
+  @ApiPropertyOptional({
+    description: 'What this member’s logged time is billed at, per hour',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  hourlyRate?: number;
 }

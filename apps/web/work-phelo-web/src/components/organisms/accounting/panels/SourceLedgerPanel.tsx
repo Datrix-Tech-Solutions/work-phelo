@@ -34,6 +34,7 @@ export function SourceLedgerPanel({
     <SidePanel
       isOpen={!!sourceType}
       onClose={onClose}
+      width="sm:w-[480px]"
       title={sourceType ? `${sourceType.name} Ledger` : 'Source Ledger'}
       description={sourceType ? `Most recent ${RECENT_LIMIT} events.` : undefined}
       footer={

@@ -78,7 +78,7 @@ export function AddProjectTabMenu({ options, onPick }: Props) {
           <ul
             ref={menuRef}
             role="menu"
-            className={popupClass('fixed z-[70] p-1.5 flex flex-col gap-0.5 min-w-44')}
+            className={popupClass('fixed z-70 p-1.5 flex flex-col gap-0.5 min-w-44')}
             style={{ top: pos.top, left: pos.left }}
           >
             {chosen ? (

@@ -8,18 +8,13 @@ import {
   Query,
   Req,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
-  ApiBody,
   ApiCookieAuth,
-  ApiConsumes,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { RequireModule } from '../auth/decorators/module.decorator';
@@ -30,10 +25,9 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from './accounting.permissions';
 import { BankReconciliationsService } from './bank-reconciliations.service';
 import {
-  CreateBankReconciliationDto,
-  MatchBankStatementLineDto,
+  CompleteBankReconciliationDto,
   QueryBankReconciliationsDto,
-  QueryBankStatementLinesDto,
+  ReconciledEntriesQueryDto,
 } from './dto/bank-reconciliations.dto';
 
 @Controller('bank-reconciliations')
@@ -57,110 +51,33 @@ export class BankReconciliationsController {
 
   @Post()
   @ApiOperation({
-    summary: 'Create a draft bank reconciliation session',
+    summary: 'Save a completed bank reconciliation',
     description:
-      'Creates only the reconciliation header. Statement import, matching and adjustment posting are separate controlled workflows.',
+      'Saves the reconciliation, every statement row the user brought and the ledger line each matched row was reconciled against, in one step. Statement values are stored, never the file. No journal is posted.',
   })
   @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_MANAGE)
-  create(
-    @Body() dto: CreateBankReconciliationDto,
+  complete(
+    @Body() dto: CompleteBankReconciliationDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.create(request.user, dto);
+    return this.service.complete(request.user, dto);
   }
 
-  @Post(':reconciliationId/statement-lines/import')
-  @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 1024 * 1024 } }),
-  )
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['file'],
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-          description:
-            'CSV with transactionDate, amount and currency columns. Optional columns: valueDate, description, bankReference, counterpartyName, runningBalance.',
-        },
-      },
-    },
-  })
-  @ApiOperation({
-    summary: 'Import validated CSV statement lines into a draft reconciliation',
-    description:
-      'Imports immutable statement lines only. It does not match Cashbook transactions or create accounting entries.',
-  })
-  @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_MANAGE)
-  importStatementLines(
-    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
-    @UploadedFile() file: Express.Multer.File | undefined,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.importStatementLines(
-      request.user,
-      reconciliationId,
-      file,
-    );
-  }
-
-  @Get(':reconciliationId/statement-lines')
-  @ApiOperation({
-    summary: 'List imported bank statement lines for a reconciliation',
-  })
-  @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_VIEW)
-  listStatementLines(
-    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
-    @Query() query: QueryBankStatementLinesDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.listStatementLines(
-      request.user.tenantId,
-      reconciliationId,
-      query,
-    );
-  }
-
-  @Get(':reconciliationId/statement-lines/:statementLineId/candidates')
+  @Get('reconciled-entries')
   @ApiOperation({
     summary:
-      'List exact posted Cashbook matches for an unmatched statement line',
+      'List the ledger lines of a cash account that are already reconciled',
     description:
-      'Candidates must have the same tenant, cash account, date, currency, absolute amount and cash direction. No match is created by this endpoint.',
+      'Used by the reconcile page to leave out entries a completed reconciliation has already taken care of.',
   })
   @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_VIEW)
-  listMatchCandidates(
-    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
-    @Param('statementLineId', ParseUUIDPipe) statementLineId: string,
+  reconciledEntries(
+    @Query() query: ReconciledEntriesQueryDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.listMatchCandidates(
+    return this.service.reconciledJournalLineIds(
       request.user.tenantId,
-      reconciliationId,
-      statementLineId,
-    );
-  }
-
-  @Post(':reconciliationId/statement-lines/:statementLineId/match')
-  @ApiOperation({
-    summary: 'Match a statement line to an exact posted Cashbook transaction',
-    description:
-      'Creates a controlled reconciliation link only. It does not post a journal, complete the reconciliation, or create an adjustment.',
-  })
-  @RequirePermissions(AccountingPermission.BANK_RECONCILIATIONS_MANAGE)
-  matchStatementLine(
-    @Param('reconciliationId', ParseUUIDPipe) reconciliationId: string,
-    @Param('statementLineId', ParseUUIDPipe) statementLineId: string,
-    @Body() dto: MatchBankStatementLineDto,
-    @Req() request: Request & { user: RequestUser },
-  ) {
-    return this.service.matchStatementLine(
-      request.user,
-      reconciliationId,
-      statementLineId,
-      dto,
+      query.cashAccountId,
     );
   }
 
