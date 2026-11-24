@@ -107,3 +107,36 @@ Optional Cloudinary folder scoping:
 
 `AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS` applies to both providers. Values are
 capped at 900 seconds.
+
+## Explicit Permission Reconciliation
+
+Auth no longer reconciles every tenant/user during `onModuleInit`. Ordinary
+restarts perform no global permission backfill. Existing transactional tenant
+creation and invite-time baseline assignment remain in place; this is not a
+change to permission policy or an automatic change to existing tenants.
+
+The built service provides an operator-only command (not an HTTP endpoint):
+
+```bash
+npm run permissions:reconcile --workspace=apps/auth-service -- --limit 10
+npm run permissions:reconcile --workspace=apps/auth-service -- --execute --tenant TENANT_ID
+npm run permissions:reconcile --workspace=apps/auth-service -- --execute --after LAST_COMPLETED_TENANT_ID --limit 10
+```
+
+Run with the intended service environment already loaded securely. The default
+is a read-only, ordered tenant preview. Execution requires explicit approval to
+reconcile existing permissions; deployment does not invoke this command. It
+seeds the global resource catalog once per explicit job, then reconciles each
+tenant in a separate transaction using the existing system/default/legacy
+permission semantics. Tenant advisory locks prevent overlapping reconciliation;
+user row locks serialize assignment with role changes/deletion. Only known
+serialization/uniqueness conflicts are retried, at most three attempts.
+
+The default page is 10 tenants, capped at 100. Each tenant transaction is bounded
+to 60 seconds with a five-second acquisition wait. A large tenant can time out
+and roll back safely; this is not a background daemon or unbounded startup job.
+Counts, safe error codes, durations and the last committed cursor are logged.
+A busy tenant stops the page without advancing its cursor; rerun from the last
+completed cursor. An error rolls back only that tenant, preserving completed
+tenants. Repeated execution is idempotent under existing reconciliation rules.
+Do not run a full seed to recover a deployment or to bypass missing authorization.

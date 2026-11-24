@@ -344,9 +344,11 @@ export async function seedSystemPermissionSets(
   prisma: AuthPrisma,
   tenantId: string,
   logger?: LoggerLike,
+  preseededResources?: Record<string, string>,
 ): Promise<Record<string, string>> {
   const log = getLogger(logger);
-  const resources = await ensurePermissionResources(prisma);
+  const resources =
+    preseededResources ?? (await ensurePermissionResources(prisma));
   const seeded: Record<string, string> = {};
 
   for (const set of SYSTEM_PERMISSION_SET_DEFINITIONS) {
@@ -711,38 +713,55 @@ export async function backfillSystemPermissionState(
 ) {
   const log = getLogger(logger);
   const tenants = await prisma.tenant.findMany({ select: { id: true } });
+  const resources = await ensurePermissionResources(prisma);
   let usersProcessed = 0;
 
   for (const tenant of tenants) {
-    const seededSetIds = await seedSystemPermissionSets(
+    usersProcessed += await reconcileTenantPermissionState(
       prisma,
       tenant.id,
+      resources,
       logger,
     );
-    await seedDefaultPermissionTemplates(prisma, tenant.id, logger);
-    await reconcileLegacySystemPermissionSets(prisma, tenant.id, logger);
-    const users = await prisma.user.findMany({
-      where: { tenantId: tenant.id },
-      select: { id: true, role: true },
-    });
-
-    for (const user of users) {
-      await syncUserSystemPermissionSet(
-        prisma,
-        {
-          tenantId: tenant.id,
-          userId: user.id,
-          role: user.role,
-          grantedBy: 'system-backfill',
-          seededSetIds,
-        },
-        logger,
-      );
-      usersProcessed += 1;
-    }
   }
 
   log.log(
     `System permission state backfill complete for ${tenants.length} tenant(s) and ${usersProcessed} user(s)`,
   );
+}
+
+/** Existing reconciliation semantics, scoped to one tenant and optionally one transaction. */
+export async function reconcileTenantPermissionState(
+  prisma: AuthPrisma,
+  tenantId: string,
+  resources: Record<string, string>,
+  logger?: LoggerLike,
+): Promise<number> {
+  const seededSetIds = await seedSystemPermissionSets(
+    prisma,
+    tenantId,
+    logger,
+    resources,
+  );
+  await seedDefaultPermissionTemplates(prisma, tenantId, logger, resources);
+  await reconcileLegacySystemPermissionSets(prisma, tenantId, logger);
+  const users = await prisma.user.findMany({
+    where: { tenantId },
+    select: { id: true, role: true },
+    orderBy: { id: 'asc' },
+  });
+  for (const user of users) {
+    await syncUserSystemPermissionSet(
+      prisma,
+      {
+        tenantId,
+        userId: user.id,
+        role: user.role,
+        grantedBy: 'system-backfill',
+        seededSetIds,
+      },
+      logger,
+    );
+  }
+  return users.length;
 }

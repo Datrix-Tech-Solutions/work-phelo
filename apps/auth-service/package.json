@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "permissions:reconcile": "node dist/scripts/reconcile-system-permissions.js",
     "dev": "nest start --watch",
     "prebuild": "npm run db:generate",
     "build": "nest build",

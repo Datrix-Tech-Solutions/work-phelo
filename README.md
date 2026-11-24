@@ -280,6 +280,85 @@ npm run build
 Do not merge directly to `prod` casually. Production changes require an
 explicit release plan, migration review, environment review and rollback notes.
 
+### Production Startup and Migrations
+
+Merging a PR into `prod` creates the single deployment event: a push to `prod`.
+The workflow validates the code, builds changed immutable SHA-tagged images,
+runs migrations, deploys changed/not-running services, then checks all eleven
+containers and their HTTP health endpoints. Production runs are serialized with
+`cancel-in-progress: false`, plus an exclusive host `flock`. There is no separate
+migration approval, baseline JSON, schema-fingerprint or backup-attestation gate.
+Existing `prod` Environment secrets and Accounting/Marketing activation flags
+are unchanged; this patch enables no business jobs or outbound messages.
+The deploy script also requires the workflow-provided push event and prod ref;
+missing or legacy PR/manual invocation context fails before host changes. Keep
+the default branch's deployment workflow trigger definition synchronized so it
+does not enqueue obsolete duplicate merged-PR runs.
+
+Before application rollout, `.github/scripts/production-migrations.mjs` runs
+native `prisma migrate deploy` once per service in this deterministic order:
+
+| Service      | Connection/history schema |
+| ------------ | ------------------------- |
+| Auth         | `w_auth`                  |
+| HR           | `hr`                      |
+| Notification | `notify`                  |
+| Reinsurance  | `reinsurance`             |
+| Accounting   | `accounting`              |
+| Marketing    | `marketing`               |
+| Inventory    | `inventory`               |
+
+Each command runs in its selected immutable service image with an overridden
+Node entrypoint, not application bootstrap. It uses that service's generated
+environment and validates exactly one correct `schema` URL parameter. PostgreSQL
+search-path correctness matters: the original Inventory max-stock migration
+contains an unqualified `InventoryItem` reference. Its SQL bytes remain unchanged;
+fresh-schema replay and the retained rolled-back-attempt case are tested.
+
+Prisma applies only pending migrations and preserves its service-specific history.
+No pending migrations is a successful no-op. Native Prisma advisory locking is
+retained. A migration failure or five-minute process deadline stops before
+application rollout and reports only the service and a safe error code; raw CLI
+output can expose credentials and is not printed. Failed/ambiguous existing
+histories require private operator diagnosis, never automatic resolution.
+
+Deployment never runs full seeds, `db push`, reset, resolve or repair SQL.
+Standard `migrate deploy` is not a proof that live schema drift is absent. Review
+immutable SQL and destructive changes in the release PR; keep ordinary backups
+and recovery practice current without introducing another approval workflow.
+
+Auth no longer performs full permission reconciliation during HTTP startup.
+Its existing transactional new-tenant/invite baseline assignment remains intact.
+The explicit, dry-run-first operator command is documented in
+`apps/auth-service/README.md`; deployment never invokes it.
+Next.js `/health` returns direct unauthenticated HTTP 200 with no-store caching.
+Protected pages retain authentication; production probes do not follow redirects.
+
+Only changed/not-running services are recreated. Entry points no longer depend
+on every backend already being healthy. Application/shared-dependency changes
+select image builds; infrastructure-only edits do not force unrelated app images
+to rebuild. Compose config hashes still detect actual runtime configuration changes.
+Existing bounded health/reachability
+checks must still pass before canonical configuration and successful image
+history are published. Private prior configuration and
+`.deployment-state.prod` identify interrupted releases. Raw application logs and
+health command output are omitted from CI diagnostics; inspect privately.
+
+If DDL succeeds but a later service/rollout fails, earlier schema changes may
+remain committed. There is no automatic database or container rollback. Continue
+with a reviewed fix or only schema-compatible previous images/configuration.
+Database restore is a separate incident action and may lose intervening writes.
+Multi-file configuration publication is not globally atomic; retain and inspect
+candidate/rollback snapshots before recovery. Do not restart or prune unrelated
+healthy services while diagnosing a failed deployment.
+
+Tests: `node --test .github/scripts/production-migrations.spec.mjs .github/scripts/deploy-prod-safety.spec.mjs apps/web/work-phelo-web/scripts/health-route.spec.mjs`.
+Opt-in PostgreSQL tests use only an owned loopback fixture on port 54413, database
+`resilience_fixture`, user `fixture`: set `MIGRATION_TEST_DATABASE_URL` securely
+and run `node --test .github/scripts/production-migrations.database.spec.mjs`.
+Generate the Inventory client first. The tests create random isolated databases;
+remove only the owned fixture container afterward, never a shared schema.
+
 ## Contribution Workflow
 
 1. Branch from latest `origin/dev` unless a release task says otherwise.
@@ -380,19 +459,17 @@ in `.github/production-rollout-manifest.json`: 65 Accounting, 40 Marketing and
 The previously excluded DEV migrations are now included with matching source
 and Prisma schemas. Disposable migration validation is not production drift proof.
 
-**Destructive migration gate:** Accounting's
+**Historical destructive migration:** Accounting's
 `20261121100000_bank_reconciliation_ledger_matching` drops old matching columns
 and indexes without a data-preserving backfill. Before application, verify actual
 production history/data, recoverable backups and any required reconciliation
 preservation plan. Do not assume tables are empty or baseline migrations blindly.
 
-Deployment runs only read-only Prisma migration status, never automatic SQL or
-explicit seeds. Existing Auth startup permission-catalog/system-set backfill is
-unchanged and can write resources/system sets when Auth starts; review/approve
-that existing behavior with the Inventory catalog addition. Required migrations
-and any additional Inventory RBAC seeding need separately approved
-execution. Pending migrations intentionally block rollout. Do not apply only the
-new application image to an older schema.
+Deployment now runs native Prisma migration deploy before application rollout,
+as documented above. It never runs full seeds or automatic history repair. Auth
+startup no longer performs global permission backfill; permission reconciliation
+is an explicit operator command, not a deployment step. Failed migrations block
+rollout. Do not apply a new application image against an incompatible schema.
 
 Assets/env files remain in `.incoming-<SHA>` until health/reachability pass;
 private previous configuration backups and canonical per-environment image
