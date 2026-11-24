@@ -55,7 +55,6 @@ export function AwaitingPostingCard({ className }: { className?: string }) {
   return (
     <DashboardListCard
       title="Awaiting Posting"
-      subtitle="Drafts not yet in the ledger"
       className={className}
       sections={[
         {
