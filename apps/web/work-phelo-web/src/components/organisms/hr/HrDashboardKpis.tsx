@@ -1,10 +1,14 @@
 'use client';
 
-import { CalendarOff, ClipboardCheck, UserPlus, Users } from 'lucide-react';
+import { CalendarOff, ClipboardCheck, FolderKanban, UserPlus, Users } from 'lucide-react';
+import { useMemo } from 'react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { useHrDashboardKpis } from '@/hooks/hr/useDashboard';
+import { useProjects } from '@/hooks/hr/useProjects';
 import { dashboardRanges, formatDay, trendBetween } from '@/lib/dashboardPeriod';
+import { summarizeProjects } from '@/lib/projectsSummary';
+import { cn } from '@/lib/utils';
 
 const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
@@ -24,10 +28,15 @@ const orUndefined = (value: number | null | undefined) => value ?? undefined;
 interface HrDashboardKpisProps {
   period: Period;
   year: number;
+  /** Adds the Projects card; it summarises every project, so the page gates it. */
+  showProjects?: boolean;
 }
 
-export function HrDashboardKpis({ period, year }: HrDashboardKpisProps) {
+export function HrDashboardKpis({ period, year, showProjects = false }: HrDashboardKpisProps) {
   const { data, isLoading } = useHrDashboardKpis(period, year);
+  // Projects are a live snapshot, so the period filter does not touch them.
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const projectSummary = useMemo(() => summarizeProjects(projects ?? []), [projects]);
   const periodLabel = PERIOD_LABELS[period];
 
   // What each badge was calculated against, so its percentage can be checked by hand.
@@ -35,7 +44,12 @@ export function HrDashboardKpis({ period, year }: HrDashboardKpisProps) {
   const previousFrom = `Previous (${formatDay(prevFromDate)} – ${formatDay(prevToDate)}): `;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div
+      className={cn(
+        'grid grid-cols-1 sm:grid-cols-2 gap-3',
+        showProjects ? 'lg:grid-cols-5' : 'lg:grid-cols-4',
+      )}
+    >
       <KpiCard
         label="Headcount"
         value={data?.headcount.current ?? '—'}
@@ -106,6 +120,20 @@ export function HrDashboardKpis({ period, year }: HrDashboardKpisProps) {
         periodLabel={periodLabel}
         isLoading={isLoading}
       />
+      {showProjects && (
+        <KpiCard
+          label="Projects"
+          value={projectSummary.counts.ACTIVE}
+          icon={FolderKanban}
+          iconColor="#0ea5e9"
+          sub={[
+            { label: 'Planning', value: projectSummary.counts.PLANNING },
+            { label: 'On hold', value: projectSummary.counts.ON_HOLD },
+            { label: 'Overdue', value: projectSummary.overdueProjects },
+          ]}
+          isLoading={projectsLoading}
+        />
+      )}
     </div>
   );
 }
