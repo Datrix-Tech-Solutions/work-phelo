@@ -9,7 +9,6 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
-import type { CanActivate } from '@nestjs/common';
 import type { JwtPayload } from '@work-phelo/types';
 import type { Prisma } from '../../prisma/generated/client';
 import { AuthService } from './auth.service';
@@ -17,6 +16,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { RecruiterAuthService } from './recruiter-auth.service';
 import { isResourceEnabledForTenant } from '../permissions/permission-entitlements';
 import * as permissionSets from '../permissions/system-permission-sets';
+import { FeatureGuard } from '../../../hr-service/src/auth/guards/feature.guard';
+
+jest.mock('bcrypt', () => ({ hash: jest.fn(), compare: jest.fn() }));
 
 jest.mock('../permissions/system-permission-sets', () => ({
   ensurePermissionResources: jest.fn().mockResolvedValue({}),
@@ -79,10 +81,42 @@ function setup() {
 }
 
 describe('RecruiterAuthService', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.mocked(permissionSets.ensurePermissionResources).mockResolvedValue({});
+    jest
+      .mocked(permissionSets.seedDefaultPermissionTemplates)
+      .mockResolvedValue({});
+    jest
+      .mocked(permissionSets.seedRecruiterPermissionSet)
+      .mockResolvedValue('recruiter-set');
+    // Synthetic hashes exercise orchestration, not bcrypt compatibility or CPU cost.
+    const hash = bcrypt.hash as unknown as jest.Mock<
+      Promise<string>,
+      [string, number]
+    >;
+    hash.mockImplementation((password, rounds) =>
+      Promise.resolve(
+        `test-only-bcrypt:${rounds}:${Buffer.from(password).toString('base64')}`,
+      ),
+    );
+    const compare = bcrypt.compare as unknown as jest.Mock<
+      Promise<boolean>,
+      [string, string]
+    >;
+    compare.mockImplementation((password, hash) =>
+      Promise.resolve(
+        /^test-only-bcrypt:\d+:/.test(hash) &&
+          hash.split(':')[2] === Buffer.from(password).toString('base64'),
+      ),
+    );
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.resetAllMocks();
+  });
 
   describe('register', () => {
-    // Real bcrypt at cost 12 (hash + compare) is slow on loaded CI runners.
     it('creates an unverified website tenant limited to the recruiter permission set and emails a confirmation link', async () => {
       const { service, tx, rabbitmq } = setup();
 
@@ -127,7 +161,11 @@ describe('RecruiterAuthService', () => {
         }),
       );
       expect(userData.password).not.toBe(dto.password);
+      expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 12);
       expect(await bcrypt.compare(dto.password, userData.password)).toBe(true);
+      expect(await bcrypt.compare('wrong-password', userData.password)).toBe(
+        false,
+      );
       expect(permissionSets.seedRecruiterPermissionSet).toHaveBeenCalled();
       expect(tx.userPermissionSet.create).toHaveBeenCalledWith({
         data: {
@@ -155,7 +193,7 @@ describe('RecruiterAuthService', () => {
         message:
           'Registration received. Check your email to confirm your account.',
       });
-    }, 30000);
+    });
 
     it('keeps a country name in the address and falls back to the default code', async () => {
       const { service, tx } = setup();
@@ -268,6 +306,7 @@ describe('RecruiterAuthService', () => {
     );
 
     await recruiter.register(dto);
+    expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 12);
     expect(tenant!.source).toBe('WEBSITE');
     expect(user!.status).toBe('PENDING_VERIFICATION');
     expect(permissionSets.seedRecruiterPermissionSet).toHaveBeenCalled();
@@ -316,9 +355,6 @@ describe('RecruiterAuthService', () => {
     ).toBe(true);
 
     // Exercise HR's unchanged gate without starting a server or weakening its metadata.
-    const { FeatureGuard } = jest.requireActual<{
-      FeatureGuard: new (reflector: Reflector) => CanActivate;
-    }>('../../../hr-service/src/auth/guards/feature.guard');
     const guard = new FeatureGuard({
       getAllAndOverride: () => ({ module: 'hr', feature: 'recruitment' }),
     } as unknown as Reflector);
@@ -336,8 +372,7 @@ describe('RecruiterAuthService', () => {
         ]),
       ),
     ).toThrow(ForbiddenException);
-    // Real bcrypt at cost 12 (register hash + login compare) is slow on loaded CI runners.
-  }, 30000);
+  });
 
   describe('confirmEmail', () => {
     it('activates the account and clears the token', async () => {
