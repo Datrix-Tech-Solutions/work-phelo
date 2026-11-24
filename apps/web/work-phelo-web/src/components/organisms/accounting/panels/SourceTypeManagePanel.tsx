@@ -30,15 +30,10 @@ export function SourceTypeManagePanel({
     >
       {sourceType?.module === 'HR' ? (
         <PayrollAccountingSetup sourceType={sourceType} />
-      ) : sourceType?.module === 'MARKETING' || sourceType?.module === 'OPERATIONS' ? (
+      ) : sourceType ? (
+        // Every other module raises transactions through the same set-up; one that does not says so.
         <SourceBillingSetup sourceType={sourceType} />
-      ) : (
-        <p className="text-sm text-gray-500">
-          This will surface {sourceType ? SOURCE_MODULE_LABELS[sourceType.module] : 'the module'}
-          &apos;s own integration setup here — the same settings screen it manages from its own
-          module, opened in place instead of navigating away.
-        </p>
-      )}
+      ) : null}
     </SidePanel>
   );
 }
