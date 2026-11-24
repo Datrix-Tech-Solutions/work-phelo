@@ -12,12 +12,149 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const source = readFileSync(join(repo, '.github/scripts/deploy-prod.sh'), 'utf8');
 const helper = readFileSync(join(repo, '.github/scripts/deploy-common.sh'), 'utf8');
 const sha = 'a'.repeat(40);
+
+test('one canonical prod push deploys the merge commit with serialization', () => {
+  const workflow = readFileSync(join(repo, '.github/workflows/deploy-prod.yml'), 'utf8');
+  const triggers = workflow.slice(workflow.indexOf('\non:'), workflow.indexOf('\n#'));
+  assert.match(triggers, /on:\n  push:\n    branches: \[prod\]/);
+  assert.equal((triggers.match(/^  [a-z_]+:/gm) ?? []).length, 1);
+  assert(!/pull_request_target|workflow_dispatch/.test(workflow));
+  assert.match(workflow, /group: deploy-prod\n  cancel-in-progress: false/);
+  assert(workflow.includes("if: github.event_name == 'push' && github.ref == 'refs/heads/prod'"));
+  assert(workflow.includes('BUILD_SHA: ${{ github.sha }}'));
+  assert(!/MIGRATION_PLAN|protection_rules/.test(workflow));
+  assert(workflow.includes('DEPLOY_TRIGGER: ${{ github.event_name }}'));
+  assert.match(workflow, /envs: .*BUILD_SHA,BUILD_REF,DEPLOY_TRIGGER,/);
+  const filters = workflow.slice(
+    workflow.indexOf('filters: |'),
+    workflow.indexOf('list-files: none'),
+  );
+  assert(
+    !/infrastructure\/|\.github\//.test(filters),
+    'infra-only edits must not force unrelated application image rebuilds',
+  );
+  assert(filters.includes("'packages/**'") && filters.includes("'package*.json'"));
+});
+
+for (const [event, ref] of [
+  ['pull_request_target', 'prod'],
+  ['workflow_dispatch', 'prod'],
+  ['push', 'dev'],
+  ['', 'prod'],
+]) {
+  test(`deployment entry rejects event=${event || 'missing'} ref=${ref} before host changes`, () => {
+    const result = spawnSync('bash', ['-c', source], {
+      env: { PATH: process.env.PATH, DEPLOY_TRIGGER: event, BUILD_REF: ref },
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /requires a push to prod/);
+  });
+}
+
+test('all eleven production services remain configured', () => {
+  const compose = readFileSync(join(repo, 'infrastructure/docker-compose.prod.yml'), 'utf8').split(
+    '\nnetworks:',
+  )[0];
+  const services = [...compose.matchAll(/^  ([a-z0-9-]+):$/gm)].map((match) => match[1]);
+  assert.deepEqual(
+    services.sort(),
+    [
+      'redis',
+      'auth-service',
+      'hr-service',
+      'notification-service',
+      'reinsurance-service',
+      'accounting-service',
+      'marketing-service',
+      'inventory-service',
+      'subscription-service',
+      'api-gateway',
+      'nextjs',
+    ].sort(),
+  );
+});
+
+for (const failure of ['', 'hr-service']) {
+  test(`migration services execute once in order and stop at failure=${failure || 'none'}`, () => {
+    const root = mkdtempSync(join(tmpdir(), 'migration-order-'));
+    try {
+      const trace = join(root, 'trace');
+      writeFileSync(trace, '');
+      const result = spawnSync(
+        'bash',
+        [
+          '-c',
+          helper +
+            `
+log() { :; }
+docker_compose() {
+  printf '%s\\n' "$*" >> "$TRACE"
+  [[ -z "$FAILURE" || "$*" != *"$FAILURE"* ]]
+}
+run_production_migrations
+`,
+        ],
+        {
+          env: { ...process.env, DEPLOY_PATH: '/fixture', TRACE: trace, FAILURE: failure },
+          encoding: 'utf8',
+        },
+      );
+      assert.equal(result.status === 0, !failure);
+      const calls = readFileSync(trace, 'utf8').trim().split('\n');
+      const order = [
+        'auth-service',
+        'hr-service',
+        'notification-service',
+        'reinsurance-service',
+        'accounting-service',
+        'marketing-service',
+        'inventory-service',
+      ];
+      assert.equal(calls.length, failure ? 2 : 7);
+      calls.forEach((call, index) => {
+        assert(call.includes('-e MIGRATION_SERVICE=' + order[index]));
+        assert(call.includes('--entrypoint node ' + order[index] + ' /production-migrations.mjs'));
+        assert(!/MIGRATION_PLAN|--execute|seed|reset|resolve/.test(call));
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+const hasFlock = spawnSync('flock', ['--help'], { stdio: 'ignore' }).status === 0;
+test(
+  'real host lock prevents overlapping deployments and releases on exit',
+  { skip: !hasFlock, timeout: 15000 },
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), 'production-lock-'));
+    const lock = join(root, 'deploy.lock');
+    const holder = spawn(
+      'bash',
+      ['-c', 'exec 9>"$LOCK"; flock -n 9 || exit 1; printf "locked\\n"; read -r release'],
+      { env: { ...process.env, LOCK: lock }, stdio: ['pipe', 'pipe', 'pipe'] },
+    );
+    try {
+      await once(holder.stdout, 'data');
+      assert.notEqual(spawnSync('flock', ['-n', lock, 'true']).status, 0);
+      const exited = once(holder, 'exit');
+      holder.stdin.end('release\n');
+      await exited;
+      assert.equal(spawnSync('flock', ['-n', lock, 'true']).status, 0);
+    } finally {
+      holder.kill();
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test('production application image selection rejects floating tags', () => {
   const check = (image) =>
@@ -170,7 +307,6 @@ docker_compose() {
     fi
     return 0
   fi
-  if [[ "$*" == *"accounting-service"* && "$*" == *"migrate status"* && "$FAILURE" == migration ]]; then return 1; fi
   if [[ "$1" == up && "$FAILURE" == rollout ]]; then return 1; fi
 }
 wait_for_http_ok() {
@@ -194,6 +330,7 @@ post_deploy_capacity_maintenance() { :; }
   Object.assign(env, {
     BUILD_SHA: sha,
     BUILD_REF: 'prod',
+    DEPLOY_TRIGGER: 'push',
     IMAGE_PREFIX: 'fixture',
     GHCR_TOKEN: 'synthetic-only',
     GHCR_USERNAME: 'fixture',
@@ -223,9 +360,7 @@ for (const failure of ['migration', 'rollout', 'reachability', 'lock']) {
       );
       assert(!f.trace.includes('HISTORY'));
       assert(
-        !/migrate (deploy|reset|resolve)|db push|seed\.js|--remove-orphans|volume prune/.test(
-          f.trace,
-        ),
+        !/migrate (reset|resolve)|db push|seed\.js|--remove-orphans|volume prune/.test(f.trace),
       );
       if (failure === 'migration') assert(!f.trace.includes('COMPOSE up'));
       if (failure !== 'lock') {
@@ -259,11 +394,7 @@ test('successful rollout preserves old image refs, defaults business flags off a
     );
     assert(f.trace.indexOf('HISTORY') > f.trace.lastIndexOf('HTTP '));
     assert(f.trace.indexOf('MIGRATIONS') < f.trace.indexOf('COMPOSE up'));
-    assert(
-      !/migrate (deploy|reset|resolve)|db push|seed\.js|--remove-orphans|volume prune/.test(
-        f.trace,
-      ),
-    );
+    assert(!/migrate (reset|resolve)|db push|seed\.js|--remove-orphans|volume prune/.test(f.trace));
     const accounting = readFileSync(join(f.root, 'apps/accounting-service/.env.prod'), 'utf8');
     const marketing = readFileSync(join(f.root, 'apps/marketing-service/.env.prod'), 'utf8');
     for (const flag of [

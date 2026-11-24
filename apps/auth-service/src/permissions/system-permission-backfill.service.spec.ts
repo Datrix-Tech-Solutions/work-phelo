@@ -1,5 +1,7 @@
 import { Test } from '@nestjs/testing';
+import request from 'supertest';
 import { PrismaService } from '../prisma/prisma.service';
+import { HealthController } from '../health/health.controller';
 import { SystemPermissionBackfillService } from './system-permission-backfill.service';
 import {
   ensurePermissionResources,
@@ -42,6 +44,34 @@ describe('Explicit permission reconciliation', () => {
     expect(ensurePermissionResources).not.toHaveBeenCalled();
     expect(reconcileTenantPermissionState).not.toHaveBeenCalled();
     await module.close();
+  });
+  it('serves unauthenticated health without waiting for tenant reconciliation', async () => {
+    const ping = jest.fn().mockResolvedValue([{ value: 1 }]);
+    const module = await Test.createTestingModule({
+      controllers: [HealthController],
+      providers: [
+        SystemPermissionBackfillService,
+        {
+          provide: PrismaService,
+          useValue: { ...prisma, $queryRawUnsafe: ping },
+        },
+      ],
+    }).compile();
+    const app = module.createNestApplication();
+    try {
+      await app.init();
+      await request(app.getHttpServer())
+        .get('/health')
+        .expect(200)
+        .expect((response) => {
+          expect(response.body.status).toBe('ok');
+        });
+      expect(ping).toHaveBeenCalledWith('SELECT 1');
+      expect(prisma.tenant.findMany).not.toHaveBeenCalled();
+      expect(ensurePermissionResources).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
   });
   it('defaults to bounded dry-run with no permission writes', async () => {
     expect(await service.run()).toMatchObject({

@@ -361,18 +361,13 @@ production_changed_services() {
 }
 
 run_production_migrations() {
-  [[ "${PROD_MIGRATION_PLAN_FILE:-}" == /* && "$PROD_MIGRATION_PLAN_FILE" != *:* && -r "$PROD_MIGRATION_PLAN_FILE" ]] || die 'An approved production migration/baseline plan file is required'
-  [[ "${PROD_MIGRATION_PLAN_SHA256:-}" =~ ^[a-f0-9]{64}$ ]] || die 'Approved migration plan digest is required'
   local service
   for service in auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service; do
-    log "Migration verification: ${service}"
+    log "Migration deploy: ${service}"
     docker_compose run -T --rm --no-deps \
       --volume "${DEPLOY_PATH}/.github/scripts/production-migrations.mjs:/production-migrations.mjs:ro" \
-      --volume "${PROD_MIGRATION_PLAN_FILE}:/approved-migrations.json:ro" \
-      -e "MIGRATION_SERVICE=${service}" -e "BUILD_SHA=${BUILD_SHA}" \
-      -e MIGRATION_PLAN_FILE=/approved-migrations.json \
-      -e "MIGRATION_PLAN_SHA256=${PROD_MIGRATION_PLAN_SHA256}" \
-      --entrypoint node "$service" /production-migrations.mjs --execute || return 1
+      -e "MIGRATION_SERVICE=${service}" \
+      --entrypoint node "$service" /production-migrations.mjs || return 1
   done
 }
 

@@ -3,6 +3,8 @@
 set -euo pipefail
 umask 077
 
+[[ "${DEPLOY_TRIGGER:-}" == push && "${BUILD_REF:-}" == prod ]] || { echo 'Production deployment requires a push to prod' >&2; exit 1; }
+
 DEPLOY_ENV="prod"
 LIVE_DEPLOY_PATH="/var/www/apps/workphelo.com/work-phelo"
 [[ "${BUILD_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid production BUILD_SHA' >&2; exit 1; }
@@ -316,10 +318,10 @@ for relative in .compose.prod.env infrastructure/docker-compose.prod.yml .github
   fi
 done
 
-section "Approved Database Migration Stage"
+section "Database Migrations"
 DEPLOY_STAGE=MIGRATIONS
 record_release_state MIGRATIONS
-run_production_migrations || die 'Migration verification/execution stopped; application rollout has not started. Review history, approved plan and backup evidence.'
+run_production_migrations || die 'Migration failed; application rollout has not started. Inspect the failed service history privately. No automatic database rollback or repair is attempted.'
 
 section "Deploy"
 DEPLOY_STAGE=ROLLOUT

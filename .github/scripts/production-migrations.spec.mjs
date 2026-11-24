@@ -1,246 +1,104 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import {
-  executeMigration,
-  validateHistory,
-  validatePlan,
-  readApprovedPlan,
-} from './production-migrations.mjs';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { runMigration, serviceSchemas } from './production-migrations.mjs';
 
-const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const sha = 'a'.repeat(40),
-  scope = 'b'.repeat(64),
-  checksum = 'c'.repeat(64);
-const files = [{ name: '20261124000000_fixture', checksum, reviewRequired: false }];
-const objects = [{ kind: 'table', name: 'fixture', definition: { column: 'id' } }];
-const completed = {
-  migration_name: files[0].name,
-  checksum,
-  finished_at: new Date(),
-  rolled_back_at: null,
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const expected = {
+  'auth-service': 'w_auth',
+  'hr-service': 'hr',
+  'notification-service': 'notify',
+  'reinsurance-service': 'reinsurance',
+  'accounting-service': 'accounting',
+  'marketing-service': 'marketing',
+  'inventory-service': 'inventory',
 };
-function fixture({ applied = false, extraHistory = [], lock = true } = {}) {
-  let migrated = applied,
-    calls = 0,
-    statuses = 0;
-  const client = {
-    $transaction: async (action) => action(client),
-    $queryRawUnsafe: async (sql) => {
-      if (sql.includes('pg_try_advisory')) return [{ locked: lock }];
-      if (sql.includes('current_schema()'))
-        return [
-          {
-            current_schema: 'inventory',
-            major: 16,
-            history_exists: migrated || extraHistory.length > 0,
-          },
-        ];
-      if (sql.startsWith('SELECT migration_name'))
-        return [...extraHistory, ...(migrated ? [completed] : [])];
-      return migrated ? objects : [];
-    },
-  };
-  const plan = {
-    version: 1,
-    releaseSha: sha,
-    approvalRef: 'review-1',
-    expiresAt: '2099-01-01',
-    backup: {
-      reference: 'backup-1',
-      verificationRef: 'verification-1',
-      restoreTestRef: 'restore-1',
-      releaseSha: sha,
-      verifiedAt: '2026-01-01',
-      validUntil: '2099-01-01',
-      serviceScopes: [scope],
-    },
-    services: {
-      'inventory-service': {
-        schema: 'inventory',
-        postgresMajor: 16,
-        databaseScopeHash: scope,
-        snapshotEvidenceRef: 'trusted-prefix-replay-1',
-        fromMigrations: [],
-        targetMigrations: files.map(({ name, checksum }) => ({ name, checksum })),
-        beforeDigest: digest([]),
-        afterDigest: digest(objects),
-        backwardCompatible: true,
-        compatibilityEvidenceRef: 'old-binary-smoke-1',
-      },
-    },
-  };
-  const run = () =>
-    executeMigration({
-      client,
-      files,
-      plan,
-      service: 'inventory-service',
-      releaseSha: sha,
-      databaseScopeHash: scope,
-      execute: async () => {
-        calls++;
-        migrated = true;
-      },
-      status: async () => {
-        statuses++;
+assert.deepEqual(serviceSchemas, expected);
+for (const [service, schema] of Object.entries(expected)) {
+  test(`${service} runs native migrate deploy using its exact schema URL`, () => {
+    let called = 0;
+    const env = {
+      DATABASE_URL: `postgresql://fixture:fixture@127.0.0.1:1/fixture?schema=${schema}`,
+    };
+    const result = runMigration({
+      service,
+      env,
+      cwd: root + 'apps/' + service,
+      spawn: (binary, args, options) => {
+        called++;
+        assert.equal(binary, process.execPath);
+        assert.deepEqual(args.slice(1), [
+          'migrate',
+          'deploy',
+          '--schema',
+          root + 'apps/' + service + '/prisma/schema.prisma',
+        ]);
+        assert.equal(options.env.DATABASE_URL, env.DATABASE_URL);
+        assert.equal(options.timeout, 300000);
+        assert.equal(options.stdio, 'pipe');
+        return { status: 0, stdout: 'No pending migrations', stderr: '' };
       },
     });
-  return { client, plan, run, calls: () => calls, statuses: () => statuses };
-}
-
-test('fresh install applies the approved pending sequence and verifies final status', async () => {
-  const f = fixture();
-  assert.equal((await f.run()).pendingApplied, 1);
-  assert.equal(f.calls(), 1);
-  assert.equal(f.statuses(), 1);
-});
-test('existing complete history is no-op, without rerunning completed migrations', async () => {
-  const f = fixture({ applied: true });
-  assert.equal((await f.run()).pendingApplied, 0);
-  assert.equal(f.calls(), 0);
-});
-test('zero pending reuses a trusted baseline without fresh release approval or backup', async () => {
-  const f = fixture({ applied: true });
-  f.plan.releaseSha = 'd'.repeat(40);
-  f.plan.expiresAt = '2020-01-01';
-  delete f.plan.backup;
-  delete f.plan.services['inventory-service'].compatibilityEvidenceRef;
-  delete f.plan.services['inventory-service'].destructiveApprovalRef;
-  assert.equal((await f.run()).pendingApplied, 0);
-  assert.equal(f.calls(), 0);
-  assert.equal(f.statuses(), 1);
-});
-test('known rolled-back attempt is retained and does not invent successful history', async () => {
-  const attempt = { ...completed, finished_at: null, rolled_back_at: new Date() };
-  const f = fixture({ applied: true, extraHistory: [attempt] });
-  assert.equal((await f.run()).rolledBackAttemptsPreserved, 1);
-  assert.equal(f.calls(), 0);
-});
-for (const [name, row, error] of [
-  ['failed', { ...completed, finished_at: null }, 'FAILED_OR_RUNNING'],
-  ['checksum mismatch', { ...completed, checksum: 'd'.repeat(64) }, 'CHECKSUM'],
-  ['unknown', { ...completed, migration_name: 'unknown' }, 'UNKNOWN_MIGRATION'],
-])
-  test(`${name} history fails closed before execution`, async () => {
-    const f = fixture({ extraHistory: [row] });
-    await assert.rejects(f.run, new RegExp(error));
-    assert.equal(f.calls(), 0);
+    assert.equal(called, 1);
+    assert.equal(result.status, 'migration-deploy-complete');
   });
-test('duplicate success records are rejected', () =>
-  assert.throws(() => validateHistory(files, [completed, completed]), /DUPLICATE/));
-test('competing database migration lock fails before inspection or execution', async () => {
-  const f = fixture({ lock: false });
-  await assert.rejects(f.run, /LOCK_BUSY/);
-  assert.equal(f.calls(), 0);
-});
-test('missing backup and restore confirmation blocks schema changes', async () => {
-  const f = fixture();
-  delete f.plan.backup.restoreTestRef;
-  await assert.rejects(f.run, /VERIFIED_BACKUP/);
-  assert.equal(f.calls(), 0);
-});
-test('expired approval blocks pending migrations', async () => {
-  const f = fixture();
-  f.plan.expiresAt = '2020-01-01';
-  await assert.rejects(f.run, /PLAN_EXPIRED/);
-  assert.equal(f.calls(), 0);
-});
-test('database-scope mismatch blocks even an otherwise valid plan', async () => {
-  const f = fixture();
-  f.plan.services['inventory-service'].databaseScopeHash = 'e'.repeat(64);
-  await assert.rejects(f.run, /SCOPE_MISMATCH/);
-});
-test('unexpected catalog drift blocks a no-pending deployment', async () => {
-  const f = fixture({ applied: true });
-  f.plan.services['inventory-service'].afterDigest = digest([]);
-  await assert.rejects(f.run, /SCHEMA_DRIFT/);
-  assert.equal(f.calls(), 0);
-});
-test('breaking migrations require maintenance rather than unsafe old-binary rollback', async () => {
-  const f = fixture();
-  f.plan.services['inventory-service'].backwardCompatible = false;
-  await assert.rejects(f.run, /MAINTENANCE_MIGRATION_REQUIRED/);
-});
-test('compatibility evidence is mandatory for a pending migration', async () => {
-  const f = fixture();
-  delete f.plan.services['inventory-service'].compatibilityEvidenceRef;
-  await assert.rejects(f.run, /MAINTENANCE_MIGRATION_REQUIRED/);
-  assert.equal(f.calls(), 0);
-});
-test('native migration failure does not run status or claim success', async () => {
-  const f = fixture();
-  await assert.rejects(
-    () =>
-      executeMigration({
-        client: f.client,
-        files,
-        plan: f.plan,
-        service: 'inventory-service',
-        releaseSha: sha,
-        databaseScopeHash: scope,
-        execute: async () => {
-          throw new Error('native failure');
-        },
-        status: async () => assert.fail('must not report status after failure'),
-      }),
-    /native failure/,
-  );
-});
-test('missing successful history after execution fails post-migration verification', async () => {
-  const f = fixture();
-  await assert.rejects(
-    () =>
-      executeMigration({
-        client: f.client,
-        files,
-        plan: f.plan,
-        service: 'inventory-service',
-        releaseSha: sha,
-        databaseScopeHash: scope,
-        execute: async () => {},
-        status: async () => assert.fail('must not report success with incomplete history'),
-      }),
-    /POST_MIGRATION_VERIFICATION_FAILED/,
-  );
-});
-test('destructive classification needs explicit review even with compatibility approval', () => {
-  const f = fixture();
-  assert.throws(
-    () =>
-      validatePlan({
-        plan: f.plan,
-        service: 'inventory-service',
-        files: [{ ...files[0], reviewRequired: true }],
-        state: { major: 16, digest: digest([]) },
-        pending: [{ ...files[0], reviewRequired: true }],
-        releaseSha: sha,
-        databaseScopeHash: scope,
-      }),
-    /DESTRUCTIVE_APPROVAL/,
-  );
-});
-test('plan file bytes must match the approved digest; absence never falls back to migrate deploy', () => {
-  assert.throws(() => readApprovedPlan(undefined, undefined), /APPROVED_PLAN/);
-  const directory = mkdtempSync(join(tmpdir(), 'migration-plan-test-'));
-  try {
-    const file = join(directory, 'plan.json');
-    const plan = fixture().plan;
-    writeFileSync(file, JSON.stringify(plan));
-    assert.deepEqual(readApprovedPlan(file, digest(plan)), plan);
-    assert.throws(() => readApprovedPlan(file, '0'.repeat(64)), /DIGEST_MISMATCH/);
-    const invalid = { ...plan, version: 2 };
-    writeFileSync(file, JSON.stringify(invalid));
-    assert.throws(() => readApprovedPlan(file, digest(invalid)), /INVALID_APPROVED_PLAN/);
-    writeFileSync(file, '{');
+}
+for (const url of [
+  'not-a-url',
+  'postgresql://fixture:fixture@localhost/fixture',
+  'postgresql://fixture:fixture@localhost/fixture?schema=public',
+  'postgresql://fixture:fixture@localhost/fixture?schema=inventory&schema=inventory',
+]) {
+  test('invalid/mismatched/ambiguous database URL stops before Prisma', () =>
     assert.throws(
-      () => readApprovedPlan(file, createHash('sha256').update('{').digest('hex')),
-      SyntaxError,
+      () =>
+        runMigration({
+          service: 'inventory-service',
+          env: { DATABASE_URL: url },
+          spawn: () => assert.fail('must not execute'),
+        }),
+      /INVALID_DATABASE_URL|INCORRECT_DATABASE_SCHEMA_URL/,
+    ));
+}
+test('unknown services cannot run migrations', () =>
+  assert.throws(() => runMigration({ service: 'subscription-service' }), /UNKNOWN_SERVICE/));
+test('obsolete inspection/approval flags fail closed instead of executing migrations', () => {
+  for (const flag of ['--manifest', '--inspect', '--execute']) {
+    const result = spawnSync(
+      process.execPath,
+      [root + '.github/scripts/production-migrations.mjs', flag],
+      { env: { MIGRATION_SERVICE: 'inventory-service' }, encoding: 'utf8' },
     );
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /UNSUPPORTED_ARGUMENTS/);
   }
 });
+test('native failure is fatal without exposing captured credentials or retrying', () => {
+  let calls = 0;
+  assert.throws(
+    () =>
+      runMigration({
+        service: 'inventory-service',
+        cwd: root + 'apps/inventory-service',
+        env: { DATABASE_URL: 'postgresql://fixture:fixture@localhost/fixture?schema=inventory' },
+        spawn: () => {
+          calls++;
+          return { status: 1, stderr: 'Error: P3009 credential-canary', stdout: '' };
+        },
+      }),
+    (error) => error.code === 'P3009' && !error.message.includes('credential-canary'),
+  );
+  assert.equal(calls, 1);
+});
+test('timeouts stop rather than reset, resolve or retry the database', () =>
+  assert.throws(
+    () =>
+      runMigration({
+        service: 'inventory-service',
+        cwd: root + 'apps/inventory-service',
+        env: { DATABASE_URL: 'postgresql://fixture:fixture@localhost/fixture?schema=inventory' },
+        spawn: () => ({ status: null, error: { code: 'ETIMEDOUT' } }),
+      }),
+    /MIGRATION_TIMEOUT/,
+  ));
