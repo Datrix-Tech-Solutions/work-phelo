@@ -43,6 +43,7 @@ interface InviteForm {
   contractEndDate?: string;
   basicSalary?: number;
   compensationType?: EmployeeCompensationType;
+  recruitmentCandidateId?: string;
 }
 
 /** Values to start the form with, e.g. when onboarding a hired candidate. */
@@ -57,6 +58,7 @@ export type InviteEmployeeDefaults = Partial<
     | 'departmentId'
     | 'branchId'
     | 'employmentType'
+    | 'recruitmentCandidateId'
   >
 >;
 
@@ -199,8 +201,15 @@ function InviteEmployeeForm({
         basicSalary: undefined,
         compensationType: 'SALARY',
         grantSystemAccess: false,
+        recruitmentCandidateId: undefined,
       });
       const fullName = `${d.firstName} ${d.lastName}`;
+      // A candidate is onboarded once, so there is no next entry to continue to.
+      if (d.recruitmentCandidateId) {
+        onClose();
+        onSuccess(fullName);
+        return;
+      }
       // Locked: the panel's Continue / Stop prompt replaces the directory's success modal.
       entry.finishSave(
         grantAccessValue
@@ -226,7 +235,7 @@ function InviteEmployeeForm({
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      {...entry.panelProps}
+      {...(initialValues?.recruitmentCandidateId ? {} : entry.panelProps)}
       title="Add New Employee"
       description="Add a new employee. Choose whether they also get a WorkPhelo login."
       footer={

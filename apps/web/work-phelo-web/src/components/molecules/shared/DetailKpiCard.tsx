@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { LucideIcon } from 'lucide-react';
 import { TrendBadge } from '@/components/atoms/TrendBadge';
 import { Skeleton } from '@/components/atoms/Skeleton';
-import { cardClass, cn, waterIconStyle } from '@/lib/utils';
+import { cardClass, cn, interactiveCardClass, waterIconStyle } from '@/lib/utils';
 
 interface DetailKpiCardProps {
   label: string;
@@ -38,7 +38,7 @@ export function DetailKpiCard({
   return (
     <div
       className={cardClass(
-        cn('flex flex-col gap-1.5 p-2', href && 'relative transition-shadow hover:shadow-md'),
+        cn('flex flex-col gap-1.5 p-2', href && interactiveCardClass()),
         'glass',
       )}
     >

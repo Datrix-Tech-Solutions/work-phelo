@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { LucideIcon } from 'lucide-react';
 import { TrendBadge } from '@/components/atoms/TrendBadge';
 import { Skeleton } from '@/components/atoms/Skeleton';
-import { cardClass, cn, waterIconStyle } from '@/lib/utils';
+import { cardClass, cn, interactiveCardClass, waterIconStyle } from '@/lib/utils';
 
 interface KpiCardProps {
   label: string;
@@ -29,6 +29,8 @@ interface KpiCardProps {
   href?: string;
   /** Makes the whole card a button, e.g. to open a side panel. Ignored when `href` is given. */
   onClick?: () => void;
+  /** Tints a clickable card, e.g. while the side panel it opened is showing. */
+  selected?: boolean;
 }
 
 export function KpiCard({
@@ -46,6 +48,7 @@ export function KpiCard({
   isLoading,
   href,
   onClick,
+  selected,
 }: KpiCardProps) {
   const clickable = Boolean(href || onClick);
   // Covers the card, so the whole of it is clickable without nesting content inside a link.
@@ -58,7 +61,7 @@ export function KpiCard({
         cn(
           'flex items-center gap-2',
           compact ? 'px-2 py-1.5' : 'p-2',
-          clickable && 'relative transition-shadow hover:shadow-md',
+          clickable && interactiveCardClass(selected),
         ),
         'glass',
       )}
@@ -67,7 +70,14 @@ export function KpiCard({
         <Link href={href} aria-label={label} className={overlayClass} />
       ) : (
         onClick && (
-          <button type="button" onClick={onClick} aria-label={label} className={overlayClass} />
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={label}
+            aria-haspopup="dialog"
+            aria-expanded={selected}
+            className={overlayClass}
+          />
         )
       )}
 

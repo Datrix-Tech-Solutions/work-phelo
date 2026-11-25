@@ -30,7 +30,8 @@ import type {
   ScreeningDecision,
   ScreeningDecisions,
 } from '@/types/recruitment';
-import { candidateFullName } from '@/components/molecules/hr/recruitment/candidateUtils';
+import { candidateFullName, isHired } from '@/components/molecules/hr/recruitment/candidateUtils';
+import { OnboardCandidatePanel } from '@/components/organisms/hr/recruitment/OnboardCandidatePanel';
 
 type CandidateTab = 'overview' | 'documents' | 'interviews';
 
@@ -45,11 +46,13 @@ export default function CandidateDetailPage({
   const canView = usePermission(Permission.READ_RECRUITMENT_CANDIDATES);
   const canChangeStage = usePermission(Permission.UPDATE_RECRUITMENT_CANDIDATE_STAGE);
   const canScheduleInterview = usePermission(Permission.SCHEDULE_RECRUITMENT_INTERVIEW);
+  const canOnboard = usePermission(Permission.CREATE_EMPLOYEE);
   useRedirectWhenDenied(canView === false, `/${tenantSlug}/hr/recruitment`);
 
   const [activeTab, setActiveTab] = useState<CandidateTab>('overview');
   const [changingStage, setChangingStage] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [onboarding, setOnboarding] = useState(false);
   const [editingInterview, setEditingInterview] = useState<CandidateInterview | null>(null);
 
   const { data: candidate, isLoading } = useCandidate(canView ? id : '');
@@ -97,6 +100,9 @@ export default function CandidateDetailPage({
     );
   const isRejected = candidate.currentStage?.name.trim().toLowerCase() === 'rejected';
 
+  const isOnboarded = !!candidate.onboardedAt;
+  const hired = isHired(candidate);
+
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'documents', label: 'Documents' },
@@ -119,8 +125,10 @@ export default function CandidateDetailPage({
         <CandidateBanner
           color="#0047AB"
           candidate={candidate}
-          canChangeStage={canChangeStage === true}
-          canScheduleInterview={canScheduleInterview === true}
+          canChangeStage={!isOnboarded && canChangeStage === true}
+          canScheduleInterview={!isOnboarded && !hired && canScheduleInterview === true}
+          canOnboard={!isOnboarded && hired && canOnboard === true}
+          onOnboard={() => setOnboarding(true)}
           onChangeStage={() => setChangingStage(true)}
           onScheduleInterview={() => setScheduling(true)}
           tabs={tabs}
@@ -139,7 +147,11 @@ export default function CandidateDetailPage({
               match={computeMatchScore(candidate, vacancyScoring?.details)}
               screening={computeScreeningScore(decisions, vacancyScoring?.questions ?? [])}
               review={{
-                enabled: !!candidate.currentStage && !isRejected && canChangeStage === true,
+                enabled:
+                  !!candidate.currentStage &&
+                  !isRejected &&
+                  !isOnboarded &&
+                  canChangeStage === true,
                 decisions,
                 onDecide: decide,
                 pendingQuestionId: decisionPending ? decisionVars?.questionId : undefined,
@@ -153,7 +165,7 @@ export default function CandidateDetailPage({
               candidateId={candidate.id}
               interviews={interviews}
               isLoading={interviewsLoading}
-              canManage={canScheduleInterview === true}
+              canManage={!isOnboarded && canScheduleInterview === true}
               stages={stages}
               currentStageId={candidate.currentStageId}
               onEdit={setEditingInterview}
@@ -170,6 +182,13 @@ export default function CandidateDetailPage({
           setEditingInterview(null);
         }}
       />
+
+      {canOnboard && (
+        <OnboardCandidatePanel
+          candidate={onboarding ? candidate : null}
+          onClose={() => setOnboarding(false)}
+        />
+      )}
 
       <ChangeCandidateStageModal
         candidate={changingStage ? candidate : null}

@@ -64,6 +64,27 @@ export function cardClass(extra?: string, border?: 'module' | 'glass') {
   );
 }
 
+/**
+ * For a KPI card that can be clicked: a module-coloured shadow on hover, and a tint of the module
+ * colour while it is pressed or `selected` (e.g. its side panel is open). Pass to cardClass().
+ */
+export function interactiveCardClass(selected = false) {
+  return cn(
+    'relative transition-[box-shadow,background-color,border-color] duration-200',
+    'hover:shadow-[0_10px_24px_-8px_color-mix(in_oklab,var(--module-btn-bg,var(--brand))_45%,transparent),0_2px_8px_-2px_rgba(0,0,0,0.16)]',
+    'active:bg-[color-mix(in_oklab,var(--module-btn-bg,var(--brand))_14%,transparent)]',
+    selected &&
+      'bg-[color-mix(in_oklab,var(--module-btn-bg,var(--brand))_14%,transparent)] border-[color-mix(in_oklab,var(--module-btn-bg,var(--brand))_45%,transparent)]',
+  );
+}
+
+/** The hover effect of a chart card: its border and shadow pick up the module colour. */
+export const chartCardHoverClass = cn(
+  'transition-[box-shadow,border-color] duration-200',
+  'hover:border-[color-mix(in_oklab,var(--module-btn-bg,var(--brand))_35%,transparent)]',
+  'hover:shadow-[0_10px_24px_-10px_color-mix(in_oklab,var(--module-btn-bg,var(--brand))_35%,transparent),0_2px_8px_-2px_rgba(0,0,0,0.12)]',
+);
+
 /** An "invisible" cardClass() — same layout/rounding, but never emits a background, blur,
  * border, or shadow class at all (rather than emitting cardClass()'s and trying to cancel
  * them via bg-transparent/border-transparent/shadow-none, which depended on twMerge

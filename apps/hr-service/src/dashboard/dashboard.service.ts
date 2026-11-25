@@ -8,6 +8,7 @@ import {
   QueryDashboardKpisDto,
   QueryDashboardRangeDto,
 } from './dto/dashboard-kpis.dto';
+import { getModuleActivity } from './module-activity';
 
 const DAY_MS = 86_400_000;
 
@@ -22,16 +23,36 @@ export type RecentActivityType =
   | 'LEAVE_APPROVED'
   | 'LEAVE_REJECTED'
   | 'TIME_CORRECTION_APPROVED'
-  | 'TIME_CORRECTION_REJECTED';
+  | 'TIME_CORRECTION_REJECTED'
+  | 'PAYROLL_CREATED'
+  | 'PAYROLL_SUBMITTED'
+  | 'PAYROLL_APPROVED'
+  | 'PAYROLL_PAID'
+  | 'APPRAISAL_CYCLE_STARTED'
+  | 'APPRAISAL_CYCLE_CLOSED'
+  | 'APPRAISAL_CYCLE_CANCELLED'
+  | 'SELF_ASSESSMENT_SUBMITTED'
+  | 'MANAGER_REVIEW_SUBMITTED'
+  | 'APPRAISAL_FINALIZED'
+  | 'VACANCY_CREATED'
+  | 'VACANCY_CLOSED'
+  | 'APPLICATION_RECEIVED'
+  | 'CANDIDATE_MOVED'
+  | 'INTERVIEW_SCHEDULED'
+  | 'PROJECT_CREATED'
+  | 'PROJECT_ARCHIVED'
+  | 'PROJECT_MEMBER_ADDED'
+  | 'PROJECT_MEMBER_REMOVED'
+  | 'PROJECT_TASK_MOVED';
 
 export interface RecentActivityEvent {
   id: string;
   type: RecentActivityType;
-  employeeId: string;
-  employeeName: string;
+  /** Who or what the event is about: an employee, candidate, payroll period, project and so on. */
+  subject: string;
   /** Job title, new status, leave type and days, and so on, depending on `type`. */
   detail: string | null;
-  /** Email of who did it, when the record keeps one. */
+  /** Name or email of who did it, when the record keeps one. */
   actor: string | null;
   timestamp: Date;
 }
@@ -608,7 +629,8 @@ export class DashboardService {
     };
   }
 
-  async getRecentActivity(tenantId: string, limit = 10) {
+  async getRecentActivity(user: RequestUser, limit = 10) {
+    const { tenantId } = user;
     const take = limit * 3;
     const person = { select: { id: true, firstName: true, lastName: true } };
     type Person = { id: string; firstName: string; lastName: string };
@@ -624,8 +646,7 @@ export class DashboardService {
       events.push({
         id,
         type,
-        employeeId: employee.id,
-        employeeName: `${employee.firstName} ${employee.lastName}`,
+        subject: `${employee.firstName} ${employee.lastName}`,
         detail: extra.detail ?? null,
         actor: extra.actor ?? null,
         timestamp,
@@ -639,6 +660,7 @@ export class DashboardService {
       resignations,
       leaveDecisions,
       corrections,
+      moduleEvents,
     ] = await Promise.all([
       this.prisma.employee.findMany({
         where: { tenantId },
@@ -726,6 +748,7 @@ export class DashboardService {
           employee: person,
         },
       }),
+      getModuleActivity(this.prisma, user, limit),
     ]);
 
     for (const e of hires) {
@@ -804,11 +827,40 @@ export class DashboardService {
       );
     }
 
-    return {
-      activity: events
-        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-        .slice(0, limit),
-    };
+    for (const { actorUserId: _actorId, detail, ...event } of moduleEvents) {
+      events.push({
+        ...event,
+        detail: detail ?? null,
+        actor: null,
+      });
+    }
+
+    const latest = events
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit);
+
+    // Module records keep the actor's user id; only the events being returned are looked up.
+    const actorIds = new Map(
+      moduleEvents.flatMap((e) =>
+        e.actorUserId ? [[e.id, e.actorUserId] as const] : [],
+      ),
+    );
+    const userIds = latest.flatMap((e) => actorIds.get(e.id) ?? []);
+    if (userIds.length > 0) {
+      const actors = await this.prisma.employee.findMany({
+        where: { tenantId, userId: { in: userIds } },
+        select: { userId: true, firstName: true, lastName: true },
+      });
+      const names = new Map(
+        actors.map((a) => [a.userId, `${a.firstName} ${a.lastName}`]),
+      );
+      for (const event of latest) {
+        const userId = actorIds.get(event.id);
+        if (userId) event.actor = names.get(userId) ?? null;
+      }
+    }
+
+    return { activity: latest };
   }
 
   async getUpcomingBirthdays(tenantId: string) {

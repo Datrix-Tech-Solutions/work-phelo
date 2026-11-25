@@ -95,6 +95,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         <KpiCard
           label="Cash Position"
           onClick={opens('cashandbank', 'cash')}
+          selected={panelOpen && kpi === 'cash'}
           value={currencyTotals(stats.cashPosition.totals, currency, base)}
           icon={Wallet}
           iconColor={MODULE_COLOR}
@@ -114,6 +115,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         <KpiCard
           label="Receivables"
           onClick={opens('accountsreceivable', 'receivables')}
+          selected={panelOpen && kpi === 'receivables'}
           value={currencyTotals(stats.receivables.totals, currency, base)}
           subPlacement="below"
           sub={[
@@ -129,6 +131,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         <KpiCard
           label="Payables"
           onClick={opens('expensesandpurchases', 'payables')}
+          selected={panelOpen && kpi === 'payables'}
           value={currencyTotals(stats.payables.totals, currency, base)}
           subPlacement="below"
           sub={[

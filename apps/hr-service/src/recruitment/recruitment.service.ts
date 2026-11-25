@@ -90,6 +90,7 @@ const RECRUITMENT_CANDIDATE_SUMMARY_SELECT = {
   firstName: true,
   lastName: true,
   currentStageId: true,
+  onboardedAt: true,
   appliedAt: true,
   submittedAt: true,
   skills: true,
@@ -937,10 +938,11 @@ export class RecruitmentService {
         id: candidateId,
         status: RecruitmentApplicationStatus.SUBMITTED,
       },
-      select: { id: true, currentStageId: true },
+      select: { id: true, currentStageId: true, onboardedAt: true },
     });
     if (!candidate)
       throw new NotFoundException('Recruitment candidate not found');
+    this.assertNotOnboarded(candidate);
 
     const targetStage = await this.prisma.recruitmentStage.findFirst({
       where: { tenantId, id: stageId },
@@ -1163,6 +1165,7 @@ export class RecruitmentService {
       tenantId,
       candidateId,
     );
+    this.assertNotOnboarded(candidate);
     const scheduledAt = this.parseInterviewTime(dto.scheduledAt);
     const channel = this.resolveInterviewChannel({
       mode: dto.mode,
@@ -1249,6 +1252,7 @@ export class RecruitmentService {
       tenantId,
       candidateId,
     );
+    this.assertNotOnboarded(candidate);
     const existing = await this.prisma.recruitmentInterview.findFirst({
       where: { tenantId, applicationId: candidateId, id: interviewId },
     });
@@ -2602,6 +2606,7 @@ export class RecruitmentService {
       vacancy: { id: candidate.vacancy.id, title: candidate.vacancy.title },
       appliedAt: candidate.appliedAt,
       submittedAt: candidate.submittedAt,
+      onboardedAt: candidate.onboardedAt,
       matchScore: this.candidateMatchScore(candidate),
     };
   }
@@ -3068,6 +3073,7 @@ export class RecruitmentService {
         firstName: true,
         email: true,
         vacancy: { select: { title: true, companyName: true } },
+        onboardedAt: true,
         currentStageId: true,
         currentStage: { select: { normalizedName: true, sortOrder: true } },
       },
@@ -3075,6 +3081,12 @@ export class RecruitmentService {
     if (!candidate)
       throw new NotFoundException('Recruitment candidate not found');
     return candidate;
+  }
+
+  private assertNotOnboarded(candidate: { onboardedAt: Date | null }) {
+    if (candidate.onboardedAt) {
+      throw new ConflictException('This candidate has already been onboarded');
+    }
   }
 
   /**

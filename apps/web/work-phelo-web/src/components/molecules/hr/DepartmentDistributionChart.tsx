@@ -5,7 +5,7 @@ import { PieChart } from '@mui/x-charts/PieChart';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { useDepartmentDistribution } from '@/hooks/hr/useEmployeeDashboard';
 import { useElementSize } from '@/hooks/useElementSize';
-import { cardClass, cn } from '@/lib/utils';
+import { cardClass, chartCardHoverClass, cn } from '@/lib/utils';
 import { useThemeStore } from '@/store/theme.store';
 
 const GENDER_ROWS = [
@@ -87,7 +87,13 @@ export function DepartmentDistributionChart({ className }: DepartmentDistributio
   const share = (value: number) => (total > 0 ? (value / total) * 100 : 0);
 
   return (
-    <div className={cn(cardClass('flex flex-col gap-2 p-3 h-60', 'glass'), className)}>
+    <div
+      className={cn(
+        cardClass('flex flex-col gap-2 p-3 h-60', 'glass'),
+        chartCardHoverClass,
+        className,
+      )}
+    >
       <div className="flex flex-col">
         <h3 className="text-sm font-semibold text-gray-900">Department Distribution</h3>
         <span className="text-xs text-gray-400">Current employees by department</span>

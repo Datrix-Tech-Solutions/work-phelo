@@ -6,7 +6,7 @@ import type { Period } from '@/components/atoms/PeriodToggle';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { useMarketingRevenueByProduct } from '@/hooks/marketing/useMarketingRevenueByProduct';
 import { useElementSize } from '@/hooks/useElementSize';
-import { cardClass, cn } from '@/lib/utils';
+import { cardClass, chartCardHoverClass, cn } from '@/lib/utils';
 import { useThemeStore } from '@/store/theme.store';
 
 const COLORS = [
@@ -98,7 +98,13 @@ export function RevenueByProductChart({
   const pieSize = Math.max(0, Math.min(area.height, area.width * 0.45));
 
   return (
-    <div className={cn(cardClass('flex flex-col gap-2 p-3 h-60', 'glass'), className)}>
+    <div
+      className={cn(
+        cardClass('flex flex-col gap-2 p-3 h-60', 'glass'),
+        chartCardHoverClass,
+        className,
+      )}
+    >
       <div className="flex flex-col">
         <h3 className="text-sm font-semibold text-gray-900">Achieved Revenue by Product/Service</h3>
         <span className="text-xs text-gray-400">{SUBTITLES[period]}</span>

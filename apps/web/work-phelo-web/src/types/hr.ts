@@ -258,6 +258,8 @@ export interface UpdateEmployeePayload {
 }
 
 export interface CreateEmployeePayload {
+  /** Set when onboarding a hired candidate, so the server marks them as onboarded. */
+  recruitmentCandidateId?: string;
   firstName: string;
   lastName: string;
   /** Required by the backend only when `grantSystemAccess` is true. */
@@ -802,13 +804,33 @@ export type RecentActivityType =
   | 'LEAVE_APPROVED'
   | 'LEAVE_REJECTED'
   | 'TIME_CORRECTION_APPROVED'
-  | 'TIME_CORRECTION_REJECTED';
+  | 'TIME_CORRECTION_REJECTED'
+  | 'PAYROLL_CREATED'
+  | 'PAYROLL_SUBMITTED'
+  | 'PAYROLL_APPROVED'
+  | 'PAYROLL_PAID'
+  | 'APPRAISAL_CYCLE_STARTED'
+  | 'APPRAISAL_CYCLE_CLOSED'
+  | 'APPRAISAL_CYCLE_CANCELLED'
+  | 'SELF_ASSESSMENT_SUBMITTED'
+  | 'MANAGER_REVIEW_SUBMITTED'
+  | 'APPRAISAL_FINALIZED'
+  | 'VACANCY_CREATED'
+  | 'VACANCY_CLOSED'
+  | 'APPLICATION_RECEIVED'
+  | 'CANDIDATE_MOVED'
+  | 'INTERVIEW_SCHEDULED'
+  | 'PROJECT_CREATED'
+  | 'PROJECT_ARCHIVED'
+  | 'PROJECT_MEMBER_ADDED'
+  | 'PROJECT_MEMBER_REMOVED'
+  | 'PROJECT_TASK_MOVED';
 
 export interface RecentActivityEvent {
   id: string;
   type: RecentActivityType;
-  employeeId: string;
-  employeeName: string;
+  /** Who or what the event is about: an employee, candidate, payroll period, project and so on. */
+  subject: string;
   detail: string | null;
   actor: string | null;
   timestamp: string;

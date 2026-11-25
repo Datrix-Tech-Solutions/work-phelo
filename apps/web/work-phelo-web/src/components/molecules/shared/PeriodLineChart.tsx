@@ -4,7 +4,7 @@ import { LineChart } from '@mui/x-charts/LineChart';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { useElementSize } from '@/hooks/useElementSize';
 import type { SeriesBucket } from '@/lib/periodSeries';
-import { cardClass, cn } from '@/lib/utils';
+import { cardClass, chartCardHoverClass, cn } from '@/lib/utils';
 
 export interface PeriodLineSeries {
   label: string;
@@ -54,6 +54,7 @@ export function PeriodLineChart({
     <div
       className={cn(
         cardClass('relative hover:z-20 flex flex-col gap-2 p-3 h-60', 'glass'),
+        chartCardHoverClass,
         className,
       )}
     >
@@ -99,6 +100,8 @@ export function PeriodLineChart({
                 showMark: buckets.length <= 24,
                 area,
                 connectNulls: false,
+                // Pointing at a line fades the others.
+                highlightScope: { highlight: 'series', fade: 'global' },
               }))}
               xAxis={[
                 {

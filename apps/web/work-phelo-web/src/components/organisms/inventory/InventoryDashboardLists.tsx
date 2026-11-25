@@ -61,7 +61,7 @@ export function LowStockCard({ className }: { className?: string }) {
   return (
     <DashboardListCard
       title="Stock Alerts"
-      subtitle="On hand / reorder level"
+      // subtitle="On hand / reorder level"
       className={className}
       sections={[
         {
@@ -160,7 +160,7 @@ export function PurchaseOrdersCard({ className }: { className?: string }) {
   return (
     <DashboardListCard
       title="Purchase Orders"
-      subtitle="Awaiting delivery, and the latest placed"
+      // subtitle="Awaiting delivery, and the latest placed"
       className={className}
       sections={[
         {

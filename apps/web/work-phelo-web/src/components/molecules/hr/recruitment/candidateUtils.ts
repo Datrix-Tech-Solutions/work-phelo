@@ -40,3 +40,7 @@ export function formatDateTime(iso: string): string {
     minute: '2-digit',
   });
 }
+
+export function isHired(c: { currentStage: { name: string } | null }): boolean {
+  return c.currentStage?.name.trim().toLowerCase() === 'hired';
+}

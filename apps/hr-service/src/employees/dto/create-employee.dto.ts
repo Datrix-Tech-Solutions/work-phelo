@@ -52,6 +52,14 @@ export class CreateEmployeeDto {
   grantSystemAccess?: boolean = false;
 
   @ApiPropertyOptional({
+    description:
+      'Recruitment candidate being onboarded. They must be in the Hired stage and not yet onboarded.',
+  })
+  @IsOptional()
+  @IsUUID()
+  recruitmentCandidateId?: string;
+
+  @ApiPropertyOptional({
     description: 'Contact phone number in international format',
     example: '+233201234567',
   })

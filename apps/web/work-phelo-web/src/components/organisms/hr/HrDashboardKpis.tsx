@@ -112,6 +112,7 @@ export function HrDashboardKpis({
       <KpiCard
         label="On Leave"
         onClick={() => setOnLeaveOpen(true)}
+        selected={onLeaveOpen}
         value={data?.onLeave.current ?? '—'}
         icon={CalendarOff}
         iconColor="#f59e0b"
@@ -131,6 +132,7 @@ export function HrDashboardKpis({
       <KpiCard
         label="Hires & Exits"
         onClick={() => setHiresExitsOpen(true)}
+        selected={hiresExitsOpen}
         value={data ? `${data.hiresAndExits.hires} / ${data.hiresAndExits.exits}` : '—'}
         icon={UserPlus}
         iconColor="#8b5cf6"

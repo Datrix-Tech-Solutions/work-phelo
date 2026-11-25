@@ -43,6 +43,7 @@ export function TransportDashboardKpis({ period, year }: Props) {
       <KpiCard
         label="On Route"
         onClick={open('ON_ROUTE')}
+        selected={panelOpen && list === 'ON_ROUTE'}
         value={value(kpis?.onRoute)}
         icon={Route}
         iconColor="#2a78d6"
@@ -51,6 +52,7 @@ export function TransportDashboardKpis({ period, year }: Props) {
       <KpiCard
         label="Overdue Trips"
         onClick={open('OVERDUE')}
+        selected={panelOpen && list === 'OVERDUE'}
         value={value(kpis?.overdue)}
         icon={AlertTriangle}
         iconColor="#e34948"
@@ -59,6 +61,7 @@ export function TransportDashboardKpis({ period, year }: Props) {
       <KpiCard
         label="Completed"
         onClick={open('COMPLETED')}
+        selected={panelOpen && list === 'COMPLETED'}
         value={value(kpis?.completed.current)}
         icon={CheckCircle2}
         iconColor="#1baf7a"
@@ -70,6 +73,7 @@ export function TransportDashboardKpis({ period, year }: Props) {
       <KpiCard
         label="Cancelled / Rejected"
         onClick={open('CLOSED')}
+        selected={panelOpen && list === 'CLOSED'}
         value={value(kpis?.closed.current)}
         icon={XCircle}
         iconColor="#6b7280"

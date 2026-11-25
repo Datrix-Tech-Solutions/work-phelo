@@ -1,15 +1,30 @@
 'use client';
 
 import {
+  Archive,
+  ArrowRightLeft,
+  Award,
+  BadgeCheck,
+  Banknote,
+  Briefcase,
   CalendarCheck,
+  CalendarClock,
   CalendarX,
+  ClipboardCheck,
+  ClipboardList,
   ClockAlert,
+  FileUser,
+  FolderPlus,
+  ListChecks,
   LogOut,
   RefreshCw,
+  Send,
+  Target,
   Undo2,
   UserMinus,
   UserPlus,
   UserX,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { Skeleton } from '@/components/atoms/Skeleton';
@@ -71,6 +86,46 @@ const EVENT_STYLES: Record<RecentActivityType, EventStyle> = {
     color: '#e34948',
     title: () => 'time correction was rejected',
   },
+  PAYROLL_CREATED: { icon: Banknote, color: '#2a78d6', title: () => 'was created' },
+  PAYROLL_SUBMITTED: { icon: Send, color: '#eda100', title: () => 'was submitted for approval' },
+  PAYROLL_APPROVED: { icon: BadgeCheck, color: '#1baf7a', title: () => 'was approved' },
+  PAYROLL_PAID: { icon: Wallet, color: '#1baf7a', title: () => 'was paid' },
+  APPRAISAL_CYCLE_STARTED: {
+    icon: Target,
+    color: '#2a78d6',
+    title: () => 'appraisal cycle started',
+  },
+  APPRAISAL_CYCLE_CLOSED: { icon: Target, color: '#9ca3af', title: () => 'appraisal cycle closed' },
+  APPRAISAL_CYCLE_CANCELLED: {
+    icon: Target,
+    color: '#e34948',
+    title: () => 'appraisal cycle was cancelled',
+  },
+  SELF_ASSESSMENT_SUBMITTED: {
+    icon: ClipboardList,
+    color: '#eda100',
+    title: () => 'submitted a self-assessment',
+  },
+  MANAGER_REVIEW_SUBMITTED: {
+    icon: ClipboardCheck,
+    color: '#2a78d6',
+    title: () => 'received a manager review',
+  },
+  APPRAISAL_FINALIZED: { icon: Award, color: '#1baf7a', title: () => 'appraisal was finalized' },
+  VACANCY_CREATED: { icon: Briefcase, color: '#2a78d6', title: () => 'job opening was created' },
+  VACANCY_CLOSED: { icon: Briefcase, color: '#9ca3af', title: () => 'job opening was closed' },
+  APPLICATION_RECEIVED: { icon: FileUser, color: '#1baf7a', title: () => 'applied for a job' },
+  CANDIDATE_MOVED: { icon: ArrowRightLeft, color: '#2a78d6', title: () => 'moved to a new stage' },
+  INTERVIEW_SCHEDULED: {
+    icon: CalendarClock,
+    color: '#eda100',
+    title: () => 'was scheduled for an interview',
+  },
+  PROJECT_CREATED: { icon: FolderPlus, color: '#2a78d6', title: () => 'project was created' },
+  PROJECT_ARCHIVED: { icon: Archive, color: '#9ca3af', title: () => 'project was archived' },
+  PROJECT_MEMBER_ADDED: { icon: UserPlus, color: '#1baf7a', title: () => 'gained a member' },
+  PROJECT_MEMBER_REMOVED: { icon: UserMinus, color: '#e34948', title: () => 'lost a member' },
+  PROJECT_TASK_MOVED: { icon: ListChecks, color: '#2a78d6', title: () => 'task progress changed' },
 };
 
 function timeAgo(iso: string) {
@@ -89,8 +144,9 @@ function timeAgo(iso: string) {
   });
 }
 
-/** The latest HR events: hires, status changes, offboarding, resignations and leave and
- * time-correction decisions. A live feed, so it ignores the period filter. Fills its parent. */
+/** The latest HR events: hires, status changes, offboarding, resignations, leave and
+ * time-correction decisions, and payroll, appraisal, recruitment and project events. A live
+ * feed, so it ignores the period filter. Fills its parent. */
 export function RecentActivityList() {
   const { data, isLoading, isError } = useRecentActivity();
   // An event type this card has no style for (or an older backend) is skipped, not fatal.
@@ -133,7 +189,7 @@ export function RecentActivityList() {
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col leading-tight">
                   <span className="text-xs text-gray-700">
-                    <span className="font-semibold text-gray-900">{event.employeeName}</span>{' '}
+                    <span className="font-semibold text-gray-900">{event.subject}</span>{' '}
                     {style.title(event)}
                   </span>
                   <span className="truncate text-[10px] text-gray-400">
