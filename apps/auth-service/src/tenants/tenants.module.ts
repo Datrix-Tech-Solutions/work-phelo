@@ -12,6 +12,7 @@ import { TenantIntegrationInternalController } from './tenant-integration-intern
 import { TenantDocumentProfileService } from './tenant-document-profile.service';
 import { TenantDocumentTemplateController } from './tenant-document-template.controller';
 import { TenantDocumentTemplateService } from './tenant-document-template.service';
+import { TenantDocumentRenderController } from './tenant-document-render.controller';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { AuditModule } from '../audit/audit.module';
 
@@ -21,6 +22,7 @@ import { AuditModule } from '../audit/audit.module';
     TenantsController,
     TenantDocumentProfileController,
     TenantDocumentTemplateController,
+    TenantDocumentRenderController,
     TenantDocumentProfileInternalController,
     TenantIntegrationInternalController,
     TenantModulesInternalController,
