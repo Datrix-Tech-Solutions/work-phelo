@@ -19,7 +19,8 @@ export class ExecutionPermits {
       throw new ConversationOperationError(503);
     const owner = requireOwnership(context);
     const lease: ExecutionLease = { ...owner, leaseId: randomUUID(), slots: [] };
-    await this.database.transaction(async (tx) => {
+    lease.slots = await this.database.transaction(async (tx) => {
+      const slots: ExecutionLease['slots'] = [];
       await tx.$queryRaw`SELECT ai.resource_prepare(${owner.tenantId},${owner.ownerUserId})`;
       for (const [user, capacity] of [
         ['', 10],
@@ -39,8 +40,9 @@ export class ExecutionPermits {
         await tx.$executeRaw`UPDATE ai."AiExecutionSlot" SET "leaseId"=${lease.leaseId}::uuid,
           generation=${generation},"expiresAt"=clock_timestamp()+interval '15 seconds'
           WHERE "tenantId"=${owner.tenantId} AND "ownerUserId"=${user} AND slot=${rows[0].slot}`;
-        lease.slots.push({ ownerUserId: user, slot: rows[0].slot, generation });
+        slots.push({ ownerUserId: user, slot: rows[0].slot, generation });
       }
+      return slots;
     }, ownershipDeadline(context));
     try {
       return await executionContext.run(lease, action);

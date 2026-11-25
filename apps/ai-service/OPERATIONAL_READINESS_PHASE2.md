@@ -83,7 +83,48 @@ which Jest rejects; its supported `test:unit -- --runInBand` was run separately 
 passed. Root-run passing suites are evidence only for those suites, not a claim
 that the entire monorepo passed. Clean-install CI remains a separate review gate.
 
-## Remaining adoption gates
+## PR #812 security-review remediation
+
+The review reproduced three correctness failures: an exhausted owner hash with
+both required fields removed could admit traffic; a rolled-back permit acquisition
+left slot identities in the successful retry; and denied PEXPIRE could leave a
+partially debited, persistent bucket after HSET. The focused regressions now reject
+malformed state with 503, retain exactly two committed permits without a false
+504, and preflight ACL failures without mutating either bucket.
+
+Unexpected script failures leave a persistent tenant/operation failure marker.
+Subsequent admission fails closed; no compensation or automatic repair occurs.
+Lost responses are not retried automatically and may conservatively consume budget.
+Existing bucket TTLs are validated as well as field values. Redis 7+ is required
+for command ACL preflight. All Gateway replicas must support this protocol before
+any separately authorized activation; operator recovery is described in
+SHARED_RESOURCE_SAFEGUARDS.md.
+
+Fresh remediation validation:
+
+- Focused zero-skip runner: 22 PostgreSQL and 16 real Redis cases passed (42 tests
+  including four configuration cases). Missing dependency configuration fails the
+  runner rather than skipping. The new isolated CI job applies only AI migrations.
+- Full AI suite with PostgreSQL: 741 passed, 26 suites, zero skips.
+- Full Gateway suite with Redis: 234 passed, 11 suites, zero skips.
+- Actual Auth + Gateway + AI + PostgreSQL: 21 scenarios passed; only outbound
+  messaging clients replaced with rejecting doubles.
+- AI/Gateway lint, typechecks, builds, Prisma validation and RBAC alignment passed.
+- A clean combined snapshot of latest DEV 04542ed1fd200a55ab40dd4da29690f964c7b92f
+  and this PR passed fresh dependency installation, forced root typecheck (32 tasks,
+  zero cached), forced root build (16 tasks, zero cached) and forced root lint
+  (32 tasks, zero cached; existing warnings only). This establishes the
+  earlier Marketing/HR generated-artifact errors as local-checkout limitations,
+  not required source fixes; no unrelated generated artifacts were changed.
+- An unchanged invalid-query HTTP fixture encountered one socket reset in the
+  first full AI run. Three isolated repetitions and the final complete 741-test run
+  passed without changing its assertions, implementation or timeout.
+
+GitHub CI status is reported separately after pushing; local results do not imply
+that GitHub checks have completed. No schema, migration, deployment, feature flag,
+inference or ERP capability was changed by this remediation.
+
+## Remaining adoption gates (unchanged)
 
 Review and merge are separate from authorization to deploy or enable. Before any
 future activation, independently approve migration/DB privileges, tenant accounting

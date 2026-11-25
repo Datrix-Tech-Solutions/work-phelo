@@ -1,7 +1,11 @@
 import Redis from 'ioredis';
 import { createHmac } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { AiAdmissionError, AiRateAdmission } from './ai-rate-admission';
+import {
+  ADMISSION_SCRIPT,
+  AiAdmissionError,
+  AiRateAdmission,
+} from './ai-rate-admission';
 
 const original = process.env;
 describe('AI admission configuration fails closed', () => {
@@ -71,6 +75,7 @@ const url = process.env.AI_TEST_ADMISSION_REDIS_URL;
     });
     afterEach(async () => {
       for (const replica of replicas) await replica.onModuleDestroy();
+      jest.restoreAllMocks();
       process.env = original;
     });
     afterAll(async () => {
@@ -133,11 +138,13 @@ const url = process.env.AI_TEST_ADMISSION_REDIS_URL;
       ).rejects.toMatchObject({ status: 503 });
       await admin.del(key);
       await admin.hset(key, 'at', '123');
+      await admin.pexpire(key, 120000);
       await expect(
         replicas[0].admit('tenant', 'owner', 'GET'),
       ).rejects.toMatchObject({ status: 503 });
       await admin.del(key);
       await admin.hset(key, 'tokens', 'nan', 'at', String(Date.now()));
+      await admin.pexpire(key, 120000);
       await expect(
         replicas[0].admit('tenant', 'owner', 'GET'),
       ).rejects.toMatchObject({ status: 503 });
@@ -187,6 +194,207 @@ const url = process.env.AI_TEST_ADMISSION_REDIS_URL;
         replicas[0].admit('tenant', 'owner', 'GET'),
       ).rejects.toMatchObject({ status: 503 });
       expect(await admin.keys('*:read:*')).toHaveLength(0);
+    });
+    const bucketKeys = () => {
+      const hash = (value: string) =>
+        createHmac('sha256', Buffer.alloc(32, 74)).update(value).digest('hex');
+      const prefix = `ai:admission:v1:{${hash(JSON.stringify(['tenant', 'tenant']))}}:write:`;
+      return {
+        tenant: prefix + 'tenant',
+        owner:
+          prefix +
+          'owner:' +
+          hash(JSON.stringify(['owner', 'tenant', 'owner'])),
+        marker: prefix + 'incomplete',
+      };
+    };
+    it('does not reset an exhausted owner hash missing both mandatory fields', async () => {
+      await replicas[0].admit('tenant', 'owner', 'POST');
+      await replicas[1].admit('tenant', 'owner', 'POST');
+      await expect(
+        replicas[0].admit('tenant', 'owner', 'POST'),
+      ).rejects.toMatchObject({ status: 429 });
+      const keys = bucketKeys();
+      await admin.del(keys.owner);
+      await admin.hset(keys.owner, 'unrelated', 'field');
+      await admin.pexpire(keys.owner, 120000);
+      const before = await admin.hgetall(keys.tenant);
+      await expect(
+        replicas[1].admit('tenant', 'owner', 'POST'),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(await admin.hgetall(keys.tenant)).toEqual(before);
+      expect(await admin.hgetall(keys.owner)).toEqual({ unrelated: 'field' });
+      expect(await admin.exists(keys.marker)).toBe(0);
+    });
+    it.each(['tenant', 'owner'] as const)(
+      'preflights malformed %s buckets before touching either scope',
+      async (scope) => {
+        const keys = bucketKeys();
+        for (const bad of [
+          { unrelated: 'field' },
+          { tokens: '1' },
+          { at: String(Date.now()) },
+          { tokens: 'nan', at: String(Date.now()) },
+          { tokens: 'inf', at: String(Date.now()) },
+          { tokens: '1', at: 'inf' },
+          { tokens: '-1', at: String(Date.now()) },
+          { tokens: '999', at: String(Date.now()) },
+          { tokens: '1', at: '-1' },
+          { tokens: '1', at: String(Date.now() + 60000) },
+        ]) {
+          await admin.del(keys[scope]);
+          await admin.hset(keys[scope], bad);
+          await admin.pexpire(keys[scope], 120000);
+          const other = scope === 'owner' ? keys.tenant : keys.owner;
+          const before = await admin.hgetall(other);
+          await expect(
+            replicas[0].admit('tenant', 'owner', 'POST'),
+          ).rejects.toMatchObject({ status: 503 });
+          expect(await admin.hgetall(other)).toEqual(before);
+          expect(await admin.hgetall(keys[scope])).toEqual(bad);
+          expect(await admin.exists(keys.marker)).toBe(0);
+        }
+        await admin.del(keys[scope]);
+        await admin.set(keys[scope], 'wrong-type');
+        await expect(
+          replicas[1].admit('tenant', 'owner', 'POST'),
+        ).rejects.toMatchObject({ status: 503 });
+        expect(await admin.get(keys[scope])).toBe('wrong-type');
+      },
+    );
+    it('rejects denied PEXPIRE before creating a debit or incomplete marker', async () => {
+      await admin.call(
+        'ACL',
+        'SETUSER',
+        'ai-partial',
+        'on',
+        '>fixture-only',
+        '~ai:admission:v1:*',
+        '+ping',
+        '+info',
+        '+eval',
+        '+get',
+        '+exists',
+        '+type',
+        '+time',
+        '+hmget',
+        '+pttl',
+        '+hset',
+        '+set',
+        '+del',
+      );
+      process.env.AI_ADMISSION_REDIS_URL =
+        'redis://ai-partial:fixture-only@127.0.0.1:17991';
+      try {
+        await expect(
+          replicas[0].admit('tenant', 'owner', 'POST'),
+        ).rejects.toMatchObject({ status: 503 });
+        expect(await admin.keys('*:write:*')).toEqual([]);
+      } finally {
+        await admin.call('ACL', 'DELUSER', 'ai-partial');
+      }
+    });
+    it.each(['tenant', 'owner'] as const)(
+      'rejects persistent or overlong TTL on an existing %s bucket',
+      async (scope) => {
+        const keys = bucketKeys();
+        for (const ttl of [undefined, 240000]) {
+          await admin.del(keys[scope]);
+          await admin.hset(
+            keys[scope],
+            'tokens',
+            '1',
+            'at',
+            String(Date.now()),
+          );
+          if (ttl) await admin.pexpire(keys[scope], ttl);
+          await expect(
+            replicas[0].admit('tenant', 'owner', 'POST'),
+          ).rejects.toMatchObject({ status: 503 });
+          expect(await admin.hget(keys[scope], 'tokens')).toBe('1');
+          if (ttl)
+            expect(await admin.pttl(keys[scope])).toBeGreaterThan(120000);
+          else expect(await admin.pttl(keys[scope])).toBe(-1);
+          expect(await admin.exists(keys.marker)).toBe(0);
+        }
+      },
+    );
+    type Evaluator = {
+      eval: (
+        script: string,
+        keys: number,
+        ...args: (string | number)[]
+      ) => Promise<unknown>;
+    };
+    const evaluator = () =>
+      (replicas[0] as unknown as { client: Evaluator }).client;
+    it('keeps a persistent failure marker on unexpected mid-script failure and never repairs it automatically', async () => {
+      await replicas[0].admit('warm', 'warm', 'GET');
+      const client = evaluator(),
+        evaluate = client.eval.bind(client);
+      const script = ADMISSION_SCRIPT.replace(
+        "redis.call('HSET',KEYS[i]",
+        "if i==3 then error('synthetic write failure') end\n redis.call('HSET',KEYS[i]",
+      );
+      expect(script).not.toBe(ADMISSION_SCRIPT);
+      const call = jest
+        .spyOn(client, 'eval')
+        .mockImplementationOnce((_script, count, ...args) =>
+          evaluate(script, count, ...args),
+        );
+      await expect(
+        replicas[0].admit('tenant', 'owner', 'POST'),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(call).toHaveBeenCalledTimes(1);
+      const keys = bucketKeys(),
+        before = await admin.hgetall(keys.tenant);
+      expect(await admin.get(keys.marker)).toBe(keys.owner);
+      expect(await admin.ttl(keys.marker)).toBe(-1);
+      await expect(
+        replicas[1].admit('tenant', 'different-owner', 'POST'),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(await admin.hgetall(keys.tenant)).toEqual(before);
+      expect(await admin.get(keys.marker)).toBe(keys.owner);
+      await replicas[1].admit('independent-tenant', 'owner', 'POST');
+    });
+    it('never retries an uncertain result or authorizes the failed request', async () => {
+      await replicas[0].admit('warm', 'warm', 'GET');
+      const client = evaluator(),
+        evaluate = client.eval.bind(client);
+      const call = jest
+        .spyOn(client, 'eval')
+        .mockImplementationOnce(async (script, count, ...args) => {
+          await evaluate(script, count, ...args);
+          throw new Error('synthetic lost response');
+        });
+      await expect(
+        replicas[0].admit('tenant', 'owner', 'POST'),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(call).toHaveBeenCalledTimes(1);
+      const keys = bucketKeys();
+      expect(await admin.exists(keys.marker)).toBe(0);
+      await replicas[1].admit('tenant', 'owner', 'POST');
+      await expect(
+        replicas[1].admit('tenant', 'owner', 'POST'),
+      ).rejects.toMatchObject({ status: 429 });
+    });
+    it('refills exhausted state from Redis server time without resetting the bucket', async () => {
+      await replicas[0].admit('tenant', 'owner', 'POST');
+      await replicas[1].admit('tenant', 'owner', 'POST');
+      await expect(
+        replicas[0].admit('tenant', 'owner', 'POST'),
+      ).rejects.toMatchObject({ status: 429 });
+      const keys = bucketKeys(),
+        clock = await admin.time();
+      const now = Number(clock[0]) * 1000 + Number(clock[1]) / 1000;
+      // Move only the fixture's refill timestamp back one complete refill window.
+      await admin.hset(keys.owner, 'at', String(now - 12000));
+      await replicas[1].admit('tenant', 'owner', 'POST');
+      expect(
+        Number(await admin.hget(keys.owner, 'tokens')),
+      ).toBeGreaterThanOrEqual(1);
+      expect(await admin.pttl(keys.owner)).toBeGreaterThan(0);
+      expect(await admin.pttl(keys.tenant)).toBeGreaterThan(0);
     });
   },
 );

@@ -7,6 +7,61 @@ on:
     branches: [dev, prod]
 
 jobs:
+  ai-resource-integration:
+    name: AI Redis / PostgreSQL Safeguards
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        env:
+          POSTGRES_USER: fixture
+          POSTGRES_DB: workphelo_ai_2b1
+          # Disposable role, no password or platform credentials; loopback only.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:54416:5432
+        options: >-
+          --health-cmd "pg_isready -U fixture -d workphelo_ai_2b1"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+      redis:
+        image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+        ports:
+          - 127.0.0.1:17991:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Configure isolated test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='postgresql://fixture@127.0.0.1:54416/workphelo_ai_2b1?schema=ai'
+          printf '::add-mask::%s\n' "$url"
+          printf 'AI_TEST_DATABASE_URL=%s\n' "$url" >> "$GITHUB_ENV"
+          printf 'AI_TEST_ADMISSION_REDIS_URL=redis://127.0.0.1:17991\n' >> "$GITHUB_ENV"
+          docker exec '${{ job.services.redis.id }}' redis-cli CONFIG SET maxmemory 67108864
+          docker exec '${{ job.services.redis.id }}' redis-cli CONFIG SET maxmemory-policy noeviction
+      - name: Apply only disposable AI migrations
+        env:
+          DATABASE_URL: ${{ env.AI_TEST_DATABASE_URL }}
+        run: npm exec --workspace=apps/ai-service -- prisma migrate deploy --schema prisma/schema.prisma
+      - name: Generate AI client
+        run: npm run db:generate --workspace=apps/ai-service
+      - name: Run real dependency regressions and reject skipped tests
+        run: node apps/ai-service/scripts/verify-shared-resource-tests.cjs
+
   validate:
     runs-on: ubuntu-latest
     steps:

@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Request } from 'express';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { PrismaClient } from '../../prisma/generated/client';
+import { Prisma, PrismaClient } from '../../prisma/generated/client';
 import { TrustedContextService } from '../auth/trusted-context.service';
 import { MessageContextFactory } from '../encryption/message-context';
 import { MessageKeyRing } from '../encryption/key-ring.service';
@@ -293,6 +293,75 @@ function gate() {
       await Promise.all(held);
     }
     expect(await db.aiExecutionSlot.count({ where: { leaseId: { not: null } } })).toBe(0);
+  });
+  it('publishes only committed slots after an interleaved serialization retry, without a false 504', async () => {
+    let injected = false,
+      competitor: Promise<void> | undefined,
+      competitorId: string | undefined;
+    const started = gate(),
+      finish = gate();
+    const retried = new AiDatabaseService(settings(), () => {
+      const client = createAiClient(testUrl!);
+      return new Proxy(client, {
+        get(target, property) {
+          if (property === '$transaction')
+            return async (
+              work: (tx: Prisma.TransactionClient) => Promise<unknown>,
+              options: { maxWait: number; timeout: number; isolationLevel: 'ReadCommitted' },
+            ) => {
+              try {
+                return await target.$transaction(async (tx) => {
+                  const result = await work(tx);
+                  if (!injected) {
+                    injected = true;
+                    throw new Prisma.PrismaClientKnownRequestError(
+                      'synthetic serialization retry',
+                      { code: 'P2034', clientVersion: '5.22.0' },
+                    );
+                  }
+                  return result;
+                }, options);
+              } catch (error) {
+                if (
+                  error instanceof Prisma.PrismaClientKnownRequestError &&
+                  error.code === 'P2034' &&
+                  !competitor
+                ) {
+                  // Occupy the rolled-back tenant slot before the original request retries.
+                  competitor = secondPermits.run(owner('tenant-a', 'competitor'), async () => {
+                    competitorId = executionContext.getStore()!.leaseId;
+                    started.release();
+                    await finish.promise;
+                  });
+                  await started.promise;
+                }
+                throw error;
+              }
+            };
+          const value: unknown = Reflect.get(target, property);
+          return typeof value === 'function' ? (value.bind(target) as unknown) : value;
+        },
+      });
+    });
+    await retried.onModuleInit();
+    try {
+      const result = await new ExecutionPermits(retried, settings()).run(owner(), async () => {
+        const slots = executionContext.getStore()!.slots;
+        expect(slots).toHaveLength(2);
+        expect(slots.map((slot) => slot.ownerUserId)).toEqual(['', 'owner-a']);
+        expect(slots[0].slot).toBe(1);
+        return new ConversationsRepository(retried).create(owner());
+      });
+      expect(injected).toBe(true);
+      expect(result.id).toBeDefined();
+      expect((await usage()).conversations).toBe(1n);
+      expect(await db.aiExecutionSlot.count({ where: { leaseId: { not: null } } })).toBe(2);
+      expect(await db.aiExecutionSlot.count({ where: { leaseId: competitorId } })).toBe(2);
+    } finally {
+      finish.release();
+      await competitor;
+      await retried.onModuleDestroy();
+    }
   });
   it('shares ten tenant permits without interference between tenants', async () => {
     const finish = gate(),

@@ -62,9 +62,24 @@ Gateway replicas). Use dedicated Redis 7 standalone, TLS/scoped ACLs in deployed
 environments, positive maxmemory and **noeviction**. Redis Cluster is not supported:
 the readiness key is global. Memory policy and server run_id are checked on each
 admission. ACLs must allow connection/readiness including INFO, EVAL, GET, TYPE,
-TIME, HMGET, HSET and PEXPIRE on `ai:admission:v1:*`. Provision ACLs outside the app.
+TIME, EXISTS, PTTL, HMGET, HSET and PEXPIRE on `ai:admission:v1:*`, plus SET/DEL for the
+`:incomplete` failure-marker keys. Redis 7+ is required for in-script ACL preflight.
+Provision ACLs outside the app.
 OOM, ACL/network errors, bad state types, missing epoch and restart fail closed.
 Capacity-test memory sizing; noeviction does not make an undersized instance safe.
+Both buckets are fully validated before mutation; an existing hash missing either
+required field or a valid bounded TTL is never treated as a fresh bucket.
+
+After ACL preflight, the script first creates a persistent failure marker, applies
+both bucket updates/expirations, and removes the marker only on complete success.
+Unexpected command failure leaves the marker in place, blocking that tenant and
+operation with 503. It records only the HMAC owner-bucket key. There is no automatic
+compensation, deletion, expiry or retry of uncertain admission. A lost reply after
+successful execution may conservatively consume budget but never permits the
+failed request to proceed. Other tenants remain independent. This marker is NOT an
+execution lease; PostgreSQL remains the hard execution-concurrency boundary.
+Keep admission disabled while upgrading; every Gateway replica must understand
+the failure marker and have the required ACLs before any separately authorized enablement.
 
 No automatic cold-start blessing exists. After reset/failover or HMAC rotation,
 stop protected admission on ALL replicas, wait at least 60 seconds (exceeding the
@@ -77,6 +92,10 @@ the key or its derived readiness tag. Verify independently before resuming. Use 
 client, not credentials in shell history. Never flush live buckets or initialize
 the epoch in deployment startup. Only known-empty disposable fixtures initialize
 immediately. This is a standalone Redis recovery protocol, not seamless failover.
+For an incomplete marker, keep admissions quiesced through that recovery window,
+inspect/repair the referenced owner bucket and corresponding tenant bucket, then
+explicitly remove the marker only after consistency and expiry are verified. Never
+clear a marker or malformed hash automatically to make traffic succeed.
 
 Receipt caps derive from 30 days of write refill plus burst:
 `AI_METADATA_OWNER_RECEIPT_LIMIT=432002`,
@@ -143,6 +162,12 @@ in the disposable DB. Only outbound Auth messaging is doubled. Existing transpor
 fixtures explicitly double Redis admission; separate tests cover real shared Redis.
 Concurrent receipt fixtures retry capacity rejection with fresh proofs and the
 same idempotency key; they preserve final single-write assertions.
+
+CI additionally runs `scripts/verify-shared-resource-tests.cjs` against pinned,
+disposable PostgreSQL 16.15 and Redis 7.4.11 service images. It requires loopback
+test URLs (PostgreSQL port 54416, Redis port 17991), applies only the AI migrations,
+and validates Jest JSON reports: at least 22 PostgreSQL and 16 real Redis cases,
+every selected assertion passed and zero skipped tests. Existing CI jobs remain.
 
 Future activation requires independent authorization for migration, privileges,
 tenant reconciliation, Redis memory/ACL/epoch and secret distribution, cleanup
