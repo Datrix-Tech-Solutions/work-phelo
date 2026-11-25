@@ -16,6 +16,9 @@ export const SAFE_ERROR_CODES = [
   'UNAVAILABLE',
   'INVALID_RESPONSE',
   'FOUNDATION_NOT_READY',
+  'AI_STORAGE_QUOTA_EXCEEDED',
+  'AI_EXECUTION_LIMITED',
+  'AI_METADATA_CAPACITY',
 ] as const;
 
 export type SafeErrorCode = (typeof SAFE_ERROR_CODES)[number];

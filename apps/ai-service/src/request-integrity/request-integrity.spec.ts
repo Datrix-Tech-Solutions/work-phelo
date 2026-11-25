@@ -773,7 +773,13 @@ const testUrl = process.env.AI_TEST_DATABASE_URL;
       const columns = await db.$queryRaw<
         { column_name: string }[]
       >`SELECT column_name FROM information_schema.columns WHERE table_schema='ai' AND table_name='AiRequestNonce' ORDER BY column_name`;
-      expect(columns.map((c) => c.column_name)).toEqual(['createdAt', 'expiresAt', 'replayDigest']);
+      expect(columns.map((c) => c.column_name)).toEqual([
+        'createdAt',
+        'expiresAt',
+        'ownerUserId',
+        'replayDigest',
+        'tenantId',
+      ]);
       const indexes = await db.$queryRaw<
         { indexname: string }[]
       >`SELECT indexname FROM pg_indexes WHERE schemaname='ai' AND tablename='AiRequestNonce'`;

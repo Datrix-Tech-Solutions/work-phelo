@@ -269,10 +269,16 @@ integration. Tests include actual client response loss after verified DB commit,
 eight concurrent copies of one proof, fresh-proof receipt retries, altered-byte
 rejection, outage/key mismatch, ownership, CSRF and total Auth deadline behavior.
 
-Capacity remains a rollout blocker: global in-process/IP Throttler buckets are
+At the Phase 2B milestone, capacity remained a rollout blocker: global in-process/IP Throttler buckets are
 30/second, 150/10 seconds and 600/minute, not AI user/tenant quotas and not shared
 across replicas. No Redis-backed throttler storage was found. Redis elsewhere in
 the platform does not itself provide shared AI rate limits. No aggregate
 conversation/message/byte cap or concurrent-job quota is implemented. Retention,
 nonce/receipt cleanup, backup deletion reconciliation, shared limits and key
 operations require explicit production approval; none is enabled here.
+
+The subsequent shared safeguards add default-off Redis admission after current
+Auth validation, plus AI-owned PostgreSQL permits and transactional quotas. See
+[AI resource safeguards](../ai-service/SHARED_RESOURCE_SAFEGUARDS.md) for exact
+limits, configuration, fail-closed Redis recovery and adoption prerequisites.
+Existing global/IP throttling remains unchanged; no infrastructure is enabled here.

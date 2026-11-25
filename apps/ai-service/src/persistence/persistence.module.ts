@@ -9,6 +9,8 @@ import { SubmissionFingerprintService } from './submission-fingerprint.service';
 import { ConversationOperationsService } from './conversation-operations.service';
 import { RetentionCleanupService } from './retention-cleanup.service';
 import { RequestNonceStore } from './request-nonce.store';
+import { ExecutionPermits } from './execution-permits.service';
+import { ResourceReconciliationService } from './resource-reconciliation.service';
 
 @Module({
   imports: [ConfigModule, TrustedAuthModule, MessageEncryptionModule],
@@ -21,12 +23,15 @@ import { RequestNonceStore } from './request-nonce.store';
     ConversationOperationsService,
     RetentionCleanupService,
     RequestNonceStore,
+    ExecutionPermits,
+    ResourceReconciliationService,
   ],
   exports: [
     OwnershipContextFactory,
     ConversationsRepository,
     ConversationOperationsService,
     RequestNonceStore,
+    ExecutionPermits,
   ],
 })
 export class PersistenceModule {}

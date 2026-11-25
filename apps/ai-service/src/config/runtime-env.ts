@@ -23,10 +23,18 @@ export interface AiRuntimeConfig {
   AI_RETENTION_CLEANUP_ENABLED: boolean;
   AI_RETENTION_SCHEDULER_ENABLED: boolean;
   AI_CLEANUP_BATCH_SIZE: number;
+  AI_CLEANUP_RECEIPT_BATCH_SIZE: number;
+  AI_CLEANUP_NONCE_BATCH_SIZE: number;
   AI_CLEANUP_INTERVAL_MS: number;
   AI_REQUEST_VERIFICATION_ENABLED: boolean;
   AI_REQUEST_VERIFICATION_KEYS?: string;
   AI_CONVERSATION_HTTP_ENABLED: boolean;
+  AI_RESOURCE_SAFEGUARDS_ENABLED: boolean;
+  AI_METADATA_OWNER_RECEIPT_LIMIT: number;
+  AI_METADATA_TENANT_RECEIPT_LIMIT: number;
+  AI_METADATA_OWNER_NONCE_LIMIT: number;
+  AI_METADATA_TENANT_NONCE_LIMIT: number;
+  AI_METADATA_BACKLOG_GRACE_SECONDS: number;
 }
 
 export class RuntimeConfigurationError extends Error {
@@ -89,9 +97,13 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
   const schedulerEnabled = booleanValue(env, 'AI_RETENTION_SCHEDULER_ENABLED');
   const verificationEnabled = booleanValue(env, 'AI_REQUEST_VERIFICATION_ENABLED');
   const conversationHttpEnabled = booleanValue(env, 'AI_CONVERSATION_HTTP_ENABLED');
+  const safeguards = booleanValue(env, 'AI_RESOURCE_SAFEGUARDS_ENABLED');
+  if (safeguards && !persistenceEnabled)
+    throw new RuntimeConfigurationError('AI_RESOURCE_SAFEGUARDS_ENABLED');
   if (
     conversationHttpEnabled &&
     (nodeEnv === 'production' ||
+      !safeguards ||
       !authenticatedRoutes ||
       !persistenceEnabled ||
       !encryptionEnabled ||
@@ -183,10 +195,43 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
     AI_RETENTION_SCHEDULER_ENABLED: schedulerEnabled,
     AI_REQUEST_VERIFICATION_ENABLED: verificationEnabled,
     AI_CONVERSATION_HTTP_ENABLED: conversationHttpEnabled,
+    AI_RESOURCE_SAFEGUARDS_ENABLED: safeguards,
+    AI_METADATA_OWNER_RECEIPT_LIMIT: integerValue(
+      env,
+      'AI_METADATA_OWNER_RECEIPT_LIMIT',
+      432002,
+      432002,
+    ),
+    AI_METADATA_TENANT_RECEIPT_LIMIT: integerValue(
+      env,
+      'AI_METADATA_TENANT_RECEIPT_LIMIT',
+      4320020,
+      4320020,
+    ),
+    AI_METADATA_OWNER_NONCE_LIMIT: integerValue(env, 'AI_METADATA_OWNER_NONCE_LIMIT', 256, 256),
+    AI_METADATA_TENANT_NONCE_LIMIT: integerValue(env, 'AI_METADATA_TENANT_NONCE_LIMIT', 4096, 4096),
+    AI_METADATA_BACKLOG_GRACE_SECONDS: integerValue(
+      env,
+      'AI_METADATA_BACKLOG_GRACE_SECONDS',
+      120,
+      3600,
+    ),
     ...(verificationEnabled
       ? { AI_REQUEST_VERIFICATION_KEYS: env.AI_REQUEST_VERIFICATION_KEYS as string }
       : {}),
     AI_CLEANUP_BATCH_SIZE: integerValue(env, 'AI_CLEANUP_BATCH_SIZE', 25, 100),
+    AI_CLEANUP_RECEIPT_BATCH_SIZE: integerValue(
+      env,
+      'AI_CLEANUP_RECEIPT_BATCH_SIZE',
+      integerValue(env, 'AI_CLEANUP_BATCH_SIZE', 25, 100),
+      100,
+    ),
+    AI_CLEANUP_NONCE_BATCH_SIZE: integerValue(
+      env,
+      'AI_CLEANUP_NONCE_BATCH_SIZE',
+      integerValue(env, 'AI_CLEANUP_BATCH_SIZE', 25, 100),
+      1000,
+    ),
     AI_CLEANUP_INTERVAL_MS: cleanupInterval,
     ...(operationsEnabled
       ? {

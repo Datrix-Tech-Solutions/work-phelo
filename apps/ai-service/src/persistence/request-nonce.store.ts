@@ -38,6 +38,7 @@ export class RequestNonceStore implements OnModuleInit {
     issuedAtMs: number,
     proofExpiryMs: number,
     deadlineAtMs: number,
+    owner?: { tenantId: string; ownerUserId: string },
   ): Promise<void> {
     this.requireEnabled();
     if (
@@ -51,9 +52,21 @@ export class RequestNonceStore implements OnModuleInit {
     let consumed: boolean;
     try {
       consumed = await this.database.transaction(async (tx) => {
+        if (this.config.get<unknown>('AI_RESOURCE_SAFEGUARDS_ENABLED') === true) {
+          if (!owner) throw new ConversationOperationError(503);
+          await tx.$queryRaw`SELECT ai.resource_prepare(${owner.tenantId},${owner.ownerUserId})`;
+          const legacy = await tx.$queryRaw<{ replayDigest: Buffer }[]>`SELECT "replayDigest"
+            FROM ai."AiRequestNonce" WHERE "tenantId" IS NULL LIMIT 4097`;
+          if (legacy.length > 4096) throw new ConversationOperationError(503);
+          const backlog = await tx.$queryRaw<{ found: boolean }[]>`SELECT EXISTS(
+            SELECT 1 FROM ai."AiRequestNonce" WHERE "tenantId"=${owner.tenantId}
+            AND "expiresAt" < clock_timestamp()-${this.config.get<number>('AI_METADATA_BACKLOG_GRACE_SECONDS') ?? 120}*interval '1 second'
+            LIMIT 1) AS found`;
+          if (backlog[0].found) throw new ConversationOperationError(503);
+        }
         const inserted =
-          await tx.$executeRaw`INSERT INTO ai."AiRequestNonce" ("replayDigest", "createdAt", "expiresAt")
-          SELECT ${digest}, date_trunc('milliseconds', clock_timestamp()), ${retainUntil}
+          await tx.$executeRaw`INSERT INTO ai."AiRequestNonce" ("replayDigest", "createdAt", "expiresAt","tenantId","ownerUserId")
+          SELECT ${digest}, date_trunc('milliseconds', clock_timestamp()), ${retainUntil},${owner?.tenantId ?? null},${owner?.ownerUserId ?? null}
           WHERE clock_timestamp() < ${validUntil} AND ${new Date(issuedAtMs)} <= clock_timestamp() + interval '1 second'
           ON CONFLICT ("replayDigest") DO NOTHING`;
         return inserted === 1;

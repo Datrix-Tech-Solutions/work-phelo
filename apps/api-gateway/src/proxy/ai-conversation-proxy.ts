@@ -13,6 +13,7 @@ import {
   validateAiConversationTarget,
 } from './ai-request-integrity';
 import { aiConversationBody } from './ai-conversation-body';
+import { AiAdmissionError } from './ai-rate-admission';
 
 export const AI_CONVERSATION_TIMEOUT_MS = 5000;
 const codes: Record<number, string> = {
@@ -23,6 +24,7 @@ const codes: Record<number, string> = {
   409: 'CONFLICT',
   413: 'REQUEST_TOO_LARGE',
   415: 'UNSUPPORTED_MEDIA_TYPE',
+  429: 'RATE_LIMITED',
   503: 'SERVICE_UNAVAILABLE',
   504: 'GATEWAY_TIMEOUT',
 };
@@ -143,6 +145,7 @@ export async function forwardAiConversation(
   res: Response,
   serviceOrigin: string | undefined,
   authenticate: (token: string, deadlineAtMs: number) => Promise<RequestUser>,
+  admit: (user: RequestUser, method: string) => Promise<void>,
 ): Promise<void> {
   const requestId = randomUUID(),
     deadlineAtMs = Date.now() + AI_CONVERSATION_TIMEOUT_MS;
@@ -170,6 +173,7 @@ export async function forwardAiConversation(
     const token = selectAiAccessCredential(req);
     checkBrowserOrigin(req);
     const user = await authenticate(token, deadlineAtMs);
+    await admit(user, req.method);
     if (Date.now() >= deadlineAtMs) throw new AiRequestIntegrityError(504);
     const { permissions: permissionList, ...identity } = user;
     const permissions = JSON.stringify(permissionList),
@@ -238,6 +242,37 @@ export async function forwardAiConversation(
             }
             const status = upstream.statusCode ?? 503;
             if (codes[status]) {
+              if (status === 429) {
+                const value = upstream.headers['retry-after'];
+                const retry =
+                  typeof value === 'string' &&
+                  /^(?:[1-9]|[1-5][0-9]|60)$/.test(value)
+                    ? value
+                    : '1';
+                res.setHeader('Retry-After', retry);
+              }
+              if (status === 409) {
+                try {
+                  const error: unknown = JSON.parse(
+                    Buffer.concat(chunks).toString('utf8'),
+                  );
+                  if (
+                    record(error) &&
+                    error.code === 'AI_STORAGE_QUOTA_EXCEEDED'
+                  ) {
+                    res.status(409).json({
+                      statusCode: 409,
+                      code: 'AI_STORAGE_QUOTA_EXCEEDED',
+                      message: 'AI storage capacity reached',
+                      requestId,
+                    });
+                    finish();
+                    return;
+                  }
+                } catch {
+                  /* Never forward an untrusted upstream body. */
+                }
+              }
               reject(status);
               finish();
               return;
@@ -284,6 +319,8 @@ export async function forwardAiConversation(
       }
     });
   } catch (error) {
+    if (error instanceof AiAdmissionError && error.getStatus() === 429)
+      res.setHeader('Retry-After', String(error.retryAfter));
     reject(
       error instanceof AiRequestIntegrityError
         ? error.status

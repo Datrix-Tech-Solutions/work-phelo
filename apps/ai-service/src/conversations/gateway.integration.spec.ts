@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { afterCapacity } from './capacity-test.fixture';
 import {
   INestApplication,
   ServiceUnavailableException,
@@ -69,6 +70,12 @@ const sourceRoot = join(__dirname, '../../../api-gateway/src');
 const { ProxyController } = loadGateway(join(sourceRoot, 'proxy/proxy.controller')) as {
   ProxyController: Type<object>;
 };
+const { AiRateAdmission, AiAdmissionError } = loadGateway(
+  join(sourceRoot, 'proxy/ai-rate-admission'),
+) as {
+  AiRateAdmission: Type<object>;
+  AiAdmissionError: new (status: 429 | 503, retryAfter?: number) => Error;
+};
 const { aiConversationJsonBoundary } = loadGateway(
   join(sourceRoot, 'proxy/ai-conversation-body'),
 ) as { aiConversationJsonBoundary: () => ReturnType<typeof json> };
@@ -124,6 +131,9 @@ async function harness(databaseUrl?: string) {
     authDelay: 0,
     relayDelay: 0,
     malicious: false,
+    forcedReply: undefined as { status: number; retry?: string; code?: string } | undefined,
+    admissionStatus: undefined as 429 | 503 | undefined,
+    admissionCalls: [] as string[][],
     duplicate: 0,
     duplicateStatuses: [] as number[],
     dropResponse: false,
@@ -181,6 +191,7 @@ async function harness(databaseUrl?: string) {
     AI_REQUEST_VERIFICATION_ENABLED: 'true',
     AI_REQUEST_VERIFICATION_KEYS: JSON.stringify([signing]),
     AI_CONVERSATION_HTTP_ENABLED: 'true',
+    AI_RESOURCE_SAFEGUARDS_ENABLED: 'true',
     AI_REQUEST_SIGNING_ENABLED: 'true',
     AI_REQUEST_SIGNING_KEY: signing.key,
     AI_REQUEST_SIGNING_KEY_ID: signing.id,
@@ -244,6 +255,14 @@ async function harness(databaseUrl?: string) {
         body: Buffer.concat(chunks),
       };
       captured.push(original);
+      if (state.forcedReply) {
+        if (state.forcedReply.retry) res.setHeader('Retry-After', state.forcedReply.retry);
+        res.setHeader('Set-Cookie', 'private-upstream-cookie');
+        res
+          .writeHead(state.forcedReply.status)
+          .end(JSON.stringify({ code: state.forcedReply.code, stack: 'private-canary' }));
+        return;
+      }
       if (state.duplicate) {
         void Promise.all(Array.from({ length: state.duplicate }, () => raw(aiOrigin, original)))
           .then((replies) => {
@@ -295,6 +314,20 @@ async function harness(databaseUrl?: string) {
   process.env.AI_SERVICE_URL = relayOrigin;
   const gatewayModule = await Test.createTestingModule({
     controllers: [ProxyController],
+    // This existing harness isolates proof/transport behavior. Shared Redis is
+    // exercised independently against a disposable server by admission tests.
+    providers: [
+      {
+        provide: AiRateAdmission,
+        useValue: {
+          admit: (tenantId: string, userId: string, method: string) => {
+            state.admissionCalls.push([tenantId, userId, method]);
+            if (state.admissionStatus) throw new AiAdmissionError(state.admissionStatus, 6);
+            return Promise.resolve();
+          },
+        },
+      },
+    ],
   }).compile();
   const gateway = gatewayModule.createNestApplication<INestApplication<http.Server>>({
     bodyParser: false,
@@ -360,11 +393,49 @@ describe('Real Gateway controller, /me HTTP stub, signer/adapter and real AI HTT
   beforeEach(() => {
     h.state.denied = false;
     h.state.malicious = false;
+    h.state.forcedReply = undefined;
+    h.state.admissionStatus = undefined;
+    h.state.admissionCalls = [];
     h.state.duplicate = 0;
     h.state.dropResponse = false;
     h.state.mutate = undefined;
     h.state.authDelay = 0;
     h.state.relayDelay = 0;
+  });
+  it('admits only after current Auth validation using trusted tenant and owner', async () => {
+    h.state.denied = true;
+    expect((await call(h, 'GET', external)).status).toBe(401);
+    expect(h.state.admissionCalls).toEqual([]);
+    h.state.denied = false;
+    h.state.admissionStatus = 429;
+    const before = h.captured.length;
+    const reply = await call(h, 'GET', external);
+    expect(reply.status).toBe(429);
+    expect(reply.headers['retry-after']).toBe('6');
+    expect(h.state.admissionCalls).toEqual([['integration-tenant', 'integration-user', 'GET']]);
+    expect(h.captured).toHaveLength(before);
+    h.state.admissionStatus = 503;
+    expect((await call(h, 'GET', external)).status).toBe(503);
+  });
+  it.each(['6', '0', '61', '1.5', 'private-canary'])(
+    'bounds upstream Retry-After %s and never propagates sensitive fields',
+    async (retry) => {
+      h.state.forcedReply = { status: 429, retry };
+      const reply = await call(h, 'GET', external);
+      expect(reply.status).toBe(429);
+      expect(reply.headers['retry-after']).toBe(retry === '6' ? '6' : '1');
+      expect(reply.headers['set-cookie']).toBeUndefined();
+      expect(reply.text).not.toContain('private-canary');
+    },
+  );
+  it('propagates only the approved storage-quota code from an untrusted upstream error', async () => {
+    h.state.forcedReply = { status: 409, code: 'AI_STORAGE_QUOTA_EXCEEDED' };
+    const reply = await call(h, 'GET', external);
+    expect(reply.status).toBe(409);
+    expect((reply.body as { code: string }).code).toBe('AI_STORAGE_QUOTA_EXCEEDED');
+    expect(reply.text).not.toContain('private-canary');
+    h.state.forcedReply = { status: 409, code: 'private-canary' };
+    expect(((await call(h, 'GET', external)).body as { code: string }).code).toBe('CONFLICT');
   });
   it.each([
     ['POST', external, {}, 'create', 201],
@@ -664,7 +735,9 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       const token = h.token(randomUUID(), randomUUID()),
         key = randomUUID();
       const replies = await Promise.all(
-        Array.from({ length: 6 }, () => call(h, 'POST', external, {}, key, token)),
+        Array.from({ length: 6 }, () =>
+          afterCapacity(() => call(h, 'POST', external, {}, key, token)),
+        ),
       );
       expect(replies.every((r) => r.status === 201)).toBe(true);
       expect(new Set(replies.map((r) => (r.body as { id: string }).id)).size).toBe(1);
@@ -672,7 +745,7 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       const target = `${external}/${result.id}/messages`;
       const messages = await Promise.all(
         Array.from({ length: 6 }, () =>
-          call(h, 'POST', target, { content: 'retry' }, 'same-key', token),
+          afterCapacity(() => call(h, 'POST', target, { content: 'retry' }, 'same-key', token)),
         ),
       );
       expect(messages.every((r) => r.status === 201)).toBe(true);

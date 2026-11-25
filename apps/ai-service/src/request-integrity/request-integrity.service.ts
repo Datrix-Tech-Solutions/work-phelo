@@ -221,7 +221,10 @@ export class RequestIntegrityService {
         ]),
       )
       .digest();
-    await this.nonces.consume(digest, proof.iat * 1000, proof.exp * 1000, proof.deadlineAtMs);
+    await this.nonces.consume(digest, proof.iat * 1000, proof.exp * 1000, proof.deadlineAtMs, {
+      tenantId: user.tenantId,
+      ownerUserId: user.id,
+    });
     const effectiveDeadline = Math.min(proof.deadlineAtMs, proof.exp * 1000);
     if (effectiveDeadline <= Date.now()) throw new GatewayTimeoutException();
     const context = Object.freeze({}) as VerifiedAiRequest;
