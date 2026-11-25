@@ -29,6 +29,7 @@ import { ConversationOperationsService } from '../persistence/conversation-opera
 import { ConversationsRepository } from '../persistence/conversations.repository';
 import { OwnershipContext, requireOwnership } from '../persistence/ownership-context';
 import { RequestNonceStore } from '../persistence/request-nonce.store';
+import { ExecutionPermits } from '../persistence/execution-permits.service';
 import {
   AuthorizedConversationOperations,
   conversationGrant,
@@ -73,6 +74,7 @@ const env = () => ({
   AI_REQUEST_VERIFICATION_ENABLED: 'true',
   AI_REQUEST_VERIFICATION_KEYS: JSON.stringify([signing]),
   AI_CONVERSATION_HTTP_ENABLED: 'true',
+  AI_RESOURCE_SAFEGUARDS_ENABLED: 'true',
 });
 const id = 'abcdef01-1111-4111-8111-111111111111';
 let capturedRequest: Request;
@@ -225,6 +227,8 @@ async function harness(databaseUrl?: string, registered = bindings) {
       .useValue(registered);
     if (!databaseUrl) {
       builder = builder
+        .overrideProvider(ExecutionPermits)
+        .useValue({ run: (_owner: unknown, action: () => Promise<unknown>) => action() })
         .overrideProvider(AI_CLIENT_FACTORY)
         .useValue(() => ({ $connect: jest.fn(), $disconnect: jest.fn() }))
         .overrideProvider(RequestNonceStore)
@@ -565,9 +569,16 @@ const testUrl = process.env.AI_TEST_DATABASE_URL;
       url.searchParams.get('schema') !== 'ai'
     )
       throw new Error('Only disposable AI database allowed');
-    h = await harness(testUrl);
     db = createAiClient(testUrl!);
     await db.$connect();
+    // This guarded suite owns this fixture scope. Older suites may deliberately
+    // leave uninitialized historical accounting; do not reuse that test state.
+    await db.aiConversation.deleteMany({ where: { tenantId: 'tenant-a' } });
+    await db.aiSubmissionReceipt.deleteMany({ where: { tenantId: 'tenant-a' } });
+    await db.aiRequestNonce.deleteMany({ where: { tenantId: 'tenant-a' } });
+    await db.aiOwnerUsage.deleteMany({ where: { tenantId: 'tenant-a' } });
+    await db.aiTenantUsage.deleteMany({ where: { tenantId: 'tenant-a' } });
+    h = await harness(testUrl);
   });
   afterAll(async () => {
     await h?.app.close();

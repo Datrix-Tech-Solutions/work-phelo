@@ -50,6 +50,7 @@ model AiConversation {
   @@unique([id, tenantId, ownerUserId], map: "AiConversation_ownership_key")
   @@index([tenantId, ownerUserId, createdAt(sort: Desc), id(sort: Desc)], map: "AiConversation_owned_list_idx")
   @@index([expiresAt, id], map: "AiConversation_expiry_idx")
+  @@index([tenantId, id], map: "AiConversation_tenant_id_idx")
   @@schema("ai")
 }
 
@@ -72,6 +73,7 @@ model AiConversationMessage {
   @@unique([conversationId, sequence], map: "AiMessage_sequence_key")
   @@unique([keyId, nonce], map: "AiMessage_key_nonce_key")
   @@index([conversationId, tenantId, ownerUserId], map: "AiMessage_parent_idx")
+  @@index([tenantId, id], map: "AiMessage_tenant_id_idx")
   @@schema("ai")
 }
 
@@ -92,6 +94,8 @@ model AiSubmissionReceipt {
 
   @@unique([tenantId, ownerUserId, operation, idempotencyKey], map: "AiReceipt_idempotency_key")
   @@index([expiresAt, id], map: "AiReceipt_expiry_idx")
+  @@index([tenantId, expiresAt], map: "AiSubmissionReceipt_tenant_expiry_idx")
+  @@index([tenantId, id], map: "AiReceipt_tenant_id_idx")
   @@schema("ai")
 }
 
@@ -99,7 +103,67 @@ model AiRequestNonce {
   replayDigest Bytes    @id
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
   expiresAt    DateTime @db.Timestamptz(3)
+  tenantId     String?
+  ownerUserId  String?
 
   @@index([expiresAt, replayDigest], map: "AiRequestNonce_expiry_idx")
+  @@index([tenantId, ownerUserId, replayDigest], map: "AiRequestNonce_owner_idx")
+  @@index([tenantId, expiresAt], map: "AiRequestNonce_tenant_expiry_idx")
+  @@schema("ai")
+}
+
+model AiTenantUsage {
+  tenantId       String  @id
+  initialized    Boolean @default(false)
+  reconciling    Boolean @default(false)
+  conversations  BigInt  @default(0)
+  messages       BigInt  @default(0)
+  encryptedBytes BigInt  @default(0)
+  receipts       BigInt  @default(0)
+  nonces         BigInt  @default(0)
+
+  @@schema("ai")
+}
+
+model AiOwnerUsage {
+  tenantId       String
+  ownerUserId    String
+  conversations  BigInt @default(0)
+  messages       BigInt @default(0)
+  encryptedBytes BigInt @default(0)
+  receipts       BigInt @default(0)
+  nonces         BigInt @default(0)
+
+  @@id([tenantId, ownerUserId])
+  @@schema("ai")
+}
+
+model AiConversationUsage {
+  conversationId String @id @db.Uuid
+  messages       BigInt @default(0)
+  encryptedBytes BigInt @default(0)
+
+  @@schema("ai")
+}
+
+model AiExecutionSlot {
+  tenantId    String
+  ownerUserId String
+  slot        Int
+  leaseId     String?  @db.Uuid
+  generation  BigInt   @default(0)
+  expiresAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([tenantId, ownerUserId, slot])
+  @@index([expiresAt])
+  @@schema("ai")
+}
+
+model AiAccountingReconciliation {
+  tenantId String @id
+  epoch    String @db.Uuid
+  stage    Int    @default(0)
+  cursor   String @default("")
+
   @@schema("ai")
 }

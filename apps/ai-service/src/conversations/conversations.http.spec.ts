@@ -1,3 +1,4 @@
+import { afterCapacity } from './capacity-test.fixture';
 import {
   CallHandler,
   ExecutionContext,
@@ -61,6 +62,7 @@ const defaults = {
   AI_REQUEST_VERIFICATION_ENABLED: 'true',
   AI_REQUEST_VERIFICATION_KEYS: JSON.stringify([signing]),
   AI_CONVERSATION_HTTP_ENABLED: 'true',
+  AI_RESOURCE_SAFEGUARDS_ENABLED: 'true',
 };
 interface Input {
   method: string;
@@ -520,7 +522,9 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
         user: randomUUID(),
         tenant: randomUUID(),
       };
-      const replies = await Promise.all(Array.from({ length: 8 }, () => send(h.app, wire(input))));
+      const replies = await Promise.all(
+        Array.from({ length: 8 }, () => afterCapacity(() => send(h.app, wire(input)))),
+      );
       expect(replies.every((r) => r.status === 201)).toBe(true);
       expect(new Set(replies.map((r) => (r.body as { id: string }).id)).size).toBe(1);
       expect(await db.aiConversation.count({ where: { ownerUserId: input.user } })).toBe(1);
@@ -697,7 +701,9 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
         key: 'append',
         body: JSON.stringify({ content }),
       };
-      const replies = await Promise.all(Array.from({ length: 6 }, () => send(h.app, wire(input))));
+      const replies = await Promise.all(
+        Array.from({ length: 6 }, () => afterCapacity(() => send(h.app, wire(input)))),
+      );
       expect(replies.every((r) => r.status === 201)).toBe(true);
       expect(new Set(replies.map((r) => (r.body as { id: string }).id)).size).toBe(1);
       safe(await send(h.app, wire({ ...input, body: '{"content":"changed"}' })), 409);
@@ -725,8 +731,8 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
         if (kind === 'deleted')
           await db.aiConversation.delete({ where: { id: row.conversationId } });
         const identity = {
-          user: kind === 'foreign-user' ? 'outsider' : row.user,
-          tenant: kind === 'foreign-tenant' ? 'outsider' : row.tenant,
+          user: kind === 'foreign-user' ? randomUUID() : row.user,
+          tenant: kind === 'foreign-tenant' ? randomUUID() : row.tenant,
         };
         const target = `${prefix}/${kind === 'missing' ? randomUUID() : row.conversationId}`;
         for (const method of ['GET', 'POST', 'DELETE'])
@@ -860,17 +866,19 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
         target = `${prefix}/${row.conversationId}`,
         identity = { user: row.user, tenant: row.tenant };
       const results = await Promise.all([
-        send(h.app, wire({ method: 'DELETE', target, ...identity })),
-        send(h.app, wire({ method: 'GET', target, ...identity })),
-        send(
-          h.app,
-          wire({
-            method: 'POST',
-            target: target + '/messages',
-            body: '{"content":"race"}',
-            key: 'race',
-            ...identity,
-          }),
+        afterCapacity(() => send(h.app, wire({ method: 'DELETE', target, ...identity }))),
+        afterCapacity(() => send(h.app, wire({ method: 'GET', target, ...identity }))),
+        afterCapacity(() =>
+          send(
+            h.app,
+            wire({
+              method: 'POST',
+              target: target + '/messages',
+              body: '{"content":"race"}',
+              key: 'race',
+              ...identity,
+            }),
+          ),
         ),
       ]);
       expect(results[0].status).toBe(204);

@@ -15,6 +15,7 @@ import { OwnershipContext, OwnershipContextFactory } from '../persistence/owners
 import { ConversationsRepository } from '../persistence/conversations.repository';
 import { ConversationOperationsService } from '../persistence/conversation-operations.service';
 import { ConversationHandlerRegistry, ConversationOperation } from './conversation-handler.policy';
+import { ExecutionPermits } from '../persistence/execution-permits.service';
 
 declare const grantBrand: unique symbol;
 export interface ConversationGrant<Operation extends ConversationOperation> {
@@ -56,6 +57,7 @@ export class ConversationAuthorizationService {
       throw new ServiceUnavailableException();
     for (const key of [
       'AI_CONVERSATION_HTTP_ENABLED',
+      'AI_RESOURCE_SAFEGUARDS_ENABLED',
       'AI_AUTHENTICATED_ROUTES_ENABLED',
       'AI_PERSISTENCE_ENABLED',
       'AI_MESSAGE_ENCRYPTION_ENABLED',
@@ -82,6 +84,7 @@ export class AuthorizedConversationOperations {
   constructor(
     private readonly repository: ConversationsRepository,
     private readonly operations: ConversationOperationsService,
+    private readonly permits: ExecutionPermits,
   ) {}
   private require<Operation extends ConversationOperation>(
     grant: ConversationGrant<Operation>,
@@ -93,21 +96,21 @@ export class AuthorizedConversationOperations {
     return state;
   }
   create(grant: ConversationGrant<'create'>) {
-    return this.repository.create(this.require(grant, 'create').owner);
+    const owner = this.require(grant, 'create').owner;
+    return this.permits.run(owner, () => this.repository.create(owner));
   }
   createIdempotent(grant: ConversationGrant<'create'>, key: string) {
-    return this.operations.createConversation(this.require(grant, 'create').owner, key);
+    const owner = this.require(grant, 'create').owner;
+    return this.permits.run(owner, () => this.operations.createConversation(owner, key));
   }
   listPage(grant: ConversationGrant<'list'>, limit = 20, cursor?: string) {
-    return this.repository.listOwnedPage(this.require(grant, 'list').owner, limit, cursor);
+    const owner = this.require(grant, 'list').owner;
+    return this.permits.run(owner, () => this.repository.listOwnedPage(owner, limit, cursor));
   }
   async detail(grant: ConversationGrant<'read'>, afterSequence = 0, limit = 20) {
     const state = this.require(grant, 'read');
-    const result = await this.operations.readOwnedDetail(
-      state.owner,
-      state.conversationId!,
-      afterSequence,
-      limit,
+    const result = await this.permits.run(state.owner, () =>
+      this.operations.readOwnedDetail(state.owner, state.conversationId!, afterSequence, limit),
     );
     return {
       conversation: result.conversation,
@@ -115,31 +118,38 @@ export class AuthorizedConversationOperations {
     };
   }
   list(grant: ConversationGrant<'list'>, limit = 20) {
-    return this.repository.listOwned(this.require(grant, 'list').owner, limit);
+    const owner = this.require(grant, 'list').owner;
+    return this.permits.run(owner, () => this.repository.listOwned(owner, limit));
   }
   async read(grant: ConversationGrant<'read'>, afterSequence = 0, limit = 20) {
     const state = this.require(grant, 'read');
-    const conversation = await this.repository.requireOwned(state.owner, state.conversationId!);
-    this.require(grant, 'read');
-    const messages = await this.operations.readOwnedMessagePage(
-      state.owner,
-      state.conversationId!,
-      afterSequence,
-      limit,
-    );
-    return { conversation, messages };
+    return this.permits.run(state.owner, async () => {
+      const conversation = await this.repository.requireOwned(state.owner, state.conversationId!);
+      this.require(grant, 'read');
+      const messages = await this.operations.readOwnedMessagePage(
+        state.owner,
+        state.conversationId!,
+        afterSequence,
+        limit,
+      );
+      return { conversation, messages };
+    });
   }
   append(grant: ConversationGrant<'append'>, content: string, idempotencyKey: string) {
     const state = this.require(grant, 'append');
-    return this.operations.appendUserMessage(
-      state.owner,
-      state.conversationId!,
-      content,
-      idempotencyKey,
+    return this.permits.run(state.owner, () =>
+      this.operations.appendUserMessage(
+        state.owner,
+        state.conversationId!,
+        content,
+        idempotencyKey,
+      ),
     );
   }
   delete(grant: ConversationGrant<'delete'>) {
     const state = this.require(grant, 'delete');
-    return this.operations.deleteOwned(state.owner, state.conversationId!);
+    return this.permits.run(state.owner, () =>
+      this.operations.deleteOwned(state.owner, state.conversationId!),
+    );
   }
 }

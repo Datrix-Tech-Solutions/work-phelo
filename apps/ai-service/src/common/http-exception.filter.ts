@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { InferenceProviderError, ProviderErrorCode } from '../inference/provider-error';
 import { SafeErrorCode } from './error-codes';
 import { recordErrorCode, requestIdFor } from './request-logging';
+import { ResourceError } from '../persistence/resource-error';
 
 interface SafeError {
   statusCode: number;
@@ -38,6 +39,12 @@ const httpCodes: Partial<Record<number, SafeErrorCode>> = {
 
 export function normalizeError(error: unknown): SafeError {
   try {
+    if (error instanceof ResourceError)
+      return {
+        statusCode: error.getStatus(),
+        code: error.resourceCode,
+        message: 'AI resource capacity unavailable',
+      };
     if (error instanceof InferenceProviderError && Object.hasOwn(providerErrors, error.code)) {
       return { ...providerErrors[error.code] };
     }
@@ -70,6 +77,8 @@ export class SafeHttpExceptionFilter implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
     const res = host.switchToHttp().getResponse<Response>();
     const safe = normalizeError(error);
+    if (error instanceof ResourceError && safe.statusCode === 429)
+      res.setHeader('Retry-After', '1');
     recordErrorCode(res, safe.code);
     if (!res.headersSent) {
       res.status(safe.statusCode).json({ ...safe, requestId: requestIdFor(res) });

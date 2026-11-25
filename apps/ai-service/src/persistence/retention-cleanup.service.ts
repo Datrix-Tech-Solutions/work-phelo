@@ -71,13 +71,29 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
   async runBatch() {
     this.requireEnabled();
     const limit = this.config.get<number>('AI_CLEANUP_BATCH_SIZE') ?? 25;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+    const receiptLimit = this.config.get<number>('AI_CLEANUP_RECEIPT_BATCH_SIZE') ?? limit;
+    const nonceLimit = this.config.get<number>('AI_CLEANUP_NONCE_BATCH_SIZE') ?? limit;
+    if (
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 100 ||
+      !Number.isInteger(receiptLimit) ||
+      receiptLimit < 1 ||
+      receiptLimit > 100 ||
+      !Number.isInteger(nonceLimit) ||
+      nonceLimit < 1 ||
+      nonceLimit > 1000
+    )
       throw new ConversationOperationError(503);
     const start = performance.now();
     try {
       const result = await this.database.transaction(async (tx) => {
-        const expired = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM ai."AiConversation"
-          WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", id LIMIT ${limit} FOR UPDATE SKIP LOCKED`;
+        const expired = await tx.$queryRaw<
+          { id: string; tenantId: string }[]
+        >`SELECT id,"tenantId" FROM ai."AiConversation" c
+          WHERE "expiresAt" <= statement_timestamp() AND NOT EXISTS
+          (SELECT 1 FROM ai."AiTenantUsage" u WHERE u."tenantId"=c."tenantId" AND u.reconciling)
+          ORDER BY "expiresAt", id LIMIT ${limit} FOR UPDATE SKIP LOCKED`;
         const parentIds = expired.map((row) => row.id);
         // Bound child work too: a parent-only LIMIT does not bound a cascade.
         const messages = parentIds.length
@@ -86,12 +102,6 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
               WHERE "conversationId" = ANY(${parentIds}::uuid[])
               ORDER BY "conversationId", sequence LIMIT ${limit} FOR UPDATE SKIP LOCKED`
           : [];
-        const deletedMessages = await tx.aiConversationMessage.deleteMany({
-          where: { id: { in: messages.map((row) => row.id) } },
-        });
-        const conversations = await tx.aiConversation.deleteMany({
-          where: { id: { in: parentIds }, messages: { none: {} } },
-        });
         const receipts = await tx.$queryRaw<
           {
             id: string;
@@ -101,8 +111,10 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
             idempotencyKey: string;
           }[]
         >`
-          SELECT id, "tenantId", "ownerUserId", operation, "idempotencyKey" FROM ai."AiSubmissionReceipt"
-          WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", id LIMIT ${limit} FOR UPDATE SKIP LOCKED`;
+          SELECT id, "tenantId", "ownerUserId", operation, "idempotencyKey" FROM ai."AiSubmissionReceipt" r
+          WHERE "expiresAt" <= statement_timestamp() AND NOT EXISTS
+          (SELECT 1 FROM ai."AiTenantUsage" u WHERE u."tenantId"=r."tenantId" AND u.reconciling)
+          ORDER BY "expiresAt", id LIMIT ${receiptLimit} FOR UPDATE SKIP LOCKED`;
         const removable: string[] = [];
         for (const receipt of receipts) {
           // Append locks the key BEFORE the parent. Never wait in the reverse order here.
@@ -121,15 +133,52 @@ export class RetentionCleanupService implements OnModuleInit, OnModuleDestroy {
           >`SELECT pg_try_advisory_xact_lock(hashtextextended(${scope}, 0)) AS acquired`;
           if (lock.acquired) removable.push(receipt.id);
         }
-        const deletedReceipts = await tx.aiSubmissionReceipt.deleteMany({
-          where: { id: { in: removable } },
+        const nonces = await tx.$queryRaw<{ replayDigest: Buffer; tenantId: string | null }[]>`
+          SELECT "replayDigest","tenantId" FROM ai."AiRequestNonce" n
+          WHERE "expiresAt" <= statement_timestamp() AND NOT EXISTS
+          (SELECT 1 FROM ai."AiTenantUsage" u WHERE u."tenantId"=n."tenantId" AND u.reconciling)
+          ORDER BY "expiresAt", "replayDigest" LIMIT ${nonceLimit} FOR UPDATE SKIP LOCKED`;
+        const tenants = [
+          ...new Set(
+            [...expired, ...receipts, ...nonces]
+              .map((row) => row.tenantId)
+              .filter((t): t is string => !!t),
+          ),
+        ].sort();
+        const held = new Set<string>();
+        for (const tenant of tenants) {
+          // Never wait on a writer holding accounting then nonce/receipt locks.
+          const [lock] = await tx.$queryRaw<{ acquired: boolean }[]>`
+            SELECT pg_try_advisory_xact_lock(hashtextextended(${'ai.usage.' + tenant},0)) AS acquired`;
+          if (lock.acquired) held.add(tenant);
+        }
+        const permittedParents = expired
+          .filter((row) => held.has(row.tenantId))
+          .map((row) => row.id);
+        const permittedMessages = messages.map((row) => row.id);
+        const deletedMessages = await tx.aiConversationMessage.deleteMany({
+          where: { id: { in: permittedMessages }, conversationId: { in: permittedParents } },
         });
-        const nonces = await tx.$queryRaw<{ replayDigest: Buffer }[]>`
-          SELECT "replayDigest" FROM ai."AiRequestNonce"
-          WHERE "expiresAt" <= statement_timestamp() ORDER BY "expiresAt", "replayDigest"
-          LIMIT ${limit} FOR UPDATE SKIP LOCKED`;
+        const conversations = await tx.aiConversation.deleteMany({
+          where: { id: { in: permittedParents }, messages: { none: {} } },
+        });
+        const deletedReceipts = await tx.aiSubmissionReceipt.deleteMany({
+          where: {
+            id: {
+              in: receipts
+                .filter((row) => held.has(row.tenantId) && removable.includes(row.id))
+                .map((row) => row.id),
+            },
+          },
+        });
         const deletedNonces = await tx.aiRequestNonce.deleteMany({
-          where: { replayDigest: { in: nonces.map((row) => row.replayDigest) } },
+          where: {
+            replayDigest: {
+              in: nonces
+                .filter((row) => !row.tenantId || held.has(row.tenantId))
+                .map((row) => row.replayDigest),
+            },
+          },
         });
         // A bounded indexed sample, not an unbounded count across the AI schema.
         const backlog = await tx.$queryRaw<

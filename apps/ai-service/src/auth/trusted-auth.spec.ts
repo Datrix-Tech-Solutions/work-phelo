@@ -297,6 +297,8 @@ describe('AI verification of signed WorkPhelo Gateway protocol fixtures', () => 
     process.env.AI_ENABLED = 'false';
     process.env.AI_MOCK_ENABLED = 'false';
     process.env.AI_AUTHENTICATED_ROUTES_ENABLED = 'true';
+    process.env.AI_CONVERSATION_HTTP_ENABLED = 'false';
+    process.env.AI_RESOURCE_SAFEGUARDS_ENABLED = 'false';
     const module = await Test.createTestingModule({
       imports: [AppModule.register({ ignoreEnvFile: true }), TrustedAuthModule],
       controllers: [TestOnlyController],

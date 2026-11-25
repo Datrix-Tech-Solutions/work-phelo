@@ -1,6 +1,6 @@
 // Local-only full Auth AppModule integration. No env files or external messaging are used.
 const assert = require('node:assert/strict');
-const { randomUUID, createHash } = require('node:crypto');
+const { randomUUID, createHash, createHmac } = require('node:crypto');
 const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { resolve, join } = require('node:path');
@@ -45,7 +45,7 @@ const { NestFactory } = require(resolve(root, 'node_modules/@nestjs/core'));
 const cookieParser = require(resolve(root, 'node_modules/cookie-parser'));
 const express = require(resolve(root, 'node_modules/express'));
 const jwt = require(resolve(root, 'node_modules/jsonwebtoken'));
-let auth, ai, gateway, db;
+let auth, ai, gateway, db, admissionRedis;
 (async () => {
   const { AppModule } = require(resolve(root, 'apps/auth-service/src/app.module.ts'));
   const { PrismaService } = require(
@@ -127,11 +127,27 @@ let auth, ai, gateway, db;
     AI_REQUEST_VERIFICATION_ENABLED: 'true',
     AI_REQUEST_VERIFICATION_KEYS: JSON.stringify([signing]),
     AI_CONVERSATION_HTTP_ENABLED: 'true',
+    AI_RESOURCE_SAFEGUARDS_ENABLED: 'true',
     AI_REQUEST_SIGNING_ENABLED: 'true',
     AI_REQUEST_SIGNING_KEY: signing.key,
     AI_REQUEST_SIGNING_KEY_ID: signing.id,
     AUTH_SERVICE_URL: await auth.getUrl(),
   });
+  const redisUrl = new URL(originalEnv.AI_TEST_ADMISSION_REDIS_URL || 'http://invalid');
+  assert(
+    ['127.0.0.1', 'localhost'].includes(redisUrl.hostname) && redisUrl.port === '17991',
+    'Only the dedicated disposable admission Redis is allowed',
+  );
+  const Redis = require('ioredis');
+  admissionRedis = new Redis(redisUrl.toString());
+  await admissionRedis.flushdb();
+  const runId = (await admissionRedis.info('server')).match(/run_id:([^\r\n]+)/)[1];
+  const admissionTag = createHmac('sha256', Buffer.alloc(32, 96))
+    .update('workphelo.ai.admission.v1')
+    .digest('hex');
+  await admissionRedis.set('ai:admission:v1:epoch', `${runId}:${admissionTag}`);
+  process.env.AI_ADMISSION_REDIS_URL = redisUrl.toString();
+  process.env.AI_ADMISSION_KEY_HMAC_SECRET = Buffer.alloc(32, 96).toString('base64');
   ai = await require(resolve(root, 'apps/ai-service/dist/main')).createApplication(
     { ignoreEnvFile: true },
     () => undefined,
@@ -141,11 +157,14 @@ let auth, ai, gateway, db;
   const { ProxyController } = require(
     resolve(root, 'apps/api-gateway/dist/proxy/proxy.controller'),
   );
+  const { AiRateAdmission } = require(
+    resolve(root, 'apps/api-gateway/dist/proxy/ai-rate-admission'),
+  );
   const { aiConversationJsonBoundary } = require(
     resolve(root, 'apps/api-gateway/dist/proxy/ai-conversation-body'),
   );
   class Gateway {}
-  Module({ controllers: [ProxyController] })(Gateway);
+  Module({ controllers: [ProxyController], providers: [AiRateAdmission] })(Gateway);
   gateway = await NestFactory.create(Gateway, { bodyParser: false, logger: false });
   gateway.use(cookieParser());
   gateway.use(aiConversationJsonBoundary());
@@ -252,6 +271,7 @@ let auth, ai, gateway, db;
     await gateway?.close();
     await ai?.close();
     await auth?.close();
+    if (admissionRedis) await admissionRedis.quit();
     process.env = originalEnv;
     process.chdir(cwd);
     rmSync(empty, { recursive: true, force: true });

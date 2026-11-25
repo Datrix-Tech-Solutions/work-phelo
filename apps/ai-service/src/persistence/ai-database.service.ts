@@ -9,6 +9,8 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, PrismaClient } from '../../prisma/generated/client';
 import { ConversationOperationError } from './conversation-operation.error';
 import { performance } from 'perf_hooks';
+import { executionContext } from './execution-context';
+import { ResourceError } from './resource-error';
 
 export const AI_CLIENT_FACTORY = Symbol('AI_CLIENT_FACTORY');
 export type AiClientFactory = (url: string) => PrismaClient;
@@ -85,6 +87,30 @@ export class AiDatabaseService implements OnModuleInit, OnModuleDestroy {
               throw new ConversationOperationError(requestDeadlineAtMs === undefined ? 503 : 504);
             await tx.$queryRaw`SELECT set_config('lock_timeout', ${String(Math.min(1500, timeout))}, true)`;
             await tx.$queryRaw`SELECT set_config('statement_timeout', ${String(Math.min(2500, timeout))}, true)`;
+            if (this.config.get<unknown>('AI_RESOURCE_SAFEGUARDS_ENABLED') === true) {
+              await tx.$queryRaw`SELECT set_config('workphelo.ai_resources','on',true)`;
+              await tx.$queryRaw`SELECT set_config('idle_in_transaction_session_timeout','4000',true)`;
+              for (const [name, fallback] of [
+                ['AI_METADATA_OWNER_RECEIPT_LIMIT', 432002],
+                ['AI_METADATA_TENANT_RECEIPT_LIMIT', 4320020],
+                ['AI_METADATA_OWNER_NONCE_LIMIT', 256],
+                ['AI_METADATA_TENANT_NONCE_LIMIT', 4096],
+                ['AI_METADATA_BACKLOG_GRACE_SECONDS', 120],
+              ] as const) {
+                const value = this.config.get<number>(name) ?? fallback;
+                await tx.$queryRaw`SELECT set_config(${'workphelo.' + name.toLowerCase()},${String(value)},true)`;
+              }
+              const lease = executionContext.getStore();
+              if (lease)
+                for (const slot of lease.slots) {
+                  const held = await tx.$queryRaw<{ generation: bigint }[]>`
+                  SELECT generation FROM ai."AiExecutionSlot" WHERE "tenantId"=${lease.tenantId}
+                    AND "ownerUserId"=${slot.ownerUserId} AND slot=${slot.slot}
+                    AND "leaseId"=${lease.leaseId}::uuid AND generation=${slot.generation}
+                    AND "expiresAt">clock_timestamp() FOR SHARE`;
+                  if (!held.length) throw new ConversationOperationError(504);
+                }
+            }
             if (performance.now() >= deadline)
               throw new ConversationOperationError(requestDeadlineAtMs === undefined ? 503 : 504);
             const result = await operation(tx);
@@ -95,6 +121,17 @@ export class AiDatabaseService implements OnModuleInit, OnModuleDestroy {
           { maxWait, timeout, isolationLevel: 'ReadCommitted' },
         );
       } catch (error) {
+        if (error instanceof ResourceError) throw error;
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2010') {
+          const message = typeof error.meta?.message === 'string' ? error.meta.message : '';
+          if (message.includes('AI_STORAGE_QUOTA_EXCEEDED'))
+            throw new ResourceError('AI_STORAGE_QUOTA_EXCEEDED');
+          if (message.includes('AI_METADATA_CAPACITY'))
+            throw new ResourceError('AI_METADATA_CAPACITY');
+        }
+        // Prisma ORM wraps trigger errors differently from raw queries.
+        if (error instanceof Error && error.message.includes('AI_STORAGE_QUOTA_EXCEEDED'))
+          throw new ResourceError('AI_STORAGE_QUOTA_EXCEEDED');
         if (error instanceof ConversationOperationError) throw error;
         if (requestDeadlineAtMs !== undefined && performance.now() >= deadline)
           throw new ConversationOperationError(504);

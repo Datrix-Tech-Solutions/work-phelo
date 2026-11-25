@@ -1,5 +1,9 @@
 # AI Service Foundation
 
+The subsequent shared-resource safeguards implementation and adoption prerequisites
+are documented in [SHARED_RESOURCE_SAFEGUARDS.md](SHARED_RESOURCE_SAFEGUARDS.md).
+Earlier phase descriptions below are historical, not the current capacity contract.
+
 The service currently provides foundation-only health/readiness and an internal,
 non-production deterministic mock provider. It does not expose inference or
 conversation APIs. External inference remains disabled.

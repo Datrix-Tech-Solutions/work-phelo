@@ -7,6 +7,18 @@ const valid = {
 };
 
 describe('AI runtime configuration', () => {
+  it.each([
+    { AI_RESOURCE_SAFEGUARDS_ENABLED: 'true' },
+    { AI_METADATA_OWNER_RECEIPT_LIMIT: '432003' },
+    { AI_METADATA_TENANT_RECEIPT_LIMIT: '4320021' },
+    { AI_METADATA_OWNER_NONCE_LIMIT: '0' },
+    { AI_METADATA_TENANT_NONCE_LIMIT: '4097' },
+    { AI_METADATA_BACKLOG_GRACE_SECONDS: '3601' },
+    { AI_CLEANUP_RECEIPT_BATCH_SIZE: '101' },
+    { AI_CLEANUP_NONCE_BATCH_SIZE: '1001' },
+  ])('rejects unsafe resource configuration %j', (extra) => {
+    expect(() => parseRuntimeEnv({ ...valid, ...extra })).toThrow(RuntimeConfigurationError);
+  });
   it('parses defaults without database or provider credentials', () => {
     expect(parseRuntimeEnv(valid)).toEqual({
       ...valid,
@@ -20,7 +32,15 @@ describe('AI runtime configuration', () => {
       AI_RETENTION_SCHEDULER_ENABLED: false,
       AI_REQUEST_VERIFICATION_ENABLED: false,
       AI_CONVERSATION_HTTP_ENABLED: false,
+      AI_RESOURCE_SAFEGUARDS_ENABLED: false,
+      AI_METADATA_OWNER_RECEIPT_LIMIT: 432002,
+      AI_METADATA_TENANT_RECEIPT_LIMIT: 4320020,
+      AI_METADATA_OWNER_NONCE_LIMIT: 256,
+      AI_METADATA_TENANT_NONCE_LIMIT: 4096,
+      AI_METADATA_BACKLOG_GRACE_SECONDS: 120,
       AI_CLEANUP_BATCH_SIZE: 25,
+      AI_CLEANUP_RECEIPT_BATCH_SIZE: 25,
+      AI_CLEANUP_NONCE_BATCH_SIZE: 25,
       AI_CLEANUP_INTERVAL_MS: 60000,
       AI_SERVICE_PORT: 4011,
       AI_REQUEST_TIMEOUT_MS: 5000,
@@ -68,6 +88,7 @@ describe('AI runtime configuration', () => {
     'AI_RETENTION_SCHEDULER_ENABLED',
     'AI_REQUEST_VERIFICATION_ENABLED',
     'AI_CONVERSATION_HTTP_ENABLED',
+    'AI_RESOURCE_SAFEGUARDS_ENABLED',
   ])('strictly parses %s', (name) => {
     for (const value of ['', 'TRUE', 'False', '1', '0', 'yes', ' false ', true, null]) {
       expect(() => parseRuntimeEnv({ ...valid, [name]: value })).toThrow(

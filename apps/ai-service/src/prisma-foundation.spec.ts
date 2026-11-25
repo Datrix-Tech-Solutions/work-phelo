@@ -20,12 +20,17 @@ describe('AI Prisma persistence foundation', () => {
     expect(schema).toMatch(/output\s*=\s*"\.\/generated\/client"/);
   });
 
-  it('generates four AI-only models with no plaintext or audit fields', () => {
+  it('generates only approved AI persistence and resource models, without plaintext', () => {
     expect(Prisma.dmmf.datamodel.models.map((m) => m.name).sort()).toEqual([
+      'AiAccountingReconciliation',
       'AiConversation',
       'AiConversationMessage',
+      'AiConversationUsage',
+      'AiExecutionSlot',
+      'AiOwnerUsage',
       'AiRequestNonce',
       'AiSubmissionReceipt',
+      'AiTenantUsage',
     ]);
     for (const model of Prisma.dmmf.datamodel.models) {
       expect(

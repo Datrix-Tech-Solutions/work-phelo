@@ -28,6 +28,8 @@ import {
   selectAiAccessCredential,
 } from './ai-request-integrity';
 import { forwardAiConversation } from './ai-conversation-proxy';
+import { AiRateAdmission } from './ai-rate-admission';
+import { Inject, Optional } from '@nestjs/common';
 
 const AUTH_LOOKUP_TIMEOUT_MS = 5_000;
 
@@ -95,6 +97,11 @@ const MAX_PROXY_TIMEOUT_MS = 300_000;
 
 @Controller()
 export class ProxyController {
+  constructor(
+    @Optional()
+    @Inject(AiRateAdmission)
+    private readonly admission: AiRateAdmission = new AiRateAdmission(),
+  ) {}
   private readonly logger = new Logger(ProxyController.name);
   private readonly services = getConfiguredGatewayServices();
 
@@ -359,6 +366,7 @@ export class ProxyController {
             throw error;
           }
         },
+        (user, method) => this.admission.admit(user.tenantId, user.id, method),
       );
     }
 
