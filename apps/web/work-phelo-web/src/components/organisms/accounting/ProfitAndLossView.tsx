@@ -33,6 +33,8 @@ import {
   type StatementExport,
 } from '@/lib/accounting/statementExport';
 import { extractError } from '@/lib/extractError';
+import { useReportLetterhead } from '@/hooks/accounting/useReportLetterhead';
+import { useToast } from '@/hooks/useToast';
 import { useAuthStore } from '@/store/auth.store';
 import { cardClass, cn } from '@/lib/utils';
 
@@ -56,6 +58,8 @@ const COLUMN_LABELS = { current: 'Current', previous: 'Comparative' };
 export function ProfitAndLossView() {
   const period = useReportPeriod();
   const [pdfBusy, setPdfBusy] = useState(false);
+  const loadLetterhead = useReportLetterhead();
+  const toast = useToast();
   const [filtersOpen, setFiltersOpen] = useState(true);
   // The statement is summed from base-currency amounts, so that is what it is labelled in.
   const currency = useBaseCurrency();
@@ -195,7 +199,10 @@ export function ProfitAndLossView() {
     if (!payload) return;
     setPdfBusy(true);
     try {
-      await exportStatementPdf(payload);
+      await exportStatementPdf(payload, await loadLetterhead());
+    } catch (error) {
+      console.error('Failed to generate report PDF', error);
+      toast.error('Could not generate the PDF. Please try again.');
     } finally {
       setPdfBusy(false);
     }

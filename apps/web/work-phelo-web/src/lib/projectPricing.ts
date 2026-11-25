@@ -107,16 +107,19 @@ export function pricingError(
 ): string | undefined {
   switch (type) {
     case 'FLAT_RATE':
-      return draft.price > 0 ? undefined : 'Enter the price';
+      if (draft.price <= 0) return 'Enter the price';
+      return draft.estimatedHours < 0 ? 'The hours can’t be negative' : undefined;
     case 'TIMED':
       // Both are optional benchmarks; only a negative number is wrong.
       return draft.hourlyRate < 0 || draft.estimatedHours < 0
         ? 'The rate and hours can’t be negative'
         : undefined;
     case 'MILESTONE':
+      if (draft.estimatedHours < 0) return 'The hours can’t be negative';
       return draft.milestones.length > 0 ? undefined : 'Add at least one milestone';
     case 'RETAINER':
       if (draft.monthlyAmount <= 0) return 'Enter the amount per month';
+      if (draft.estimatedHours < 0) return 'The hours can’t be negative';
       return retainerMonths(startDate, endDate) === null
         ? 'Set a start and end date to work out the retainer'
         : undefined;
@@ -125,18 +128,19 @@ export function pricingError(
 
 /** The pricing to keep: only the fields that belong to the billing type. */
 export function buildPricing(type: ProjectBillingType, draft: PricingDraft): ProjectPricing {
+  const estimatedHours = draft.estimatedHours > 0 ? draft.estimatedHours : undefined;
   switch (type) {
     case 'FLAT_RATE':
-      return { type, price: draft.price };
+      return { type, price: draft.price, estimatedHours };
     case 'TIMED':
       return {
         type,
         hourlyRate: draft.hourlyRate > 0 ? draft.hourlyRate : undefined,
-        estimatedHours: draft.estimatedHours > 0 ? draft.estimatedHours : undefined,
+        estimatedHours,
       };
     case 'MILESTONE':
-      return { type, milestones: draft.milestones };
+      return { type, milestones: draft.milestones, estimatedHours };
     case 'RETAINER':
-      return { type, monthlyAmount: draft.monthlyAmount };
+      return { type, monthlyAmount: draft.monthlyAmount, estimatedHours };
   }
 }

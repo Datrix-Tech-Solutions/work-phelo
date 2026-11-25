@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { pageHeader, pagePx, pageContent } from '@/lib/layout';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 
-import { CorrectionRequestPanel } from '@/components/organisms/hr/time-clock/CorrectionRequestPanel';
+import { CorrectionRequestModal } from '@/components/organisms/hr/time-clock/CorrectionRequestModal';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 
@@ -199,8 +199,8 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
         )}
       </div>
 
-      {/* Global Panels */}
-      <CorrectionRequestPanel isOpen={correctionOpen} onClose={() => setCorrectionOpen(false)} />
+      {/* Global Modals */}
+      <CorrectionRequestModal isOpen={correctionOpen} onClose={() => setCorrectionOpen(false)} />
 
       <Modal
         isOpen={!!reviewTarget}

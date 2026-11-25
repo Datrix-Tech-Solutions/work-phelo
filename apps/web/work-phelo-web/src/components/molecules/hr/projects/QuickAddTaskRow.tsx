@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Plus, Timer, User, X } from 'lucide-react';
 import { TableButton } from '@/components/atoms/TableButton';
@@ -30,7 +30,7 @@ interface Props {
   isCreating?: boolean;
 }
 
-/** The last line of a list: type a name and press Enter, optionally picking assignees and a due date. */
+/** The last line of a list: type a name and press Enter, optionally picking an assignee and a due date. */
 export function QuickAddTaskRow({
   projectId,
   onCreate,
@@ -53,14 +53,17 @@ export function QuickAddTaskRow({
   const { pos } = useDropdownPosition(pickerOpen, triggerRef);
   const { data: members = [] } = useProjectMembers(projectId);
 
-  const selectedIds = useMemo(() => new Set(assignees.map((a) => a.id)), [assignees]);
+  const selectedId = assignees[0]?.id;
 
-  const toggleMember = (m: (typeof members)[number]) =>
-    setAssignees((prev) =>
-      prev.some((a) => a.id === m.employeeId)
-        ? prev.filter((a) => a.id !== m.employeeId)
-        : [...prev, { id: m.employeeId, name: m.name, avatarUrl: m.avatarUrl }],
+  // One person per task: picking another replaces them, picking the same one clears it.
+  const pickMember = (m: (typeof members)[number]) => {
+    setAssignees(
+      selectedId === m.employeeId
+        ? []
+        : [{ id: m.employeeId, name: m.name, avatarUrl: m.avatarUrl }],
     );
+    setPickerOpen(false);
+  };
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -203,11 +206,11 @@ export function QuickAddTaskRow({
                   <button
                     key={m.employeeId}
                     type="button"
-                    onClick={() => toggleMember(m)}
+                    onClick={() => pickMember(m)}
                     className="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-left text-sm text-gray-800 hover:bg-gray-50"
                   >
                     <span className="flex-1 truncate">{m.name}</span>
-                    {selectedIds.has(m.employeeId) && (
+                    {selectedId === m.employeeId && (
                       <Check className="w-4 h-4 shrink-0 text-brand" />
                     )}
                   </button>

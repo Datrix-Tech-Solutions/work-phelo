@@ -98,6 +98,7 @@ export function ProjectInvoiceModal({
                 label: l.label,
                 amount: l.amount,
                 minutes: l.minutes,
+                people: l.people,
               })),
             },
             {

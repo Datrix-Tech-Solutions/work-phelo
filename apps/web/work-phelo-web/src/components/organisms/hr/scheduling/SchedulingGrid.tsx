@@ -3,29 +3,32 @@
 import { cn, cardClass } from '@/lib/utils';
 import { Employee } from '@/types/hr';
 import { ShiftSchedule } from '@/types/scheduling';
-import { WEEKDAYS, addDays, toISODate } from '@/components/molecules/hr/scheduling/WeekSelector';
+import { WEEKDAYS, toISODate } from '@/components/molecules/hr/scheduling/WeekSelector';
+import { getSchedulingGridLayout } from '@/components/molecules/hr/scheduling/schedulingGridLayout';
 import { SchedulingGridCell } from '@/components/molecules/hr/scheduling/SchedulingGridCell';
 
 interface Props {
   employees: Employee[];
-  weekStart: Date;
-  weekDates: string[];
+  days: Date[];
+  /** Narrow day columns, used by the month view. */
+  compact?: boolean;
   shiftsByKey: Record<string, ShiftSchedule[]>;
   canManage: boolean;
   onAddShift: (employeeId: string, date: string) => void;
   onOpenDetail: (schedule: ShiftSchedule, date: string) => void;
 }
 
-function OnLeaveCell({ isToday }: { isToday: boolean }) {
+function OnLeaveCell({ isToday, compact }: { isToday: boolean; compact: boolean }) {
   return (
     <div
       className={cn(
-        'border-l border-gray-100 p-3 min-h-20 flex items-center justify-center',
+        'border-l border-gray-100 min-h-20 flex items-center justify-center opacity-60',
+        compact ? 'p-1' : 'p-3',
         isToday ? 'bg-blue-50' : 'bg-gray-50/80',
       )}
     >
       <span className="text-[11px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-        On Leave
+        {compact ? 'Leave' : 'On Leave'}
       </span>
     </div>
   );
@@ -33,8 +36,8 @@ function OnLeaveCell({ isToday }: { isToday: boolean }) {
 
 export function SchedulingGrid({
   employees,
-  weekStart,
-  weekDates,
+  days,
+  compact = false,
   shiftsByKey,
   canManage,
   onAddShift,
@@ -42,26 +45,27 @@ export function SchedulingGrid({
 }: Props) {
   const today = toISODate(new Date());
 
+  const { gridTemplateColumns, minWidth } = getSchedulingGridLayout(days.length);
+
   return (
-    <div className={cardClass('overflow-hidden')} style={{ minWidth: 1000 }}>
+    // overflow-clip, not overflow-hidden: hidden would make the card a scroll
+    // container and stop the employee column from sticking while days scroll.
+    <div className={cardClass('overflow-clip')} style={{ minWidth }}>
       {/* Header row */}
-      <div
-        className="grid bg-gray-50 border-b border-gray-200"
-        style={{ gridTemplateColumns: '180px repeat(7, 1fr)' }}
-      >
-        <div className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
+      <div className="grid bg-gray-50 border-b border-gray-200" style={{ gridTemplateColumns }}>
+        <div className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 border-r border-gray-100">
           Employee
         </div>
-        {WEEKDAYS.map(({ label, isoDay }) => {
-          const dayDate = addDays(weekStart, isoDay - 1);
-          const dateStr = toISODate(dayDate);
+        {days.map((day) => {
+          const dateStr = toISODate(day);
           const isToday = dateStr === today;
           const isPast = dateStr < today;
           return (
             <div
-              key={label}
+              key={dateStr}
               className={cn(
-                'px-4 py-3.5 text-center border-l border-gray-200',
+                'py-3.5 text-center border-l border-gray-200',
+                compact ? 'px-1' : 'px-4',
                 isToday && 'bg-blue-300',
                 isPast && 'bg-gray-50',
               )}
@@ -72,7 +76,7 @@ export function SchedulingGrid({
                   isToday ? 'text-brand' : isPast ? 'text-gray-400' : 'text-gray-500',
                 )}
               >
-                {label} {dayDate.getDate()}
+                {WEEKDAYS[day.getDay()].label} {day.getDate()}
               </span>
             </div>
           );
@@ -88,8 +92,8 @@ export function SchedulingGrid({
           return (
             <div
               key={emp.id}
-              className={cn('grid border-t border-gray-100', isOnLeave && 'opacity-60')}
-              style={{ gridTemplateColumns: '180px repeat(7, 1fr)' }}
+              className="grid border-t border-gray-100"
+              style={{ gridTemplateColumns }}
             >
               <div className="px-5 py-4 flex items-center gap-2 sticky left-0 bg-gray-50 z-10 border-r border-gray-100">
                 <span
@@ -107,21 +111,23 @@ export function SchedulingGrid({
                 )}
               </div>
 
-              {weekDates.map((date) =>
-                isOnLeave ? (
-                  <OnLeaveCell key={date} isToday={date === today} />
+              {days.map((day) => {
+                const date = toISODate(day);
+                return isOnLeave ? (
+                  <OnLeaveCell key={date} isToday={date === today} compact={compact} />
                 ) : (
                   <SchedulingGridCell
                     key={date}
                     shifts={shiftsByKey[`${emp.id}-${date}`] ?? []}
                     canManage={canManage}
+                    compact={compact}
                     isToday={date === today}
                     isPast={date < today}
                     onAddShift={() => onAddShift(emp.id, date)}
                     onOpenDetail={(s) => onOpenDetail(s, date)}
                   />
-                ),
-              )}
+                );
+              })}
             </div>
           );
         })

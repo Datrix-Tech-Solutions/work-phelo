@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -89,10 +90,11 @@ export class UpdateProjectTaskDto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: 'Everyone the task is assigned to',
+    description: 'Who the task is assigned to: one person at most',
   })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(1, { message: 'A task can be assigned to only one person' })
   @IsUUID('4', { each: true })
   assigneeIds?: string[];
 }

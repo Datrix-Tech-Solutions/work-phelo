@@ -8,6 +8,7 @@ interface Props {
   canManage: boolean;
   isToday?: boolean;
   isPast?: boolean;
+  compact?: boolean;
   onAddShift: () => void;
   onOpenDetail: (schedule: ShiftSchedule) => void;
 }
@@ -17,6 +18,7 @@ export function SchedulingGridCell({
   canManage,
   isToday,
   isPast,
+  compact,
   onAddShift,
   onOpenDetail,
 }: Props) {
@@ -26,13 +28,14 @@ export function SchedulingGridCell({
   return (
     <div
       className={cn(
-        'group/cell relative border-l border-gray-100 p-3 min-h-20 flex flex-col gap-2',
+        'group/cell relative border-l border-gray-100 min-h-20 flex flex-col',
+        compact ? 'p-1 gap-1' : 'p-3 gap-2',
         isToday && 'bg-blue-100',
         isPast && 'bg-gray-50',
       )}
     >
       {shifts.map((s) => (
-        <ShiftGridCard key={s.id} schedule={s} onClick={() => onOpenDetail(s)} />
+        <ShiftGridCard key={s.id} schedule={s} compact={compact} onClick={() => onOpenDetail(s)} />
       ))}
 
       {/* Empty cell: centred + on hover */}

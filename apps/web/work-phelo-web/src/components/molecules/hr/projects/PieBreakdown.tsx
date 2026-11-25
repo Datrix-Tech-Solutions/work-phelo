@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
+import { ChartTooltip } from '@/components/molecules/shared/ChartTooltip';
 import { useElementSize } from '@/hooks/useElementSize';
 import { cn } from '@/lib/utils';
 import { useThemeStore } from '@/store/theme.store';
@@ -70,25 +71,18 @@ export function PieBreakdown({
           )}
 
           {active && (
-            <div className="absolute left-1/2 -top-1 z-10 -translate-x-1/2 -translate-y-full pointer-events-none">
-              <div className="bg-(--chip-dark,#111827) text-white rounded-lg shadow-xl px-2.5 py-1.5 text-[10px] whitespace-nowrap flex flex-col gap-1">
-                <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: active.color }}
-                  />
-                  {active.label}
-                  <span className="ml-auto pl-3 text-[#d1d5db]">
-                    {share(active.value).toFixed(1)}%
-                  </span>
-                </div>
-                <div className="border-t border-[#374151] pt-1 flex justify-between gap-4">
-                  <span className="text-[#9ca3af] capitalize">{valueLabel ?? plural(2)}</span>
-                  <span className="font-medium">{formatValue(active.value)}</span>
-                </div>
-              </div>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm" />
-            </div>
+            <ChartTooltip
+              title={active.label}
+              color={active.color}
+              aside={`${share(active.value).toFixed(1)}%`}
+              rows={[
+                {
+                  label: valueLabel ?? `${unit.charAt(0).toUpperCase()}${unit.slice(1)}s`,
+                  value: formatValue(active.value),
+                },
+              ]}
+              className="left-1/2 -top-1"
+            />
           )}
         </div>
 

@@ -166,7 +166,7 @@ export function useAddProjectMember() {
   });
 }
 
-/** Sets what a member's logged time is billed at on a project billed by time. */
+/** Sets a member's hourly rate on a project. */
 export function useUpdateProjectMemberRate() {
   const queryClient = useQueryClient();
 

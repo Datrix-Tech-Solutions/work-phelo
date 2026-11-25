@@ -26,10 +26,16 @@ import { TenantDocumentTemplateService } from './tenant-document-template.servic
 type AuthenticatedRequest = Request & { user: RequestUser };
 
 /** Holding any of these means the user can already see the transactions being printed. */
-export const DOCUMENT_RENDER_PERMISSIONS = [
+const TRADE_DOCUMENT_PERMISSIONS = [
   'accounting.transactions:VIEW',
   'accounting.receivables:VIEW',
   'accounting.payables:VIEW',
+];
+
+/** Financial reports use the letterhead too, but are never signed. */
+const DOCUMENT_RENDER_PERMISSIONS = [
+  ...TRADE_DOCUMENT_PERMISSIONS,
+  'accounting.ledger:VIEW',
 ];
 
 @ApiTags('Tenant Document Template')
@@ -46,7 +52,7 @@ export class TenantDocumentRenderController {
   @ApiOperation({
     summary: 'Get what is needed to render a company document',
     description:
-      'Read-only template and company identity for users who view accounting documents. Bank accounts, tax numbers and storage keys are not included. The signature image is returned only when the template places it on an accounting document.',
+      'Read-only template and company identity for users who view accounting documents or reports. Bank accounts, tax numbers and storage keys are not included. The signature image is returned only to users who view transactions, when the template places it on an accounting document.',
   })
   @ApiParam({ name: 'tenantId', format: 'uuid' })
   @ApiOkResponse({ type: TenantDocumentRenderResponseDto })
@@ -61,6 +67,7 @@ export class TenantDocumentRenderController {
       this.profiles.get(tenantId),
     ]);
     const signs =
+      this.holdsAny(request.user, TRADE_DOCUMENT_PERMISSIONS) &&
       template.config.signatureEnabled &&
       DOCUMENT_TEMPLATE_DOCUMENT_KEYS.some(
         (key) => key !== 'payslip' && template.config.signatureRules[key],
@@ -92,14 +99,20 @@ export class TenantDocumentRenderController {
     };
   }
 
+  /** Admins hold every permission without it being listed. */
+  private holdsAny(user: RequestUser, permissions: string[]): boolean {
+    return (
+      user.role !== 'EMPLOYEE' ||
+      permissions.some((permission) => user.permissions?.includes(permission))
+    );
+  }
+
   private assertAccess(tenantId: string, user: RequestUser): void {
     if (user.role === 'SUPER_ADMIN') return;
     const allowed =
       tenantId === user.tenantId &&
       (user.role === 'TENANT_ADMIN' ||
-        DOCUMENT_RENDER_PERMISSIONS.some((permission) =>
-          user.permissions?.includes(permission),
-        ));
+        this.holdsAny(user, DOCUMENT_RENDER_PERMISSIONS));
     if (!allowed) {
       throw new ForbiddenException(
         "You don't have permission to access this. Contact your administrator.",

@@ -12,13 +12,17 @@ import { Shift } from './ShiftPanel';
 import { ShiftPanel } from './ShiftPanel';
 import { ShiftDetailPanel } from './ShiftDetailPanel';
 import { SchedulingGrid } from './SchedulingGrid';
-import { SchedulingToolbar } from '@/components/molecules/hr/scheduling/SchedulingToolbar';
+import {
+  SchedulingToolbar,
+  SchedulingView,
+} from '@/components/molecules/hr/scheduling/SchedulingToolbar';
 import { SchedulingGridSkeleton } from '@/components/molecules/hr/scheduling/SchedulingGridSkeleton';
 import {
   getSundayOf,
   addDays,
   toISODate,
-  WEEKDAYS,
+  getMonthStart,
+  getDaysOfMonth,
 } from '@/components/molecules/hr/scheduling/WeekSelector';
 
 function getDatesInRange(startDate: string, endDate: string): string[] {
@@ -40,10 +44,14 @@ export function SchedulingContent({ tenantSlug }: Props) {
   void tenantSlug;
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
 
-  /* ── Week ── */
+  /* ── Period ── */
+  const [view, setView] = useState<SchedulingView>('week');
   const [weekStart, setWeekStart] = useState<Date>(() => getSundayOf(new Date()));
-  const prevWeek = () => setWeekStart((d) => addDays(d, -7));
-  const nextWeek = () => setWeekStart((d) => addDays(d, 7));
+  const [monthStart, setMonthStart] = useState<Date>(() => getMonthStart(new Date()));
+  const shiftPeriod = (step: 1 | -1) => {
+    if (view === 'week') setWeekStart((d) => addDays(d, step * 7));
+    else setMonthStart((d) => getMonthStart(d, step));
+  };
 
   /* ── Search & filter ── */
   const [search, setSearch] = useState('');
@@ -84,15 +92,19 @@ export function SchedulingContent({ tenantSlug }: Props) {
     sublabel: e.jobTitle,
   }));
 
-  const weekDates = useMemo(
-    () => WEEKDAYS.map(({ isoDay }) => toISODate(addDays(weekStart, isoDay - 1))),
-    [weekStart],
+  const days = useMemo(
+    () =>
+      view === 'week'
+        ? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+        : getDaysOfMonth(monthStart),
+    [view, weekStart, monthStart],
   );
 
   const shiftsByKey = useMemo(() => {
     const map: Record<string, ShiftSchedule[]> = {};
     for (const s of schedules) {
-      for (const date of weekDates) {
+      for (const day of days) {
+        const date = toISODate(day);
         const dow = new Date(date + 'T00:00:00').getDay();
         const from = s.effectiveFrom.slice(0, 10);
         const to = s.effectiveTo?.slice(0, 10) ?? null;
@@ -104,7 +116,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
       }
     }
     return map;
-  }, [schedules, weekDates]);
+  }, [schedules, days]);
 
   /* ── Handlers ── */
   const openAdd = (empId: string, date: string) => {
@@ -155,19 +167,22 @@ export function SchedulingContent({ tenantSlug }: Props) {
           departmentId={departmentId}
           onDepartmentChange={setDepartmentId}
           departments={departments}
+          view={view}
+          onViewChange={setView}
           weekStart={weekStart}
-          onPrevWeek={prevWeek}
-          onNextWeek={nextWeek}
+          monthStart={monthStart}
+          onPrev={() => shiftPeriod(-1)}
+          onNext={() => shiftPeriod(1)}
         />
 
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <SchedulingGridSkeleton />
+            <SchedulingGridSkeleton columns={days.length} />
           ) : (
             <SchedulingGrid
               employees={employees}
-              weekStart={weekStart}
-              weekDates={weekDates}
+              days={days}
+              compact={view === 'month'}
               shiftsByKey={shiftsByKey}
               canManage={canManageSchedules}
               onAddShift={openAdd}

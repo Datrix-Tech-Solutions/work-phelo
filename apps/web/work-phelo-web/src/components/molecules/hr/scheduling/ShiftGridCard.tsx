@@ -27,30 +27,45 @@ function formatWorkMode(workMode: ShiftSchedule['workMode']): string {
 
 interface Props {
   schedule: ShiftSchedule;
+  compact?: boolean;
   onClick: () => void;
 }
 
-export function ShiftGridCard({ schedule, onClick }: Props) {
+export function ShiftGridCard({ schedule, compact, onClick }: Props) {
   const shiftType = toFrontendShiftType(schedule.shiftType);
   const timeStr =
     schedule.startTime && schedule.endTime
       ? `${formatTime(schedule.startTime)} - ${formatTime(schedule.endTime)}`
       : '';
   const typeLabel = schedule.shiftType.charAt(0) + schedule.shiftType.slice(1).toLowerCase();
+  const details = `${typeLabel} · ${formatWorkMode(schedule.workMode)}`;
   const colorClass = SHIFT_COLORS[shiftType] ?? 'bg-gray-100 text-gray-600';
 
   return (
     <button
       onClick={onClick}
+      title={compact ? [timeStr, details].filter(Boolean).join(' · ') : undefined}
       className={cn(
-        'w-full text-left rounded-xl px-3 py-2.5 hover:opacity-80 transition-opacity',
+        'w-full hover:opacity-80 transition-opacity',
+        compact ? 'text-center rounded-lg px-1 py-1.5' : 'text-left rounded-xl px-3 py-2.5',
         colorClass,
       )}
     >
-      <p className="text-xs font-semibold">{timeStr}</p>
-      <p className="text-xs mt-0.5 opacity-80">
-        {typeLabel} · {formatWorkMode(schedule.workMode)}
-      </p>
+      {compact ? (
+        <>
+          <p className="text-[10px] font-semibold leading-tight">
+            {schedule.startTime && formatTime(schedule.startTime)}
+          </p>
+          <p className="text-[10px] leading-tight opacity-80">
+            {schedule.endTime && formatTime(schedule.endTime)}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-xs font-semibold">{timeStr}</p>
+          <p className="text-xs mt-0.5 opacity-80">{details}</p>
+        </>
+      )}
     </button>
   );
 }

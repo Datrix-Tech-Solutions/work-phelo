@@ -7,6 +7,8 @@ import { cardClass } from '@/lib/utils';
 interface CollapsibleOverviewProps {
   title?: string;
   headerExtra?: React.ReactNode;
+  /** Shown on the title row only while collapsed, e.g. the key figures. */
+  collapsedExtra?: React.ReactNode;
   children: React.ReactNode;
   defaultCollapsed?: boolean;
 }
@@ -14,6 +16,7 @@ interface CollapsibleOverviewProps {
 export function CollapsibleOverview({
   title = 'Overview',
   headerExtra,
+  collapsedExtra,
   children,
   defaultCollapsed = false,
 }: CollapsibleOverviewProps) {
@@ -34,9 +37,12 @@ export function CollapsibleOverview({
         aria-label={collapsed ? 'Expand overview' : 'Collapse overview'}
         className="flex items-center justify-between cursor-pointer"
       >
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-          {headerExtra}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+            {headerExtra}
+          </div>
+          {collapsed && collapsedExtra}
         </div>
         <span className="text-gray-400">
           <Icons.ChevronDown

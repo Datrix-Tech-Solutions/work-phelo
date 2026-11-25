@@ -1,26 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { Button } from '@/components/atoms/Button';
+import { BILLING_TYPE_LABELS } from '@/lib/projectTypes';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
+import { ProjectPriceVsTime } from '@/components/organisms/hr/projects/ProjectPriceVsTime';
 import { UpdatePriceModal } from '@/components/organisms/hr/projects/UpdatePriceModal';
 import { ProjectInvoiceModal } from '@/components/organisms/hr/projects/ProjectInvoiceModal';
 import { ProjectClientInvoiceModal } from '@/components/organisms/hr/projects/ProjectClientInvoiceModal';
-import {
-  useProject,
-  useProjectMembers,
-  useProjectSetup,
-  useProjectTasks,
-  useUpdateProject,
-} from '@/hooks';
-import { billingLines } from '@/lib/projectBilling';
-import { formatMoney, pricingExpectedValue } from '@/lib/projectPricing';
-import { formatHoursMinutes, timerElapsedMs, useNow } from '@/lib/taskTime';
-import { useProjectTimers } from '@/hooks/hr/useProjectTime';
+import { useProject, useProjectSetup, useUpdateProject } from '@/hooks';
+import { formatMoney } from '@/lib/projectPricing';
+import { formatHoursMinutes } from '@/lib/taskTime';
+import { useProjectBillingLines } from '@/hooks/hr/useProjectBillingLines';
 import { useSaveWithToast } from '@/hooks/hr/useProjectWork';
 import { cardClass, cn } from '@/lib/utils';
-import { useProjectInvoices } from '@/hooks/hr/useProjectInvoices';
 
 type BillingTab = 'bill' | 'history';
 
@@ -34,7 +28,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
-      <p className="text-lg font-bold text-gray-900">{value}</p>
+      <p className="text-lg font-bold tabular-nums text-gray-900">{value}</p>
     </div>
   );
 }
@@ -42,15 +36,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 /** Make billing for a billable client project and look back over what has been billed. */
 export function ProjectBilling({ projectId }: { projectId: string }) {
   const { data: project } = useProject(projectId);
-  const { data: tasks = [] } = useProjectTasks(projectId);
   const details = useProjectSetup(projectId);
-  const { timersByTaskId, timedByTaskId, anyRunning } = useProjectTimers(projectId);
-  const { data: members = [] } = useProjectMembers(projectId);
   const updateProject = useUpdateProject();
   const save = useSaveWithToast();
-  // The dates a retainer or milestone project is priced over.
-  const startDate = project?.startDate?.slice(0, 10);
-  const endDate = project?.endDate?.slice(0, 10);
 
   const [tab, setTab] = useState<BillingTab>('bill');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -59,35 +47,8 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
 
   const client = details?.client;
   const pricing = details?.pricing;
-  const { invoices, active, statusOf } = useProjectInvoices(projectId);
-
-  const now = useNow(anyRunning);
-
-  const lines = useMemo(() => {
-    if (!pricing) return [];
-    return billingLines({
-      pricing,
-      startDate,
-      endDate,
-      tasks: tasks
-        .filter((t) => timedByTaskId[t.id])
-        .map((t) => ({
-          id: t.id,
-          name: t.name,
-          ms: Object.values(timersByTaskId[t.id] ?? {}).reduce(
-            (sum, timer) => sum + timerElapsedMs(timer, now),
-            0,
-          ),
-          // Priced at the rate of whoever logged the time; a timed task has one assignee.
-          rate: Object.keys(timersByTaskId[t.id] ?? {}).reduce(
-            (rate, personId) =>
-              rate || (members.find((m) => m.employeeId === personId)?.hourlyRate ?? 0),
-            0,
-          ),
-        })),
-      invoices: active,
-    });
-  }, [pricing, startDate, endDate, tasks, timedByTaskId, timersByTaskId, members, now, active]);
+  const { lines, invoices, active, statusOf, invoiced, left, full } =
+    useProjectBillingLines(projectId);
 
   if (!pricing || !project) return null;
 
@@ -99,13 +60,6 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
       </div>
     );
   }
-
-  const invoiced = active.reduce((sum, i) => sum + i.amount, 0);
-  const left = lines.filter((l) => !l.billed).reduce((sum, l) => sum + l.amount, 0);
-  const full =
-    pricing.type === 'TIMED'
-      ? invoiced + left
-      : (pricingExpectedValue(pricing, startDate, endDate) ?? 0);
 
   // Once the price is on an invoice, changing it would no longer match what the client was billed.
   const priceInvoiced = active.some((i) => i.lines.some((l) => l.key === 'price'));
@@ -122,32 +76,42 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={cardClass('px-5 py-4 flex flex-wrap items-center gap-x-12 gap-y-3')}>
-        <Stat
-          label={pricing.type === 'TIMED' ? 'Full price so far' : 'Full price'}
-          value={formatMoney(full)}
-        />
-        <Stat label="Invoiced" value={formatMoney(invoiced)} />
-        <Stat label="Left to bill" value={formatMoney(left)} />
-        <div className="ml-auto flex items-center gap-4 text-sm text-gray-500">
-          <span>
-            Billing <span className="font-semibold text-gray-900">{client.name}</span>
-          </span>
-          {pricing.type === 'FLAT_RATE' && (
-            <Button
-              variant="outline"
-              disabled={priceInvoiced}
-              title={
-                priceInvoiced
-                  ? 'The price has been invoiced, so it can no longer change'
-                  : undefined
-              }
-              onClick={() => setPriceOpen(true)}
-            >
-              Update Price
-            </Button>
-          )}
+      <div className={cardClass('flex flex-col gap-4 px-5 py-4')}>
+        <div className="flex flex-wrap items-center gap-x-12 gap-y-3">
+          <Stat
+            label={pricing.type === 'TIMED' ? 'Full price so far' : 'Full price'}
+            value={formatMoney(full)}
+          />
+          <Stat label="Invoiced" value={formatMoney(invoiced)} />
+          <Stat label="Left to bill" value={formatMoney(left)} />
+          <div className="ml-auto flex items-center gap-4 text-sm text-gray-500">
+            <span>
+              {BILLING_TYPE_LABELS[pricing.type]} ·{' '}
+              <span className="font-semibold text-gray-900">{client.name}</span>
+            </span>
+            {pricing.type === 'FLAT_RATE' && (
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={priceInvoiced}
+                title={
+                  priceInvoiced
+                    ? 'The price has been invoiced, so it can no longer change'
+                    : undefined
+                }
+                onClick={() => setPriceOpen(true)}
+              >
+                Update Price
+              </Button>
+            )}
+          </div>
         </div>
+
+        {pricing.type !== 'TIMED' && (
+          <section className="border-t border-gray-100 pt-4">
+            <ProjectPriceVsTime projectId={projectId} />
+          </section>
+        )}
       </div>
 
       <TabBar

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ClockAlert, MapPin } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { CorrectionRequestPanel } from '@/components/organisms/hr/time-clock/CorrectionRequestPanel';
+import { CorrectionRequestModal } from '@/components/organisms/hr/time-clock/CorrectionRequestModal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { useMyAttendanceHistory } from '@/hooks/hr/useTimeClock';
@@ -88,7 +88,7 @@ export function MyAttendancePanel({ isOpen, onClose }: MyAttendancePanelProps) {
           ))}
         </div>
       )}
-      <CorrectionRequestPanel isOpen={correctionOpen} onClose={() => setCorrectionOpen(false)} />
+      <CorrectionRequestModal isOpen={correctionOpen} onClose={() => setCorrectionOpen(false)} />
     </SidePanel>
   );
 }

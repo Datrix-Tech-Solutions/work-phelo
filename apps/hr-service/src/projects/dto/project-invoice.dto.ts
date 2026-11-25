@@ -14,6 +14,17 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+export class InvoiceLinePersonDto {
+  @ApiProperty()
+  @IsUUID()
+  employeeId!: string;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(0)
+  minutes!: number;
+}
+
 export class InvoiceLineDto {
   @ApiProperty({
     description: 'Task id, milestone id, a retainer month, or "price"',
@@ -38,6 +49,17 @@ export class InvoiceLineDto {
   @IsNumber()
   @Min(0)
   minutes?: number;
+
+  @ApiPropertyOptional({
+    type: [InvoiceLinePersonDto],
+    description: "For a task's time: whose minutes were billed",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceLinePersonDto)
+  people?: InvoiceLinePersonDto[];
 }
 
 /** Records an invoice that has already been raised in Accounting. */

@@ -36,6 +36,8 @@ import {
   type StatementExport,
 } from '@/lib/accounting/statementExport';
 import { extractError } from '@/lib/extractError';
+import { useReportLetterhead } from '@/hooks/accounting/useReportLetterhead';
+import { useToast } from '@/hooks/useToast';
 import { cardClass, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -58,6 +60,8 @@ const PROFIT_LABEL = 'Current period profit / (loss)';
 export function BalanceSheetView() {
   const period = useReportPeriod({ asAt: true });
   const [pdfBusy, setPdfBusy] = useState(false);
+  const loadLetterhead = useReportLetterhead();
+  const toast = useToast();
   const [filtersOpen, setFiltersOpen] = useState(true);
   const currency = useBaseCurrency();
   const tenantId = useAuthStore((state) => state.user?.tenantId ?? '');
@@ -236,7 +240,10 @@ export function BalanceSheetView() {
     if (!payload) return;
     setPdfBusy(true);
     try {
-      await exportStatementPdf(payload);
+      await exportStatementPdf(payload, await loadLetterhead());
+    } catch (error) {
+      console.error('Failed to generate report PDF', error);
+      toast.error('Could not generate the PDF. Please try again.');
     } finally {
       setPdfBusy(false);
     }

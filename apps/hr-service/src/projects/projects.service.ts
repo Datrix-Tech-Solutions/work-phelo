@@ -243,7 +243,11 @@ export class ProjectsService {
     switch (pricing.type) {
       case ProjectBillingType.FLAT_RATE:
         need(pricing.price, 'Enter the price');
-        return { billingType: pricing.type, flatPrice: pricing.price };
+        return {
+          billingType: pricing.type,
+          flatPrice: pricing.price,
+          estimatedHours: pricing.estimatedHours ?? null,
+        };
       case ProjectBillingType.TIMED:
         // The rate and hours are only a benchmark the logged time is compared with, so both are optional.
         return {
@@ -256,12 +260,16 @@ export class ProjectsService {
         return {
           billingType: pricing.type,
           retainerAmount: pricing.monthlyAmount,
+          estimatedHours: pricing.estimatedHours ?? null,
         };
       case ProjectBillingType.MILESTONE:
         if (!pricing.milestones?.length) {
           throw new BadRequestException('Add at least one milestone');
         }
-        return { billingType: pricing.type };
+        return {
+          billingType: pricing.type,
+          estimatedHours: pricing.estimatedHours ?? null,
+        };
     }
   }
 
@@ -269,7 +277,11 @@ export class ProjectsService {
     const num = (value: Prisma.Decimal | null) => value?.toNumber() ?? 0;
     switch (project.billingType) {
       case ProjectBillingType.FLAT_RATE:
-        return { type: project.billingType, price: num(project.flatPrice) };
+        return {
+          type: project.billingType,
+          price: num(project.flatPrice),
+          estimatedHours: project.estimatedHours ?? undefined,
+        };
       case ProjectBillingType.TIMED:
         return {
           type: project.billingType,
@@ -280,10 +292,12 @@ export class ProjectsService {
         return {
           type: project.billingType,
           monthlyAmount: num(project.retainerAmount),
+          estimatedHours: project.estimatedHours ?? undefined,
         };
       case ProjectBillingType.MILESTONE:
         return {
           type: project.billingType,
+          estimatedHours: project.estimatedHours ?? undefined,
           milestones: project.milestones.map((m) => ({
             id: m.id,
             name: m.name,

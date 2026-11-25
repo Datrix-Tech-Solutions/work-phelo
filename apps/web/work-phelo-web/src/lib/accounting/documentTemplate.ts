@@ -22,7 +22,7 @@ export function buildDocumentTemplate(
     tenantId,
     status,
     version,
-  }: { tenantId: string; status: AccountingTradeDocumentStatus; version: number },
+  }: { tenantId: string; status?: AccountingTradeDocumentStatus; version: number },
 ): DocumentTemplate {
   const template = toEditorTemplate(render.template, render.profile, 'invoice');
   const image = (asset: 'logo' | 'signature' | 'watermark', stored: string | null) =>
@@ -32,7 +32,7 @@ export function buildDocumentTemplate(
         )}&asset=${asset}&v=${version}`
       : null;
   const logo = image('logo', template.logo);
-  const statusText = STATUS_WATERMARK[status];
+  const statusText = status && STATUS_WATERMARK[status];
 
   return {
     ...template,

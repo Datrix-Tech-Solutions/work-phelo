@@ -17,10 +17,17 @@ import {
   SummaryChip,
   singleGrid,
 } from '@/components/molecules/accounting/StatementBlocks';
+import { useTenant } from '@/hooks';
 import { useCashFlowStatementReport } from '@/hooks/accounting/useFinancialReports';
+import {
+  exportCashFlowCsv,
+  exportCashFlowPdf,
+  type CashFlowExport,
+} from '@/lib/accounting/cashFlowExport';
 import { formatDate, toCents } from '@/lib/accounting/profitAndLoss';
 import { extractError } from '@/lib/extractError';
 import { cardClass, cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
 import type { CashFlowStatementReport } from '@/types/accounting';
 
 type AppliedFilters = {
@@ -86,6 +93,9 @@ function ActivitySection({
 export function CashFlowStatementView() {
   const period = useReportPeriod();
   const currency = useBaseCurrency();
+  const tenantId = useAuthStore((state) => state.user?.tenantId ?? '');
+  const { data: tenant } = useTenant(tenantId);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [applied, setApplied] = useState<AppliedFilters | null>(null);
 
@@ -104,6 +114,37 @@ export function CashFlowStatementView() {
   const data: CashFlowStatementReport | undefined = report.data;
   const collapsed = applied !== null && !filtersOpen;
   const isLoading = report.isLoading || !data;
+  const reportReady = applied !== null && !!data && !report.isFetching && !report.isError;
+
+  const buildExport = (): CashFlowExport | null => {
+    if (!applied || !data) return null;
+    return {
+      companyName: tenant?.name ?? '',
+      currency,
+      metaLines: [
+        `${applied.periodLabel ? `${applied.periodLabel} · ` : ''}For the period ${formatDate(applied.fromDate)} to ${formatDate(applied.toDate)}`,
+        `${currency ? `Amounts in ${currency} · ` : ''}Posted entries only · Indirect method`,
+      ],
+      report: data,
+      filename: `cash-flow-statement_${applied.fromDate}_${applied.toDate}`,
+    };
+  };
+
+  const downloadCsv = () => {
+    const payload = buildExport();
+    if (payload) exportCashFlowCsv(payload);
+  };
+
+  const downloadPdf = async () => {
+    const payload = buildExport();
+    if (!payload) return;
+    setPdfBusy(true);
+    try {
+      await exportCashFlowPdf(payload);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   return (
     <section className="flex flex-col gap-6">
@@ -126,13 +167,10 @@ export function CashFlowStatementView() {
         onGenerate={generate}
         generateDisabled={!period.range}
         generating={report.isFetching}
-        // Export isn't built for this report yet (a fast-follow) — it doesn't fit the
-        // classification/group-based exporter the other statements share, since cash flow is
-        // grouped by activity type instead.
-        onDownloadPdf={() => {}}
-        onDownloadCsv={() => {}}
-        downloadDisabled
-        pdfBusy={false}
+        onDownloadPdf={downloadPdf}
+        onDownloadCsv={downloadCsv}
+        downloadDisabled={!reportReady}
+        pdfBusy={pdfBusy}
       />
 
       <BaseCurrencyField currency={currency} />
