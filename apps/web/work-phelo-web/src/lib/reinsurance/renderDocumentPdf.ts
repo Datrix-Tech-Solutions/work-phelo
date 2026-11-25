@@ -176,7 +176,7 @@ function collectBreakOffsets(content: HTMLElement, canvasHeight: number): number
 }
 
 /** Waits for every <img> under `el` to finish loading so captures don't miss images. */
-async function waitForImages(el: HTMLElement) {
+export async function waitForImages(el: HTMLElement) {
   const imgs = Array.from(el.querySelectorAll('img'));
   await Promise.all(
     imgs.map((img) => {

@@ -11,50 +11,9 @@ const ACCENT = '#3b4a7a';
 const MIN_TABLE_ROWS = 10;
 const COMPACT_MIN_TABLE_ROWS = 4;
 
-const WATERMARK_TEXT: Partial<Record<TradeDocumentData['status'], string>> = {
-  DRAFT: 'DRAFT',
-  REVERSED: 'REVERSED',
-};
-
-/** A4 bill for a real transaction. The company letterhead is intentionally absent — the
- *  document template supplies it. Text scales with the sheet width through a container
- *  query. */
-export function BillDocument({ data }: { data: TradeDocumentData }) {
-  const watermark = WATERMARK_TEXT[data.status];
-
-  return (
-    <div
-      className="relative mx-auto w-full max-w-[794px] rounded-lg border border-gray-200 bg-white shadow-sm @container"
-      style={{ aspectRatio: '1 / 1.4142' }}
-    >
-      {watermark && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-          <span
-            className="select-none font-black tracking-widest text-gray-900/10"
-            style={{ transform: 'rotate(-30deg)', fontSize: '18cqw' }}
-          >
-            {watermark}
-          </span>
-        </div>
-      )}
-
-      <div
-        className="relative z-10 h-full"
-        style={{
-          padding: 'clamp(16px, 6%, 48px)',
-          color: '#111827',
-          fontSize: 'clamp(8px, 2cqw, 16px)',
-        }}
-      >
-        <BillDocumentBody data={data} />
-      </div>
-    </div>
-  );
-}
-
-/** The bill's content only — no sheet, padding or letterhead — so it can sit inside the
- *  document template's paper (between its letterhead and footer) as well as inside the
- *  standalone sheet above. Sizes are in em, so it follows whatever font size it's given.
+/** The bill's content only — no sheet, padding or letterhead — so it sits inside the
+ *  document template's paper, between its letterhead and footer. Sizes are in em, so it follows whatever font size
+ *  it's given.
  *  `compact` trims the table filler and text size for the template studio's smaller area. */
 export function BillDocumentBody({
   data,
@@ -182,7 +141,7 @@ export function BillDocumentBody({
 }
 
 /** The bill's closing line. In the template studio the paper pins it to the footer line;
- *  on the standalone sheet the body places it at the bottom itself. */
+ *  a non-compact body places it at the bottom itself. */
 export function BillDocumentFooterNote() {
   return (
     <p className="text-center text-[0.8em] font-semibold italic" style={{ color: ACCENT }}>
@@ -215,7 +174,7 @@ function Cell({
     <td
       className={`h-[1.9em] border-x border-gray-300 border-b border-b-gray-200 px-[0.5em] ${
         align === 'right' ? 'text-right' : 'text-left'
-      } ${shaded ? 'bg-gray-100' : ''} truncate`}
+      } ${shaded ? 'bg-gray-100' : ''} break-words`}
     >
       {children}
     </td>
