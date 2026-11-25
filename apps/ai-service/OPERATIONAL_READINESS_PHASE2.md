@@ -124,6 +124,14 @@ GitHub CI status is reported separately after pushing; local results do not impl
 that GitHub checks have completed. No schema, migration, deployment, feature flag,
 inference or ERP capability was changed by this remediation.
 
+The first new GitHub dependency job executed all 22 PostgreSQL cases and exposed
+an existing fixture performance issue: serializing/transferring ten 10 MiB payloads
+through Prisma exceeded the five-second Jest limit. The fixture now generates
+the same persisted 100 MiB inside PostgreSQL through the actual quota triggers,
+asserts each owner's 10 MiB charge and retains the tenant-boundary rejection.
+No test deadline or application quota was increased. The local focused rerun
+passed all 22 PostgreSQL and 16 Redis cases; the byte fixture took 805 ms.
+
 ## Remaining adoption gates (unchanged)
 
 Review and merge are separate from authorization to deploy or enable. Before any

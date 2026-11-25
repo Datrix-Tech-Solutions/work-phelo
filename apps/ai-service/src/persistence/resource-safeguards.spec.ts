@@ -180,7 +180,19 @@ function gate() {
   it('enforces the tenant byte limit independently of each owner', async () => {
     for (let i = 0; i < 10; i++) {
       const parent = await db.aiConversation.create({ data: data('tenant-a', 'owner-' + i) });
-      await syntheticMessage(parent, 10485760 - (12 + 16 + 7 + 2));
+      // Persist the full payload through the real triggers without transporting
+      // 100 MiB through Prisma's JSON protocol on a shared CI runner.
+      await db.$executeRaw`INSERT INTO ai."AiConversationMessage"
+        (id,"conversationId","tenantId","ownerUserId",sequence,"encryptionVersion",
+         "keyId",ciphertext,nonce,"authenticationTag")
+        VALUES (${randomUUID()}::uuid,${parent.id}::uuid,${parent.tenantId},${parent.ownerUserId},
+          1,1,'fixture',decode(repeat('01',${10485760 - (12 + 16 + 7 + 2)}::int),'hex'),
+          ${randomBytes(12)},${randomBytes(16)})`;
+      expect(
+        await db.aiOwnerUsage.findUniqueOrThrow({
+          where: { tenantId_ownerUserId: { tenantId: 'tenant-a', ownerUserId: 'owner-' + i } },
+        }),
+      ).toMatchObject({ encryptedBytes: 10485760n });
     }
     const parent = await repository.create(owner('tenant-a', 'new-owner'));
     await expect(
