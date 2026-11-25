@@ -79,6 +79,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
         <KpiCard
           label="Overall Sales"
           onClick={open('sales')}
+          selected={panelOpen && kpi === 'sales'}
           value={money(currency, data?.sales.won)}
           icon={Handshake}
           iconColor={MODULE_COLOR}
@@ -93,6 +94,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
         <KpiCard
           label="Achieved Revenue"
           onClick={open('revenue')}
+          selected={panelOpen && kpi === 'revenue'}
           value={money(currency, data?.achievedRevenue.current)}
           icon={Wallet}
           iconColor="#1baf7a"
@@ -104,6 +106,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
         <KpiCard
           label="Conversion Rate"
           onClick={open('conversion')}
+          selected={panelOpen && kpi === 'conversion'}
           value={conversionRate === undefined ? '—' : `${conversionRate.toFixed(1)}%`}
           icon={Percent}
           iconColor="#2a78d6"
@@ -129,6 +132,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
         <KpiCard
           label="New Prospects"
           onClick={open('prospects')}
+          selected={panelOpen && kpi === 'prospects'}
           value={data ? data.newProspects.current : '—'}
           icon={UserPlus}
           iconColor="#eb6834"

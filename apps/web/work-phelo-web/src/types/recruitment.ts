@@ -202,6 +202,8 @@ export interface RecruitmentCandidate {
   matchScore: number | null;
   appliedAt: string;
   submittedAt: string | null;
+  /** Set once the candidate has been added as an employee. */
+  onboardedAt: string | null;
   vacancy: { id: string; title: string | null };
   currentStage: Pick<RecruitmentStage, 'id' | 'name' | 'sortOrder' | 'isDefault'> | null;
 }

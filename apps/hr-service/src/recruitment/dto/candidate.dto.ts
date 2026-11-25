@@ -38,6 +38,7 @@ export interface RecruitmentCandidateSummary {
   vacancy: { id: string; title: string | null };
   appliedAt: Date;
   submittedAt: Date | null;
+  onboardedAt: Date | null;
   matchScore: number | null;
 }
 

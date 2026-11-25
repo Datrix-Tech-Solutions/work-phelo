@@ -307,6 +307,27 @@ export class EmployeesService {
             undefined,
             tx,
           );
+          if (dto.recruitmentCandidateId) {
+            // The conditions are part of the write, so two requests cannot onboard one candidate.
+            const { count } = await tx.recruitmentApplication.updateMany({
+              where: {
+                tenantId,
+                id: dto.recruitmentCandidateId,
+                status: 'SUBMITTED',
+                onboardedAt: null,
+                currentStage: { is: { normalizedName: 'hired' } },
+              },
+              data: {
+                onboardedAt: new Date(),
+                onboardedEmployeeId: employee.id,
+              },
+            });
+            if (count !== 1) {
+              throw new ConflictException(
+                'Only a hired candidate who has not been onboarded can be onboarded.',
+              );
+            }
+          }
           if (request) {
             if (dto.grantSystemAccess) {
               await this.access!.enqueue(

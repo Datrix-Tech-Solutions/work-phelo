@@ -7,7 +7,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { useMarketingSalesPersonnel } from '@/hooks/marketing/useMarketingSalesPersonnel';
 import { useElementSize } from '@/hooks/useElementSize';
-import { cardClass, cn } from '@/lib/utils';
+import { cardClass, chartCardHoverClass, cn } from '@/lib/utils';
 import type { MarketingSalesRep } from '@/types/marketing';
 
 const BAR_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ef4444'];
@@ -103,7 +103,13 @@ export function TopSalesPersonnelChart({
   const activeRow = hovered !== null ? rows[hovered] : null;
 
   return (
-    <div className={cn(cardClass('flex flex-col gap-2 p-3 h-60', 'glass'), className)}>
+    <div
+      className={cn(
+        cardClass('flex flex-col gap-2 p-3 h-60', 'glass'),
+        chartCardHoverClass,
+        className,
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col">
           <h3 className="text-sm font-semibold text-gray-900">Top 5 Sales Personnel</h3>

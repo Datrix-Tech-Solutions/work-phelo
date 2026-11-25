@@ -111,11 +111,11 @@ export class DashboardController {
   @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
   @ApiOperation({
     summary:
-      'Get the latest HR events (hires, status changes, offboarding, resignations, leave and time-correction decisions)',
+      'Get the latest HR events (hires, status changes, offboarding, resignations, leave and time-correction decisions, plus payroll, appraisal, recruitment and project events the user has access to)',
   })
   @ApiResponse({ status: 200, description: 'Recent activity returned' })
   getRecentActivity(@Req() req: AuthenticatedRequest) {
-    return this.dashboardService.getRecentActivity(req.user.tenantId);
+    return this.dashboardService.getRecentActivity(req.user);
   }
 
   @Get('upcoming-birthdays')

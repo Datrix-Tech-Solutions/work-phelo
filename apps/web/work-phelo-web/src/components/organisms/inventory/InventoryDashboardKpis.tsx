@@ -88,6 +88,7 @@ export function InventoryDashboardKpis() {
         <KpiCard
           label="Total Inventory Value"
           onClick={opens('value')}
+          selected={panelOpen && kpi === 'value'}
           value={formatInventoryValue(stats.totalValue)}
           icon={Wallet}
           iconColor="#1baf7a"
@@ -96,6 +97,7 @@ export function InventoryDashboardKpis() {
         <KpiCard
           label="Out of Stock"
           onClick={opens('out')}
+          selected={panelOpen && kpi === 'out'}
           value={stats.outOfStock.toLocaleString()}
           icon={PackageX}
           iconColor="#ef4444"
@@ -114,6 +116,7 @@ export function InventoryDashboardKpis() {
         <KpiCard
           label="Low Stock Items"
           onClick={opens('low')}
+          selected={panelOpen && kpi === 'low'}
           value={stats.lowStock.toLocaleString()}
           icon={AlertTriangle}
           iconColor="#f59e0b"
@@ -122,6 +125,7 @@ export function InventoryDashboardKpis() {
         <KpiCard
           label="Pending Purchase Orders"
           onClick={opens('pending')}
+          selected={panelOpen && kpi === 'pending'}
           value={orders.pendingOrders.toLocaleString()}
           icon={ClipboardList}
           iconColor="#2a78d6"
@@ -131,6 +135,7 @@ export function InventoryDashboardKpis() {
         <KpiCard
           label="Owed to Suppliers"
           onClick={opens('owed')}
+          selected={panelOpen && kpi === 'owed'}
           value={formatInventoryValue(orders.amountOwed)}
           icon={Wallet}
           iconColor="#ef4444"

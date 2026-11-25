@@ -5,7 +5,7 @@ import { BarChart } from '@mui/x-charts/BarChart';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { useElementSize } from '@/hooks/useElementSize';
 import type { SeriesBucket } from '@/lib/periodSeries';
-import { cardClass, cn } from '@/lib/utils';
+import { cardClass, chartCardHoverClass, cn } from '@/lib/utils';
 
 export interface PeriodBarSeries {
   label: string;
@@ -73,7 +73,8 @@ export function PeriodBarChart({
     disableLine: true,
     disableTicks: true,
     categoryGapRatio: 0.35,
-    barGapRatio: 0.1,
+    // Leaves room for a hovered bar to grow without covering its neighbour.
+    barGapRatio: 0.25,
     tickLabelStyle: { fontSize: 11, fill: 'var(--color-gray-700)' },
     valueFormatter: (label: string, context: { location: string }) =>
       context.location === 'tooltip'
@@ -92,6 +93,7 @@ export function PeriodBarChart({
     <div
       className={cn(
         cardClass('relative hover:z-20 flex flex-col gap-2 p-3 h-60', 'glass'),
+        chartCardHoverClass,
         className,
       )}
     >
@@ -175,12 +177,36 @@ export function PeriodBarChart({
                   ...(onBarClick && { cursor: 'pointer' }),
                 },
                 // Each series lists its bars in period order (wrapped in a clip group when rounded).
-                '& .MuiBarChart-series > *': { transition: 'filter 150ms ease' },
-                // The hovered period's bars get brighter, with no gray band behind them.
+                '& .MuiBarChart-series > *': {
+                  // The overshoot on the outline gives the growth a small spring.
+                  transition:
+                    'filter 150ms ease, opacity 150ms ease, stroke-width 300ms cubic-bezier(0.34, 1.8, 0.64, 1)',
+                  strokeWidth: 0,
+                  strokeLinejoin: 'round',
+                  '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+                },
+                // An outline in the bar's own colour, so a hovered bar grows where it stands.
+                ...Object.fromEntries(
+                  series.map((s, i) => [
+                    `& .MuiBarChart-series[data-series="${i}"] > *`,
+                    { stroke: s.color },
+                  ]),
+                ),
+                // The hovered period's bars get brighter and the others fade back, with no gray
+                // band behind them.
                 ...(hovered !== null && {
-                  [`& .MuiBarChart-series > :nth-of-type(${hovered + 1})`]: {
-                    filter: 'brightness(1.15) saturate(1.2)',
+                  '& .MuiBarChart-series > *': {
+                    opacity: 0.45,
                   },
+                  [`& .MuiBarChart-series > :nth-of-type(${hovered + 1})`]: {
+                    opacity: 1,
+                    filter: 'brightness(1.15) saturate(1.2)',
+                    strokeWidth: 5,
+                  },
+                }),
+                // A clickable bar under the pointer stands out from its neighbour.
+                ...(onBarClick && {
+                  '& .MuiBarChart-element:hover': { filter: 'brightness(1.12) saturate(1.25)' },
                 }),
                 '& .MuiChartsGrid-line': {
                   stroke: 'var(--color-gray-200)',
@@ -231,6 +257,11 @@ export function PeriodBarChart({
                   );
                 })}
               </div>
+              {onBarClick && (
+                <div className="border-t border-[#374151] pt-1 text-[#9ca3af]">
+                  Click a bar for details
+                </div>
+              )}
             </div>
             <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm" />
           </div>

@@ -56,6 +56,7 @@ export function PipelineStageCards({ period, year, userId }: PipelineStageCardsP
         <KpiCard
           key={item.stageId}
           label={item.name}
+          selected={panelOpen && stage?.stageId === item.stageId}
           onClick={() => {
             setStage(item);
             setPanelOpen(true);

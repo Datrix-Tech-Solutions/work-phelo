@@ -1073,6 +1073,9 @@ model RecruitmentApplication {
   /// as a person moves them, so the cut-off never undoes a recruiter's decision.
   autoRejectedAt         DateTime?
   autoRejectedScore      Int?
+  /// Set once the candidate has been added as an employee; nothing more can be done with them.
+  onboardedAt            DateTime?
+  onboardedEmployeeId    String?
   status                 RecruitmentApplicationStatus @default(DRAFT)
   accessTokenHash        String?                      @unique
   submittedAt            DateTime?

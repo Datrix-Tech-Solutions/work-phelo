@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { BadgeCheck } from 'lucide-react';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { ContactCard, PillColor } from '@/components/molecules/ContactCard';
+import { Avatar } from '@/components/atoms/Avatar';
+import { TypeChip, TypeChipColor } from '@/components/atoms/TypeChip';
+import { ViewModeToggle, type ViewMode } from '@/components/atoms/ViewModeToggle';
 import { EmployeeStatsRow } from '@/components/molecules/hr/employees/EmployeeStatsRow';
 import { EmployeeFilterBar } from '@/components/molecules/hr/employees/EmployeeFilterBar';
 import { Button } from '@/components/atoms/Button';
@@ -17,7 +22,7 @@ import { Permission } from '@/lib/permissionMap';
 import { EmployeeImportDialog } from '@/components/organisms/hr/bulkUpload/EmployeeImportDialog';
 import { InviteEmployeePanel } from '@/components/organisms/hr/employee/inviteEmployeePanel';
 import { formatDate } from '@/lib/formatters';
-import { EmploymentStatus } from '@/types/hr';
+import { Employee, EmploymentStatus, EmploymentType } from '@/types/hr';
 
 const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
 const PAGE_SIZE = 12;
@@ -29,6 +34,21 @@ const STATUS_PILL: Record<EmploymentStatus, { label: string; color: PillColor }>
   SUSPENDED: { label: 'Suspended', color: 'red' },
   TERMINATED: { label: 'Terminated', color: 'gray' },
   OFFBOARDED: { label: 'Offboarded', color: 'gray' },
+};
+
+const CHIP_COLOR: Record<PillColor, TypeChipColor> = {
+  green: 'green',
+  yellow: 'amber',
+  blue: 'blue',
+  red: 'red',
+  gray: 'gray',
+};
+
+const TYPE_LABEL: Record<EmploymentType, string> = {
+  FULL_TIME: 'Full Time',
+  PART_TIME: 'Part Time',
+  CONTRACT: 'Contract',
+  INTERN: 'Intern',
 };
 
 interface EmployeeDirectoryProps {
@@ -48,6 +68,7 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
   const [deptFilter, setDeptFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -112,6 +133,136 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
     setPage(1);
   };
 
+  const statusPill = (emp: Employee) =>
+    onLeaveEmployeeIds.has(emp.id) ? STATUS_PILL.ON_LEAVE : STATUS_PILL[emp.employmentStatus];
+  const openEmployee = (emp: Employee) => router.push(`/${tenantSlug}/hr/employees/${emp.id}`);
+
+  // Marks employees who also have a login; employee-only records get no mark.
+  const accessLabel = (emp: Employee) =>
+    emp.userId
+      ? emp.userStatus === 'PENDING_VERIFICATION'
+        ? 'System access: invite pending'
+        : 'Has system access'
+      : undefined;
+
+  const columns: Column<Employee>[] = [
+    {
+      key: 'name',
+      label: 'Employee',
+      width: 'minmax(180px, 1.2fr)',
+      render: (emp) => {
+        const name = `${emp.firstName} ${emp.lastName}`;
+        const access = accessLabel(emp);
+        return (
+          <div className="flex items-center gap-2 min-w-0">
+            <Avatar name={name} avatarUrl={emp.avatarUrl} size="sm" />
+            <div className="min-w-0">
+              <p className="font-semibold flex items-center gap-1">
+                <span title={name} className="truncate">
+                  {name}
+                </span>
+                {access && (
+                  <BadgeCheck size={15} className="shrink-0 text-blue-500" aria-label={access}>
+                    <title>{access}</title>
+                  </BadgeCheck>
+                )}
+              </p>
+              <p title={emp.jobTitle} className="text-xs text-gray-500 truncate">
+                {emp.jobTitle}
+              </p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'department',
+      label: 'Department',
+      width: 'minmax(120px, 1fr)',
+      render: (emp) => <span className="font-semibold">{emp.department?.name ?? '—'}</span>,
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      width: 'minmax(180px, 1.2fr)',
+      render: (emp) => (
+        <span title={emp.email ?? undefined} className="block truncate font-semibold text-gray-700">
+          {emp.email ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'phone',
+      label: 'Phone',
+      width: '120px',
+      render: (emp) => <span className="font-semibold text-gray-700">{emp.phone ?? '—'}</span>,
+    },
+    {
+      key: 'hireDate',
+      label: 'Date Hired',
+      width: '110px',
+      render: (emp) => (
+        <div>
+          <p className="font-semibold">{emp.hireDate ? formatDate(emp.hireDate) : '—'}</p>
+          <p className="text-xs text-gray-500">{TYPE_LABEL[emp.employmentType] ?? '—'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'employmentStatus',
+      label: 'Status',
+      width: '110px',
+      render: (emp) => {
+        const { label, color } = statusPill(emp);
+        return <TypeChip label={label} color={CHIP_COLOR[color]} />;
+      },
+    },
+  ];
+
+  // Shared by the table and the grid so both views have the same toolbar and paging.
+  const listProps = {
+    data: pagedEmployees,
+    isLoading,
+    searchPlaceholder: 'Search by name, email, job title...',
+    searchValue: search,
+    onSearch: (q: string) => {
+      setSearch(q);
+      setPage(1);
+    },
+    toolbarTrailing: <ViewModeToggle value={viewMode} onChange={setViewMode} />,
+    secondaryButton: canInvite
+      ? { label: 'Import', onClick: () => setImportOpen(true) }
+      : undefined,
+    actionButton: canInvite ? { label: 'Add Employee', onClick: handleInviteClick } : undefined,
+    extraFilters: (
+      <EmployeeFilterBar
+        statusFilter={statusFilter}
+        onStatusChange={(v) => {
+          setStatusFilter(v);
+          setPage(1);
+        }}
+        deptFilter={deptFilter}
+        onDeptChange={(v) => {
+          setDeptFilter(v);
+          setPage(1);
+        }}
+        typeFilter={typeFilter}
+        onTypeChange={(v) => {
+          setTypeFilter(v);
+          setPage(1);
+        }}
+        departments={departments}
+        canViewRestricted={canViewRestricted}
+        showClear={hasActiveFilter}
+        onClear={clearFilters}
+      />
+    ),
+    emptyMessage: 'No employees found',
+    currentPage: page,
+    totalPages,
+    onPageChange: setPage,
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
       {/* Header */}
@@ -119,86 +270,42 @@ export function EmployeeDirectory({ tenantSlug }: EmployeeDirectoryProps) {
 
       <EmployeeStatsRow isLoading={isStatsLoading} {...summary} />
 
-      <DataCardGrid
-        data={pagedEmployees}
-        isLoading={isLoading}
-        skeletonCount={8}
-        renderSkeleton={() => <div className="w-full h-56 rounded-xl bg-gray-100 animate-pulse" />}
-        searchPlaceholder="Search by name, email, job title..."
-        searchValue={search}
-        onSearch={(q) => {
-          setSearch(q);
-          setPage(1);
-        }}
-        secondaryButton={
-          canInvite
-            ? {
-                label: 'Import',
-                onClick: () => setImportOpen(true),
-              }
-            : undefined
-        }
-        actionButton={canInvite ? { label: 'Add Employee', onClick: handleInviteClick } : undefined}
-        extraFilters={
-          <EmployeeFilterBar
-            statusFilter={statusFilter}
-            onStatusChange={(v) => {
-              setStatusFilter(v);
-              setPage(1);
-            }}
-            deptFilter={deptFilter}
-            onDeptChange={(v) => {
-              setDeptFilter(v);
-              setPage(1);
-            }}
-            typeFilter={typeFilter}
-            onTypeChange={(v) => {
-              setTypeFilter(v);
-              setPage(1);
-            }}
-            departments={departments}
-            canViewRestricted={canViewRestricted}
-            showClear={hasActiveFilter}
-            onClear={clearFilters}
-          />
-        }
-        emptyMessage="No employees found"
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        renderCard={(emp) => (
-          <ContactCard
-            name={`${emp.firstName} ${emp.lastName}`}
-            avatarUrl={emp.avatarUrl}
-            nameCheck={
-              emp.userId
-                ? emp.userStatus === 'PENDING_VERIFICATION'
-                  ? 'System access: invite pending'
-                  : 'Has system access'
-                : undefined
-            }
-            subtitle={emp.jobTitle}
-            statusPill={
-              onLeaveEmployeeIds.has(emp.id)
-                ? STATUS_PILL.ON_LEAVE
-                : STATUS_PILL[emp.employmentStatus]
-            }
-            details={[
-              {
-                label: 'Department',
-                value: emp.department?.name ?? '—',
-                dotColor: 'bg-orange-500',
-              },
-              { label: 'Date hired', value: emp.hireDate ? formatDate(emp.hireDate) : '—' },
-            ]}
-            email={emp.email ?? '—'}
-            phone={emp.phone ?? '—'}
-            onClick={
-              canViewDetail ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`) : undefined
-            }
-          />
-        )}
-      />
+      {viewMode === 'grid' ? (
+        <DataCardGrid
+          {...listProps}
+          skeletonCount={8}
+          renderSkeleton={() => (
+            <div className="w-full h-56 rounded-xl bg-gray-100 animate-pulse" />
+          )}
+          renderCard={(emp) => (
+            <ContactCard
+              name={`${emp.firstName} ${emp.lastName}`}
+              avatarUrl={emp.avatarUrl}
+              nameCheck={accessLabel(emp)}
+              subtitle={emp.jobTitle}
+              statusPill={statusPill(emp)}
+              details={[
+                {
+                  label: 'Department',
+                  value: emp.department?.name ?? '—',
+                  dotColor: 'bg-orange-500',
+                },
+                { label: 'Date hired', value: emp.hireDate ? formatDate(emp.hireDate) : '—' },
+              ]}
+              email={emp.email ?? '—'}
+              phone={emp.phone ?? '—'}
+              onClick={canViewDetail ? () => openEmployee(emp) : undefined}
+            />
+          )}
+        />
+      ) : (
+        <DataTable
+          {...listProps}
+          columns={columns}
+          onRowClick={canViewDetail ? openEmployee : undefined}
+          noInternalScroll
+        />
+      )}
 
       <Modal
         isOpen={noDeptWarning}

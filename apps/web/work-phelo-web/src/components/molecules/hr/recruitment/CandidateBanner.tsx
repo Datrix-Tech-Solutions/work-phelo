@@ -15,6 +15,8 @@ interface Props {
   color?: string | null;
   canChangeStage: boolean;
   canScheduleInterview: boolean;
+  canOnboard: boolean;
+  onOnboard: () => void;
   onChangeStage: () => void;
   onScheduleInterview: () => void;
   tabs: ProfileBannerTab[];
@@ -28,6 +30,8 @@ export function CandidateBanner({
   color,
   canChangeStage,
   canScheduleInterview,
+  canOnboard,
+  onOnboard,
   onChangeStage,
   onScheduleInterview,
   tabs,
@@ -104,6 +108,11 @@ export function CandidateBanner({
           {canChangeStage && (
             <Button size="sm" onClick={onChangeStage}>
               Change Stage
+            </Button>
+          )}
+          {canOnboard && (
+            <Button size="sm" onClick={onOnboard}>
+              Onboard
             </Button>
           )}
         </div>
