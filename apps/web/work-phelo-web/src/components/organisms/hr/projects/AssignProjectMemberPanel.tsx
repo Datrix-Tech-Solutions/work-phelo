@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { NumberField } from '@/components/atoms/NumberField';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { cn } from '@/lib/utils';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
@@ -12,7 +13,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   assignedIds: Set<string>;
-  onAssign: (employeeIds: string[]) => void;
+  onAssign: (members: { employeeId: string; hourlyRate?: number }[]) => void;
   isAssigning?: boolean;
 }
 
@@ -26,6 +27,7 @@ export function AssignProjectMemberPanel({
   const labels = useProjectLabels();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rates, setRates] = useState<Record<string, number>>({});
 
   const { data: employees = [], isLoading } = useEmployeeOptions();
 
@@ -60,13 +62,20 @@ export function AssignProjectMemberPanel({
 
   const handleAssign = () => {
     if (selected.size === 0) return;
-    onAssign(Array.from(selected));
+    onAssign(
+      Array.from(selected, (employeeId) => ({
+        employeeId,
+        hourlyRate: rates[employeeId] > 0 ? rates[employeeId] : undefined,
+      })),
+    );
     setSelected(new Set());
+    setRates({});
     setSearch('');
   };
 
   const handleClose = () => {
     setSelected(new Set());
+    setRates({});
     setSearch('');
     onClose();
   };
@@ -76,7 +85,7 @@ export function AssignProjectMemberPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title="Assign Member"
-      description={`Select one or more employees to add to this ${labels.singularLower}.`}
+      description={`Select one or more employees to add to this ${labels.singularLower}. A rate can be given now or later.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isAssigning}>
@@ -121,35 +130,48 @@ export function AssignProjectMemberPanel({
           {filtered.map((emp) => {
             const isChecked = selected.has(emp.id);
             return (
-              <button
+              <div
                 key={emp.id}
-                type="button"
-                onClick={() => toggle(emp.id)}
                 className={cn(
-                  'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-left transition-colors',
+                  'flex items-center gap-3 rounded-lg transition-colors',
                   isChecked ? 'bg-brand/5' : 'hover:bg-gray-50',
                 )}
               >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => toggle(emp.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-4 h-4 rounded accent-brand shrink-0"
-                />
-                <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
-                  <span className="text-xs font-bold text-brand">
-                    {emp.firstName[0]}
-                    {emp.lastName[0]}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {emp.firstName} {emp.lastName}
-                  </p>
-                  <p className="text-xs text-gray-400 truncate">{emp.jobTitle}</p>
-                </div>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => toggle(emp.id)}
+                  className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5 text-left"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggle(emp.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 rounded accent-brand shrink-0"
+                  />
+                  <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-brand">
+                      {emp.firstName[0]}
+                      {emp.lastName[0]}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {emp.firstName} {emp.lastName}
+                    </p>
+                    <p className="text-xs text-gray-400 truncate">{emp.jobTitle}</p>
+                  </div>
+                </button>
+                {isChecked && (
+                  <NumberField
+                    ariaLabel={`Hourly rate for ${emp.firstName} ${emp.lastName}`}
+                    placeholder="Rate / hour"
+                    className="mr-3"
+                    value={rates[emp.id] ?? 0}
+                    onChange={(rate) => setRates((prev) => ({ ...prev, [emp.id]: rate }))}
+                  />
+                )}
+              </div>
             );
           })}
         </div>

@@ -1,3 +1,5 @@
+import type { DocumentTemplate } from '@/components/molecules/settings/document-template/templateConfig';
+import { createReportPdf } from '@/lib/documents/reportPdf';
 import { exportToCsv } from '@/lib/exportCsv';
 import { formatCents } from '@/lib/accounting/profitAndLoss';
 import type { TrialCategory } from '@/lib/accounting/trialBalance';
@@ -97,34 +99,15 @@ export function exportTrialBalanceCsv(input: TrialBalanceExport) {
   );
 }
 
-export async function exportTrialBalancePdf(input: TrialBalanceExport) {
-  const { default: jsPDF } = await import('jspdf');
-  const { autoTable } = await import('jspdf-autotable');
-
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const centre = pageWidth / 2;
-
-  let y = 16;
-  if (input.companyName) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.text(input.companyName, centre, y, { align: 'center' });
-    y += 7;
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text(TITLE, centre, y, { align: 'center' });
-  y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(90, 90, 90);
-  for (const line of input.metaLines) {
-    doc.text(line, centre, y, { align: 'center' });
-    y += 5;
-  }
-  doc.setTextColor(0, 0, 0);
+export async function exportTrialBalancePdf(
+  input: TrialBalanceExport,
+  template: DocumentTemplate | null,
+) {
+  const { doc, autoTable, font, margin, heading, save } = await createReportPdf({
+    orientation: 'portrait',
+    template,
+  });
+  const startY = heading(TITLE, input.metaLines, input.companyName);
 
   const rows = buildRows(input);
   const suffix = input.currency ? ` (${input.currency})` : '';
@@ -137,12 +120,12 @@ export async function exportTrialBalancePdf(input: TrialBalanceExport) {
   });
 
   autoTable(doc, {
-    startY: y + 3,
+    startY,
     head: [['', `Debit${suffix}`, `Credit${suffix}`]],
     body,
     theme: 'plain',
-    margin: { left: 14, right: 14, bottom: 16 },
-    styles: { fontSize: 9, cellPadding: { top: 1.3, bottom: 1.3, left: 2, right: 2 } },
+    margin,
+    styles: { font, fontSize: 9, cellPadding: { top: 1.3, bottom: 1.3, left: 2, right: 2 } },
     headStyles: {
       fontStyle: 'bold',
       fillColor: [243, 244, 246],
@@ -191,15 +174,7 @@ export async function exportTrialBalancePdf(input: TrialBalanceExport) {
         cell.styles.textColor = [200, 200, 200];
       }
     },
-    didDrawPage: ({ pageNumber }) => {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(140, 140, 140);
-      doc.text(`Generated ${new Date().toLocaleString()}`, 14, pageHeight - 8);
-      doc.text(`Page ${pageNumber}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
-      doc.setTextColor(0, 0, 0);
-    },
   });
 
-  doc.save(`${input.filename}.pdf`);
+  save(input.filename);
 }

@@ -44,11 +44,19 @@ export function ProjectPricingFields({ type, value, onChange, startDate, endDate
   return (
     <div className="flex flex-col gap-3">
       {type === 'FLAT_RATE' && (
-        <NumberField
-          label="Price (GHS)"
-          value={value.price}
-          onChange={(price) => onChange({ ...value, price })}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <NumberField
+            label="Price (GHS)"
+            value={value.price}
+            onChange={(price) => onChange({ ...value, price })}
+          />
+          <NumberField
+            label="Estimated Hours · optional"
+            decimals={0}
+            value={value.estimatedHours}
+            onChange={(estimatedHours) => onChange({ ...value, estimatedHours })}
+          />
+        </div>
       )}
 
       {type === 'TIMED' && (
@@ -68,15 +76,29 @@ export function ProjectPricingFields({ type, value, onChange, startDate, endDate
       )}
 
       {type === 'RETAINER' && (
-        <NumberField
-          label="Amount per Month (GHS)"
-          value={value.monthlyAmount}
-          onChange={(monthlyAmount) => onChange({ ...value, monthlyAmount })}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <NumberField
+            label="Amount per Month (GHS)"
+            value={value.monthlyAmount}
+            onChange={(monthlyAmount) => onChange({ ...value, monthlyAmount })}
+          />
+          <NumberField
+            label="Estimated Hours per Month · optional"
+            decimals={0}
+            value={value.estimatedHours}
+            onChange={(estimatedHours) => onChange({ ...value, estimatedHours })}
+          />
+        </div>
       )}
 
       {type === 'MILESTONE' && (
         <div className="flex flex-col gap-2">
+          <NumberField
+            label="Estimated Hours · optional"
+            decimals={0}
+            value={value.estimatedHours}
+            onChange={(estimatedHours) => onChange({ ...value, estimatedHours })}
+          />
           <label className="text-sm font-bold text-gray-900">Milestones</label>
           <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_9rem_9rem_auto] gap-2 items-start">
             <input

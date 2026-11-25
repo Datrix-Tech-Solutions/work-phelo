@@ -35,6 +35,15 @@ export function formatWeekRange(start: Date, endOffset = 4): string {
   return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', opts)}`;
 }
 
+export function getMonthStart(date: Date, offset = 0): Date {
+  return new Date(date.getFullYear(), date.getMonth() + offset, 1);
+}
+
+export function getDaysOfMonth(monthStart: Date): Date[] {
+  const count = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  return Array.from({ length: count }, (_, i) => addDays(monthStart, i));
+}
+
 export const WEEKDAYS = [
   { label: 'SUN', isoDay: 1 },
   { label: 'MON', isoDay: 2 },
@@ -52,25 +61,35 @@ interface WeekSelectorProps {
   onPrev: () => void;
   onNext: () => void;
   endOffset?: number;
+  /** Replaces the week range text, e.g. when paging by month. */
+  label?: string;
+  unit?: 'week' | 'month';
 }
 
-export function WeekSelector({ weekStart, onPrev, onNext, endOffset = 4 }: WeekSelectorProps) {
+export function WeekSelector({
+  weekStart,
+  onPrev,
+  onNext,
+  endOffset = 4,
+  label,
+  unit = 'week',
+}: WeekSelectorProps) {
   return (
     <div className={cardClass('flex items-center gap-2 px-4 py-2.5 shrink-0')}>
       <button
         onClick={onPrev}
         className="text-gray-400 hover:text-gray-700 transition-colors p-0.5"
-        aria-label="Previous week"
+        aria-label={`Previous ${unit}`}
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
       <span className="text-sm font-semibold text-gray-800 min-w-45 text-center">
-        {formatWeekRange(weekStart, endOffset)}
+        {label ?? formatWeekRange(weekStart, endOffset)}
       </span>
       <button
         onClick={onNext}
         className="text-gray-400 hover:text-gray-700 transition-colors p-0.5"
-        aria-label="Next week"
+        aria-label={`Next ${unit}`}
       >
         <ChevronRight className="w-4 h-4" />
       </button>

@@ -513,11 +513,12 @@ export interface ProjectMilestone {
 
 /** What a billable client project charges, by how it is billed. */
 export type ProjectPricing =
-  | { type: 'FLAT_RATE'; price: number }
+  | { type: 'FLAT_RATE'; price: number; estimatedHours?: number }
   /** Both are optional: when given they are only a benchmark the logged time and accrued amount are compared with. */
   | { type: 'TIMED'; hourlyRate?: number; estimatedHours?: number }
-  | { type: 'MILESTONE'; milestones: ProjectMilestone[] }
-  | { type: 'RETAINER'; monthlyAmount: number };
+  | { type: 'MILESTONE'; milestones: ProjectMilestone[]; estimatedHours?: number }
+  /** A retainer's estimated hours are per month. */
+  | { type: 'RETAINER'; monthlyAmount: number; estimatedHours?: number };
 
 /** How a billable client project is charged. */
 export type ProjectBillingType = 'FLAT_RATE' | 'TIMED' | 'MILESTONE' | 'RETAINER';
@@ -643,7 +644,8 @@ export interface ProjectMember {
   jobTitle: string;
   department: string | null;
   avatarUrl?: string;
-  /** What this person's logged time is billed at, on a project billed by time. */
+  /** Per hour. A project billed by time invoices their time at it; on the others it only values the
+   *  time for the project's figures. */
   hourlyRate?: number | null;
 }
 
@@ -1530,6 +1532,8 @@ export interface ProjectInvoiceLine {
   amount: number;
   /** For a task's time: the minutes this invoice billed. */
   minutes?: number;
+  /** For a task's time: whose minutes they were. Missing on an invoice raised before this was kept. */
+  people?: { employeeId: string; minutes: number }[];
 }
 
 /** An invoice raised from a project and sent to Accounting through marketing. */

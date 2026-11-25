@@ -2,18 +2,18 @@
 
 import { useState } from 'react';
 import { extractError } from '@/lib/extractError';
-import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { useSubmitCorrectionRequest } from '@/hooks/hr/useTimeClock';
 import { useToast } from '@/hooks/useToast';
 
-interface CorrectionRequestPanelProps {
+interface CorrectionRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPanelProps) {
+export function CorrectionRequestModal({ isOpen, onClose }: CorrectionRequestModalProps) {
   const toast = useToast();
   const { mutate, isPending } = useSubmitCorrectionRequest();
 
@@ -68,23 +68,23 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
   };
 
   return (
-    <SidePanel
+    <Modal
       isOpen={isOpen}
       onClose={handleClose}
       title="Report Missed Entry"
       description="Request a correction for a missed or incorrect clock entry. An admin will review your request."
       footer={
-        <div className="flex justify-end gap-3">
+        <>
           <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} isLoading={isPending} loadingText="Submitting…">
             Submit Request
           </Button>
-        </div>
+        </>
       }
     >
-      <div className="flex flex-col gap-(--field-stack-gap,0.75rem)">
+      <div className="flex flex-col gap-(--field-stack-gap,0.75rem) px-0.5 pt-4">
         {/* Date */}
         <div className="flex flex-col gap-(--field-label-gap,0.125rem)">
           <DatePicker
@@ -150,6 +150,6 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
           </p>
         </div>
       </div>
-    </SidePanel>
+    </Modal>
   );
 }

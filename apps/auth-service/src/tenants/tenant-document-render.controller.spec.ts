@@ -66,6 +66,19 @@ describe('TenantDocumentRenderController', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  it('gives report viewers the letterhead without the signature', async () => {
+    const result = await makeController({
+      signatureEnabled: true,
+      signatureRules: {
+        ...DEFAULT_DOCUMENT_TEMPLATE_CONFIG.signatureRules,
+        invoice: true,
+      },
+    }).get('tenant-1', requestFor({ permissions: ['accounting.ledger:VIEW'] }));
+
+    expect(result.profile.logoUrl).toBe('https://logo');
+    expect(result.profile.signatureUrl).toBeNull();
+  });
+
   it('returns the signature only when an accounting document is signed', async () => {
     const rules = DEFAULT_DOCUMENT_TEMPLATE_CONFIG.signatureRules;
     const unsigned = await makeController({

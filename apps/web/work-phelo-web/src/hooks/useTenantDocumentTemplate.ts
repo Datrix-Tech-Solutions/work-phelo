@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
@@ -22,19 +23,33 @@ export function useTenantDocumentTemplate(tenantId?: string) {
   });
 }
 
+const renderQuery = (tenantId: string) => ({
+  queryKey: [...tenantDocumentTemplateKeys.template(tenantId), 'render'],
+  queryFn: () =>
+    api
+      .get<TenantDocumentRender>(`/auth/tenants/${tenantId}/document-render`)
+      .then((response) => response.data),
+  staleTime: 0,
+});
+
 /** What a real document renders with — readable by accounting users, not only admins.
  *  Refetched on every use so a newly saved template applies straight away. */
 export function useTenantDocumentRender(tenantId: string | undefined, enabled: boolean) {
   return useQuery({
-    queryKey: [...tenantDocumentTemplateKeys.template(tenantId ?? ''), 'render'],
-    queryFn: () =>
-      api
-        .get<TenantDocumentRender>(`/auth/tenants/${tenantId}/document-render`)
-        .then((response) => response.data),
+    ...renderQuery(tenantId ?? ''),
     enabled: enabled && Boolean(tenantId),
-    staleTime: 0,
     refetchOnWindowFocus: false,
   });
+}
+
+/** The same, fetched on demand — for exports that need the template only when clicked. */
+export function useFetchTenantDocumentRender() {
+  const queryClient = useQueryClient();
+
+  return useCallback(
+    (tenantId: string) => queryClient.fetchQuery(renderQuery(tenantId)),
+    [queryClient],
+  );
 }
 
 export function useSaveTenantDocumentTemplate(tenantId: string) {

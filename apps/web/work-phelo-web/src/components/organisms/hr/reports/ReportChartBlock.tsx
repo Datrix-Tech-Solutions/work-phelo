@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { ScatterChart } from '@mui/x-charts/ScatterChart';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { PieBreakdown } from '@/components/molecules/hr/projects/PieBreakdown';
+import { ChartTooltip } from '@/components/molecules/shared/ChartTooltip';
 import { PeriodBarChart } from '@/components/molecules/shared/PeriodBarChart';
 import { PeriodLineChart } from '@/components/molecules/shared/PeriodLineChart';
 import { useRunReportBlock } from '@/hooks/hr/useReports';
@@ -52,9 +54,20 @@ const formatTick = (value: number) =>
 function Scatter({ result }: { result: ChartResult }) {
   const [plotRef, { width, height }] = useElementSize<HTMLDivElement>();
   const points = result.points ?? [];
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [pointer, setPointer] = useState({ x: 0, y: 0 });
+  const active = hovered !== null ? points[hovered] : undefined;
 
   return (
-    <div ref={plotRef} className="relative flex-1 min-h-0">
+    <div
+      ref={plotRef}
+      className="relative flex-1 min-h-0"
+      onPointerMove={(event) => {
+        const box = event.currentTarget.getBoundingClientRect();
+        setPointer({ x: event.clientX - box.left, y: event.clientY - box.top });
+      }}
+      onPointerLeave={() => setHovered(null)}
+    >
       {width > 0 && height > 0 && (
         <ScatterChart
           width={width}
@@ -63,10 +76,11 @@ function Scatter({ result }: { result: ChartResult }) {
             {
               data: points.map((p, i) => ({ x: p.x, y: p.y, id: i })),
               color: COLORS[0],
-              valueFormatter: (value, { dataIndex }) =>
-                value ? `${points[dataIndex]?.label ?? ''} (${value.x}, ${value.y})` : '',
+              highlightScope: { highlight: 'item' },
             },
           ]}
+          onHighlightChange={(item) => setHovered(item?.dataIndex ?? null)}
+          slotProps={{ tooltip: { trigger: 'none' } as never }}
           xAxis={[{ label: result.measures[0]?.label, tickLabelStyle: AXIS_TEXT }]}
           yAxis={[{ label: result.measures[1]?.label, tickLabelStyle: AXIS_TEXT }]}
           hideLegend
@@ -74,6 +88,18 @@ function Scatter({ result }: { result: ChartResult }) {
           sx={{
             '& .MuiChartsGrid-line': { stroke: 'var(--color-gray-200)', strokeDasharray: '3 3' },
           }}
+        />
+      )}
+
+      {active && (
+        <ChartTooltip
+          title={active.label ?? 'Record'}
+          color={COLORS[0]}
+          rows={[
+            { label: result.measures[0]?.label ?? 'X', value: formatNumber(active.x) },
+            { label: result.measures[1]?.label ?? 'Y', value: formatNumber(active.y) },
+          ]}
+          style={{ left: pointer.x, top: pointer.y - 10 }}
         />
       )}
     </div>
@@ -125,7 +151,13 @@ export function ReportChartBlock({
   }));
   const errorText = isError ? apiErrorMessage(error, 'This chart could not be loaded.') : undefined;
 
+  // A share of the total only means something for values that add up.
+  const showShare = (block.measures ?? []).every(
+    (measure) => measure.aggregation === 'count' || measure.aggregation === 'sum',
+  );
+
   const shared = {
+    showShare,
     title,
     subtitle,
     buckets,

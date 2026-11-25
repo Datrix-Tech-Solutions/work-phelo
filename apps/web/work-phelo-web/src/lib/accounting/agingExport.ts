@@ -1,3 +1,5 @@
+import type { DocumentTemplate } from '@/components/molecules/settings/document-template/templateConfig';
+import { createReportPdf } from '@/lib/documents/reportPdf';
 import { exportToCsv } from '@/lib/exportCsv';
 import {
   AGING_BUCKET_KEYS,
@@ -122,34 +124,12 @@ export function exportAgingCsv(input: AgingExport) {
   );
 }
 
-export async function exportAgingPdf(input: AgingExport) {
-  const { default: jsPDF } = await import('jspdf');
-  const { autoTable } = await import('jspdf-autotable');
-
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const centre = pageWidth / 2;
-
-  let y = 16;
-  if (input.companyName) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.text(input.companyName, centre, y, { align: 'center' });
-    y += 7;
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text(input.title, centre, y, { align: 'center' });
-  y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(90, 90, 90);
-  for (const line of input.metaLines) {
-    doc.text(line, centre, y, { align: 'center' });
-    y += 5;
-  }
-  doc.setTextColor(0, 0, 0);
+export async function exportAgingPdf(input: AgingExport, template: DocumentTemplate | null) {
+  const { doc, autoTable, font, margin, heading, save } = await createReportPdf({
+    orientation: 'landscape',
+    template,
+  });
+  const startY = heading(input.title, input.metaLines, input.companyName);
 
   const rows = buildRows(input);
   const blank = BUCKET_HEADS.map(() => '');
@@ -174,12 +154,12 @@ export async function exportAgingPdf(input: AgingExport) {
   });
 
   autoTable(doc, {
-    startY: y + 3,
+    startY,
     head: [[input.partyLabel, ...BUCKET_HEADS]],
     body,
     theme: 'plain',
-    margin: { left: 14, right: 14, bottom: 16 },
-    styles: { fontSize: 8.5, cellPadding: { top: 1.2, bottom: 1.2, left: 2, right: 2 } },
+    margin,
+    styles: { font, fontSize: 8.5, cellPadding: { top: 1.2, bottom: 1.2, left: 2, right: 2 } },
     headStyles: {
       fontStyle: 'bold',
       fillColor: [243, 244, 246],
@@ -226,15 +206,7 @@ export async function exportAgingPdf(input: AgingExport) {
         cell.styles.textColor = [185, 28, 28];
       }
     },
-    didDrawPage: ({ pageNumber }) => {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(140, 140, 140);
-      doc.text(`Generated ${new Date().toLocaleString()}`, 14, pageHeight - 8);
-      doc.text(`Page ${pageNumber}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
-      doc.setTextColor(0, 0, 0);
-    },
   });
 
-  doc.save(`${input.filename}.pdf`);
+  save(input.filename);
 }

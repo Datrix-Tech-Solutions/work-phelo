@@ -167,7 +167,7 @@ export class ProjectPricingDto {
   hourlyRate?: number;
 
   @ApiPropertyOptional({
-    description: 'TIMED: hours estimated, for the expected value',
+    description: 'Hours estimated; per month on a RETAINER',
   })
   @IsOptional()
   @IsInt()

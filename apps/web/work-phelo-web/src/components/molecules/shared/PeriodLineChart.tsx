@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { Skeleton } from '@/components/atoms/Skeleton';
+import { bucketTooltip, ChartTooltip } from '@/components/molecules/shared/ChartTooltip';
 import { useElementSize } from '@/hooks/useElementSize';
 import type { SeriesBucket } from '@/lib/periodSeries';
 import { cardClass, chartCardHoverClass, cn } from '@/lib/utils';
@@ -28,10 +30,13 @@ interface PeriodLineChartProps {
   axisFormatter?: (value: number) => string;
   /** Fills the space under each line. */
   area?: boolean;
+  /** With one series of counts or totals, the tooltip also shows each bucket's share. */
+  showShare?: boolean;
   className?: string;
 }
 
 const AXIS_WIDTH = 48;
+const MARGIN_RIGHT = 16;
 
 /** Lines over the ranges of a period filter, in a dashboard card. */
 export function PeriodLineChart({
@@ -45,9 +50,11 @@ export function PeriodLineChart({
   emptyText = 'Nothing in this range.',
   axisFormatter = String,
   area,
+  showShare,
   className,
 }: PeriodLineChartProps) {
   const [plotRef, plotSize] = useElementSize<HTMLDivElement>();
+  const [hovered, setHovered] = useState<number | null>(null);
   const isEmpty = !isLoading && series.every((s) => s.data.every((value) => value === null));
 
   return (
@@ -73,7 +80,20 @@ export function PeriodLineChart({
         </div>
       </div>
 
-      <div ref={plotRef} className="relative flex-1 min-h-0">
+      <div
+        ref={plotRef}
+        className="relative flex-1 min-h-0"
+        onMouseMove={(event) => {
+          // The nearest point to the pointer, as the points are spread evenly across the plot.
+          const box = event.currentTarget.getBoundingClientRect();
+          const inner = box.width - AXIS_WIDTH - MARGIN_RIGHT;
+          const x = event.clientX - box.left - AXIS_WIDTH;
+          if (buckets.length === 0 || inner <= 0 || x < 0) return setHovered(null);
+          const nearest = Math.round((x / inner) * (buckets.length - 1));
+          setHovered(Math.min(buckets.length - 1, nearest));
+        }}
+        onMouseLeave={() => setHovered(null)}
+      >
         {isLoading ? (
           <Skeleton className="h-full w-full" />
         ) : isError ? (
@@ -126,7 +146,8 @@ export function PeriodLineChart({
                 },
               ]}
               hideLegend
-              margin={{ left: 0, right: 16, top: 8, bottom: 0 }}
+              slotProps={{ tooltip: { trigger: 'none' } as never }}
+              margin={{ left: 0, right: MARGIN_RIGHT, top: 8, bottom: 0 }}
               grid={{ horizontal: true }}
               sx={{
                 '& .MuiChartsGrid-line': {
@@ -136,6 +157,22 @@ export function PeriodLineChart({
               }}
             />
           )
+        )}
+
+        {!isLoading && !isError && !isEmpty && hovered !== null && buckets[hovered] && (
+          <ChartTooltip
+            {...bucketTooltip(
+              buckets[hovered].detail ?? buckets[hovered].label,
+              series,
+              hovered,
+              showShare,
+            )}
+            className="-top-1"
+            style={{
+              // A lone point sits in the middle of the plot.
+              left: `calc(${AXIS_WIDTH}px + (100% - ${AXIS_WIDTH + MARGIN_RIGHT}px) * ${buckets.length > 1 ? hovered / (buckets.length - 1) : 0.5})`,
+            }}
+          />
         )}
       </div>
     </div>

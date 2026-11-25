@@ -9,13 +9,13 @@ import {
   useProjectMembers,
   useAddProjectMember,
   useUpdateProjectMemberRate,
-  useProjectSetup,
   useRemoveProjectMember,
-  useProject,
-  useMyProfile,
-  usePermission,
 } from '@/hooks';
-import { Permission } from '@/lib/permissionMap';
+import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { useCanManageProjectTeam } from '@/hooks/hr/useCanManageProjectTeam';
+import { useProjectTime } from '@/hooks/hr/useProjectTime';
+import { formatHoursMinutes } from '@/lib/taskTime';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { NumberField } from '@/components/atoms/NumberField';
@@ -38,21 +38,17 @@ export function ProjectMembersTable({ projectId }: Props) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [search, setSearch] = useState('');
 
-  const canManageProjects = usePermission(Permission.ASSIGN_PROJECT);
-  const { data: myProfile } = useMyProfile();
-  const { data: project } = useProject(projectId);
-  const isProjectManager = !!(
-    project?.managerId &&
-    myProfile?.id &&
-    project.managerId === myProfile.id
-  );
-  const canAssign = canManageProjects || isProjectManager;
+  const canAssign = useCanManageProjectTeam(projectId);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkRate, setBulkRate] = useState(0);
+  const [removing, setRemoving] = useState<ProjectMember | null>(null);
+  const { people } = useProjectTime(projectId);
+  const loggedMs = (employeeId: string) => people.find((p) => p.personId === employeeId)?.ms ?? 0;
 
   const { data: members = [], isLoading } = useProjectMembers(projectId);
   const addMember = useAddProjectMember();
   const removeMember = useRemoveProjectMember();
   const updateRate = useUpdateProjectMemberRate();
-  const isTimedProject = useProjectSetup(projectId)?.pricing?.type === 'TIMED';
 
   const assignedIds = useMemo(() => new Set(members.map((m) => m.employeeId)), [members]);
 
@@ -64,11 +60,9 @@ export function ProjectMembersTable({ projectId }: Props) {
     );
   }, [members, search]);
 
-  const handleAssign = async (employeeIds: string[]) => {
+  const handleAssign = async (assigned: { employeeId: string; hourlyRate?: number }[]) => {
     try {
-      await Promise.all(
-        employeeIds.map((employeeId) => addMember.mutateAsync({ projectId, data: { employeeId } })),
-      );
+      await Promise.all(assigned.map((data) => addMember.mutateAsync({ projectId, data })));
       setPanelOpen(false);
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
@@ -90,12 +84,47 @@ export function ProjectMembersTable({ projectId }: Props) {
   const handleRemove = async (employeeId: string) => {
     try {
       await removeMember.mutateAsync({ projectId, employeeId });
+      setPicked((prev) => new Set([...prev].filter((id) => id !== employeeId)));
+      setRemoving(null);
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
     }
   };
 
+  const togglePicked = (employeeId: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(employeeId)) next.delete(employeeId);
+      else next.add(employeeId);
+      return next;
+    });
+  const allPicked = filtered.length > 0 && filtered.every((m) => picked.has(m.employeeId));
+
+  const applyBulkRate = async () => {
+    await Promise.all([...picked].map((employeeId) => handleRate(employeeId, bulkRate)));
+    setPicked(new Set());
+    setBulkRate(0);
+  };
+
   const COLUMNS: Column<ProjectMember>[] = [
+    ...(canAssign
+      ? [
+          {
+            key: 'id' as keyof ProjectMember,
+            label: '',
+            width: '44px',
+            render: (row: ProjectMember) => (
+              <input
+                type="checkbox"
+                aria-label={`Select ${row.name}`}
+                checked={picked.has(row.employeeId)}
+                onChange={() => togglePicked(row.employeeId)}
+                className="h-4 w-4 accent-brand"
+              />
+            ),
+          },
+        ]
+      : []),
     {
       key: 'name',
       label: 'team member',
@@ -120,33 +149,27 @@ export function ProjectMembersTable({ projectId }: Props) {
         </span>
       ),
     },
-    ...(isTimedProject
-      ? [
-          {
-            key: 'hourlyRate' as keyof ProjectMember,
-            label: 'Rate / hour (GHS)',
-            width: '170px',
-            render: (row: ProjectMember) =>
-              canAssign ? (
-                <div onClick={(e) => e.stopPropagation()}>
-                  <NumberField
-                    ariaLabel={`Hourly rate for ${row.name}`}
-                    value={row.hourlyRate ?? 0}
-                    onChange={() => {}}
-                    onBlur={(v) => {
-                      if (v !== (row.hourlyRate ?? 0)) handleRate(row.employeeId, v);
-                    }}
-                    placeholder="Set rate"
-                  />
-                </div>
-              ) : (
-                <span className="text-sm text-gray-700">
-                  {row.hourlyRate ? row.hourlyRate : '—'}
-                </span>
-              ),
-          },
-        ]
-      : []),
+    {
+      key: 'hourlyRate' as keyof ProjectMember,
+      label: 'Rate / hour (GHS)',
+      width: '170px',
+      render: (row: ProjectMember) =>
+        canAssign ? (
+          <div onClick={(e) => e.stopPropagation()}>
+            <NumberField
+              ariaLabel={`Hourly rate for ${row.name}`}
+              value={row.hourlyRate ?? 0}
+              onChange={() => {}}
+              onBlur={(v) => {
+                if (v !== (row.hourlyRate ?? 0)) handleRate(row.employeeId, v);
+              }}
+              placeholder="Set rate"
+            />
+          </div>
+        ) : (
+          <span className="text-sm text-gray-700">{row.hourlyRate ? row.hourlyRate : '—'}</span>
+        ),
+    },
     ...(canAssign
       ? [
           {
@@ -161,7 +184,10 @@ export function ProjectMembersTable({ projectId }: Props) {
                   <TableButton
                     variant="red"
                     onClick={() => {
-                      if (!isLead) handleRemove(row.employeeId);
+                      // Their logged time would lose its rate, so ask first.
+                      if (isLead) return;
+                      if (loggedMs(row.employeeId) > 0) setRemoving(row);
+                      else handleRemove(row.employeeId);
                     }}
                     disabled={isLead || removeMember.isPending}
                     tooltip={isLead ? `${labels.singular} lead can't be removed` : undefined}
@@ -178,6 +204,40 @@ export function ProjectMembersTable({ projectId }: Props) {
 
   return (
     <>
+      {canAssign && (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={allPicked}
+              onChange={() =>
+                setPicked(allPicked ? new Set() : new Set(filtered.map((m) => m.employeeId)))
+              }
+              className="h-4 w-4 accent-brand"
+            />
+            Select all
+          </label>
+          {picked.size > 0 && (
+            <>
+              <NumberField
+                ariaLabel="Rate per hour for the selected members"
+                placeholder="Rate / hour"
+                value={bulkRate}
+                onChange={setBulkRate}
+              />
+              <Button
+                onClick={applyBulkRate}
+                disabled={bulkRate <= 0}
+                isLoading={updateRate.isPending}
+                loadingText="Saving…"
+              >
+                Set rate for {picked.size}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
       <DataTable
         columns={COLUMNS}
         data={filtered}
@@ -202,6 +262,29 @@ export function ProjectMembersTable({ projectId }: Props) {
           assignedIds={assignedIds}
           onAssign={handleAssign}
           isAssigning={addMember.isPending}
+        />
+      )}
+
+      {removing && (
+        <Modal
+          isOpen
+          onClose={() => setRemoving(null)}
+          title={`Remove ${removing.name}?`}
+          description={`They have logged ${formatHoursMinutes(loggedMs(removing.employeeId))} on this ${labels.singularLower}. Once removed, that time has no rate: it can’t be billed or valued until they are added back with one.`}
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setRemoving(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => handleRemove(removing.employeeId)}
+                isLoading={removeMember.isPending}
+                loadingText="Removing…"
+              >
+                Remove
+              </Button>
+            </>
+          }
         />
       )}
     </>

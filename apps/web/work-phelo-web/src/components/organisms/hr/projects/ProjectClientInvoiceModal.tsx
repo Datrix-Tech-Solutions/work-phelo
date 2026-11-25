@@ -103,7 +103,7 @@ export function ProjectClientInvoiceModal({
           key: l.key,
           label: l.label,
           amount: l.amount,
-          ...(l.minutes ? { minutes: l.minutes } : {}),
+          ...(l.minutes ? { minutes: l.minutes, people: l.people } : {}),
         })),
       },
       {

@@ -1,7 +1,14 @@
 import { SearchIcon } from 'lucide-react';
-import { cardClass, inputClass } from '@/lib/utils';
+import { cardClass, cn, inputClass } from '@/lib/utils';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { WeekSelector } from './WeekSelector';
+
+export type SchedulingView = 'week' | 'month';
+
+const VIEWS: { value: SchedulingView; label: string }[] = [
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+];
 
 interface Props {
   search: string;
@@ -9,9 +16,12 @@ interface Props {
   departmentId: string;
   onDepartmentChange: (id: string) => void;
   departments: { id: string; name: string }[];
+  view: SchedulingView;
+  onViewChange: (view: SchedulingView) => void;
   weekStart: Date;
-  onPrevWeek: () => void;
-  onNextWeek: () => void;
+  monthStart: Date;
+  onPrev: () => void;
+  onNext: () => void;
 }
 
 export function SchedulingToolbar({
@@ -20,9 +30,12 @@ export function SchedulingToolbar({
   departmentId,
   onDepartmentChange,
   departments,
+  view,
+  onViewChange,
   weekStart,
-  onPrevWeek,
-  onNextWeek,
+  monthStart,
+  onPrev,
+  onNext,
 }: Props) {
   return (
     <div className={cardClass('flex items-center flex-wrap shrink-0 mb-6 gap-3 px-4 py-2')}>
@@ -54,7 +67,37 @@ export function SchedulingToolbar({
 
       <div className="flex-1" />
 
-      <WeekSelector weekStart={weekStart} onPrev={onPrevWeek} onNext={onNextWeek} endOffset={6} />
+      <div className="flex items-center gap-1 p-1 shrink-0 rounded-xl border border-gray-200">
+        {VIEWS.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onViewChange(value)}
+            aria-pressed={view === value}
+            className={cn(
+              'px-4 py-1.5 text-sm font-medium rounded-input transition-colors',
+              view === value
+                ? 'bg-(--module-btn-bg,var(--color-brand)) text-white'
+                : 'text-gray-600 hover:bg-gray-100',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <WeekSelector
+        weekStart={weekStart}
+        onPrev={onPrev}
+        onNext={onNext}
+        endOffset={6}
+        unit={view}
+        label={
+          view === 'month'
+            ? monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+            : undefined
+        }
+      />
     </div>
   );
 }

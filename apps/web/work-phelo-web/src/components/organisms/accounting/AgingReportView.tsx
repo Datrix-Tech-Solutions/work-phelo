@@ -14,6 +14,8 @@ import { buildAgingBlocks } from '@/lib/accounting/aging';
 import { exportAgingCsv, exportAgingPdf, type AgingExport } from '@/lib/accounting/agingExport';
 import { formatDate } from '@/lib/accounting/profitAndLoss';
 import { extractError } from '@/lib/extractError';
+import { useReportLetterhead } from '@/hooks/accounting/useReportLetterhead';
+import { useToast } from '@/hooks/useToast';
 import { cardClass } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -43,6 +45,8 @@ export function AgingReportView({ side }: { side: Side }) {
   const copy = COPY[side];
   const period = useReportPeriod({ asAt: true });
   const [pdfBusy, setPdfBusy] = useState(false);
+  const loadLetterhead = useReportLetterhead();
+  const toast = useToast();
   const [filtersOpen, setFiltersOpen] = useState(true);
   const tenantId = useAuthStore((state) => state.user?.tenantId ?? '');
   const { data: tenant } = useTenant(tenantId);
@@ -104,7 +108,10 @@ export function AgingReportView({ side }: { side: Side }) {
     if (!payload) return;
     setPdfBusy(true);
     try {
-      await exportAgingPdf(payload);
+      await exportAgingPdf(payload, await loadLetterhead());
+    } catch (error) {
+      console.error('Failed to generate report PDF', error);
+      toast.error('Could not generate the PDF. Please try again.');
     } finally {
       setPdfBusy(false);
     }

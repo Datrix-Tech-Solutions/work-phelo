@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { Skeleton } from '@/components/atoms/Skeleton';
+import { bucketTooltip, ChartTooltip } from '@/components/molecules/shared/ChartTooltip';
 import { useElementSize } from '@/hooks/useElementSize';
 import type { SeriesBucket } from '@/lib/periodSeries';
 import { cardClass, chartCardHoverClass, cn } from '@/lib/utils';
@@ -35,6 +36,8 @@ interface PeriodBarChartProps {
   horizontal?: boolean;
   /** Makes the bars clickable, naming the bar picked by its bucket and series positions. */
   onBarClick?: (bucketIndex: number, seriesIndex: number) => void;
+  /** With one series of counts or totals, the tooltip also shows each bucket's share. */
+  showShare?: boolean;
   className?: string;
 }
 
@@ -61,6 +64,7 @@ export function PeriodBarChart({
   stacked,
   horizontal,
   onBarClick,
+  showShare,
   className,
 }: PeriodBarChartProps) {
   const [plotRef, plotSize] = useElementSize<HTMLDivElement>();
@@ -218,11 +222,15 @@ export function PeriodBarChart({
         )}
 
         {!isLoading && !isError && !isEmpty && hovered !== null && buckets[hovered] && (
-          <div
-            className={cn(
-              'absolute z-10 -translate-x-1/2 -translate-y-full pointer-events-none',
-              !horizontal && '-top-1',
+          <ChartTooltip
+            {...bucketTooltip(
+              buckets[hovered].detail ?? buckets[hovered].label,
+              series,
+              hovered,
+              showShare,
             )}
+            footer={onBarClick && 'Click a bar for details'}
+            className={horizontal ? undefined : '-top-1'}
             style={
               horizontal
                 ? {
@@ -233,38 +241,7 @@ export function PeriodBarChart({
                     left: `calc(${AXIS_WIDTH}px + (100% - ${AXIS_WIDTH + MARGIN_RIGHT}px) * ${(hovered + 0.5) / buckets.length})`,
                   }
             }
-          >
-            <div className="bg-(--chip-dark,#111827) text-white rounded-lg shadow-xl px-2.5 py-1.5 text-[10px] whitespace-nowrap flex flex-col gap-1">
-              <div className="font-semibold text-[11px]">
-                {buckets[hovered].detail ?? buckets[hovered].label}
-              </div>
-              <div className="border-t border-[#374151] pt-1 flex flex-col gap-0.5">
-                {series.map((s) => {
-                  const value = s.data[hovered] ?? null;
-                  return (
-                    <div key={s.label} className="flex items-center justify-between gap-4">
-                      <span className="flex items-center gap-1.5 text-[#9ca3af]">
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: s.color }}
-                        />
-                        {s.label}
-                      </span>
-                      <span className="font-medium">
-                        {s.valueFormatter ? s.valueFormatter(value) : String(value ?? '')}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              {onBarClick && (
-                <div className="border-t border-[#374151] pt-1 text-[#9ca3af]">
-                  Click a bar for details
-                </div>
-              )}
-            </div>
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm" />
-          </div>
+          />
         )}
       </div>
     </div>
