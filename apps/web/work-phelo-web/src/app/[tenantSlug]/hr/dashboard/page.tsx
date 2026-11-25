@@ -36,7 +36,12 @@ export default function HrDashboardPage({ params }: { params: Promise<{ tenantSl
 
   return (
     <DashboardShell filters={filters} showViewToggle>
-      <HrDashboardKpis period={filters.period} year={filters.year} showProjects={canViewProjects} />
+      <HrDashboardKpis
+        tenantSlug={tenantSlug}
+        period={filters.period}
+        year={filters.year}
+        showProjects={canViewProjects}
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-20 gap-3">
         <DepartmentDistributionChart className="md:col-span-2 lg:col-span-6" />
         <RecruitmentPipelineCard className="md:col-span-2 lg:col-span-7" />

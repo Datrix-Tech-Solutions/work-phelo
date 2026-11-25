@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { CalendarClock, Route } from 'lucide-react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import {
@@ -20,7 +20,9 @@ interface Props {
 /** Today's approved trips, earliest first. A live list, so it ignores the period filter. */
 export function TripsTodayCard({ period, year, className }: Props) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const { data, isLoading, isError } = useTransportDashboard(period, year);
+  const requestsHref = `/${tenantSlug}/marketing/requests/all-requests`;
 
   const items = useMemo<TransportListItem[]>(
     () =>
@@ -52,7 +54,8 @@ export function TripsTodayCard({ period, year, className }: Props) {
       isError={isError}
       emptyText="No trips today."
       errorText="Today's trips could not be loaded."
-      action={{ href: `/${tenantSlug}/marketing/requests/all-requests`, label: 'View all' }}
+      action={{ href: requestsHref, label: 'View all' }}
+      onSelect={(id) => router.push(`${requestsHref}?requestId=${id}`)}
       className={className}
     />
   );

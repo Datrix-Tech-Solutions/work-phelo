@@ -18,6 +18,7 @@ import {
   getMovementQuantity,
   getMovementValue,
   type StockMovement,
+  type StockMovementType,
 } from '@/hooks/inventory/useStockMovements';
 import {
   canCancel,
@@ -45,6 +46,8 @@ interface StockMovementsTableProps {
   onDraftClick?: (id: string) => void;
   /** Show a filter for the movement type. */
   typeFilter?: boolean;
+  /** The type that filter starts on. */
+  initialType?: StockMovementType | '';
   /** Show a Variant column and filter: for the history of one item. */
   showVariant?: boolean;
   /** Show who recorded (or issued) each movement. */
@@ -59,6 +62,7 @@ export function StockMovementsTable({
   actionButton,
   onDraftClick,
   typeFilter,
+  initialType = '',
   showVariant,
   showRecordedBy,
 }: StockMovementsTableProps) {
@@ -77,7 +81,7 @@ export function StockMovementsTable({
   const userName = useUserNames();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [typeValue, setTypeValue] = useState('');
+  const [typeValue, setTypeValue] = useState<string>(initialType);
   const [variantValue, setVariantValue] = useState('');
   const { items } = useInventoryItems();
   const { warehouses } = useInventoryWarehouses();

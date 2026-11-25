@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { LucideIcon } from 'lucide-react';
 import { TrendBadge } from '@/components/atoms/TrendBadge';
 import { Skeleton } from '@/components/atoms/Skeleton';
@@ -24,6 +25,10 @@ interface KpiCardProps {
   /** Where `sub` sits: beside the value (default) or on its own line underneath it. */
   subPlacement?: 'inline' | 'below';
   isLoading?: boolean;
+  /** Makes the whole card a link to this page. */
+  href?: string;
+  /** Makes the whole card a button, e.g. to open a side panel. Ignored when `href` is given. */
+  onClick?: () => void;
 }
 
 export function KpiCard({
@@ -39,11 +44,33 @@ export function KpiCard({
   sub,
   subPlacement = 'inline',
   isLoading,
+  href,
+  onClick,
 }: KpiCardProps) {
+  const clickable = Boolean(href || onClick);
+  // Covers the card, so the whole of it is clickable without nesting content inside a link.
+  const overlayClass =
+    'absolute inset-0 rounded-[inherit] cursor-pointer focus-visible:outline-2 focus-visible:outline-brand';
+
   return (
     <div
-      className={cardClass(cn('flex items-center gap-2', compact ? 'px-2 py-1.5' : 'p-2'), 'glass')}
+      className={cardClass(
+        cn(
+          'flex items-center gap-2',
+          compact ? 'px-2 py-1.5' : 'p-2',
+          clickable && 'relative transition-shadow hover:shadow-md',
+        ),
+        'glass',
+      )}
     >
+      {href ? (
+        <Link href={href} aria-label={label} className={overlayClass} />
+      ) : (
+        onClick && (
+          <button type="button" onClick={onClick} aria-label={label} className={overlayClass} />
+        )
+      )}
+
       {Icon && (
         <div
           className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
@@ -93,7 +120,10 @@ export function KpiCard({
             )}
             {trend !== undefined && (
               <div className="flex items-center gap-1">
-                <TrendBadge change={trend} tooltip={trendTooltip} />
+                {/* Above the card's click overlay, so the tooltip still shows on hover. */}
+                <span className="relative z-10 inline-flex">
+                  <TrendBadge change={trend} tooltip={trendTooltip} />
+                </span>
                 <span className="text-[10px] text-gray-400">vs previous {periodLabel}</span>
               </div>
             )}

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
+  TenantDocumentRender,
   TenantDocumentTemplate,
   UpsertTenantDocumentTemplatePayload,
 } from '@/types/tenant-document-template';
@@ -18,6 +19,21 @@ export function useTenantDocumentTemplate(tenantId?: string) {
         .then((response) => response.data),
     enabled: Boolean(tenantId),
     staleTime: 60_000,
+  });
+}
+
+/** What a real document renders with — readable by accounting users, not only admins.
+ *  Refetched on every use so a newly saved template applies straight away. */
+export function useTenantDocumentRender(tenantId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: [...tenantDocumentTemplateKeys.template(tenantId ?? ''), 'render'],
+    queryFn: () =>
+      api
+        .get<TenantDocumentRender>(`/auth/tenants/${tenantId}/document-render`)
+        .then((response) => response.data),
+    enabled: enabled && Boolean(tenantId),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
   });
 }
 

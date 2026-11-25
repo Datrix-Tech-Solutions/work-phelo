@@ -1,5 +1,5 @@
-import type { TenantDocumentProfile } from '@/types/tenant-document-profile';
 import type {
+  DocumentIdentity,
   TenantDocumentTemplate,
   TenantDocumentTemplateConfig,
 } from '@/types/tenant-document-template';
@@ -43,8 +43,8 @@ export function toTemplateConfig(template: DocumentTemplate): TenantDocumentTemp
  * and footer from the company's document profile so the preview starts useful.
  */
 export function toEditorTemplate(
-  saved: TenantDocumentTemplate,
-  profile: TenantDocumentProfile | undefined,
+  saved: Pick<TenantDocumentTemplate, 'config' | 'defaultsApplied' | 'watermarkUrl'>,
+  profile: DocumentIdentity | undefined,
   previewDoc: DocumentTemplate['previewDoc'],
 ): DocumentTemplate {
   const config = { ...saved.config };
@@ -78,8 +78,8 @@ export function toEditorTemplate(
 
 /** Image fields always reflect what is stored on the server, never local edits. */
 export function serverImages(
-  saved: TenantDocumentTemplate | undefined,
-  profile: TenantDocumentProfile | undefined,
+  saved: Pick<TenantDocumentTemplate, 'watermarkUrl'> | undefined,
+  profile: DocumentIdentity | undefined,
 ): Pick<DocumentTemplate, 'logo' | 'signatureImage' | 'watermarkImage'> {
   return {
     logo: profile?.logoUrl ?? null,
@@ -90,7 +90,7 @@ export function serverImages(
 
 export function hasSignatoryChanges(
   template: DocumentTemplate,
-  profile: TenantDocumentProfile | undefined,
+  profile: DocumentIdentity | undefined,
 ): boolean {
   return (
     template.signatoryName.trim() !== (profile?.authorizedSignatoryName ?? '') ||

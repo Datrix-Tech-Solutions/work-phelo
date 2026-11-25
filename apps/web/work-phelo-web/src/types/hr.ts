@@ -734,6 +734,27 @@ export interface OutTodayEntry {
   endDate: string;
 }
 
+export interface MovementEntry {
+  employeeId: string;
+  employeeName: string;
+  jobTitle: string | null;
+  department: string | null;
+  avatarUrl: string | null;
+  /** The hire or exit day, YYYY-MM-DD. */
+  date: string;
+}
+
+export interface HiresAndExits {
+  hires: MovementEntry[];
+  exits: MovementEntry[];
+}
+
+export interface OnLeaveEntry extends OutTodayEntry {
+  /** First day of the leave, YYYY-MM-DD. */
+  startDate: string;
+  totalDays: number;
+}
+
 export interface PayrollStatusRun {
   id: string;
   payslipKey: string;

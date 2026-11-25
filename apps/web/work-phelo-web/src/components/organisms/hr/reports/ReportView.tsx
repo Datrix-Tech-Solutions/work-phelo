@@ -8,14 +8,14 @@ interface ReportViewProps {
   spec: ReportSpec;
 }
 
-/** Draws a report: its table, or its charts side by side. */
+/** Draws a report: its table, or its charts, as many to a row as fit. */
 export function ReportView({ spec }: ReportViewProps) {
   if (spec.type === 'TABLE') {
     return spec.blocks[0] ? <ReportTableBlock block={spec.blocks[0]} period={spec.period} /> : null;
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+    <div className="flex flex-wrap gap-3">
       {spec.blocks.map((block, index) => (
         <ReportChartBlock
           key={index}

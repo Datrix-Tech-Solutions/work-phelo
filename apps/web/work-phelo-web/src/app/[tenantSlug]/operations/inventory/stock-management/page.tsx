@@ -12,17 +12,21 @@ import {
   type StockMovementDraft,
 } from '@/hooks/inventory/useStockMovementDrafts';
 
+const asMovementType = (value: string | null): StockMovementType | null =>
+  value === 'STOCK_IN' || value === 'STOCK_OUT' || value === 'TRANSFER' || value === 'ADJUSTMENT'
+    ? value
+    : null;
+
 function StockManagementInner() {
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   // The dashboard's stock shortcuts arrive with ?type=STOCK_IN (or STOCK_OUT, TRANSFER, ADJUSTMENT).
-  const linkedType = useSearchParams().get('type');
-  const [movementType, setMovementType] = useState<StockMovementType | null>(
-    linkedType === 'STOCK_IN' ||
-      linkedType === 'STOCK_OUT' ||
-      linkedType === 'TRANSFER' ||
-      linkedType === 'ADJUSTMENT'
-      ? linkedType
-      : null,
+  const searchParams = useSearchParams();
+  const [movementType, setMovementType] = useState<StockMovementType | null>(() =>
+    asMovementType(searchParams.get('type')),
+  );
+  // The dashboard's chart panels link here with ?filter= to start the table on one type.
+  const [initialType] = useState<StockMovementType | ''>(
+    () => asMovementType(searchParams.get('filter')) ?? '',
   );
   const { movements, isLoading } = useStockMovements();
 
@@ -51,6 +55,7 @@ function StockManagementInner() {
           isLoading={isLoading}
           onDraftClick={openDraft}
           typeFilter
+          initialType={initialType}
           actionButton={{ label: 'Record Movement', onClick: () => setTypePickerOpen(true) }}
         />
       </div>

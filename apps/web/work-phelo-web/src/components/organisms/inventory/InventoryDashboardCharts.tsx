@@ -1,12 +1,17 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import {
   compactNumber,
   SERIES_SUBTITLES,
 } from '@/components/molecules/accounting/dashboardChartFormat';
 import { PeriodBarChart } from '@/components/molecules/shared/PeriodBarChart';
+import {
+  InventoryBarPanel,
+  type InventoryBar,
+  type InventoryBarKind,
+} from '@/components/organisms/inventory/InventoryBarPanel';
 import { usePurchaseOrders, purchaseOrderValue } from '@/hooks/inventory/usePurchaseOrders';
 import { getMovementValue, useStockMovements } from '@/hooks/inventory/useStockMovements';
 import { formatInventoryValue } from '@/lib/inventoryCurrency';
@@ -35,6 +40,20 @@ function sumByBucket<T>(
   return totals;
 }
 
+/** Opens the panel for a clicked bar; `kinds` names the chart's series in order. */
+function useBarPanel(buckets: SeriesBucket[], kinds: [InventoryBarKind, InventoryBarKind]) {
+  // Open state is kept apart from the bar, so the panel keeps its content while it slides shut.
+  const [bar, setBar] = useState<InventoryBar | null>(null);
+  const [isOpen, setOpen] = useState(false);
+  return {
+    onBarClick: (bucketIndex: number, seriesIndex: number) => {
+      setBar({ kind: kinds[seriesIndex], bucket: buckets[bucketIndex] });
+      setOpen(true);
+    },
+    panel: <InventoryBarPanel isOpen={isOpen} onClose={() => setOpen(false)} bar={bar} />,
+  };
+}
+
 /** Value of stock received against value issued. Stock out is valued at selling price, so the
  * two bars are not like for like; the card's subtitle says so. */
 export function StockFlowChart({ period }: { period: Period }) {
@@ -53,19 +72,25 @@ export function StockFlowChart({ period }: { period: Period }) {
     return { stockIn: of('STOCK_IN'), stockOut: of('STOCK_OUT') };
   }, [movements, buckets]);
 
+  const { onBarClick, panel } = useBarPanel(buckets, ['STOCK_IN', 'STOCK_OUT']);
+
   return (
-    <PeriodBarChart
-      title="Stock In vs Stock Out"
-      subtitle={`${SERIES_SUBTITLES[period]} · in at cost, out at selling price`}
-      buckets={buckets}
-      series={[
-        { label: 'Stock In', color: GREEN, data: series.stockIn, valueFormatter: money },
-        { label: 'Stock Out', color: RED, data: series.stockOut, valueFormatter: money },
-      ]}
-      isLoading={isLoading}
-      emptyText="No stock movements in this range."
-      axisFormatter={compactNumber}
-    />
+    <>
+      <PeriodBarChart
+        onBarClick={onBarClick}
+        title="Stock In vs Stock Out"
+        subtitle={`${SERIES_SUBTITLES[period]} · in at cost, out at selling price`}
+        buckets={buckets}
+        series={[
+          { label: 'Stock In', color: GREEN, data: series.stockIn, valueFormatter: money },
+          { label: 'Stock Out', color: RED, data: series.stockOut, valueFormatter: money },
+        ]}
+        isLoading={isLoading}
+        emptyText="No stock movements in this range."
+        axisFormatter={compactNumber}
+      />
+      {panel}
+    </>
   );
 }
 
@@ -87,18 +112,24 @@ export function PurchasesPaymentsChart({ period }: { period: Period }) {
     };
   }, [purchaseOrders, buckets]);
 
+  const { onBarClick, panel } = useBarPanel(buckets, ['ORDERED', 'PAID']);
+
   return (
-    <PeriodBarChart
-      title="Purchases vs Payments"
-      subtitle={SERIES_SUBTITLES[period]}
-      buckets={buckets}
-      series={[
-        { label: 'Ordered', color: BLUE, data: series.ordered, valueFormatter: money },
-        { label: 'Paid', color: AMBER, data: series.paid, valueFormatter: money },
-      ]}
-      isLoading={isLoading}
-      emptyText="No purchases or payments in this range."
-      axisFormatter={compactNumber}
-    />
+    <>
+      <PeriodBarChart
+        onBarClick={onBarClick}
+        title="Purchases vs Payments"
+        subtitle={SERIES_SUBTITLES[period]}
+        buckets={buckets}
+        series={[
+          { label: 'Ordered', color: BLUE, data: series.ordered, valueFormatter: money },
+          { label: 'Paid', color: AMBER, data: series.paid, valueFormatter: money },
+        ]}
+        isLoading={isLoading}
+        emptyText="No purchases or payments in this range."
+        axisFormatter={compactNumber}
+      />
+      {panel}
+    </>
   );
 }

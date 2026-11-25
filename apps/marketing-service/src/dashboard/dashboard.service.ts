@@ -15,14 +15,20 @@ import {
   sumInvoiced,
 } from '../sales-targets/sales-targets.service';
 import {
+  DashboardClientRevenue,
   DashboardGrowthPoint,
+  DashboardNewClient,
+  DashboardPeriodProspect,
+  DashboardWonDeal,
   DashboardUpcomingBirthdays,
   QueryDashboardBirthdaysDto,
   DashboardRep,
   DashboardRevenueByProduct,
   DashboardSalesPersonnel,
   DashboardStage,
+  DashboardStageProspect,
   DashboardSummary,
+  QueryDashboardStageProspectsDto,
   QueryDashboardGrowthDto,
   QueryDashboardRevenueDto,
   QueryDashboardSalesPersonnelDto,
@@ -135,6 +141,211 @@ export class DashboardService {
     };
   }
 
+  /** The prospects behind one pipeline stage card, selected the same way as its count. */
+  async stageProspects(
+    user: RequestUser,
+    query: QueryDashboardStageProspectsDto,
+  ): Promise<{ prospects: DashboardStageProspect[] }> {
+    const scope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const rows = await this.prisma.marketingProspect.findMany({
+      where: {
+        ...this.openProspects(
+          user.tenantId,
+          scope,
+          toRange(query.fromDate, query.toDate),
+        ),
+        pipelineStageId: query.stageId,
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        companyName: true,
+        assignedUserId: true,
+        products: { select: { expectedValue: true } },
+      },
+    });
+
+    const names = await this.assignees.namesFor(user.tenantId, [
+      ...new Set(rows.map((row) => row.assignedUserId)),
+    ]);
+
+    return {
+      prospects: rows.map((row) => ({
+        prospectId: row.id,
+        companyName: row.companyName,
+        assignedUserName: names.get(row.assignedUserId) ?? 'Unknown user',
+        expected: money(
+          row.products.reduce(
+            (total, product) => total.plus(product.expectedValue),
+            ZERO,
+          ),
+        ),
+      })),
+    };
+  }
+
+  /** The deals behind the "Overall Sales" figure, most recent first. */
+  async wonDealList(
+    user: RequestUser,
+    query: QueryDashboardRevenueDto,
+  ): Promise<{ deals: DashboardWonDeal[] }> {
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const range = toRange(query.fromDate, query.toDate);
+    const deals = (await this.wonDeals(user.tenantId, clientScope))
+      .filter((deal) => inRange(deal.at, range))
+      .sort((a, b) => b.at.getTime() - a.at.getTime());
+
+    const [clients, products] = await Promise.all([
+      this.clientNames(user.tenantId, [
+        ...new Set(deals.map((deal) => deal.clientId)),
+      ]),
+      this.productNames(user.tenantId, [
+        ...new Set(deals.map((deal) => deal.productId)),
+      ]),
+    ]);
+
+    return {
+      deals: deals.map((deal) => ({
+        clientId: deal.clientId,
+        clientName: clients.get(deal.clientId) ?? 'Unknown client',
+        productId: deal.productId,
+        productName: products.get(deal.productId) ?? 'Unknown product',
+        value: money(deal.value),
+        date: deal.at.toISOString().slice(0, 10),
+      })),
+    };
+  }
+
+  /** The "Achieved Revenue" figure split by client, largest first. */
+  async revenueByClient(
+    user: RequestUser,
+    query: QueryDashboardRevenueDto,
+  ): Promise<{ clients: DashboardClientRevenue[] }> {
+    const clientScope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const invoices = await this.targets.invoiceRows(user.tenantId, clientScope);
+
+    const range = toRange(query.fromDate, query.toDate);
+    const byClient = new Map<string, Prisma.Decimal>();
+    for (const invoice of invoices) {
+      if (!inRange(invoice.createdAt, range)) continue;
+      byClient.set(
+        invoice.clientId,
+        (byClient.get(invoice.clientId) ?? ZERO).plus(invoice.amount),
+      );
+    }
+    const names = await this.clientNames(user.tenantId, [...byClient.keys()]);
+
+    return {
+      clients: [...byClient.entries()]
+        .sort(([, a], [, b]) => b.comparedTo(a))
+        .map(([clientId, amount]) => ({
+          clientId,
+          clientName: names.get(clientId) ?? 'Unknown client',
+          amount: money(amount),
+        })),
+    };
+  }
+
+  /**
+   * Every prospect created in the range, newest first, with whether it has become a client:
+   * the list behind both "New Prospects" and "Conversion Rate".
+   */
+  async periodProspects(
+    user: RequestUser,
+    query: QueryDashboardRevenueDto,
+  ): Promise<{ prospects: DashboardPeriodProspect[] }> {
+    const scope = this.scopeFor(
+      user,
+      P.PROSPECTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const range = toRange(query.fromDate, query.toDate);
+    const [rows, stages] = await Promise.all([
+      this.prisma.marketingProspect.findMany({
+        where: this.createdProspects(user.tenantId, scope, range),
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          companyName: true,
+          assignedUserId: true,
+          pipelineStageId: true,
+          createdAt: true,
+          client: { select: { id: true } },
+        },
+      }),
+      this.prisma.marketingPipelineStage.findMany({
+        where: { tenantId: user.tenantId },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const stageNames = new Map(stages.map((stage) => [stage.id, stage.name]));
+    const names = await this.assignees.namesFor(user.tenantId, [
+      ...new Set(rows.map((row) => row.assignedUserId)),
+    ]);
+
+    return {
+      prospects: rows.map((row) => ({
+        prospectId: row.id,
+        companyName: row.companyName,
+        assignedUserName: names.get(row.assignedUserId) ?? 'Unknown user',
+        stageName: stageNames.get(row.pipelineStageId) ?? 'Unknown stage',
+        clientId: row.client?.id ?? null,
+        createdDate: row.createdAt.toISOString().slice(0, 10),
+      })),
+    };
+  }
+
+  /** The clients created in the range: the list behind a "New clients" bar. */
+  async newClients(
+    user: RequestUser,
+    query: QueryDashboardRevenueDto,
+  ): Promise<{ clients: DashboardNewClient[] }> {
+    const scope = this.scopeFor(
+      user,
+      P.CLIENTS_VIEW_ALL,
+      this.repFor(user, query.userId),
+    );
+    const range = toRange(query.fromDate, query.toDate);
+    const rows = await this.prisma.marketingClient.findMany({
+      where: {
+        tenantId: user.tenantId,
+        ...scope,
+        createdAt: { gte: range.from, lt: range.to },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        companyName: true,
+        assignedUserId: true,
+        createdAt: true,
+      },
+    });
+    const names = await this.assignees.namesFor(user.tenantId, [
+      ...new Set(rows.map((row) => row.assignedUserId)),
+    ]);
+
+    return {
+      clients: rows.map((row) => ({
+        clientId: row.id,
+        companyName: row.companyName,
+        assignedUserName: names.get(row.assignedUserId) ?? 'Unknown user',
+        createdDate: row.createdAt.toISOString().slice(0, 10),
+      })),
+    };
+  }
+
   /** Prospects and clients created in each range, scoped like the lists they come from. */
   async growth(
     user: RequestUser,
@@ -206,19 +417,7 @@ export class DashboardService {
     const productIds = [...byProduct.keys()].filter(
       (id): id is string => id !== null,
     );
-    const names = new Map(
-      (productIds.length
-        ? await this.prisma.marketingCrmSettingOption.findMany({
-            where: {
-              tenantId: user.tenantId,
-              id: { in: productIds },
-              category: MarketingCrmSettingCategory.PRODUCT,
-            },
-            select: { id: true, name: true },
-          })
-        : []
-      ).map((option) => [option.id, option.name]),
-    );
+    const names = await this.productNames(user.tenantId, productIds);
 
     const products = [...byProduct.entries()]
       .sort(([, a], [, b]) => b.comparedTo(a))
@@ -498,11 +697,7 @@ export class DashboardService {
     scope: { assignedUserId?: string },
     range: Range,
   ) {
-    const where: Prisma.MarketingProspectWhereInput = {
-      tenantId,
-      ...scope,
-      createdAt: { gte: range.from, lt: range.to },
-    };
+    const where = this.createdProspects(tenantId, scope, range);
     const [created, converted] = await Promise.all([
       this.prisma.marketingProspect.count({ where }),
       this.prisma.marketingProspect.count({
@@ -549,11 +744,18 @@ export class DashboardService {
       }
     }
 
-    const deals: { at: Date; value: Prisma.Decimal }[] = [];
+    const deals: {
+      clientId: string;
+      productId: string;
+      at: Date;
+      value: Prisma.Decimal;
+    }[] = [];
     for (const product of purchased) {
       const at = firstPosted.get(`${product.clientId}:${product.productId}`);
       if (!at) continue;
       deals.push({
+        clientId: product.clientId,
+        productId: product.productId,
         at,
         value: product.expectedValue
           ? new Prisma.Decimal(product.expectedValue)
@@ -596,6 +798,52 @@ export class DashboardService {
     );
   }
 
+  private createdProspects(
+    tenantId: string,
+    scope: { assignedUserId?: string },
+    range: Range,
+  ): Prisma.MarketingProspectWhereInput {
+    return {
+      tenantId,
+      ...scope,
+      createdAt: { gte: range.from, lt: range.to },
+    };
+  }
+
+  private async clientNames(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return new Map<string, string>();
+    const clients = await this.prisma.marketingClient.findMany({
+      where: { tenantId, id: { in: ids } },
+      select: { id: true, companyName: true },
+    });
+    return new Map(clients.map((client) => [client.id, client.companyName]));
+  }
+
+  private async productNames(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return new Map<string, string>();
+    const options = await this.prisma.marketingCrmSettingOption.findMany({
+      where: {
+        tenantId,
+        id: { in: ids },
+        category: MarketingCrmSettingCategory.PRODUCT,
+      },
+      select: { id: true, name: true },
+    });
+    return new Map(options.map((option) => [option.id, option.name]));
+  }
+
+  /** Prospects created in the range that have not become clients. */
+  private openProspects(
+    tenantId: string,
+    scope: { assignedUserId?: string },
+    range: Range,
+  ): Prisma.MarketingProspectWhereInput {
+    return {
+      ...this.createdProspects(tenantId, scope, range),
+      client: { is: null },
+    };
+  }
+
   /**
    * Open prospects (not yet clients) created in the range, by pipeline stage: how many there
    * are, what they are expected to bring in, and the average per prospect.
@@ -605,12 +853,7 @@ export class DashboardService {
     prospectScope: { assignedUserId?: string },
     range: Range,
   ) {
-    const open: Prisma.MarketingProspectWhereInput = {
-      tenantId,
-      ...prospectScope,
-      client: { is: null },
-      createdAt: { gte: range.from, lt: range.to },
-    };
+    const open = this.openProspects(tenantId, prospectScope, range);
     const [stages, counts, products] = await Promise.all([
       this.prisma.marketingPipelineStage.findMany({
         where: { tenantId, isActive: true },

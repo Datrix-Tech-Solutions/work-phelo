@@ -3,6 +3,7 @@
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { TableButton } from '@/components/atoms/TableButton';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { formatDate } from '@/lib/formatters';
 import type { Campaign, CampaignChannel, CampaignStatus } from '@/types/marketing';
 
@@ -20,6 +21,15 @@ export const CAMPAIGN_STATUS_MAP: Record<
   FAILED: { label: 'Failed', variant: 'danger' },
   CANCELLED: { label: 'Cancelled', variant: 'neutral' },
 };
+
+// "Completed" matches the stat card, which counts partly sent campaigns as completed.
+const STATUS_FILTER_OPTIONS = [
+  { value: 'SCHEDULED', label: 'Scheduled' },
+  { value: 'COMPLETED,PARTIALLY_COMPLETED', label: 'Completed (incl. partial)' },
+  ...Object.entries(CAMPAIGN_STATUS_MAP)
+    .filter(([value]) => value !== 'SCHEDULED')
+    .map(([value, { label }]) => ({ value, label })),
+];
 
 const CHANNEL_LABEL: Record<CampaignChannel, string> = { SMS: 'SMS', EMAIL: 'Email' };
 
@@ -99,6 +109,8 @@ interface Props {
   isLoading?: boolean;
   searchValue: string;
   onSearch: (q: string) => void;
+  statusFilter: string;
+  onStatusFilter: (status: string) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -126,6 +138,8 @@ export function CampaignsTable({
   isLoading,
   searchValue,
   onSearch,
+  statusFilter,
+  onStatusFilter,
   currentPage,
   totalPages,
   onPageChange,
@@ -215,6 +229,18 @@ export function CampaignsTable({
       searchPlaceholder="Search campaigns..."
       searchValue={searchValue}
       onSearch={onSearch}
+      extraFilters={
+        <div className="w-56">
+          <SearchSelect
+            placeholder="Statuses"
+            options={STATUS_FILTER_OPTIONS}
+            value={statusFilter}
+            onChange={onStatusFilter}
+            size="sm"
+            showAllOption
+          />
+        </div>
+      }
       currentPage={currentPage}
       totalPages={totalPages}
       onPageChange={onPageChange}

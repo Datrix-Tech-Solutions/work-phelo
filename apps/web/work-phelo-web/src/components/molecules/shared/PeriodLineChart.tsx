@@ -18,7 +18,7 @@ export interface PeriodLineSeries {
 interface PeriodLineChartProps {
   title: string;
   subtitle: string;
-  buckets: SeriesBucket[];
+  buckets: Pick<SeriesBucket, 'label' | 'detail'>[];
   series: PeriodLineSeries[];
   isLoading?: boolean;
   isError?: boolean;
@@ -26,6 +26,8 @@ interface PeriodLineChartProps {
   emptyText?: string;
   /** Formats the y-axis ticks. Defaults to plain numbers. */
   axisFormatter?: (value: number) => string;
+  /** Fills the space under each line. */
+  area?: boolean;
   className?: string;
 }
 
@@ -42,6 +44,7 @@ export function PeriodLineChart({
   errorText = 'Could not be loaded.',
   emptyText = 'Nothing in this range.',
   axisFormatter = String,
+  area,
   className,
 }: PeriodLineChartProps) {
   const [plotRef, plotSize] = useElementSize<HTMLDivElement>();
@@ -92,7 +95,9 @@ export function PeriodLineChart({
                 color: s.color,
                 valueFormatter: s.valueFormatter,
                 curve: 'monotoneX',
-                showMark: true,
+                // Marks crowd into each other on long series.
+                showMark: buckets.length <= 24,
+                area,
                 connectNulls: false,
               }))}
               xAxis={[

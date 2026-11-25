@@ -1,10 +1,10 @@
 'use client';
 
-import { BarChart } from '@mui/x-charts/BarChart';
-import { LineChart } from '@mui/x-charts/LineChart';
-import { PieChart } from '@mui/x-charts/PieChart';
 import { ScatterChart } from '@mui/x-charts/ScatterChart';
 import { Skeleton } from '@/components/atoms/Skeleton';
+import { PieBreakdown } from '@/components/molecules/hr/projects/PieBreakdown';
+import { PeriodBarChart } from '@/components/molecules/shared/PeriodBarChart';
+import { PeriodLineChart } from '@/components/molecules/shared/PeriodLineChart';
 import { useRunReportBlock } from '@/hooks/hr/useReports';
 import { useElementSize } from '@/hooks/useElementSize';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -25,145 +25,58 @@ const COLORS = [
   '#84cc16',
 ];
 
-const AXIS_TEXT = { fontSize: 11, fill: 'var(--color-gray-600)' };
-const GRID_SX = {
-  '& .MuiChartsGrid-line': { stroke: 'var(--color-gray-200)', strokeDasharray: '3 3' },
-};
+/** Past these, a card is too crowded at normal width: bars side by side, or points along a line. */
+const WIDE_BARS = 8;
+const WIDE_POINTS = 12;
 
-interface PlotProps {
-  result: ChartResult;
-  width: number;
-  height: number;
+/** Whether a chart has enough along its horizontal axis to need a wider card. Horizontal bars,
+ * pies and scatters gain little from extra width. */
+function needsWideCard(result: ChartResult) {
+  if (result.chartType === 'LINE' || result.chartType === 'AREA') {
+    return result.rows.length > WIDE_POINTS;
+  }
+  if (result.chartType === 'BAR') return result.rows.length * result.measures.length > WIDE_BARS;
+  return result.chartType === 'BAR_STACKED' && result.rows.length > WIDE_BARS;
 }
 
-function Plot({ result, width, height }: PlotProps) {
-  const { chartType, rows, measures, points } = result;
-  const groups = rows.map((row) => row.group);
-  const series = measures.map((measure, i) => ({
-    id: measure.key,
-    label: measure.label,
-    color: COLORS[i % COLORS.length],
-    data: rows.map((row) => row.values[i] ?? null),
-  }));
-  const margin = { left: 0, right: 12, top: 8, bottom: 0 };
+const AXIS_TEXT = { fontSize: 11, fill: 'var(--color-gray-700)' };
+const EMPTY_TEXT = 'No data for this selection.';
 
-  if (chartType === 'PIE' || chartType === 'DONUT') {
-    const data = rows
-      .filter((row) => (row.values[0] ?? 0) > 0)
-      .map((row, i) => ({
-        id: i,
-        value: row.values[0] as number,
-        label: row.group,
-        color: COLORS[i % COLORS.length],
-      }));
-    return (
-      <PieChart
-        width={width}
-        height={height}
-        series={[
-          {
-            data,
-            innerRadius: chartType === 'DONUT' ? Math.min(width, height) * 0.2 : 0,
-            outerRadius: Math.min(width, height) * 0.42,
-            paddingAngle: 1,
-            cornerRadius: 3,
-          },
-        ]}
-        hideLegend
-      />
-    );
-  }
+const formatNumber = (value: number | null) =>
+  value === null ? '—' : value.toLocaleString('en-GB', { maximumFractionDigits: 2 });
 
-  if (chartType === 'SCATTER') {
-    return (
-      <ScatterChart
-        width={width}
-        height={height}
-        series={[
-          {
-            data: (points ?? []).map((p, i) => ({ x: p.x, y: p.y, id: i })),
-            color: COLORS[0],
-            valueFormatter: (value, { dataIndex }) =>
-              value ? `${(points ?? [])[dataIndex]?.label ?? ''} (${value.x}, ${value.y})` : '',
-          },
-        ]}
-        xAxis={[{ label: measures[0]?.label, tickLabelStyle: AXIS_TEXT }]}
-        yAxis={[{ label: measures[1]?.label, tickLabelStyle: AXIS_TEXT }]}
-        hideLegend
-        grid={{ horizontal: true, vertical: true }}
-        sx={GRID_SX}
-      />
-    );
-  }
+/** Short axis ticks, so large totals fit beside the plot. */
+const formatTick = (value: number) =>
+  value.toLocaleString('en-GB', { notation: 'compact', maximumFractionDigits: 1 });
 
-  if (chartType === 'LINE' || chartType === 'AREA') {
-    return (
-      <LineChart
-        width={width}
-        height={height}
-        series={series.map((s) => ({
-          ...s,
-          area: chartType === 'AREA',
-          showMark: groups.length <= 24,
-          connectNulls: true,
-        }))}
-        xAxis={[{ data: groups, scaleType: 'point', disableLine: true, tickLabelStyle: AXIS_TEXT }]}
-        yAxis={[{ disableLine: true, disableTicks: true, tickLabelStyle: AXIS_TEXT }]}
-        hideLegend
-        margin={margin}
-        grid={{ horizontal: true }}
-        sx={GRID_SX}
-      />
-    );
-  }
-
-  if (chartType === 'BAR_HORIZONTAL') {
-    return (
-      <BarChart
-        layout="horizontal"
-        width={width}
-        height={height}
-        series={series}
-        yAxis={[
-          {
-            data: groups,
-            scaleType: 'band',
-            disableLine: true,
-            disableTicks: true,
-            width: 110,
-            tickLabelStyle: AXIS_TEXT,
-          },
-        ]}
-        xAxis={[{ disableLine: true, disableTicks: true, tickLabelStyle: AXIS_TEXT }]}
-        hideLegend
-        margin={margin}
-        grid={{ vertical: true }}
-        sx={GRID_SX}
-      />
-    );
-  }
+function Scatter({ result }: { result: ChartResult }) {
+  const [plotRef, { width, height }] = useElementSize<HTMLDivElement>();
+  const points = result.points ?? [];
 
   return (
-    <BarChart
-      width={width}
-      height={height}
-      series={series.map((s) => (chartType === 'BAR_STACKED' ? { ...s, stack: 'total' } : s))}
-      xAxis={[
-        {
-          data: groups,
-          scaleType: 'band',
-          disableLine: true,
-          disableTicks: true,
-          categoryGapRatio: 0.35,
-          tickLabelStyle: AXIS_TEXT,
-        },
-      ]}
-      yAxis={[{ disableLine: true, disableTicks: true, width: 48, tickLabelStyle: AXIS_TEXT }]}
-      hideLegend
-      margin={margin}
-      grid={{ horizontal: true }}
-      sx={GRID_SX}
-    />
+    <div ref={plotRef} className="relative flex-1 min-h-0">
+      {width > 0 && height > 0 && (
+        <ScatterChart
+          width={width}
+          height={height}
+          series={[
+            {
+              data: points.map((p, i) => ({ x: p.x, y: p.y, id: i })),
+              color: COLORS[0],
+              valueFormatter: (value, { dataIndex }) =>
+                value ? `${points[dataIndex]?.label ?? ''} (${value.x}, ${value.y})` : '',
+            },
+          ]}
+          xAxis={[{ label: result.measures[0]?.label, tickLabelStyle: AXIS_TEXT }]}
+          yAxis={[{ label: result.measures[1]?.label, tickLabelStyle: AXIS_TEXT }]}
+          hideLegend
+          grid={{ horizontal: true, vertical: true }}
+          sx={{
+            '& .MuiChartsGrid-line': { stroke: 'var(--color-gray-200)', strokeDasharray: '3 3' },
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -175,77 +88,110 @@ interface ReportChartBlockProps {
   className?: string;
 }
 
+/** One chart of a report, drawn as the matching dashboard card. It sizes itself within the
+ * report's wrapping row: it grows to share the space, a wide one claiming more, up to half the row. */
 export function ReportChartBlock({
   block,
   period,
   fallbackTitle,
-  className,
+  className: extraClassName,
 }: ReportChartBlockProps) {
   const { data, isLoading, isError, error } = useRunReportBlock('CHART', block, period);
-  const [plotRef, plotSize] = useElementSize<HTMLDivElement>();
   const result = data?.type === 'CHART' ? data : null;
+  const chartType = result?.chartType ?? block.chartType;
+  const className = cn(
+    // Never more than half the row (less half the gap), except on small screens.
+    'min-w-0 lg:max-w-[calc(50%-0.375rem)]',
+    result && needsWideCard(result) ? 'flex-[2_1_44rem]' : 'flex-[1_1_22rem]',
+    extraClassName,
+  );
 
-  const isEmpty =
-    !!result &&
-    (result.chartType === 'SCATTER' ? !result.points?.length : result.rows.length === 0);
+  const title = block.title || fallbackTitle;
+  const subtitle = [
+    chartType ? CHART_TYPE_LABELS[chartType] : '',
+    result?.groupBy ? `by ${result.groupBy.label.toLowerCase()}` : '',
+    result?.truncated ? 'incomplete, dataset too large' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
-  // Pies colour by group, everything else by measure.
-  const legend =
-    result && (result.chartType === 'PIE' || result.chartType === 'DONUT')
-      ? result.rows
-          .filter((row) => (row.values[0] ?? 0) > 0)
-          .map((row, i) => ({ label: row.group, color: COLORS[i % COLORS.length] }))
-      : (result?.chartType === 'SCATTER' ? [] : (result?.measures ?? [])).map((m, i) => ({
-          label: m.label,
-          color: COLORS[i % COLORS.length],
-        }));
+  const rows = result?.rows ?? [];
+  const buckets = rows.map((row) => ({ label: row.group, detail: row.group }));
+  const series = (result?.measures ?? []).map((measure, i) => ({
+    label: measure.label,
+    color: COLORS[i % COLORS.length],
+    data: rows.map((row) => row.values[i] ?? null),
+    valueFormatter: formatNumber,
+  }));
+  const errorText = isError ? apiErrorMessage(error, 'This chart could not be loaded.') : undefined;
+
+  const shared = {
+    title,
+    subtitle,
+    buckets,
+    series,
+    isLoading,
+    isError,
+    errorText,
+    emptyText: EMPTY_TEXT,
+    axisFormatter: formatTick,
+    className,
+  };
+
+  if (chartType === 'LINE' || chartType === 'AREA') {
+    return <PeriodLineChart {...shared} area={chartType === 'AREA'} />;
+  }
+
+  if (chartType === 'BAR' || chartType === 'BAR_STACKED' || chartType === 'BAR_HORIZONTAL') {
+    return (
+      <PeriodBarChart
+        {...shared}
+        stacked={chartType === 'BAR_STACKED'}
+        horizontal={chartType === 'BAR_HORIZONTAL'}
+        wholeNumbers={series.every((s) =>
+          s.data.every((value) => value === null || Number.isInteger(value)),
+        )}
+      />
+    );
+  }
+
+  // Pies colour by group and only show the groups that have something to slice.
+  const slices = rows
+    .filter((row) => (row.values[0] ?? 0) > 0)
+    .map((row, i) => ({
+      label: row.group,
+      value: row.values[0] as number,
+      color: COLORS[i % COLORS.length],
+    }));
+  const isEmpty = chartType === 'SCATTER' ? !result?.points?.length : slices.length === 0;
 
   return (
-    <div className={cn(cardClass('flex flex-col gap-2 p-4 h-96', 'glass'), className)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 truncate">
-            {block.title || fallbackTitle}
-          </h3>
-          <span className="text-xs text-gray-400">
-            {block.chartType ? CHART_TYPE_LABELS[block.chartType] : ''}
-            {result?.groupBy ? ` · by ${result.groupBy.label.toLowerCase()}` : ''}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-gray-600 max-w-[60%]">
-          {legend.slice(0, 8).map((item) => (
-            <span key={item.label} className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-sm" style={{ background: item.color }} />
-              {item.label}
-            </span>
-          ))}
-        </div>
+    <div
+      className={cn(
+        cardClass('relative hover:z-20 flex flex-col gap-2 p-3 h-60', 'glass'),
+        className,
+      )}
+    >
+      <div className="flex flex-col">
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        <span className="text-xs text-gray-400">{subtitle}</span>
       </div>
 
-      <div ref={plotRef} className="relative flex-1 min-h-0">
-        {isLoading ? (
-          <Skeleton className="h-full w-full" />
-        ) : isError ? (
-          <div className="flex h-full items-center justify-center text-center text-sm text-gray-400">
-            {apiErrorMessage(error, 'This chart could not be loaded.')}
-          </div>
-        ) : isEmpty ? (
-          <div className="flex h-full items-center justify-center text-sm text-gray-400">
-            No data for this selection.
-          </div>
-        ) : (
-          result &&
-          plotSize.width > 0 &&
-          plotSize.height > 0 && (
-            <Plot result={result} width={plotSize.width} height={plotSize.height} />
-          )
-        )}
-      </div>
-
-      {result?.truncated && (
-        <p className="text-xs text-amber-600">
-          Only the first part of a very large dataset was read, so these figures may be incomplete.
-        </p>
+      {isLoading ? (
+        <Skeleton className="flex-1 min-h-0 w-full" />
+      ) : isError || isEmpty || !result ? (
+        <div className="flex flex-1 min-h-0 items-center justify-center text-center text-sm text-gray-400">
+          {errorText ?? EMPTY_TEXT}
+        </div>
+      ) : chartType === 'SCATTER' ? (
+        <Scatter result={result} />
+      ) : (
+        <PieBreakdown
+          className="flex-1"
+          slices={slices}
+          valueLabel={result.measures[0]?.label}
+          formatValue={formatNumber}
+        />
       )}
     </div>
   );

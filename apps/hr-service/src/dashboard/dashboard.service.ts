@@ -3,7 +3,11 @@ import { RequestUser } from '@work-phelo/types';
 import { AnnouncementsService } from '../announcements/announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AvatarUrlResolverService } from '../common/avatar-url-resolver.service';
-import { DashboardKpis, QueryDashboardKpisDto } from './dto/dashboard-kpis.dto';
+import {
+  DashboardKpis,
+  QueryDashboardKpisDto,
+  QueryDashboardRangeDto,
+} from './dto/dashboard-kpis.dto';
 
 const DAY_MS = 86_400_000;
 
@@ -76,6 +80,22 @@ export interface OutTodayEntry {
   leaveType: string;
   /** Last day of the leave, as YYYY-MM-DD. */
   endDate: string;
+}
+
+export interface OnLeaveEntry extends OutTodayEntry {
+  /** First day of the leave, as YYYY-MM-DD. */
+  startDate: string;
+  totalDays: number;
+}
+
+export interface MovementEntry {
+  employeeId: string;
+  employeeName: string;
+  jobTitle: string | null;
+  department: string | null;
+  avatarUrl: string | null;
+  /** The hire or exit day, as YYYY-MM-DD. */
+  date: string;
 }
 
 export interface PayrollStatusRun {
@@ -1009,6 +1029,115 @@ export class DashboardService {
         leaveType: r.leaveType.name,
         endDate: dayKey(r.endDate),
       })),
+    };
+  }
+
+  /**
+   * Approved leave overlapping the range: the requests behind the "On Leave" KPI,
+   * so it applies the same filter as that count.
+   */
+  async getOnLeave(
+    tenantId: string,
+    query: QueryDashboardRangeDto,
+  ): Promise<{ onLeave: OnLeaveEntry[] }> {
+    const from = startOfDay(query.fromDate);
+    const afterTo = new Date(startOfDay(query.toDate).getTime() + DAY_MS);
+
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: {
+        tenantId,
+        status: 'APPROVED',
+        startDate: { lt: afterTo },
+        endDate: { gte: from },
+      },
+      orderBy: [{ startDate: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        totalDays: true,
+        leaveType: { select: { name: true } },
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    const avatarUrls = await this.avatarUrlResolver.resolveMany(
+      requests.map((r) => r.employee.avatarUrl),
+    );
+
+    return {
+      onLeave: requests.map((r, index) => ({
+        id: r.id,
+        employeeId: r.employee.id,
+        employeeName: `${r.employee.firstName} ${r.employee.lastName}`,
+        department: r.employee.department?.name ?? null,
+        avatarUrl: avatarUrls[index] ?? null,
+        leaveType: r.leaveType.name,
+        startDate: dayKey(r.startDate),
+        endDate: dayKey(r.endDate),
+        totalDays: Number(r.totalDays),
+      })),
+    };
+  }
+
+  /**
+   * Who joined and who left within the range: the people behind the "Hires & Exits"
+   * KPI. Someone who did both appears in both lists, as they do in its counts.
+   */
+  async getHiresAndExits(
+    tenantId: string,
+    query: QueryDashboardRangeDto,
+  ): Promise<{ hires: MovementEntry[]; exits: MovementEntry[] }> {
+    const range = {
+      gte: startOfDay(query.fromDate),
+      lt: new Date(startOfDay(query.toDate).getTime() + DAY_MS),
+    };
+
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, OR: [{ hireDate: range }, { offboardedAt: range }] },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        jobTitle: true,
+        avatarUrl: true,
+        hireDate: true,
+        offboardedAt: true,
+        department: { select: { name: true } },
+      },
+    });
+
+    const avatarUrls = await this.avatarUrlResolver.resolveMany(
+      employees.map((e) => e.avatarUrl),
+    );
+
+    const listBy = (dateOf: (e: (typeof employees)[number]) => Date | null) =>
+      employees
+        .flatMap((e, index) => {
+          const at = dateOf(e);
+          if (!at || at < range.gte || at >= range.lt) return [];
+          return {
+            employeeId: e.id,
+            employeeName: `${e.firstName} ${e.lastName}`,
+            jobTitle: e.jobTitle,
+            department: e.department?.name ?? null,
+            avatarUrl: avatarUrls[index] ?? null,
+            date: dayKey(at),
+          };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      hires: listBy((e) => e.hireDate),
+      exits: listBy((e) => e.offboardedAt),
     };
   }
 

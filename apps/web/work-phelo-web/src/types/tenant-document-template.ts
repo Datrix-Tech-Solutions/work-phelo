@@ -4,6 +4,24 @@ import type {
   SlotPosition,
   WatermarkMode,
 } from '@/components/molecules/settings/document-template/templateConfig';
+import type { TenantDocumentProfile } from '@/types/tenant-document-profile';
+
+/** The parts of the document profile that appear on a document. */
+export type DocumentIdentity = Pick<
+  TenantDocumentProfile,
+  | 'displayName'
+  | 'legalName'
+  | 'registrationNumber'
+  | 'physicalAddress'
+  | 'postalAddress'
+  | 'phone'
+  | 'email'
+  | 'website'
+  | 'logoUrl'
+  | 'signatureUrl'
+  | 'authorizedSignatoryName'
+  | 'authorizedSignatoryTitle'
+>;
 
 /** Layout settings persisted for a tenant's generated documents. */
 export interface TenantDocumentTemplateConfig {
@@ -45,6 +63,12 @@ export interface TenantDocumentTemplate {
   version: number;
   defaultsApplied: boolean;
   updatedAt: string | null;
+}
+
+/** The read-only template and company identity used to render a real document. */
+export interface TenantDocumentRender {
+  template: Pick<TenantDocumentTemplate, 'config' | 'version' | 'defaultsApplied' | 'watermarkUrl'>;
+  profile: DocumentIdentity;
 }
 
 export interface UpsertTenantDocumentTemplatePayload {

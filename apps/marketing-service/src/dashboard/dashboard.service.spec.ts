@@ -48,7 +48,11 @@ describe('DashboardService', () => {
   };
 
   let prisma: {
-    marketingProspect: { count: jest.Mock; groupBy: jest.Mock };
+    marketingProspect: {
+      count: jest.Mock;
+      groupBy: jest.Mock;
+      findMany: jest.Mock;
+    };
     marketingProspectProduct: { aggregate: jest.Mock; findMany: jest.Mock };
     marketingClient: {
       count: jest.Mock;
@@ -73,6 +77,7 @@ describe('DashboardService', () => {
       marketingProspect: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       marketingProspectProduct: {
         aggregate: jest
@@ -210,6 +215,135 @@ describe('DashboardService', () => {
     expect(grouped.where.createdAt.lt.toISOString()).toBe(
       '2026-10-10T00:00:00.000Z',
     );
+  });
+
+  it('lists a stage’s open prospects for the period, narrowed to the caller without view-all', async () => {
+    prisma.marketingProspect.findMany.mockResolvedValue([
+      {
+        id: 'pr-1',
+        companyName: 'Kofi Ltd',
+        assignedUserId: 'rep-1',
+        products: [{ expectedValue: D('100') }, { expectedValue: D('50.5') }],
+      },
+    ]);
+    assignees.namesFor.mockResolvedValue(new Map([['rep-1', 'Ama Mensah']]));
+
+    const result = await service.stageProspects(rep, {
+      stageId: 's-1',
+      fromDate: query.fromDate,
+      toDate: query.toDate,
+      userId: 'someone-else',
+    });
+
+    expect(prisma.marketingProspect.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: 'tenant-1',
+          assignedUserId: 'rep-1',
+          client: { is: null },
+          createdAt: {
+            gte: new Date('2026-10-01T00:00:00.000Z'),
+            lt: new Date('2026-10-10T00:00:00.000Z'),
+          },
+          pipelineStageId: 's-1',
+        },
+      }),
+    );
+    expect(result.prospects).toEqual([
+      {
+        prospectId: 'pr-1',
+        companyName: 'Kofi Ltd',
+        assignedUserName: 'Ama Mensah',
+        expected: '150.50',
+      },
+    ]);
+  });
+
+  it('lists the deals won in the period with who bought what', async () => {
+    prisma.marketingClientBilling.findMany.mockResolvedValue([
+      { clientId: 'c-1', productId: 'p-1', updatedAt: new Date('2026-10-05') },
+      { clientId: 'c-2', productId: 'p-1', updatedAt: new Date('2026-09-03') },
+    ]);
+    prisma.marketingClientProduct.findMany.mockResolvedValue([
+      { clientId: 'c-1', productId: 'p-1', expectedValue: D('1000') },
+      { clientId: 'c-2', productId: 'p-1', expectedValue: D('400') },
+    ]);
+    prisma.marketingClient.findMany.mockResolvedValue([
+      { id: 'c-1', companyName: 'Kofi Ltd' },
+    ]);
+    prisma.marketingCrmSettingOption.findMany.mockResolvedValue([
+      { id: 'p-1', name: 'Fire' },
+    ]);
+
+    const { deals } = await service.wonDealList(manager, query);
+
+    expect(deals).toEqual([
+      {
+        clientId: 'c-1',
+        clientName: 'Kofi Ltd',
+        productId: 'p-1',
+        productName: 'Fire',
+        value: '1000.00',
+        date: '2026-10-05',
+      },
+    ]);
+  });
+
+  it('adds up the period’s invoices per client, largest first', async () => {
+    targets.invoiceRows.mockResolvedValue([
+      { clientId: 'c-1', amount: D('100'), createdAt: new Date('2026-10-02') },
+      { clientId: 'c-2', amount: D('500'), createdAt: new Date('2026-10-03') },
+      { clientId: 'c-1', amount: D('50'), createdAt: new Date('2026-10-09') },
+      { clientId: 'c-1', amount: D('999'), createdAt: new Date('2026-09-09') },
+    ]);
+    prisma.marketingClient.findMany.mockResolvedValue([
+      { id: 'c-1', companyName: 'Kofi Ltd' },
+      { id: 'c-2', companyName: 'Ama Ltd' },
+    ]);
+
+    const { clients } = await service.revenueByClient(manager, query);
+
+    expect(clients).toEqual([
+      { clientId: 'c-2', clientName: 'Ama Ltd', amount: '500.00' },
+      { clientId: 'c-1', clientName: 'Kofi Ltd', amount: '150.00' },
+    ]);
+  });
+
+  it('lists the clients created in the range, narrowed to the caller without view-all', async () => {
+    prisma.marketingClient.findMany.mockResolvedValue([
+      {
+        id: 'c-1',
+        companyName: 'Kofi Ltd',
+        assignedUserId: 'rep-1',
+        createdAt: new Date('2026-10-04T10:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.newClients(rep, {
+      fromDate: query.fromDate,
+      toDate: query.toDate,
+    });
+
+    expect(prisma.marketingClient.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: 'tenant-1',
+          assignedUserId: 'rep-1',
+          createdAt: {
+            gte: new Date('2026-10-01T00:00:00.000Z'),
+            lt: new Date('2026-10-10T00:00:00.000Z'),
+          },
+        },
+      }),
+    );
+    expect(result.clients).toEqual([
+      {
+        clientId: 'c-1',
+        companyName: 'Kofi Ltd',
+        assignedUserName: 'Unknown user',
+        createdDate: '2026-10-04',
+      },
+    ]);
   });
 
   it('counts conversions among the prospects created in the period', async () => {

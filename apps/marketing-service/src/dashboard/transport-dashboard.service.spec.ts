@@ -57,6 +57,86 @@ describe('TransportDashboardService', () => {
     fleet.list.mockResolvedValue({ data: [] });
   });
 
+  describe('tripList', () => {
+    const range = { fromDate: '2026-10-01', toDate: '2026-10-31' };
+
+    it('lists only the overdue trips, and only the ones on route', async () => {
+      trips.activeTrips.mockResolvedValue([
+        trip({ requestId: 'booked' }),
+        trip({ requestId: 'out', state: 'ON_ROUTE' }),
+        trip({ requestId: 'late', state: 'ON_ROUTE', overdue: true }),
+      ]);
+
+      const onRoute = await service.tripList(user, {
+        ...range,
+        list: 'ON_ROUTE',
+      });
+      const overdue = await service.tripList(user, {
+        ...range,
+        list: 'OVERDUE',
+      });
+
+      expect(onRoute.trips.map((t) => t.requestId)).toEqual(['out', 'late']);
+      expect(overdue.trips.map((t) => t.requestId)).toEqual(['late']);
+      expect(prisma.marketingTransportRequest.findMany).not.toHaveBeenCalled();
+    });
+
+    it('lists every request raised within the range, whatever its status', async () => {
+      await service.tripList(user, { ...range, list: 'REQUESTED' });
+
+      expect(prisma.marketingTransportRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'tenant-1',
+            createdAt: {
+              gte: new Date('2026-10-01T00:00:00.000Z'),
+              lt: new Date('2026-11-01T00:00:00.000Z'),
+            },
+          },
+        }),
+      );
+    });
+
+    it('lists the trips completed within the range', async () => {
+      prisma.marketingTransportRequest.findMany.mockResolvedValue([
+        {
+          id: 'req-9',
+          requesterName: 'Efua',
+          destination: 'Kumasi',
+          travelDate: new Date('2026-10-05T00:00:00.000Z'),
+          departureTime: '09:00',
+          returnTime: null,
+          vehicleName: 'Hilux',
+          status: 'COMPLETED',
+        },
+      ]);
+
+      const result = await service.tripList(user, {
+        ...range,
+        list: 'COMPLETED',
+      });
+
+      expect(prisma.marketingTransportRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'tenant-1',
+            status: 'COMPLETED',
+            completedAt: {
+              gte: new Date('2026-10-01T00:00:00.000Z'),
+              lt: new Date('2026-11-01T00:00:00.000Z'),
+            },
+          },
+        }),
+      );
+      expect(result.trips).toEqual([
+        expect.objectContaining({
+          requestId: 'req-9',
+          travelDate: '2026-10-05',
+        }),
+      ]);
+    });
+  });
+
   describe('summary', () => {
     it('counts today, on route and overdue trips from the active trips', async () => {
       trips.activeTrips.mockResolvedValue([

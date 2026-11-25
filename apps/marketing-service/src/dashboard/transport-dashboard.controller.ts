@@ -23,6 +23,7 @@ import {
   QueryDashboardGrowthDto,
   QueryDashboardSummaryDto,
 } from './dto/dashboard-summary.dto';
+import { QueryTransportDashboardTripsDto } from './dto/transport-dashboard.dto';
 import { TransportDashboardService } from './transport-dashboard.service';
 
 type AuthedRequest = Request & { user: RequestUser };
@@ -53,6 +54,19 @@ export class TransportDashboardController {
     @Req() request: AuthedRequest,
   ) {
     return this.service.summary(request.user, query);
+  }
+
+  @Get('trips')
+  @RequireAnyPermission(P.REQUESTS_VIEW_ALL, P.REQUESTS_APPROVE_ALL)
+  @ApiOperation({
+    summary: 'The trips on route, overdue, completed, or cancelled or rejected',
+  })
+  @ApiOkResponse({ description: 'The trips behind that count.' })
+  tripList(
+    @Query() query: QueryTransportDashboardTripsDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.tripList(request.user, query);
   }
 
   @Get('trend')

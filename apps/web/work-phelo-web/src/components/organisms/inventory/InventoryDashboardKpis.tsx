@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
 import {
   AlertTriangle,
   Boxes,
@@ -11,6 +12,10 @@ import {
   Wallet,
 } from 'lucide-react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import {
+  InventoryKpiPanel,
+  type InventoryKpi,
+} from '@/components/organisms/inventory/InventoryKpiPanel';
 import {
   getItemValue,
   getStockStatus,
@@ -59,11 +64,22 @@ export function InventoryDashboardKpis() {
     };
   }, [items, warehouses]);
 
+  // Open state is kept apart from the figure, so the panel keeps its content while it slides shut.
+  const [kpi, setKpi] = useState<InventoryKpi>('value');
+  const [panelOpen, setPanelOpen] = useState(false);
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const base = `/${tenantSlug}/operations/inventory`;
+  const opens = (next: InventoryKpi) => () => {
+    setKpi(next);
+    setPanelOpen(true);
+  };
+
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
           label="Total Items"
+          href={`${base}/items`}
           value={stats.totalItems.toLocaleString()}
           icon={Boxes}
           iconColor={MODULE_COLOR}
@@ -71,6 +87,7 @@ export function InventoryDashboardKpis() {
         />
         <KpiCard
           label="Total Inventory Value"
+          onClick={opens('value')}
           value={formatInventoryValue(stats.totalValue)}
           icon={Wallet}
           iconColor="#1baf7a"
@@ -78,6 +95,7 @@ export function InventoryDashboardKpis() {
         />
         <KpiCard
           label="Out of Stock"
+          onClick={opens('out')}
           value={stats.outOfStock.toLocaleString()}
           icon={PackageX}
           iconColor="#ef4444"
@@ -85,6 +103,7 @@ export function InventoryDashboardKpis() {
         />
         <KpiCard
           label="Total Warehouses"
+          href={`${base}/warehouses`}
           value={stats.warehouses.toLocaleString()}
           icon={Warehouse}
           iconColor="#8b5cf6"
@@ -94,6 +113,7 @@ export function InventoryDashboardKpis() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
           label="Low Stock Items"
+          onClick={opens('low')}
           value={stats.lowStock.toLocaleString()}
           icon={AlertTriangle}
           iconColor="#f59e0b"
@@ -101,6 +121,7 @@ export function InventoryDashboardKpis() {
         />
         <KpiCard
           label="Pending Purchase Orders"
+          onClick={opens('pending')}
           value={orders.pendingOrders.toLocaleString()}
           icon={ClipboardList}
           iconColor="#2a78d6"
@@ -109,6 +130,7 @@ export function InventoryDashboardKpis() {
         />
         <KpiCard
           label="Owed to Suppliers"
+          onClick={opens('owed')}
           value={formatInventoryValue(orders.amountOwed)}
           icon={Wallet}
           iconColor="#ef4444"
@@ -123,6 +145,7 @@ export function InventoryDashboardKpis() {
         />
         <KpiCard
           label="Suppliers"
+          href={`${base}/suppliers-customers`}
           value={suppliers.filter((p) => p.status === 'ACTIVE').length.toLocaleString()}
           icon={Truck}
           iconColor="#d97706"
@@ -135,6 +158,7 @@ export function InventoryDashboardKpis() {
           isLoading={suppliersLoading}
         />
       </div>
+      <InventoryKpiPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} kpi={kpi} />
     </>
   );
 }

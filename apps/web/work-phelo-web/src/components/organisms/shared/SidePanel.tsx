@@ -20,6 +20,8 @@ interface SidePanelProps {
   glass?: boolean;
   /** Rendered at the end of the description line (only shown alongside a description). */
   descriptionAction?: React.ReactNode;
+  /** Rendered in the header, before the close button. */
+  headerAction?: React.ReactNode;
   /** Opt-in multi-entry lock (see useMultiEntryPanel). Shows a lock toggle in the header;
    * while locked, the backdrop and Escape no longer close the panel — only the X does. */
   lock?: { locked: boolean; onToggle: () => void };
@@ -43,6 +45,7 @@ export function SidePanel({
   width = 'sm:w-[960px]',
   glass = false,
   descriptionAction,
+  headerAction,
   lock,
   savePrompt,
 }: SidePanelProps) {
@@ -140,6 +143,8 @@ export function SidePanel({
                 </div>
               )}
             </div>
+
+            {headerAction}
 
             {lock && (
               <button

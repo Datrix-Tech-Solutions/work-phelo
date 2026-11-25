@@ -26,6 +26,7 @@ import {
   QueryDashboardGrowthDto,
   QueryDashboardRevenueDto,
   QueryDashboardSalesPersonnelDto,
+  QueryDashboardStageProspectsDto,
   QueryDashboardSummaryDto,
   QueryDashboardTargetsDto,
 } from './dto/dashboard-summary.dto';
@@ -70,6 +71,95 @@ export class DashboardController {
     @Req() request: AuthedRequest,
   ) {
     return this.service.summary(request.user, query);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.stageProspects delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('pipeline-prospects')
+  @ApiOperation({
+    summary: 'The open prospects in one pipeline stage for a period',
+    description:
+      'The prospects behind a stage card, scoped like the summary it comes from.',
+  })
+  @ApiOkResponse({ description: 'Prospects, newest first.' })
+  stageProspects(
+    @Query() query: QueryDashboardStageProspectsDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.stageProspects(request.user, query);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.wonDealList delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('won-deals')
+  @ApiOperation({
+    summary: 'The deals won in a period',
+    description:
+      'The deals behind the sales won figure. Scoped like the summary it comes from.',
+  })
+  @ApiOkResponse({ description: 'The deals won in a period.' })
+  wonDealList(
+    @Query() query: QueryDashboardRevenueDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.wonDealList(request.user, query);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.revenueByClient delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('revenue-by-client')
+  @ApiOperation({
+    summary: 'Achieved revenue per client for a period',
+    description:
+      'Invoices raised in the range, added up per client. Scoped like the summary it comes from.',
+  })
+  @ApiOkResponse({ description: 'Achieved revenue per client for a period.' })
+  revenueByClient(
+    @Query() query: QueryDashboardRevenueDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.revenueByClient(request.user, query);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.periodProspects delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('period-prospects')
+  @ApiOperation({
+    summary: 'Prospects created in a period',
+    description:
+      'With whether each has become a client. Scoped like the summary it comes from.',
+  })
+  @ApiOkResponse({ description: 'Prospects created in a period.' })
+  periodProspects(
+    @Query() query: QueryDashboardRevenueDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.periodProspects(request.user, query);
+  }
+
+  @PermissionExempt(
+    'service-policy',
+    'DashboardController.newClients delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('new-clients')
+  @ApiOperation({
+    summary: 'Clients created in a period',
+    description: 'Scoped like the growth chart they come from.',
+  })
+  @ApiOkResponse({ description: 'Clients, newest first.' })
+  newClients(
+    @Query() query: QueryDashboardRevenueDto,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.service.newClients(request.user, query);
   }
 
   @PermissionExempt(

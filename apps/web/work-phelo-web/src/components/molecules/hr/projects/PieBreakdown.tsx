@@ -15,7 +15,11 @@ export interface PieSlice {
 interface Props {
   slices: PieSlice[];
   /** Singular noun for the legend and tooltip, e.g. "task". */
-  unit: string;
+  unit?: string;
+  /** Names the value in the tooltip when it is not a count of `unit`, e.g. "Total salary". */
+  valueLabel?: string;
+  /** How a value is shown. Defaults to the plain number. */
+  formatValue?: (value: number) => string;
   className?: string;
 }
 
@@ -23,7 +27,13 @@ interface Props {
  * A pie with its legend beside it, styled like the HR dashboard's department distribution: hover a slice
  * for a tooltip, and the legend dims everything else. Give it a height; the pie fits inside.
  */
-export function PieBreakdown({ slices, unit, className }: Props) {
+export function PieBreakdown({
+  slices,
+  unit = '',
+  valueLabel,
+  formatValue = String,
+  className,
+}: Props) {
   const [hovered, setHovered] = useState<number | null>(null);
   const [areaRef, area] = useElementSize<HTMLDivElement>();
   const isDark = useThemeStore((s) => s.theme === 'dark');
@@ -73,8 +83,8 @@ export function PieBreakdown({ slices, unit, className }: Props) {
                   </span>
                 </div>
                 <div className="border-t border-[#374151] pt-1 flex justify-between gap-4">
-                  <span className="text-[#9ca3af] capitalize">{plural(2)}</span>
-                  <span className="font-medium">{active.value}</span>
+                  <span className="text-[#9ca3af] capitalize">{valueLabel ?? plural(2)}</span>
+                  <span className="font-medium">{formatValue(active.value)}</span>
                 </div>
               </div>
               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm" />
@@ -82,7 +92,7 @@ export function PieBreakdown({ slices, unit, className }: Props) {
           )}
         </div>
 
-        <ul className="flex min-w-0 flex-1 flex-col gap-2 self-stretch justify-center overflow-y-auto">
+        <ul className="flex min-w-0 flex-1 flex-col gap-2 self-stretch [justify-content:safe_center] overflow-y-auto">
           {data.map((slice) => {
             const dimmed = hovered !== null && hovered !== slice.id;
             return (
@@ -108,7 +118,7 @@ export function PieBreakdown({ slices, unit, className }: Props) {
                       {slice.label}
                     </span>
                     <span className="truncate text-[10px] font-semibold text-gray-700">
-                      {slice.value} {plural(slice.value)}
+                      {formatValue(slice.value)} {unit && plural(slice.value)}
                     </span>
                   </span>
                 </span>

@@ -22,6 +22,17 @@ export class QueryDashboardKpisDto {
   prevToDate!: string;
 }
 
+/** A date range, for the lists behind the KPI cards. */
+export class QueryDashboardRangeDto {
+  @ApiProperty({ example: '2026-10-01', description: 'First day, inclusive.' })
+  @IsDateString({ strict: true })
+  fromDate!: string;
+
+  @ApiProperty({ example: '2026-10-11', description: 'Last day, inclusive.' })
+  @IsDateString({ strict: true })
+  toDate!: string;
+}
+
 export interface DashboardKpis {
   headcount: {
     current: number;
