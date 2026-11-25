@@ -10,6 +10,7 @@ import { ReportToolbar } from '@/components/molecules/accounting/ReportToolbar';
 import {
   ReportPeriodFields,
   useReportPeriod,
+  useGenerateFromLink,
 } from '@/components/molecules/accounting/ReportPeriodFields';
 import {
   ClosingRow,
@@ -113,6 +114,7 @@ export function ProfitAndLossView() {
           : comparativeRange(fromDate, toDate, compareMode),
     });
   };
+  useGenerateFromLink(period, generate);
 
   const data = report.data;
   const comparativeData = comparativeReport.data;

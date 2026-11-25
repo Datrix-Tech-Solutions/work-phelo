@@ -17,10 +17,11 @@ import {
 import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { apiErrorMessage } from '@/lib/apiError';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { formatDate } from '@/lib/formatters';
 import { pageContent } from '@/lib/layout';
 import { cn } from '@/lib/utils';
-import type { Campaign } from '@/types/marketing';
+import type { CampaignsQuery, Campaign } from '@/types/marketing';
 
 const PAGE_SIZE = 10;
 
@@ -47,6 +48,18 @@ export default function CampaignsPage() {
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  // The filter lives in the link (?status=…), so the stat cards here and on the dashboard set it.
+  const router = useRouter();
+  const pathname = usePathname();
+  const statusFilter = (useSearchParams().get('status') ?? '') as NonNullable<
+    CampaignsQuery['status']
+  >;
+  // A filter changed from a stat card should start on its first page too.
+  const [pagedStatus, setPagedStatus] = useState(statusFilter);
+  if (pagedStatus !== statusFilter) {
+    setPagedStatus(statusFilter);
+    setPage(1);
+  }
   const [panelOpen, setPanelOpen] = useState(false);
   /** The campaign being resent or retried; the form opens with its details. */
   const [reusing, setReusing] = useState<Campaign | null>(null);
@@ -63,6 +76,7 @@ export default function CampaignsPage() {
     page,
     limit: PAGE_SIZE,
     ...(search.trim() ? { search: search.trim() } : {}),
+    ...(statusFilter ? { status: statusFilter } : {}),
   });
   // Looked up from the list, so a campaign that is still sending updates as the list refreshes.
   const viewing = data?.data.find((campaign) => campaign.id === viewingId) ?? null;
@@ -169,6 +183,10 @@ export default function CampaignsPage() {
           onAdd={canCreate ? () => setPanelOpen(true) : undefined}
           onReuse={canCreate ? openReuse : undefined}
           onEdit={canCreate ? openEdit : undefined}
+          statusFilter={statusFilter}
+          onStatusFilter={(status) =>
+            router.replace(status ? `${pathname}?status=${status}` : pathname, { scroll: false })
+          }
           onRowClick={(campaign) => setViewingId(campaign.id)}
           onSend={canSend ? setSending : undefined}
           onCancel={canCancel ? setCancelling : undefined}

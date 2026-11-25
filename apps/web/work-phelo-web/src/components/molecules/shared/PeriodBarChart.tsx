@@ -10,8 +10,8 @@ import { cardClass, cn } from '@/lib/utils';
 export interface PeriodBarSeries {
   label: string;
   color: string;
-  /** One value per bucket, in bucket order. */
-  data: number[];
+  /** One value per bucket, in bucket order; null draws no bar. */
+  data: (number | null)[];
   /** Formats a value in the tooltip. */
   valueFormatter?: (value: number | null) => string;
 }
@@ -19,7 +19,7 @@ export interface PeriodBarSeries {
 interface PeriodBarChartProps {
   title: string;
   subtitle: string;
-  buckets: SeriesBucket[];
+  buckets: Pick<SeriesBucket, 'label' | 'detail'>[];
   series: PeriodBarSeries[];
   isLoading?: boolean;
   isError?: boolean;
@@ -29,12 +29,22 @@ interface PeriodBarChartProps {
   axisFormatter?: (value: number) => string;
   /** Count charts: no fractional ticks. */
   wholeNumbers?: boolean;
+  /** Stacks the series into one bar per bucket instead of placing them side by side. */
+  stacked?: boolean;
+  /** Bars run left to right, with the buckets down the side. */
+  horizontal?: boolean;
+  /** Makes the bars clickable, naming the bar picked by its bucket and series positions. */
+  onBarClick?: (bucketIndex: number, seriesIndex: number) => void;
   className?: string;
 }
 
 // Plot geometry shared with the chart below: the y-axis width and the right margin.
 const AXIS_WIDTH = 48;
 const MARGIN_RIGHT = 8;
+// Used by horizontal bars, whose side axis holds names and whose bottom axis holds numbers.
+const NAME_AXIS_WIDTH = 110;
+const BOTTOM_AXIS_HEIGHT = 25;
+const MARGIN_TOP = 8;
 
 /** Grouped vertical bars over the ranges of a period filter, in a dashboard card. */
 export function PeriodBarChart({
@@ -48,11 +58,35 @@ export function PeriodBarChart({
   emptyText = 'Nothing in this range.',
   axisFormatter = String,
   wholeNumbers,
+  stacked,
+  horizontal,
+  onBarClick,
   className,
 }: PeriodBarChartProps) {
   const [plotRef, plotSize] = useElementSize<HTMLDivElement>();
   const [hovered, setHovered] = useState<number | null>(null);
-  const isEmpty = !isLoading && series.every((s) => s.data.every((value) => value === 0));
+  const isEmpty = !isLoading && series.every((s) => s.data.every((value) => !value));
+
+  const bandAxis = {
+    data: buckets.map((b) => b.label),
+    scaleType: 'band' as const,
+    disableLine: true,
+    disableTicks: true,
+    categoryGapRatio: 0.35,
+    barGapRatio: 0.1,
+    tickLabelStyle: { fontSize: 11, fill: 'var(--color-gray-700)' },
+    valueFormatter: (label: string, context: { location: string }) =>
+      context.location === 'tooltip'
+        ? (buckets.find((b) => b.label === label)?.detail ?? label)
+        : label,
+  };
+  const valueAxis = {
+    disableLine: true,
+    disableTicks: true,
+    ...(wholeNumbers ? { tickMinStep: 1 } : {}),
+    valueFormatter: (value: number) => axisFormatter(value),
+    tickLabelStyle: { fontSize: 10, fill: 'var(--color-gray-500)' },
+  };
 
   return (
     <div
@@ -84,10 +118,14 @@ export function PeriodBarChart({
           // not only the bars. The tooltip is drawn by the card, like the pie charts', so it
           // can never fall outside the page.
           const box = event.currentTarget.getBoundingClientRect();
-          const inner = box.width - AXIS_WIDTH - MARGIN_RIGHT;
-          const x = event.clientX - box.left - AXIS_WIDTH;
-          if (buckets.length === 0 || inner <= 0 || x < 0 || x > inner) return setHovered(null);
-          setHovered(Math.min(buckets.length - 1, Math.floor((x / inner) * buckets.length)));
+          const inner = horizontal
+            ? box.height - MARGIN_TOP - BOTTOM_AXIS_HEIGHT
+            : box.width - AXIS_WIDTH - MARGIN_RIGHT;
+          const at = horizontal
+            ? event.clientY - box.top - MARGIN_TOP
+            : event.clientX - box.left - AXIS_WIDTH;
+          if (buckets.length === 0 || inner <= 0 || at < 0 || at > inner) return setHovered(null);
+          setHovered(Math.min(buckets.length - 1, Math.floor((at / inner) * buckets.length)));
         }}
         onMouseLeave={() => setHovered(null)}
       >
@@ -107,44 +145,35 @@ export function PeriodBarChart({
             <BarChart
               width={plotSize.width}
               height={plotSize.height}
-              series={series.map((s) => ({
+              layout={horizontal ? 'horizontal' : 'vertical'}
+              onItemClick={
+                onBarClick && ((_, item) => onBarClick(item.dataIndex, Number(item.seriesId)))
+              }
+              series={series.map((s, i) => ({
+                id: String(i),
                 data: s.data,
                 label: s.label,
                 color: s.color,
                 valueFormatter: s.valueFormatter,
+                ...(stacked ? { stack: 'total' } : {}),
               }))}
-              xAxis={[
-                {
-                  data: buckets.map((b) => b.label),
-                  scaleType: 'band',
-                  disableLine: true,
-                  disableTicks: true,
-                  categoryGapRatio: 0.35,
-                  barGapRatio: 0.1,
-                  tickLabelStyle: { fontSize: 11, fill: 'var(--color-gray-700)' },
-                  valueFormatter: (label: string, context) =>
-                    context.location === 'tooltip'
-                      ? (buckets.find((b) => b.label === label)?.detail ?? label)
-                      : label,
-                },
-              ]}
+              xAxis={[horizontal ? { ...valueAxis, height: BOTTOM_AXIS_HEIGHT } : bandAxis]}
               yAxis={[
-                {
-                  disableLine: true,
-                  disableTicks: true,
-                  width: AXIS_WIDTH,
-                  ...(wholeNumbers ? { tickMinStep: 1 } : {}),
-                  valueFormatter: (value: number) => axisFormatter(value),
-                  tickLabelStyle: { fontSize: 10, fill: 'var(--color-gray-500)' },
-                },
+                horizontal
+                  ? { ...bandAxis, width: NAME_AXIS_WIDTH }
+                  : { ...valueAxis, width: AXIS_WIDTH },
               ]}
               hideLegend
               slotProps={{ tooltip: { trigger: 'none' } as never }}
               axisHighlight={{ x: 'none', y: 'none' }}
-              margin={{ left: 0, right: MARGIN_RIGHT, top: 8, bottom: 0 }}
-              grid={{ horizontal: true }}
+              margin={{ left: 0, right: MARGIN_RIGHT, top: MARGIN_TOP, bottom: 0 }}
+              grid={horizontal ? { vertical: true } : { horizontal: true }}
               sx={{
-                '& .MuiBarChart-element': { rx: 3, ry: 3 },
+                '& .MuiBarChart-element': {
+                  rx: 3,
+                  ry: 3,
+                  ...(onBarClick && { cursor: 'pointer' }),
+                },
                 // Each series lists its bars in period order (wrapped in a clip group when rounded).
                 '& .MuiBarChart-series > *': { transition: 'filter 150ms ease' },
                 // The hovered period's bars get brighter, with no gray band behind them.
@@ -164,10 +193,20 @@ export function PeriodBarChart({
 
         {!isLoading && !isError && !isEmpty && hovered !== null && buckets[hovered] && (
           <div
-            className="absolute -top-1 z-10 -translate-x-1/2 -translate-y-full pointer-events-none"
-            style={{
-              left: `calc(${AXIS_WIDTH}px + (100% - ${AXIS_WIDTH + MARGIN_RIGHT}px) * ${(hovered + 0.5) / buckets.length})`,
-            }}
+            className={cn(
+              'absolute z-10 -translate-x-1/2 -translate-y-full pointer-events-none',
+              !horizontal && '-top-1',
+            )}
+            style={
+              horizontal
+                ? {
+                    left: '50%',
+                    top: `calc(${MARGIN_TOP}px + (100% - ${MARGIN_TOP + BOTTOM_AXIS_HEIGHT}px) * ${hovered / buckets.length})`,
+                  }
+                : {
+                    left: `calc(${AXIS_WIDTH}px + (100% - ${AXIS_WIDTH + MARGIN_RIGHT}px) * ${(hovered + 0.5) / buckets.length})`,
+                  }
+            }
           >
             <div className="bg-(--chip-dark,#111827) text-white rounded-lg shadow-xl px-2.5 py-1.5 text-[10px] whitespace-nowrap flex flex-col gap-1">
               <div className="font-semibold text-[11px]">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { cardClass, cn } from '@/lib/utils';
@@ -44,6 +45,8 @@ interface GaugeOverviewCardProps {
   isEmpty?: boolean;
   emptyMessage?: string;
   className?: string;
+  /** Makes the card a link to this page; the metric buttons still select their metric. */
+  href?: string;
 }
 
 /**
@@ -62,6 +65,7 @@ export function GaugeOverviewCard({
   isEmpty = false,
   emptyMessage = 'Nothing to show for this period.',
   className,
+  href,
 }: GaugeOverviewCardProps) {
   const [selected, setSelected] = useState<string | null>(null);
   // The key being reset to zero (no transition) just before it sweeps back up, so every
@@ -105,7 +109,13 @@ export function GaugeOverviewCard({
     : defaultCenter;
 
   return (
-    <div className={cn(cardClass('flex flex-col gap-2 p-3 h-60', 'glass'), className)}>
+    <div
+      className={cn(
+        cardClass('flex flex-col gap-2 p-3 h-60', 'glass'),
+        href && 'relative transition-shadow hover:shadow-md',
+        className,
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col">
           <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
@@ -120,7 +130,8 @@ export function GaugeOverviewCard({
         </div>
       ) : (
         <div className="flex flex-1 min-h-0 items-center gap-2">
-          <div className="flex flex-col gap-1.5 shrink-0">
+          {/* Above the card's link overlay, so a metric can still be picked. */}
+          <div className="relative z-[1] flex flex-col gap-1.5 shrink-0">
             {metrics.map((m) => {
               const Icon = m.icon;
               const active = selected === m.key;
@@ -218,6 +229,15 @@ export function GaugeOverviewCard({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Last, so it covers everything not raised above it. */}
+      {href && (
+        <Link
+          href={href}
+          aria-label={title}
+          className="absolute inset-0 rounded-[inherit] focus-visible:outline-2 focus-visible:outline-brand"
+        />
       )}
     </div>
   );

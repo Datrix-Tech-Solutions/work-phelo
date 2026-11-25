@@ -1,5 +1,6 @@
 'use client';
 
+import { useParams } from 'next/navigation';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { Icons } from '@/components/atoms/icons';
 import { GaugeOverviewCard } from '@/components/molecules/shared/GaugeOverviewCard';
@@ -32,6 +33,7 @@ interface TargetsOverviewCardProps {
 
 /** Total target for the period against what has been achieved, as a gauge with selectable figures. */
 export function TargetsOverviewCard({ period, year, userId, className }: TargetsOverviewCardProps) {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { data, isLoading: loadingSummary } = useMarketingDashboard(period, year, userId);
   const { data: overview, isLoading: loadingTargets } = useMarketingTargetsOverview(
     period,
@@ -52,6 +54,7 @@ export function TargetsOverviewCard({ period, year, userId, className }: Targets
   return (
     <GaugeOverviewCard
       title="Targets Overview"
+      href={`/${tenantSlug}/marketing/targets`}
       subtitle={SUBTITLES[period]}
       className={className}
       isLoading={isLoading}

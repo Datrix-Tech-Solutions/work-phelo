@@ -1,16 +1,21 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
-import { MarketingTransportRequestStatus as Status } from '../../prisma/generated/client';
+import {
+  MarketingTransportRequestStatus as Status,
+  Prisma,
+} from '../../prisma/generated/client';
 import { FleetService } from '../fleet/fleet.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TripScheduleService } from '../trips/trip-schedule.service';
-import { toRange } from './range';
+import { Range, toRange } from './range';
 import {
   QueryDashboardGrowthDto,
   QueryDashboardSummaryDto,
 } from './dto/dashboard-summary.dto';
 import {
+  QueryTransportDashboardTripsDto,
   TransportDashboardSummary,
+  TransportDashboardTrip,
   TransportFleetCounts,
   TransportTrendPoint,
 } from './dto/transport-dashboard.dto';
@@ -21,6 +26,41 @@ const ATTENTION_LIMIT = 5;
 const LIST_LIMIT = 8;
 /** Larger than any fleet, so the internal listing is never paged. */
 const ALL_VEHICLES = 100_000;
+
+const requestedWhere = (
+  tenantId: string,
+  range: Range,
+): Prisma.MarketingTransportRequestWhereInput => ({
+  tenantId,
+  createdAt: { gte: range.from, lt: range.to },
+});
+
+const completedWhere = (
+  tenantId: string,
+  range: Range,
+): Prisma.MarketingTransportRequestWhereInput => ({
+  tenantId,
+  status: Status.COMPLETED,
+  completedAt: { gte: range.from, lt: range.to },
+});
+
+/** Cancelled or rejected within the range. */
+const closedWhere = (
+  tenantId: string,
+  range: Range,
+): Prisma.MarketingTransportRequestWhereInput => ({
+  tenantId,
+  OR: [
+    {
+      status: Status.CANCELLED,
+      cancelledAt: { gte: range.from, lt: range.to },
+    },
+    {
+      status: Status.REJECTED,
+      reviewedAt: { gte: range.from, lt: range.to },
+    },
+  ],
+});
 
 /** Figures for the Transport dashboard, across the whole company's requests and fleet. */
 @Injectable()
@@ -40,29 +80,13 @@ export class TransportDashboardService {
     const tenantId = user.tenantId;
     const current = toRange(query.fromDate, query.toDate);
     const previous = toRange(query.prevFromDate, query.prevToDate);
-    const completedIn = (range: { from: Date; to: Date }) =>
+    const completedIn = (range: Range) =>
       this.prisma.marketingTransportRequest.count({
-        where: {
-          tenantId,
-          status: Status.COMPLETED,
-          completedAt: { gte: range.from, lt: range.to },
-        },
+        where: completedWhere(tenantId, range),
       });
-    const closedIn = (range: { from: Date; to: Date }) =>
+    const closedIn = (range: Range) =>
       this.prisma.marketingTransportRequest.count({
-        where: {
-          tenantId,
-          OR: [
-            {
-              status: Status.CANCELLED,
-              cancelledAt: { gte: range.from, lt: range.to },
-            },
-            {
-              status: Status.REJECTED,
-              reviewedAt: { gte: range.from, lt: range.to },
-            },
-          ],
-        },
+        where: closedWhere(tenantId, range),
       });
 
     const [
@@ -148,6 +172,67 @@ export class TransportDashboardService {
     };
   }
 
+  /** The trips behind one of the headline counts, selected the same way as the count. */
+  async tripList(
+    user: RequestUser,
+    query: QueryTransportDashboardTripsDto,
+  ): Promise<{ trips: TransportDashboardTrip[] }> {
+    const tenantId = user.tenantId;
+
+    if (query.list === 'ON_ROUTE' || query.list === 'OVERDUE') {
+      const active = await this.trips.activeTrips(tenantId);
+      const wanted = active.filter((trip) =>
+        query.list === 'OVERDUE' ? trip.overdue : trip.state === 'ON_ROUTE',
+      );
+      return {
+        trips: wanted.map((trip) => ({
+          requestId: trip.requestId,
+          requesterName: trip.requesterName,
+          destination: trip.destination,
+          travelDate: trip.travelDate,
+          departureTime: trip.departureTime,
+          returnTime: trip.returnTime,
+          vehicleName: trip.vehicle?.name ?? null,
+          // A started trip is still an approved request until it is completed.
+          status: Status.APPROVED,
+        })),
+      };
+    }
+
+    const range = toRange(query.fromDate, query.toDate);
+    const rows = await this.prisma.marketingTransportRequest.findMany({
+      where:
+        query.list === 'REQUESTED'
+          ? requestedWhere(tenantId, range)
+          : query.list === 'COMPLETED'
+            ? completedWhere(tenantId, range)
+            : closedWhere(tenantId, range),
+      orderBy: [
+        { travelDate: 'desc' },
+        { departureTime: 'desc' },
+        { id: 'asc' },
+      ],
+      select: {
+        id: true,
+        requesterName: true,
+        destination: true,
+        travelDate: true,
+        departureTime: true,
+        returnTime: true,
+        vehicleName: true,
+        status: true,
+      },
+    });
+
+    return {
+      trips: rows.map(({ id, travelDate, ...row }) => ({
+        ...row,
+        requestId: id,
+        travelDate: travelDate.toISOString().slice(0, 10),
+      })),
+    };
+  }
+
   /** Requests raised and trips completed in each range, for charting over consecutive periods. */
   async trend(
     user: RequestUser,
@@ -164,17 +249,12 @@ export class TransportDashboardService {
     return Promise.all(
       ranges.map(async ({ from, to }) => {
         const window = toRange(from, to);
-        const between = { gte: window.from, lt: window.to };
         const [requested, completed] = await Promise.all([
           this.prisma.marketingTransportRequest.count({
-            where: { tenantId: user.tenantId, createdAt: between },
+            where: requestedWhere(user.tenantId, window),
           }),
           this.prisma.marketingTransportRequest.count({
-            where: {
-              tenantId: user.tenantId,
-              status: Status.COMPLETED,
-              completedAt: between,
-            },
+            where: completedWhere(user.tenantId, window),
           }),
         ]);
         return { fromDate: from, toDate: to, requested, completed };

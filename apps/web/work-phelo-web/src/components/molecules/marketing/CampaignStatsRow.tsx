@@ -1,5 +1,6 @@
 'use client';
 
+import { useParams } from 'next/navigation';
 import { CalendarClock, CheckCircle2, Mail, MessageSquare } from 'lucide-react';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
 import { useCampaigns } from '@/hooks/marketing/useCampaigns';
@@ -10,6 +11,8 @@ const count = (value: number | undefined) => (value === undefined ? '—' : valu
 
 /** Credits left for SMS and email, and how many campaigns are lined up or done. */
 export function CampaignStatsRow() {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const base = `/${tenantSlug}/marketing`;
   // The wallet is only readable with its own permission, so the cards stay out of reach without it.
   const canViewWallet = usePermissionRule('marketing.sms-wallet:VIEW');
   const wallet = useSmsWalletBalance(canViewWallet);
@@ -30,6 +33,7 @@ export function CampaignStatsRow() {
         <>
           <KpiCard
             label="SMS Credits Remaining"
+            href={`${base}/campaign-management/sms-senders`}
             value={count(wallet.data?.availableCredits)}
             icon={MessageSquare}
             iconColor="#2a78d6"
@@ -52,6 +56,7 @@ export function CampaignStatsRow() {
       )}
       <KpiCard
         label="Upcoming Campaigns"
+        href={`${base}/campaigns?status=SCHEDULED`}
         value={count(upcoming.data?.meta.total)}
         icon={CalendarClock}
         iconColor="#8b5cf6"
@@ -59,6 +64,7 @@ export function CampaignStatsRow() {
       />
       <KpiCard
         label="Completed Campaigns"
+        href={`${base}/campaigns?status=COMPLETED,PARTIALLY_COMPLETED`}
         value={count(completedTotal)}
         icon={CheckCircle2}
         iconColor="#1baf7a"

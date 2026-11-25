@@ -1,10 +1,17 @@
 'use client';
 
+import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import { ArrowLeftRight, HandCoins, Receipt, Scale, TrendingUp, Wallet } from 'lucide-react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { DetailKpiCard } from '@/components/molecules/shared/DetailKpiCard';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import {
+  AccountingKpiPanel,
+  type AccountingKpi,
+} from '@/components/organisms/accounting/AccountingKpiPanel';
 import { useAccountingDashboardStats } from '@/hooks';
+import { useAccountingAccess } from '@/hooks/accounting/useAccountingAccess';
 import { formatDay } from '@/lib/dashboardPeriod';
 
 const PERIOD_LABELS: Record<Period, string> = {
@@ -53,7 +60,27 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
   const stats = useAccountingDashboardStats(period, year);
   const base = stats.baseCurrency;
   const periodLabel = PERIOD_LABELS[period];
-  const { prevFromDate, prevToDate } = stats.ranges;
+  const { fromDate, toDate, prevFromDate, prevToDate } = stats.ranges;
+
+  // Open state is kept apart from the figure, so the panel keeps its content while it slides shut.
+  const [kpi, setKpi] = useState<AccountingKpi>('cash');
+  const [panelOpen, setPanelOpen] = useState(false);
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const { canSeePage } = useAccountingAccess();
+  // A card is only clickable for someone who can open the page behind it.
+  const opens = (page: string, next: AccountingKpi) =>
+    canSeePage(page)
+      ? () => {
+          setKpi(next);
+          setPanelOpen(true);
+        }
+      : undefined;
+  // The statements open on the figures' own dates.
+  const statement = (name: string, dates: Record<string, string>) =>
+    canSeePage('financial-reports')
+      ? `/${tenantSlug}/accounting/financial-reports/${name}?${new URLSearchParams(dates)}`
+      : undefined;
+  const profitAndLoss = statement('profit-and-loss', { fromDate, toDate });
 
   // What a trend badge was calculated against, so the percentage can be checked by hand.
   const previousRange = `${formatDay(prevFromDate)} – ${formatDay(prevToDate)}`;
@@ -67,6 +94,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
           label="Cash Position"
+          onClick={opens('cashandbank', 'cash')}
           value={currencyTotals(stats.cashPosition.totals, currency, base)}
           icon={Wallet}
           iconColor={MODULE_COLOR}
@@ -74,6 +102,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         />
         <KpiCard
           label="Net Profit"
+          href={profitAndLoss}
           value={money(base, stats.netProfit.value)}
           icon={TrendingUp}
           iconColor="#1baf7a"
@@ -84,6 +113,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         />
         <KpiCard
           label="Receivables"
+          onClick={opens('accountsreceivable', 'receivables')}
           value={currencyTotals(stats.receivables.totals, currency, base)}
           subPlacement="below"
           sub={[
@@ -98,6 +128,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         />
         <KpiCard
           label="Payables"
+          onClick={opens('expensesandpurchases', 'payables')}
           value={currencyTotals(stats.payables.totals, currency, base)}
           subPlacement="below"
           sub={[
@@ -115,6 +146,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <DetailKpiCard
           label="Total Revenue"
+          href={profitAndLoss}
           value={money(base, stats.revenueAndExpenses.revenue)}
           icon={ArrowLeftRight}
           iconColor="#1baf7a"
@@ -128,6 +160,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         />
         <DetailKpiCard
           label="Net Cash Change"
+          href={statement('cash-flow-statement', { fromDate, toDate })}
           value={money(base, stats.netCash.change)}
           icon={Wallet}
           iconColor={MODULE_COLOR}
@@ -143,6 +176,7 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
         />
         <DetailKpiCard
           label="Net Worth"
+          href={statement('balance-sheet', { asOfDate: toDate })}
           value={money(base, stats.netWorth.value)}
           icon={Scale}
           iconColor="#a855f7"
@@ -156,6 +190,12 @@ export function AccountingDashboardKpis({ period, year, currency }: AccountingDa
           isLoading={stats.netWorth.isLoading}
         />
       </div>
+      <AccountingKpiPanel
+        isOpen={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        kpi={kpi}
+        currency={currency}
+      />
     </div>
   );
 }

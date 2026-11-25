@@ -1,9 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { TypeChip } from '@/components/atoms/TypeChip';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import { StageProspectsPanel } from '@/components/organisms/marketing/StageProspectsPanel';
 import { useMarketingDashboard } from '@/hooks/marketing/useMarketingDashboard';
 import { compactCardGrid } from '@/lib/layout';
 
@@ -26,6 +28,9 @@ interface PipelineStageCardsProps {
 export function PipelineStageCards({ period, year, userId }: PipelineStageCardsProps) {
   const { data, isLoading } = useMarketingDashboard(period, year, userId);
   const stages = data?.pipeline.stages ?? [];
+  // Open state is kept apart from the stage, so the panel keeps its content while it slides shut.
+  const [stage, setStage] = useState<{ stageId: string; name: string } | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -47,22 +52,35 @@ export function PipelineStageCards({ period, year, userId }: PipelineStageCardsP
 
   return (
     <div className={compactCardGrid}>
-      {stages.map((stage) => (
+      {stages.map((item) => (
         <KpiCard
-          key={stage.stageId}
-          label={stage.name}
+          key={item.stageId}
+          label={item.name}
+          onClick={() => {
+            setStage(item);
+            setPanelOpen(true);
+          }}
           badge={
             <TypeChip
-              label={`${stage.prospects} ${stage.prospects === 1 ? 'deal' : 'deals'}`}
+              label={`${item.prospects} ${item.prospects === 1 ? 'deal' : 'deals'}`}
               color="blue"
             />
           }
-          value={money(data?.currency, stage.expected)}
-          sub={[{ label: 'Average value', value: money(data?.currency, stage.average) }]}
+          value={money(data?.currency, item.expected)}
+          sub={[{ label: 'Average value', value: money(data?.currency, item.average) }]}
           subPlacement="below"
           compact
         />
       ))}
+      <StageProspectsPanel
+        isOpen={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        stage={stage}
+        currency={data?.currency}
+        period={period}
+        year={year}
+        userId={userId}
+      />
     </div>
   );
 }

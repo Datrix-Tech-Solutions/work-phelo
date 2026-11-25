@@ -1061,7 +1061,8 @@ export interface CampaignsQuery {
   page?: number;
   limit?: number;
   search?: string;
-  status?: CampaignStatus;
+  /** One status, or several separated by commas. */
+  status?: CampaignStatus | `${CampaignStatus},${CampaignStatus}`;
 }
 
 export interface CreateCampaignPayload {
@@ -1547,6 +1548,51 @@ export interface MarketingDashboardStage {
 }
 
 /** Marketing dashboard figures for a period. Money is a 2dp string; null means it could not be read. */
+export interface MarketingDashboardStageProspect {
+  prospectId: string;
+  companyName: string;
+  assignedUserName: string;
+  /** 2dp string. */
+  expected: string;
+}
+
+export interface MarketingDashboardWonDeal {
+  clientId: string;
+  clientName: string;
+  productId: string;
+  productName: string;
+  /** 2dp string. */
+  value: string;
+  /** YYYY-MM-DD */
+  date: string;
+}
+
+export interface MarketingDashboardClientRevenue {
+  clientId: string;
+  clientName: string;
+  /** 2dp string. */
+  amount: string;
+}
+
+export interface MarketingDashboardPeriodProspect {
+  prospectId: string;
+  companyName: string;
+  assignedUserName: string;
+  stageName: string;
+  /** Set once the prospect has become a client. */
+  clientId: string | null;
+  /** YYYY-MM-DD */
+  createdDate: string;
+}
+
+export interface MarketingDashboardNewClient {
+  clientId: string;
+  companyName: string;
+  assignedUserName: string;
+  /** YYYY-MM-DD */
+  createdDate: string;
+}
+
 export interface MarketingDashboardSummary {
   /** Currency Accounting reports in, when any client has an Accounting entity. */
   currency: string | null;
@@ -1704,6 +1750,21 @@ export interface TransportDashboardSummary {
     documentsExpired: number;
     maintenance: number;
   } | null;
+}
+
+/** Which Transport dashboard count to list. CLOSED is cancelled or rejected. */
+export type TransportTripList = 'REQUESTED' | 'ON_ROUTE' | 'OVERDUE' | 'COMPLETED' | 'CLOSED';
+
+export interface TransportDashboardTrip {
+  requestId: string;
+  requesterName: string;
+  destination: string;
+  /** YYYY-MM-DD */
+  travelDate: string;
+  departureTime: string;
+  returnTime: string | null;
+  vehicleName: string | null;
+  status: TransportRequestStatus;
 }
 
 export interface TransportTrendPoint {

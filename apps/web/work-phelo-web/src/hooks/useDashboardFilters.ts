@@ -19,11 +19,16 @@ export interface DashboardFilters {
  * the values of whatever extra filter fields the module declares, and the general/detailed
  * view. Pass the result to `DashboardShell` and to the cards inside it. */
 export function useDashboardFilters(
-  initial: { period?: Period; view?: DashboardView } = {},
+  initial: {
+    period?: Period;
+    year?: number;
+    view?: DashboardView;
+    fieldValues?: Record<string, string>;
+  } = {},
 ): DashboardFilters {
   const [period, setPeriod] = useState<Period>(initial.period ?? 'monthly');
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [year, setYear] = useState(initial.year ?? new Date().getFullYear());
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(initial.fieldValues ?? {});
   const [view, setView] = useState<DashboardView>(initial.view ?? 'general');
 
   const setFieldValue = (key: string, value: string) =>

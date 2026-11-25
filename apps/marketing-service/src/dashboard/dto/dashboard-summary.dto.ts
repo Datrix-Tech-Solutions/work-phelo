@@ -40,6 +40,73 @@ export interface DashboardStage {
   average: string;
 }
 
+export class QueryDashboardStageProspectsDto {
+  @ApiProperty({ description: 'The pipeline stage to list.' })
+  @IsString()
+  stageId!: string;
+
+  @ApiProperty({ example: '2026-10-01', description: 'First day, inclusive.' })
+  @IsDateString({ strict: true })
+  fromDate!: string;
+
+  @ApiProperty({ example: '2026-10-09', description: 'Last day, inclusive.' })
+  @IsDateString({ strict: true })
+  toDate!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only this sales rep’s prospects. Omit for everyone the caller may see.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+}
+
+export interface DashboardStageProspect {
+  prospectId: string;
+  companyName: string;
+  /** Falls back to "Unknown user" when the directory cannot name them. */
+  assignedUserName: string;
+  /** Sum of the expected value of the prospect's products, as a 2dp string. */
+  expected: string;
+}
+
+/** A deal won in the period: a purchased product, dated by its first posted transaction. */
+export interface DashboardWonDeal {
+  clientId: string;
+  clientName: string;
+  productId: string;
+  productName: string;
+  value: string;
+  /** YYYY-MM-DD */
+  date: string;
+}
+
+export interface DashboardClientRevenue {
+  clientId: string;
+  clientName: string;
+  amount: string;
+}
+
+export interface DashboardPeriodProspect {
+  prospectId: string;
+  companyName: string;
+  assignedUserName: string;
+  stageName: string;
+  /** Set once the prospect has become a client. */
+  clientId: string | null;
+  /** YYYY-MM-DD */
+  createdDate: string;
+}
+
+export interface DashboardNewClient {
+  clientId: string;
+  companyName: string;
+  assignedUserName: string;
+  /** YYYY-MM-DD */
+  createdDate: string;
+}
+
 /** Money is a 2dp string. `null` means the figure could not be read (Accounting unreachable). */
 export interface DashboardSummary {
   /** Currency Accounting reports its money in, when any client has an Accounting entity. */

@@ -37,9 +37,14 @@ function InventoryItemsInner() {
   const [page, setPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const searchParams = useSearchParams();
+  // The dashboard's stock panels link here with ?status=LOW_STOCK (or OUT_OF_STOCK).
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const linked = searchParams.get('status');
+    return linked && linked in STOCK_STATUS_BADGE ? linked : '';
+  });
   // The dashboard's "Add Item" shortcut arrives with ?new=1.
-  const [modalOpen, setModalOpen] = useState(useSearchParams().get('new') === '1');
+  const [modalOpen, setModalOpen] = useState(searchParams.get('new') === '1');
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
 

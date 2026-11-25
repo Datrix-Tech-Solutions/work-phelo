@@ -1,6 +1,9 @@
 'use client';
 
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { Skeleton } from '@/components/atoms/Skeleton';
+import { usePermissionRule } from '@/hooks/hr/usePermission';
 import { useTransportDashboard } from '@/hooks/marketing/useTransportDashboard';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { FLEET_STATUS_STYLES } from '@/lib/fleetOptions';
@@ -29,9 +32,24 @@ const ROWS: {
 export function FleetSnapshotCard({ period, year, className }: Props) {
   const { data, isLoading } = useTransportDashboard(period, year);
   const fleet = data?.fleet;
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const canViewFleet = usePermissionRule('marketing.fleet:VIEW');
 
   return (
-    <div className={cn(cardClass('flex flex-col gap-2 p-3 h-60', 'glass'), className)}>
+    <div
+      className={cn(
+        cardClass('flex flex-col gap-2 p-3 h-60', 'glass'),
+        canViewFleet && 'relative transition-shadow hover:shadow-md',
+        className,
+      )}
+    >
+      {canViewFleet && (
+        <Link
+          href={`/${tenantSlug}/marketing/fleet-management`}
+          aria-label="Fleet Status"
+          className="absolute inset-0 rounded-[inherit] focus-visible:outline-2 focus-visible:outline-brand"
+        />
+      )}
       <div className="flex flex-col">
         <h3 className="text-sm font-semibold text-gray-900">Fleet Status</h3>
         <span className="text-xs text-gray-400">

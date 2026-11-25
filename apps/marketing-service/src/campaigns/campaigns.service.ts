@@ -133,7 +133,7 @@ export class CampaignsService {
     const limit = query.limit ?? 20;
     const where: Prisma.MarketingCampaignWhereInput = {
       tenantId: user.tenantId,
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status ? { status: { in: query.status } } : {}),
       ...(query.search
         ? { name: { contains: query.search, mode: 'insensitive' } }
         : {}),

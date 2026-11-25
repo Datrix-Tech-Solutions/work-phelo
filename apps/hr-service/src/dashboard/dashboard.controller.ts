@@ -8,7 +8,10 @@ import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { DashboardService } from './dashboard.service';
-import { QueryDashboardKpisDto } from './dto/dashboard-kpis.dto';
+import {
+  QueryDashboardKpisDto,
+  QueryDashboardRangeDto,
+} from './dto/dashboard-kpis.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -140,6 +143,28 @@ export class DashboardController {
   @ApiResponse({ status: 200, description: 'Employees out today returned' })
   getOutToday(@Req() req: AuthenticatedRequest) {
     return this.dashboardService.getOutToday(req.user.tenantId);
+  }
+
+  @Get('on-leave')
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
+  @ApiOperation({ summary: 'Approved leave overlapping a date range' })
+  @ApiResponse({ status: 200, description: 'Leave in the range returned' })
+  getOnLeave(
+    @Query() query: QueryDashboardRangeDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.dashboardService.getOnLeave(req.user.tenantId, query);
+  }
+
+  @Get('hires-exits')
+  @RequirePermissions(Permission.VIEW_HR_DASHBOARD)
+  @ApiOperation({ summary: 'Employees who joined or left within a date range' })
+  @ApiResponse({ status: 200, description: 'Hires and exits returned' })
+  getHiresAndExits(
+    @Query() query: QueryDashboardRangeDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.dashboardService.getHiresAndExits(req.user.tenantId, query);
   }
 
   @Get('payroll-status')

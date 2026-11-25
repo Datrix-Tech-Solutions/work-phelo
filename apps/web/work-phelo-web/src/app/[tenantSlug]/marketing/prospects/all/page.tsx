@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useLoadingRouter as useRouter } from '@/hooks/useLoadingRouter';
 import { usePipelineStages } from '@/hooks/marketing/usePipelineStages';
 import { useDeleteProspect, useProspect, useProspects } from '@/hooks/marketing/useProspects';
@@ -44,7 +44,9 @@ export default function AllProspectsPage() {
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [stageFilter, setStageFilter] = useState('');
+  // The dashboard's pipeline panel links here with ?stage=… to open on that stage.
+  const linkedStage = useSearchParams().get('stage') ?? '';
+  const [stageFilter, setStageFilter] = useState(linkedStage);
   const [pendingDelete, setPendingDelete] = useState<Prospect | null>(null);
   const [stageProspect, setStageProspect] = useState<Prospect | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);

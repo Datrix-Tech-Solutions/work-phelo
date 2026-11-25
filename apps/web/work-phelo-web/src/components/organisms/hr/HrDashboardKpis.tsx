@@ -1,14 +1,19 @@
 'use client';
 
 import { CalendarOff, ClipboardCheck, FolderKanban, UserPlus, Users } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import { HiresExitsPanel } from '@/components/organisms/hr/HiresExitsPanel';
+import { OnLeavePanel } from '@/components/organisms/hr/OnLeavePanel';
 import { useHrDashboardKpis } from '@/hooks/hr/useDashboard';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { useProjects } from '@/hooks/hr/useProjects';
 import { dashboardRanges, formatDay, trendBetween } from '@/lib/dashboardPeriod';
+import { Permission } from '@/lib/permissionMap';
 import { summarizeProjects } from '@/lib/projectsSummary';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
 
 const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
@@ -26,13 +31,26 @@ const pct = (value: number | null | undefined) =>
 const orUndefined = (value: number | null | undefined) => value ?? undefined;
 
 interface HrDashboardKpisProps {
+  tenantSlug: string;
   period: Period;
   year: number;
   /** Adds the Projects card; it summarises every project, so the page gates it. */
   showProjects?: boolean;
 }
 
-export function HrDashboardKpis({ period, year, showProjects = false }: HrDashboardKpisProps) {
+export function HrDashboardKpis({
+  tenantSlug,
+  period,
+  year,
+  showProjects = false,
+}: HrDashboardKpisProps) {
+  const user = useAuthStore((s) => s.user);
+  const canReadAttendance = usePermission(Permission.READ_ATTENDANCE);
+  // Same rule as the time clock's Records tab, so the card never leads to an empty page.
+  const canViewClockHistory =
+    Boolean(user?.featureConfig?.hr?.time) && (canReadAttendance || user?.role === 'TENANT_ADMIN');
+  const [onLeaveOpen, setOnLeaveOpen] = useState(false);
+  const [hiresExitsOpen, setHiresExitsOpen] = useState(false);
   const { data, isLoading } = useHrDashboardKpis(period, year);
   // Projects are a live snapshot, so the period filter does not touch them.
   const { data: projects, isLoading: projectsLoading } = useProjects();
@@ -52,6 +70,7 @@ export function HrDashboardKpis({ period, year, showProjects = false }: HrDashbo
     >
       <KpiCard
         label="Headcount"
+        href={`/${tenantSlug}/hr/employees`}
         value={data?.headcount.current ?? '—'}
         icon={Users}
         iconColor={MODULE_COLOR}
@@ -70,6 +89,7 @@ export function HrDashboardKpis({ period, year, showProjects = false }: HrDashbo
       />
       <KpiCard
         label="Attendance"
+        href={canViewClockHistory ? `/${tenantSlug}/hr/time-clock?tab=records` : undefined}
         value={pct(data?.attendance.rate)}
         icon={ClipboardCheck}
         iconColor="#1baf7a"
@@ -91,6 +111,7 @@ export function HrDashboardKpis({ period, year, showProjects = false }: HrDashbo
       />
       <KpiCard
         label="On Leave"
+        onClick={() => setOnLeaveOpen(true)}
         value={data?.onLeave.current ?? '—'}
         icon={CalendarOff}
         iconColor="#f59e0b"
@@ -109,6 +130,7 @@ export function HrDashboardKpis({ period, year, showProjects = false }: HrDashbo
       />
       <KpiCard
         label="Hires & Exits"
+        onClick={() => setHiresExitsOpen(true)}
         value={data ? `${data.hiresAndExits.hires} / ${data.hiresAndExits.exits}` : '—'}
         icon={UserPlus}
         iconColor="#8b5cf6"
@@ -123,6 +145,7 @@ export function HrDashboardKpis({ period, year, showProjects = false }: HrDashbo
       {showProjects && (
         <KpiCard
           label="Projects"
+          href={`/${tenantSlug}/hr/projects`}
           value={projectSummary.counts.ACTIVE}
           icon={FolderKanban}
           iconColor="#0ea5e9"
@@ -134,6 +157,19 @@ export function HrDashboardKpis({ period, year, showProjects = false }: HrDashbo
           isLoading={projectsLoading}
         />
       )}
+      <OnLeavePanel
+        tenantSlug={tenantSlug}
+        isOpen={onLeaveOpen}
+        onClose={() => setOnLeaveOpen(false)}
+        period={period}
+        year={year}
+      />
+      <HiresExitsPanel
+        isOpen={hiresExitsOpen}
+        onClose={() => setHiresExitsOpen(false)}
+        period={period}
+        year={year}
+      />
     </div>
   );
 }

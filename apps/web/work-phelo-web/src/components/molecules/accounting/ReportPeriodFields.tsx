@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useFiscalYear, useFiscalYears } from '@/hooks/accounting/useFiscalPeriods';
@@ -20,6 +21,9 @@ const AS_AT_MODE_OPTIONS: Array<{ value: PeriodMode; label: string }> = [
 ];
 
 const isoDate = (value: string) => value.slice(0, 10);
+/** A date taken from the page's link, ignored unless it is a YYYY-MM-DD day. */
+const linkedDay = (value: string | null) =>
+  value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 const today = () => new Date().toISOString().slice(0, 10);
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
 
@@ -38,11 +42,18 @@ function containingToday<T extends { startDate: string; endDate: string }>(items
  *
  * With `asAt`, the report is a point in time rather than a span: a custom pick is one date and
  * the fiscal picks mean the end of that year or month. `asOfDate` is that date.
+ *
+ * A link can set the custom dates (`?fromDate=…&toDate=…`, or `?asOfDate=…` with `asAt`);
+ * `linked` is then true.
  */
 export function useReportPeriod({ asAt = false }: { asAt?: boolean } = {}) {
   const [mode, setMode] = useState<PeriodMode>('custom');
-  const [fromDate, setFromDate] = useState(startOfYear);
-  const [toDate, setToDate] = useState(today);
+  const searchParams = useSearchParams();
+  const linkedFrom = linkedDay(searchParams.get('fromDate'));
+  const linkedTo = linkedDay(searchParams.get(asAt ? 'asOfDate' : 'toDate'));
+  const [linked] = useState(() => Boolean(linkedTo && (asAt || linkedFrom)));
+  const [fromDate, setFromDate] = useState(() => linkedFrom ?? startOfYear());
+  const [toDate, setToDate] = useState(() => linkedTo ?? today());
   const [yearId, setYearId] = useState('');
   const [periodId, setPeriodId] = useState('');
 
@@ -111,6 +122,7 @@ export function useReportPeriod({ asAt = false }: { asAt?: boolean } = {}) {
     /** The as-at date: the end of the resolved range. Null while the selection isn't usable. */
     asOfDate: range ? range.toDate : null,
     asAt,
+    linked,
     yearsLoading,
     label,
     /** Null for a custom range, or when there is no earlier fiscal period to compare to. */
@@ -121,6 +133,15 @@ export function useReportPeriod({ asAt = false }: { asAt?: boolean } = {}) {
 }
 
 export type ReportPeriod = ReturnType<typeof useReportPeriod>;
+
+/** Runs the report straight away when the link brought its dates, once the fiscal years are in. */
+export function useGenerateFromLink(period: ReportPeriod, generate: () => void) {
+  const [pending, setPending] = useState(period.linked);
+  if (pending && !period.yearsLoading) {
+    setPending(false);
+    generate();
+  }
+}
 
 /** Renders inside a flex-wrap filter bar; each field is its own flex item. */
 export function ReportPeriodFields({ period }: { period: ReportPeriod }) {

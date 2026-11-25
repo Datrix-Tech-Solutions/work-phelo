@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { LucideIcon } from 'lucide-react';
 import { TrendBadge } from '@/components/atoms/TrendBadge';
 import { Skeleton } from '@/components/atoms/Skeleton';
-import { cardClass, waterIconStyle } from '@/lib/utils';
+import { cardClass, cn, waterIconStyle } from '@/lib/utils';
 
 interface DetailKpiCardProps {
   label: string;
@@ -17,6 +18,8 @@ interface DetailKpiCardProps {
   /** Lines under the value that explain or break it down. */
   details: { label: string; value: string }[];
   isLoading?: boolean;
+  /** Makes the whole card a link to this page. */
+  href?: string;
 }
 
 /** A KPI card with a headline figure and a short breakdown underneath it. */
@@ -30,9 +33,23 @@ export function DetailKpiCard({
   periodLabel,
   details,
   isLoading,
+  href,
 }: DetailKpiCardProps) {
   return (
-    <div className={cardClass('flex flex-col gap-1.5 p-2', 'glass')}>
+    <div
+      className={cardClass(
+        cn('flex flex-col gap-1.5 p-2', href && 'relative transition-shadow hover:shadow-md'),
+        'glass',
+      )}
+    >
+      {/* Covers the card, so the whole of it is clickable without nesting content inside a link. */}
+      {href && (
+        <Link
+          href={href}
+          aria-label={label}
+          className="absolute inset-0 rounded-[inherit] focus-visible:outline-2 focus-visible:outline-brand"
+        />
+      )}
       <div className="flex items-center gap-2">
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
@@ -57,7 +74,10 @@ export function DetailKpiCard({
             <span className="text-lg font-bold text-gray-900">{value}</span>
             {trend !== undefined && (
               <div className="flex items-center gap-1">
-                <TrendBadge change={trend} tooltip={trendTooltip} />
+                {/* Above the card's link overlay, so the tooltip still shows on hover. */}
+                <span className="relative z-10 inline-flex">
+                  <TrendBadge change={trend} tooltip={trendTooltip} />
+                </span>
                 <span className="text-[10px] text-gray-400">vs previous {periodLabel}</span>
               </div>
             )}

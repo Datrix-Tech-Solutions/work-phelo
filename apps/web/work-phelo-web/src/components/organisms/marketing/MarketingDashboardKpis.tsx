@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { Handshake, Percent, UserPlus, Wallet } from 'lucide-react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import { CrmKpiPanel, type CrmKpi } from '@/components/organisms/marketing/CrmKpiPanel';
 import { useMarketingDashboard } from '@/hooks/marketing/useMarketingDashboard';
 import { dashboardRanges, formatDay, trendBetween } from '@/lib/dashboardPeriod';
 
@@ -44,6 +46,13 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
   const { data, isLoading } = useMarketingDashboard(period, year, userId);
   const periodLabel = PERIOD_LABELS[period];
   const currency = data?.currency;
+  // Open state is kept apart from the figure, so the panel keeps its content while it slides shut.
+  const [kpi, setKpi] = useState<CrmKpi>('sales');
+  const [panelOpen, setPanelOpen] = useState(false);
+  const open = (next: CrmKpi) => () => {
+    setKpi(next);
+    setPanelOpen(true);
+  };
 
   const conversionRate = data
     ? rate(data.conversion.converted, data.conversion.created)
@@ -69,6 +78,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
           label="Overall Sales"
+          onClick={open('sales')}
           value={money(currency, data?.sales.won)}
           icon={Handshake}
           iconColor={MODULE_COLOR}
@@ -82,6 +92,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
         />
         <KpiCard
           label="Achieved Revenue"
+          onClick={open('revenue')}
           value={money(currency, data?.achievedRevenue.current)}
           icon={Wallet}
           iconColor="#1baf7a"
@@ -92,6 +103,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
         />
         <KpiCard
           label="Conversion Rate"
+          onClick={open('conversion')}
           value={conversionRate === undefined ? '—' : `${conversionRate.toFixed(1)}%`}
           icon={Percent}
           iconColor="#2a78d6"
@@ -116,6 +128,7 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
         />
         <KpiCard
           label="New Prospects"
+          onClick={open('prospects')}
           value={data ? data.newProspects.current : '—'}
           icon={UserPlus}
           iconColor="#eb6834"
@@ -125,6 +138,15 @@ export function MarketingDashboardKpis({ period, year, userId }: MarketingDashbo
           isLoading={isLoading}
         />
       </div>
+      <CrmKpiPanel
+        isOpen={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        kpi={kpi}
+        currency={currency}
+        period={period}
+        year={year}
+        userId={userId}
+      />
     </div>
   );
 }

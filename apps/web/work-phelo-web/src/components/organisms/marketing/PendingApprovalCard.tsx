@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ClipboardList } from 'lucide-react';
 import type { Period } from '@/components/atoms/PeriodToggle';
 import {
@@ -31,7 +31,9 @@ interface Props {
 /** Requests waiting for an approver, oldest first. A live list, so it ignores the period filter. */
 export function PendingApprovalCard({ period, year, className }: Props) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const { data, isLoading, isError } = useTransportDashboard(period, year);
+  const requestsHref = `/${tenantSlug}/marketing/requests/all-requests`;
 
   const items = useMemo<TransportListItem[]>(
     () =>
@@ -56,7 +58,8 @@ export function PendingApprovalCard({ period, year, className }: Props) {
       isError={isError}
       emptyText="No requests are waiting."
       errorText="Pending requests could not be loaded."
-      action={{ href: `/${tenantSlug}/marketing/requests/all-requests`, label: 'Review' }}
+      action={{ href: requestsHref, label: 'Review' }}
+      onSelect={(id) => router.push(`${requestsHref}?requestId=${id}`)}
       className={className}
     />
   );

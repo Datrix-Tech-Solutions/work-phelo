@@ -3,7 +3,12 @@ import type { Period } from '@/components/atoms/PeriodToggle';
 import { api } from '@/lib/api';
 import { dashboardRanges } from '@/lib/dashboardPeriod';
 import type { SeriesBucket } from '@/lib/periodSeries';
-import type { TransportDashboardSummary, TransportTrendPoint } from '@/types/marketing';
+import type {
+  TransportDashboardSummary,
+  TransportDashboardTrip,
+  TransportTrendPoint,
+  TransportTripList,
+} from '@/types/marketing';
 
 const ENDPOINT = '/marketing/dashboard/transport';
 
@@ -30,6 +35,26 @@ export function useTransportDashboard(period: Period, year: number, enabled = tr
     enabled,
     placeholderData: (previous) => previous,
     // Pending approvals and overdue trips change through the day.
+    refetchInterval: 60_000,
+  });
+}
+
+/** The trips behind one of the dashboard's counts, within the given dates. */
+export function useTransportTripList(
+  list: TransportTripList,
+  { fromDate, toDate }: { fromDate: string; toDate: string },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['marketing', 'dashboard', 'transport', 'trips', list, fromDate, toDate] as const,
+    queryFn: async () =>
+      (
+        await api.get<{ trips: TransportDashboardTrip[] }>(`${ENDPOINT}/trips`, {
+          params: { list, fromDate, toDate },
+        })
+      ).data.trips,
+    enabled,
+    // Trips go out and come back through the day.
     refetchInterval: 60_000,
   });
 }

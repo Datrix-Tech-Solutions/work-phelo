@@ -142,10 +142,17 @@ export class QueryCampaignsDto {
   @MaxLength(100)
   search?: string;
 
-  @ApiPropertyOptional({ enum: CAMPAIGN_STATUSES })
+  @ApiPropertyOptional({
+    enum: CAMPAIGN_STATUSES,
+    isArray: true,
+    description: 'One status, or several separated by commas.',
+  })
   @IsOptional()
-  @IsEnum(CAMPAIGN_STATUSES)
-  status?: CampaignStatus;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
+  @IsEnum(CAMPAIGN_STATUSES, { each: true })
+  status?: CampaignStatus[];
 }
 
 export class PreviewCampaignRecipientsDto {
