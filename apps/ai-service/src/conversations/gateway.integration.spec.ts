@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import * as http from 'http';
 import { join, resolve } from 'path';
@@ -28,6 +28,7 @@ import {
 } from '../persistence/ai-database.service';
 import { RequestNonceStore } from '../persistence/request-nonce.store';
 import { AuthorizedConversationOperations } from '../security/conversation-authorization.service';
+import { INFERENCE_PROVIDER, InferenceProvider } from '../inference/inference-provider';
 
 // Load actual Gateway TS recursively in memory, not stale dist or a cross-workspace production dependency.
 const cache = new Map<string, { exports: unknown }>();
@@ -124,7 +125,7 @@ function raw(origin: string, wire: Wire): Promise<{ status: number; body: string
     call.end(wire.body);
   });
 }
-async function harness(databaseUrl?: string) {
+async function harness(databaseUrl?: string, demo = false) {
   const original = process.env;
   const state = {
     denied: false,
@@ -177,6 +178,14 @@ async function harness(databaseUrl?: string) {
     NODE_ENV: 'test',
     AI_PROVIDER: 'mock',
     AI_POLICY_VERSION: 'full-http-test',
+    ...(demo
+      ? {
+          AI_ENABLED: 'true',
+          AI_MOCK_ENABLED: 'true',
+          AI_INTERNAL_DEMO_ENABLED: 'true',
+          AI_RUNTIME_SCOPE: 'isolated-demo',
+        }
+      : {}),
     JWT_SECRET: secret,
     AI_AUTHENTICATED_ROUTES_ENABLED: 'true',
     AI_PERSISTENCE_ENABLED: 'true',
@@ -674,6 +683,318 @@ describe('Real Gateway controller, /me HTTP stub, signer/adapter and real AI HTT
 });
 
 const databaseUrl = process.env.AI_TEST_DATABASE_URL;
+(databaseUrl ? describe : describe.skip)(
+  'Isolated demo through real Gateway, AI and PostgreSQL (Auth current-state stub)',
+  () => {
+    let h: Awaited<ReturnType<typeof harness>>, db: ReturnType<typeof createAiClient>;
+    beforeAll(async () => {
+      const url = new URL(databaseUrl!);
+      if (
+        !['127.0.0.1', 'localhost'].includes(url.hostname) ||
+        url.pathname !== '/workphelo_ai_2b1' ||
+        url.searchParams.get('schema') !== 'ai'
+      )
+        throw new Error('Disposable database only');
+      h = await harness(databaseUrl, true);
+      db = createAiClient(databaseUrl!);
+      await db.$connect();
+    });
+    afterAll(async () => {
+      await h?.dispose();
+      await db?.$disconnect();
+    });
+    async function conversation() {
+      const tenant = randomUUID(),
+        user = randomUUID(),
+        token = h.token(user, tenant);
+      const result = await call(h, 'POST', external, {}, randomUUID(), token);
+      expect(result.status).toBe(201);
+      const conversationId = (result.body as { id: string }).id;
+      return { tenant, user, token, conversationId, target: `${external}/${conversationId}` };
+    }
+    it('returns a labeled reply, stores both roles encrypted, continues history, lists and deletes', async () => {
+      const c = await conversation();
+      const first = await call(
+        h,
+        'POST',
+        c.target + '/messages',
+        { content: 'What can this demo do?' },
+        'turn-1',
+        c.token,
+      );
+      expect(first.status).toBe(201);
+      const turn = first.body as {
+        demo: { mode: string; synthetic: boolean; reply: { content: string } };
+      };
+      expect(turn.demo).toMatchObject({
+        mode: 'scripted-demo',
+        synthetic: true,
+        reply: { role: 'DEMO_ASSISTANT', sequence: 2 },
+      });
+      expect(turn.demo.reply.content).toContain('No LLM or live ERP data was used.');
+      expect(
+        (
+          await call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'Who can read my demo conversation?' },
+            'turn-2',
+            c.token,
+          )
+        ).status,
+      ).toBe(201);
+      const detail = await call(h, 'GET', c.target, undefined, undefined, c.token);
+      expect(detail.status).toBe(200);
+      const items = (detail.body as { messages: { items: { role: string; sequence: number }[] } })
+        .messages.items;
+      expect(items.map((x) => x.role)).toEqual([
+        'USER',
+        'DEMO_ASSISTANT',
+        'USER',
+        'DEMO_ASSISTANT',
+      ]);
+      expect(items.map((x) => x.sequence)).toEqual([1, 2, 3, 4]);
+      const rows = await db.aiConversationMessage.findMany({
+        where: { conversationId: c.conversationId },
+      });
+      expect(rows).toHaveLength(4);
+      for (const row of rows)
+        expect(row.ciphertext.toString('utf8')).not.toMatch(/What can|Scripted WorkPhelo|Who can/);
+      expect((await call(h, 'GET', external, undefined, undefined, c.token)).status).toBe(200);
+      expect((await call(h, 'DELETE', c.target, undefined, undefined, c.token)).status).toBe(204);
+      expect(
+        await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+      ).toBe(0);
+      expect((await call(h, 'GET', c.target, undefined, undefined, c.token)).status).toBe(404);
+      expect(JSON.stringify(h.logs)).not.toContain(turn.demo.reply.content);
+    });
+    it('commits one pair under concurrent retries and returns the identical stored response', async () => {
+      const c = await conversation(),
+        send = () =>
+          call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'What can this demo do?' },
+            'same-turn',
+            c.token,
+          );
+      const replies = await Promise.all([afterCapacity(send), afterCapacity(send)]);
+      expect(replies.map((r) => r.status)).toEqual([201, 201]);
+      expect(replies[0].body).toEqual(replies[1].body);
+      expect((await send()).body).toEqual(replies[0].body);
+      expect(
+        await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+      ).toBe(2);
+      expect(
+        (
+          await call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'Who can read my demo conversation?' },
+            'same-turn',
+            c.token,
+          )
+        ).status,
+      ).toBe(409);
+      await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+    });
+    it('rejects arbitrary/private input and cross-owner access without storing a turn', async () => {
+      const c = await conversation();
+      expect(
+        (
+          await call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'private salary data' },
+            'rejected',
+            c.token,
+          )
+        ).status,
+      ).toBe(400);
+      for (const token of [h.token(randomUUID(), c.tenant), h.token(randomUUID(), randomUUID())]) {
+        expect((await call(h, 'GET', c.target, undefined, undefined, token)).status).toBe(404);
+        expect(
+          (
+            await call(
+              h,
+              'POST',
+              c.target + '/messages',
+              { content: 'What can this demo do?' },
+              randomUUID(),
+              token,
+            )
+          ).status,
+        ).toBe(404);
+      }
+      expect(
+        await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+      ).toBe(0);
+      await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+    });
+    it('rolls back the user row and receipt when the reply exceeds the transactional message quota', async () => {
+      const c = await conversation();
+      await db.aiConversationMessage.createMany({
+        data: Array.from({ length: 999 }, (_, i) => ({
+          id: randomUUID(),
+          conversationId: c.conversationId,
+          tenantId: c.tenant,
+          ownerUserId: c.user,
+          sequence: i + 1,
+          encryptionVersion: 1,
+          keyId: 'fixture',
+          ciphertext: Buffer.from('x'),
+          nonce: randomBytes(12),
+          authenticationTag: randomBytes(16),
+        })),
+      });
+      await db.aiConversation.update({
+        where: { id: c.conversationId },
+        data: { nextMessageSequence: 1000 },
+      });
+      expect(
+        (
+          await call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'What can this demo do?' },
+            'quota-turn',
+            c.token,
+          )
+        ).status,
+      ).toBe(409);
+      expect(
+        await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+      ).toBe(999);
+      expect(
+        await db.aiSubmissionReceipt.count({
+          where: { tenantId: c.tenant, idempotencyKey: 'quota-turn' },
+        }),
+      ).toBe(0);
+      expect(
+        (await db.aiConversation.findUniqueOrThrow({ where: { id: c.conversationId } }))
+          .nextMessageSequence,
+      ).toBe(1000);
+      await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+    });
+    it('fails closed on corrupt reply ciphertext, while authorized deletion remains possible', async () => {
+      const c = await conversation();
+      expect(
+        (
+          await call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'What can this demo do?' },
+            'corrupt',
+            c.token,
+          )
+        ).status,
+      ).toBe(201);
+      const reply = await db.aiConversationMessage.findFirstOrThrow({
+        where: { conversationId: c.conversationId, role: 'DEMO_ASSISTANT' },
+      });
+      const corrupt = Buffer.from(reply.ciphertext);
+      corrupt[0] ^= 1;
+      await db.aiConversationMessage.update({
+        where: { id: reply.id },
+        data: { ciphertext: corrupt },
+      });
+      expect((await call(h, 'GET', c.target, undefined, undefined, c.token)).status).toBe(503);
+      expect((await call(h, 'DELETE', c.target, undefined, undefined, c.token)).status).toBe(204);
+    });
+    it('keeps encrypted history readable when demo generation is switched off', async () => {
+      const c = await conversation();
+      expect(
+        (
+          await call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'What can this demo do?' },
+            'before-disable',
+            c.token,
+          )
+        ).status,
+      ).toBe(201);
+      const config = h.ai.get(ConfigService);
+      config.set('AI_INTERNAL_DEMO_ENABLED', false);
+      process.env.AI_INTERNAL_DEMO_ENABLED = 'false';
+      try {
+        const detail = await call(h, 'GET', c.target, undefined, undefined, c.token);
+        expect(detail.status).toBe(200);
+        expect(
+          (detail.body as { messages: { items: { role: string }[] } }).messages.items[1].role,
+        ).toBe('DEMO_ASSISTANT');
+        const result = await call(
+          h,
+          'POST',
+          c.target + '/messages',
+          { content: 'What can this demo do?' },
+          'after-disable',
+          c.token,
+        );
+        expect(result.status).toBe(201);
+        expect(result.body).not.toHaveProperty('demo');
+        expect(
+          await db.aiConversationMessage.count({
+            where: { conversationId: c.conversationId, role: 'DEMO_ASSISTANT' },
+          }),
+        ).toBe(1);
+      } finally {
+        config.set('AI_INTERNAL_DEMO_ENABLED', true);
+        process.env.AI_INTERNAL_DEMO_ENABLED = 'true';
+        await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+      }
+    });
+    it('does not persist a partial turn on mock failure and can retry the same business key', async () => {
+      const c = await conversation();
+      const provider = h.ai.get<InferenceProvider>(INFERENCE_PROVIDER);
+      const failed = jest
+        .spyOn(provider, 'generateText')
+        .mockRejectedValueOnce(new Error('private-provider-canary'));
+      try {
+        const result = await call(
+          h,
+          'POST',
+          c.target + '/messages',
+          { content: 'What can this demo do?' },
+          'provider-failed',
+          c.token,
+        );
+        expect(result.status).toBe(503);
+        expect(result.text).not.toContain('private-provider-canary');
+        expect(
+          await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+        ).toBe(0);
+        expect(
+          await db.aiSubmissionReceipt.count({
+            where: { tenantId: c.tenant, idempotencyKey: 'provider-failed' },
+          }),
+        ).toBe(0);
+      } finally {
+        failed.mockRestore();
+      }
+      expect(
+        (
+          await call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'What can this demo do?' },
+            'provider-failed',
+            c.token,
+          )
+        ).status,
+      ).toBe(201);
+      await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+    });
+  },
+);
 (databaseUrl ? describe : describe.skip)(
   'Gateway -> real AI -> REAL disposable PostgreSQL; Auth /me remains explicitly stubbed',
   () => {

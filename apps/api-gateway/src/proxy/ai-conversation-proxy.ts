@@ -44,6 +44,13 @@ const cursor = (value: unknown) =>
   (typeof value === 'string' &&
     value.length <= 256 &&
     /^[A-Za-z0-9_-]+$/.test(value));
+function demoEnabled(): boolean {
+  return (
+    process.env.AI_INTERNAL_DEMO_ENABLED === 'true' &&
+    ['development', 'test'].includes(process.env.NODE_ENV ?? '') &&
+    process.env.AI_RUNTIME_SCOPE === 'isolated-demo'
+  );
+}
 function metadata(value: unknown, created = false): boolean {
   return (
     record(value) &&
@@ -75,7 +82,7 @@ function message(value: unknown, content: boolean): boolean {
     Number.isInteger(value.sequence) &&
     Number(value.sequence) > 0 &&
     Number(value.sequence) <= 2147483647 &&
-    value.role === 'USER' &&
+    (value.role === 'USER' || value.role === 'DEMO_ASSISTANT') &&
     date(value.createdAt) &&
     (!content ||
       (typeof value.content === 'string' &&
@@ -85,10 +92,26 @@ function message(value: unknown, content: boolean): boolean {
 }
 function validSuccess(value: unknown, method: string, target: string): boolean {
   const path = target.split('?')[0];
-  if (method === 'POST')
-    return path.endsWith('/messages')
-      ? message(value, false)
-      : metadata(value, true);
+  if (method === 'POST') {
+    if (!path.endsWith('/messages')) return metadata(value, true);
+    if (!demoEnabled())
+      return record(value) && value.role === 'USER' && message(value, false);
+    if (!record(value)) return false;
+    const { demo, ...userMessage } = value;
+    return (
+      userMessage.role === 'USER' &&
+      message(userMessage, false) &&
+      record(demo) &&
+      exact(demo, ['mode', 'synthetic', 'reply']) &&
+      demo.mode === 'scripted-demo' &&
+      demo.synthetic === true &&
+      message(demo.reply, true) &&
+      record(demo.reply) &&
+      demo.reply.role === 'DEMO_ASSISTANT' &&
+      demo.reply.conversationId === userMessage.conversationId &&
+      demo.reply.sequence === Number(userMessage.sequence) + 1
+    );
+  }
   if (!record(value)) return false;
   if (path === '/api/v1/ai/conversations')
     return (
@@ -164,6 +187,8 @@ export async function forwardAiConversation(
     validateAiConversationTarget(req.method, req.originalUrl);
     const config = parseAiSigningConfig(process.env);
     if (!config.enabled || !serviceOrigin)
+      throw new AiRequestIntegrityError(503);
+    if (process.env.AI_INTERNAL_DEMO_ENABLED === 'true' && !demoEnabled())
       throw new AiRequestIntegrityError(503);
     if (
       !req.headers.authorization &&

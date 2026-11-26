@@ -1,0 +1,1 @@
+ALTER TYPE "ai"."AiMessageRole" ADD VALUE 'DEMO_ASSISTANT';

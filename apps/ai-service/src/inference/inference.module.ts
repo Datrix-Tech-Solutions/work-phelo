@@ -15,6 +15,8 @@ import { MockExecutionConfig } from './mock.provider';
           AI_PROVIDER: config.getOrThrow<'mock'>('AI_PROVIDER'),
           AI_ENABLED: config.getOrThrow<boolean>('AI_ENABLED'),
           AI_MOCK_ENABLED: config.getOrThrow<boolean>('AI_MOCK_ENABLED'),
+          AI_INTERNAL_DEMO_ENABLED: config.get<boolean>('AI_INTERNAL_DEMO_ENABLED'),
+          AI_RUNTIME_SCOPE: config.get<string>('AI_RUNTIME_SCOPE'),
           AI_REQUEST_TIMEOUT_MS: config.getOrThrow<number>('AI_REQUEST_TIMEOUT_MS'),
         }),
     },

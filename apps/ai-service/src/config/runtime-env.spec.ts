@@ -24,6 +24,7 @@ describe('AI runtime configuration', () => {
       ...valid,
       AI_ENABLED: false,
       AI_MOCK_ENABLED: false,
+      AI_INTERNAL_DEMO_ENABLED: false,
       AI_AUTHENTICATED_ROUTES_ENABLED: false,
       AI_PERSISTENCE_ENABLED: false,
       AI_MESSAGE_ENCRYPTION_ENABLED: false,
@@ -80,6 +81,7 @@ describe('AI runtime configuration', () => {
   it.each([
     'AI_ENABLED',
     'AI_MOCK_ENABLED',
+    'AI_INTERNAL_DEMO_ENABLED',
     'AI_AUTHENTICATED_ROUTES_ENABLED',
     'AI_PERSISTENCE_ENABLED',
     'AI_MESSAGE_ENCRYPTION_ENABLED',

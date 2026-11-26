@@ -121,6 +121,12 @@ describe('AI authenticated message encryption', () => {
     );
     expect(nonces.size).toBe(100);
   });
+  it('authenticates demo reply role and cannot relabel ciphertext as a user message', () => {
+    const demo = factory.forMessage(ownership(), { ...metadata, role: 'DEMO_ASSISTANT' });
+    const envelope = service.encryptMessage('Scripted demo reply', demo);
+    expect(service.decryptMessage(envelope, demo)).toBe('Scripted demo reply');
+    expectCode(() => service.decryptMessage(envelope, context), 'AUTHENTICATION_FAILED');
+  });
   it.each(['ciphertext', 'nonce', 'authenticationTag'] as const)(
     'rejects %s tampering',
     (field) => {

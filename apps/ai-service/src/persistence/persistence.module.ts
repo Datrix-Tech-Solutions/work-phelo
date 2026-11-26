@@ -11,9 +11,10 @@ import { RetentionCleanupService } from './retention-cleanup.service';
 import { RequestNonceStore } from './request-nonce.store';
 import { ExecutionPermits } from './execution-permits.service';
 import { ResourceReconciliationService } from './resource-reconciliation.service';
+import { InferenceModule } from '../inference/inference.module';
 
 @Module({
-  imports: [ConfigModule, TrustedAuthModule, MessageEncryptionModule],
+  imports: [ConfigModule, TrustedAuthModule, MessageEncryptionModule, InferenceModule],
   providers: [
     { provide: AI_CLIENT_FACTORY, useValue: createAiClient },
     AiDatabaseService,
