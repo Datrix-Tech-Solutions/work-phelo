@@ -14,6 +14,7 @@ import { ProxyController } from './proxy/proxy.controller';
 import { AiRateAdmission } from './proxy/ai-rate-admission';
 import { aiConversationJsonBoundary } from './proxy/ai-conversation-body';
 import { AI_DEMO_QUESTIONS } from './ai.openapi';
+import { isSwaggerEnabled } from '@work-phelo/config';
 
 const root = '/api/v1/ai';
 const expected = [
@@ -102,6 +103,106 @@ describe('Generated Gateway AI OpenAPI contract', () => {
     expect([...actual, `get ${root}/eligibility`].sort()).toEqual(
       [...expected].sort(),
     );
+  });
+  it('serves an AI-only document from the same six operations and component definitions', async () => {
+    const response = await fetch(origin + root + '/docs-json', {
+      headers: { Connection: 'close' },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    const scoped = (await response.json()) as OpenAPIObject;
+    expect(scoped.openapi).toBe(document.openapi);
+    expect(scoped.info.title).toBe('WorkPhelo AI Assistant');
+    expect(scoped.servers).toEqual([{ url: '/' }]);
+    expect(
+      Object.entries(scoped.paths)
+        .flatMap(([path, item]) =>
+          Object.keys(item).map((method) => `${method} ${path}`),
+        )
+        .sort(),
+    ).toEqual([...expected].sort());
+    for (const [path, item] of Object.entries(scoped.paths))
+      expect(item).toEqual(document.paths[path]);
+    for (const [name, definition] of Object.entries(
+      scoped.components!.schemas!,
+    ))
+      expect(definition).toEqual(document.components!.schemas![name]);
+    expect(scoped.components!.securitySchemes).toEqual(
+      document.components!.securitySchemes,
+    );
+    const serialized = JSON.stringify(scoped);
+    for (const match of serialized.matchAll(
+      /"\$ref":"#\/components\/schemas\/([^"/]+)"/g,
+    ))
+      expect(scoped.components!.schemas![match[1]]).toBeDefined();
+    for (const internal of [
+      'x-ai-request-integrity',
+      'x-gateway-auth-context',
+      'demoIntent',
+      '/api/health',
+      '/api/ready',
+    ])
+      expect(serialized).not.toContain(internal);
+  });
+  it.each(['/docs', '/docs/'])(
+    'loads dedicated UI, relative assets and its JSON URL from %s while execution is off',
+    async (suffix) => {
+      const uiUrl = origin + root + suffix;
+      const response = await fetch(uiUrl, { headers: { Connection: 'close' } });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/html');
+      const html = await response.text();
+      const assets = [
+        ...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g),
+      ].map((match) => new URL(match[1], uiUrl));
+      expect(assets.length).toBeGreaterThanOrEqual(4);
+      let initializer = '';
+      for (const asset of assets) {
+        expect(asset.origin).toBe(origin);
+        expect(asset.pathname).toMatch(/^\/api\/v1\/ai\/docs\//);
+        const resource = await fetch(asset, {
+          headers: { Connection: 'close' },
+        });
+        expect(resource.status).toBe(200);
+        expect(resource.headers.get('content-type')).toMatch(/javascript|css/);
+        const content = await resource.text();
+        if (asset.pathname.endsWith('swagger-ui-init.js'))
+          initializer = content;
+      }
+      expect(initializer).toContain('"url": "/api/v1/ai/docs-json"');
+      expect(initializer).toContain('WorkPhelo AI Assistant');
+      expect(process.env.AI_REQUEST_SIGNING_ENABLED).toBe('false');
+      expect(process.env.AI_INTERNAL_DEMO_ENABLED).toBeUndefined();
+      expect(admit).not.toHaveBeenCalled();
+    },
+  );
+  it('does not mount dedicated documentation when the existing Swagger policy disables it', async () => {
+    const previous = process.env.ENABLE_SWAGGER;
+    process.env.ENABLE_SWAGGER = 'false';
+    const module = await Test.createTestingModule({
+      controllers: [ProxyController],
+      providers: [{ provide: AiRateAdmission, useValue: { admit } }],
+    }).compile();
+    const disabled = module.createNestApplication({ logger: false });
+    try {
+      if (isSwaggerEnabled()) setupSwagger(disabled);
+      await disabled.listen(0, '127.0.0.1');
+      for (const path of [root + '/docs', root + '/docs-json']) {
+        const result = await fetch((await disabled.getUrl()) + path, {
+          headers: { Connection: 'close' },
+        });
+        expect(result.status).toBe(401);
+        await result.text();
+      }
+      const rootDocs = await fetch((await disabled.getUrl()) + '/docs', {
+        headers: { Connection: 'close' },
+      });
+      expect(rootDocs.status).toBe(404);
+      await rootDocs.text();
+    } finally {
+      await disabled.close();
+      process.env.ENABLE_SWAGGER = previous;
+    }
   });
   it('uses the existing Bearer OR session-cookie schemes on every AI operation', () => {
     expect(document.components!.securitySchemes!['access-token']).toMatchObject(
@@ -352,10 +453,14 @@ describe('Generated Gateway AI OpenAPI contract', () => {
     const router = app.getHttpAdapter().getInstance() as {
       _router: { stack: { route?: { path: string } }[] };
     };
+    const routes = router._router.stack
+      .map((layer) => layer.route?.path)
+      .filter((path): path is string => Boolean(path?.startsWith('/api/v1')));
+    expect(routes.filter((path) => path === '/api/v1/*')).toHaveLength(1);
     expect(
-      router._router.stack.filter((layer) =>
-        layer.route?.path.startsWith('/api/v1'),
+      routes.every(
+        (path) => path === '/api/v1/*' || path.startsWith(root + '/docs'),
       ),
-    ).toHaveLength(1);
+    ).toBe(true);
   });
 });

@@ -20,22 +20,40 @@ not asserted here; deployment investigation is explicitly out of scope.
 
 ### Swagger / OpenAPI
 
-The existing Gateway Swagger UI is **`/docs`**, and its OpenAPI JSON is
-**`/docs-json`**, at the Gateway origin (not under `/api/v1`). At the standalone
-Gateway default `PORT=4000`, these are `http://localhost:4000/docs` and
-`http://localhost:4000/docs-json`. If the configured port or reverse-proxy origin
-differs, use that actual origin with these paths; no deployed URL is asserted here.
-The generated UI, initializer and JSON paths are exercised by automated HTTP tests.
+AI-specific Gateway documentation:
+
+- Local UI: `http://localhost:4000/api/v1/ai/docs`
+- Local OpenAPI JSON: `http://localhost:4000/api/v1/ai/docs-json`
+- Intended DEV UI: `https://dev-app.workphelo.com/api/v1/ai/docs`
+- Intended DEV JSON: `https://dev-app.workphelo.com/api/v1/ai/docs-json`
+
+Local examples use the standalone Gateway default `PORT=4000`. The DEV URLs are
+intended routes, not verified live availability: they require this Gateway build,
+enabled Swagger policy, and deployment/reverse-proxy route verification. The
+frontend's existing `/api/v1/*` rewrite forwards them to its configured Gateway.
+No frontend, Nginx or deployment configuration change is included here.
+
+The existing root Gateway UI **`/docs`** and JSON **`/docs-json`** remain available
+under the same policy: `http://localhost:4000/docs` and
+`http://localhost:4000/docs-json` at the default local port. Use the actual Gateway
+origin when it differs. UI, initializer, relative assets, JSON and trailing-slash
+behavior are exercised by automated HTTP tests.
 
 The six operations are grouped under **AI Assistant**. Documentation augments
 Gateway's existing generated spec because its wildcard proxy cannot discover
-concrete downstream paths. No new API handler, auth bypass or AI-side Swagger
-server is registered. AI `/api/health` and `/api/ready` remain internal probes,
+concrete downstream paths. Dedicated docs filter the same generated paths/schemas;
+there is no second schema catalog or AI-side Swagger server. HR instead hosts its
+own Swagger, which the Gateway proxies. AI docs are registered at the Gateway
+before its wildcard proxy, so they require neither an AI URL nor an AI process.
+Only documentation GET/static routes are added; business authorization is unchanged.
+AI `/api/health` and `/api/ready` remain internal probes,
 not documented public assistant endpoints.
 
 Availability follows existing `isSwaggerEnabled`: recognized `ENABLE_SWAGGER`
 overrides first, otherwise `DEPLOY_ENV` controls it, falling back to `NODE_ENV`.
-This change does not turn Swagger or AI on in any shared environment. Authenticate
+Documentation is public only when that existing Swagger policy enables registration,
+even while conversation execution is off. This does not turn Swagger or AI on in
+any shared environment. Authenticate
 normally; Swagger's cookie security definition does not mint an HttpOnly session.
 Cookie-based Try it out mutations also require the Swagger UI origin to be an
 explicitly allowed Origin. Do not broaden CORS or enable features just to use docs.
@@ -232,12 +250,13 @@ No external provider SDK or connection is part of this MVP.
 
 ## Handoff validation
 
-Local Swagger handoff validation: AI 779 tests / 27 suites; Gateway 244 tests / 12 suites,
+Local Swagger handoff validation: AI 779 tests / 27 suites; Gateway 248 tests / 12 suites,
 with isolated dependencies and no skipped tests in those runs. The expanded
 zero-skip runner passed PostgreSQL=22, Redis=16 and DemoGateway=18 (the Gateway
-integration file also runs the existing security regressions). The 10 new generated
-OpenAPI contract tests exercise the existing UI/initializer/JSON, six operations,
-schemas, authentication, errors and unchanged default-disabled behavior. AI/Gateway
+integration file also runs the existing security regressions). The 14 generated
+OpenAPI contract tests exercise root and dedicated UI/initializer/JSON/assets,
+trailing slashes, six operations, shared schemas, authentication, errors, disabled
+Swagger policy and unchanged default-disabled AI behavior. AI/Gateway
 typechecks, builds and lint passed; Gateway retains 17 pre-existing warnings.
 Prisma generation/validation, fresh disposable migration sequence, formatting,
 RBAC alignment and whitespace checks passed. Only disposable local databases were

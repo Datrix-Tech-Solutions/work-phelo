@@ -77,5 +77,40 @@ All frontend requests go through this gateway at port **4000**.
     },
   });
 
+  // Serve a service-scoped view of the same definitions before the wildcard proxy.
+  const aiDocument = {
+    ...document,
+    info: {
+      ...document.info,
+      title: 'WorkPhelo AI Assistant',
+      description:
+        'Authenticated encrypted history and isolated scripted demo, not real LLM inference. Documentation does not enable execution.',
+    },
+    servers: [{ url: '/' }],
+    tags: document.tags?.filter((tag) => tag.name === 'AI Assistant'),
+    paths: Object.fromEntries(
+      Object.entries(document.paths).filter(([path]) =>
+        path.startsWith('/api/v1/ai/'),
+      ),
+    ),
+    components: {
+      schemas: Object.fromEntries(
+        Object.entries(document.components?.schemas ?? {}).filter(([name]) =>
+          name.startsWith('Ai'),
+        ),
+      ),
+      securitySchemes: document.components?.securitySchemes,
+    },
+  };
+  SwaggerModule.setup('api/v1/ai/docs', app, aiDocument, {
+    jsonDocumentUrl: '/api/v1/ai/docs-json',
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      // Absolute origin-relative URL also works from /docs/ and nested asset aliases.
+      url: '/api/v1/ai/docs-json',
+    },
+  });
+
   console.log(' API Gateway docs: http://localhost:4000/docs');
 }
