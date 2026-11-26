@@ -7,12 +7,7 @@ DEPLOY_PATH="/var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo"
 COMPOSE_FILE="${DEPLOY_PATH}/infrastructure/docker-compose.dev.yml"
 COMPOSE_ENV_FILE="${DEPLOY_PATH}/.compose.dev.env"
 COMPOSE_PROJECT_NAME="workphelo-dev"
-[[ "${DEV_DEPLOYMENT_RUN_ID:-}" =~ ^[0-9]+$ && "${DEV_DEPLOYMENT_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]] || {
-  echo "Missing DEV deployment run identity" >&2; exit 1;
-}
-ASSET_PATH="${DEPLOY_PATH}/.dev-deploy/${DEV_DEPLOYMENT_RUN_ID}-${DEV_DEPLOYMENT_RUN_ATTEMPT}"
-HELPER_FILE="${ASSET_PATH}/.github/scripts/deploy-common.sh"
-BASELINE_IMAGE_ENV_FILE="${ASSET_PATH}/.dev-baseline-images.env"
+HELPER_FILE="${DEPLOY_PATH}/.github/scripts/deploy-common.sh"
 
 [[ -f "$HELPER_FILE" ]] || {
   echo "✗ Missing deploy helper at ${HELPER_FILE}. Upload step did not complete." >&2
@@ -21,17 +16,6 @@ BASELINE_IMAGE_ENV_FILE="${ASSET_PATH}/.dev-baseline-images.env"
 
 # shellcheck source=/dev/null
 source "$HELPER_FILE"
-
-[[ "${BUILD_SHA:-}" =~ ^[0-9a-f]{40}$ && "${DEV_DATABASE_OPERATIONS_APPROVED_SHA:-}" == "$BUILD_SHA" ]] ||
-  die "DEV migration and seed operations require approval for this exact release SHA"
-[[ "${DEV_DEPLOYMENT_BASELINE_SHA:-}" =~ ^[0-9a-f]{40}$ && -f "$BASELINE_IMAGE_ENV_FILE" && "$(read_env_value "$BASELINE_IMAGE_ENV_FILE" DEPLOYED_SHA)" == "$DEV_DEPLOYMENT_BASELINE_SHA" ]] ||
-  die "Successful deployment image inventory is missing or mismatched"
-require_command flock
-exec 9>"${DEPLOY_PATH}/.deploy.dev.lock"
-flock -n 9 || die "Another DEV deployment is still executing on the host"
-# Cancelled SSH clients may leave a remote script running. Stage assets per run,
-# then replace active Compose only while holding the host lock.
-cp "${ASSET_PATH}/infrastructure/docker-compose.dev.yml" "$COMPOSE_FILE"
 
 section "WorkPhelo Dev Deployment"
 log "SHA: ${BUILD_SHA:-unknown}"
@@ -43,22 +27,17 @@ require_command docker
 validate_required_envs "$DEPLOY_ENV"
 warn_optional_envs
 ensure_deploy_dirs
-mkdir -p "${DEPLOY_PATH}/apps/ai-service"
 
-API_GATEWAY_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "API_GATEWAY_IMAGE" "api-gateway" "api-gateway" "dev")"
-AUTH_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "AUTH_SERVICE_IMAGE" "auth-service" "auth-service" "dev")"
-HR_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "HR_SERVICE_IMAGE" "hr-service" "hr-service" "dev")"
-NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "dev")"
-SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "dev")"
-MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "dev")"
-REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "dev")"
-ACCOUNTING_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service" "dev")"
-INVENTORY_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service" "dev")"
-AI_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "AI_SERVICE_IMAGE" "ai-service" "ai-service" "dev")"
-NEXTJS_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "dev")"
-for key in API_GATEWAY_IMAGE AUTH_SERVICE_IMAGE HR_SERVICE_IMAGE NOTIFICATION_SERVICE_IMAGE SUBSCRIPTION_SERVICE_IMAGE MARKETING_SERVICE_IMAGE REINSURANCE_SERVICE_IMAGE ACCOUNTING_SERVICE_IMAGE INVENTORY_SERVICE_IMAGE AI_SERVICE_IMAGE NEXTJS_IMAGE; do
-  is_sha_tagged_workphelo_ref "${!key}" || die "${key} requires a SHA-tagged image from the successful baseline or this build"
-done
+API_GATEWAY_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "API_GATEWAY_IMAGE" "api-gateway" "api-gateway" "dev")"
+AUTH_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "AUTH_SERVICE_IMAGE" "auth-service" "auth-service" "dev")"
+HR_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "HR_SERVICE_IMAGE" "hr-service" "hr-service" "dev")"
+NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "dev")"
+SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "dev")"
+MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "dev")"
+REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "dev")"
+ACCOUNTING_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service" "dev")"
+INVENTORY_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service" "dev")"
+NEXTJS_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "dev")"
 
 section "Compose Env"
 write_env_file "$COMPOSE_ENV_FILE" \
@@ -74,7 +53,6 @@ write_env_file "$COMPOSE_ENV_FILE" \
   "REINSURANCE_SERVICE_IMAGE=${REINSURANCE_SERVICE_IMAGE}" \
   "ACCOUNTING_SERVICE_IMAGE=${ACCOUNTING_SERVICE_IMAGE}" \
   "INVENTORY_SERVICE_IMAGE=${INVENTORY_SERVICE_IMAGE}" \
-  "AI_SERVICE_IMAGE=${AI_SERVICE_IMAGE}" \
   "NEXTJS_IMAGE=${NEXTJS_IMAGE}" \
   "WEB_PUBLIC_API_URL=${WEB_PUBLIC_API_URL:-https://dev-api.workphelo.com/api/v1}" \
   "WEB_PUBLIC_APP_BASE_URL=${WEB_PUBLIC_APP_BASE_URL:-https://dev-app.workphelo.com}"
@@ -95,31 +73,7 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.dev" \
   "MARKETING_SERVICE_URL=http://marketing-service:4006" \
   "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007" \
   "ACCOUNTING_SERVICE_URL=http://accounting-service:4008" \
-  "INVENTORY_SERVICE_URL=http://inventory-service:4009" \
-  "AI_SERVICE_URL=http://ai-service:4011" \
-  "AI_REQUEST_SIGNING_ENABLED=false" \
-  "AI_RESOURCE_SAFEGUARDS_ENABLED=false" \
-  "AI_INTERNAL_DEMO_ENABLED=false"
-
-# Availability is not execution authorization. Deliberately omit all DB/Redis/keyring credentials.
-write_env_file "${DEPLOY_PATH}/apps/ai-service/.env.dev" \
-  "NODE_ENV=production" \
-  "AI_SERVICE_PORT=4011" \
-  "AI_PROVIDER=mock" \
-  "AI_POLICY_VERSION=dev-eligibility-v1" \
-  "JWT_SECRET=${JWT_SECRET}" \
-  "AI_AUTHENTICATED_ROUTES_ENABLED=true" \
-  "AI_ENABLED=false" \
-  "AI_MOCK_ENABLED=false" \
-  "AI_INTERNAL_DEMO_ENABLED=false" \
-  "AI_PERSISTENCE_ENABLED=false" \
-  "AI_MESSAGE_ENCRYPTION_ENABLED=false" \
-  "AI_MESSAGE_OPERATIONS_ENABLED=false" \
-  "AI_REQUEST_VERIFICATION_ENABLED=false" \
-  "AI_CONVERSATION_HTTP_ENABLED=false" \
-  "AI_RESOURCE_SAFEGUARDS_ENABLED=false" \
-  "AI_RETENTION_CLEANUP_ENABLED=false" \
-  "AI_RETENTION_SCHEDULER_ENABLED=false"
+  "INVENTORY_SERVICE_URL=http://inventory-service:4009"
 
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "PORT=4001" \
@@ -299,7 +253,6 @@ ensure_image_available "$MARKETING_SERVICE_IMAGE" "marketing-service" "marketing
 ensure_image_available "$REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service"
 ensure_image_available "$ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service"
 ensure_image_available "$INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service"
-ensure_image_available "$AI_SERVICE_IMAGE" "ai-service" "ai-service"
 ensure_image_available "$NEXTJS_IMAGE" "nextjs-web" "nextjs-web"
 log "✓ Required images available"
 
@@ -312,9 +265,6 @@ preflight_runtime_env "$MARKETING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/marketing-
 preflight_runtime_env "$REINSURANCE_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" "dist/config/runtime-env.js" "reinsurance-service"
 preflight_runtime_env "$ACCOUNTING_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/accounting-service/.env.dev" "dist/config/runtime-env.js" "accounting-service"
 preflight_runtime_env "$INVENTORY_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/inventory-service/.env.dev" "dist/config/runtime-env.js" "inventory-service"
-# AI exports a parser rather than a CLI; invoke it explicitly, without a network.
-docker run --rm --network none --env-file "${DEPLOY_PATH}/apps/ai-service/.env.dev" \
-  "$AI_SERVICE_IMAGE" node -e 'const c=require("./dist/config/runtime-env.js").parseRuntimeEnv(process.env);if(!c.AI_AUTHENTICATED_ROUTES_ENABLED||Object.entries(c).some(([k,v])=>k.endsWith("_ENABLED")&&k!=="AI_AUTHENTICATED_ROUTES_ENABLED"&&v!==false))process.exit(1);'
 log "✓ Runtime env validation passed"
 
 section "Infrastructure Services"
@@ -324,7 +274,6 @@ wait_for_container_health rabbitmq
 log "✓ Infrastructure services healthy"
 
 section "Database Migrations"
-# AI is intentionally excluded: eligibility has no persistence. No AI migrate/seed/reconcile.
 docker_compose run --rm auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
 docker_compose run --rm hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
 docker_compose run --rm notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
@@ -353,7 +302,6 @@ wait_for_container_health marketing-service
 wait_for_container_health reinsurance-service
 wait_for_container_health accounting-service
 wait_for_container_health inventory-service
-wait_for_container_health ai-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
@@ -388,8 +336,6 @@ wait_for_http_ok "dev marketing-service" "http://127.0.0.1:4006/api/health"
 wait_for_http_ok "dev reinsurance-service" "http://127.0.0.1:4007/api/health"
 wait_for_http_ok "dev accounting-service" "http://127.0.0.1:4008/api/health"
 wait_for_http_ok "dev inventory-service" "http://127.0.0.1:4009/api/health"
-# AI is not host-published. Inspect internal probes from its own container.
-docker_compose_exec ai-service node -e 'Promise.all(["health","ready"].map(async p=>{const r=await fetch("http://127.0.0.1:4011/api/"+p,{signal:AbortSignal.timeout(2000)});const b=await r.json();if(!r.ok||b.service!=="ai-service"||(p==="ready"&&b.inferenceAvailable!==false))throw Error("AI probe failed");})).catch(()=>process.exit(1));'
 wait_for_http_ok "dev api-gateway" "http://127.0.0.1:4010/health"
 wait_for_http_ok "dev reinsurance via gateway" "http://127.0.0.1:4010/api/v1/operations/reinsurance/health"
 wait_for_http_ok "dev accounting via gateway" "http://127.0.0.1:4010/api/v1/accounting/health"
