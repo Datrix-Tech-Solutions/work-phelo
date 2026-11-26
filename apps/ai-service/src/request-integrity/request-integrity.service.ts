@@ -1,4 +1,10 @@
-import { GatewayTimeoutException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  GatewayTimeoutException,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'crypto';
 import { Request } from 'express';
 import { verify } from 'jsonwebtoken';
@@ -23,6 +29,7 @@ const payloadFields = [
   'bodyLength',
   'contentType',
   'deadlineAtMs',
+  'demoIntent',
   'exp',
   'iat',
   'idempotencyKeyHash',
@@ -60,6 +67,7 @@ export class RequestIntegrityService {
     private readonly keys: RequestVerificationKeys,
     private readonly authentication: TrustedContextService,
     private readonly nonces: RequestNonceStore,
+    private readonly config: ConfigService,
   ) {}
 
   async authenticateAndConsume(request: Request): Promise<VerifiedAiRequest> {
@@ -112,6 +120,7 @@ export class RequestIntegrityService {
       const now = Date.now();
       if (
         proof.v !== 1 ||
+        typeof proof.demoIntent !== 'boolean' ||
         proof.iss !== 'workphelo-gateway' ||
         proof.aud !== 'workphelo-ai-request' ||
         typeof proof.iat !== 'number' ||
@@ -210,6 +219,10 @@ export class RequestIntegrityService {
     } catch {
       throw new UnauthorizedException();
     }
+    // Only authenticated proof claims participate in this policy. Reject mode
+    // drift before nonce consumption, permits, receipts or other durable writes.
+    if (proof.demoIntent !== (this.config.get<unknown>('AI_INTERNAL_DEMO_ENABLED') === true))
+      throw new ServiceUnavailableException();
     const digest = createHash('sha256')
       .update(
         JSON.stringify([

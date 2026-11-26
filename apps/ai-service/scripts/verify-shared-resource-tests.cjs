@@ -49,6 +49,13 @@ try {
       suite: 'Shared AI admission on disposable Redis',
       minimum: 16,
     },
+    {
+      name: 'DemoGateway',
+      workspace: 'ai-service',
+      file: 'conversations/gateway.integration.spec.ts',
+      suite: 'Isolated demo through real Gateway, AI and PostgreSQL (Auth current-state stub)',
+      minimum: 18,
+    },
   ];
   const totals = {};
   for (const test of cases) {
@@ -94,7 +101,7 @@ try {
     totals[test.name] = actual.length;
   }
   console.log(
-    `AI shared-resource integration PASS: PostgreSQL=${totals.PostgreSQL} Redis=${totals.Redis} skipped=0`,
+    `AI shared-resource integration PASS: PostgreSQL=${totals.PostgreSQL} Redis=${totals.Redis} DemoGateway=${totals.DemoGateway} skipped=0`,
   );
 } catch (error) {
   console.error(

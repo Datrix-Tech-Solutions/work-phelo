@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { INFERENCE_PROVIDER, InferenceProvider } from '../inference/inference-provider';
+import { demoGuidance } from '../inference/demo-guidance';
 import { randomUUID } from 'crypto';
 import { Prisma } from '../../prisma/generated/client';
 import { MessageContextFactory } from '../encryption/message-context';
@@ -39,6 +42,8 @@ export class ConversationOperationsService {
     private readonly fingerprints: SubmissionFingerprintService,
     private readonly encryption: MessageEncryptionService,
     private readonly contexts: MessageContextFactory,
+    @Optional() private readonly config?: ConfigService,
+    @Optional() @Inject(INFERENCE_PROVIDER) private readonly provider?: InferenceProvider,
   ) {}
 
   private async lock(tx: Prisma.TransactionClient, owner: Owner, id: string, write = true) {
@@ -85,6 +90,15 @@ export class ConversationOperationsService {
       throw new ConversationOperationError(404);
     const input = { ...owner, conversationId, content };
     const fingerprint = this.fingerprints.create(input);
+    const demo = this.config?.get<unknown>('AI_INTERNAL_DEMO_ENABLED') === true;
+    if (demo) {
+      if (
+        !['development', 'test'].includes(this.config?.get<string>('NODE_ENV') ?? '') ||
+        this.config?.get<string>('AI_RUNTIME_SCOPE') !== 'isolated-demo' ||
+        !this.provider
+      )
+        throw new ConversationOperationError(503);
+    }
     return this.database.transaction(async (tx) => {
       // The receipt scope spans conversations. Acquire this lock before the parent lock.
       const scope = appendReceiptLockScope(owner.tenantId, owner.ownerUserId, idempotencyKey);
@@ -120,11 +134,52 @@ export class ConversationOperationsService {
           select: resultSelect,
         });
         if (!result) throw new ConversationOperationError(404);
+        if (demo) {
+          const assistant = await tx.aiConversationMessage.findFirst({
+            where: {
+              conversationId,
+              ...owner,
+              sequence: result.sequence + 1,
+              role: 'DEMO_ASSISTANT',
+            },
+          });
+          if (!assistant) throw new ConversationOperationError(503);
+          const storedReply = this.demoReply(context, assistant);
+          await this.live(tx, conversation);
+          return {
+            ...result,
+            demo: { mode: 'scripted-demo' as const, synthetic: true as const, reply: storedReply },
+          };
+        }
         await this.live(tx, conversation);
         return result;
       }
+      // Resolve durable replay before generation. The only provider allowed here
+      // is the bounded local mock; never put external inference in this DB lock.
+      let reply: string | undefined;
+      if (demo) {
+        const request = {
+          requestId: randomUUID(),
+          messages: [{ role: 'user' as const, content }],
+          maxOutputTokens: 256,
+        };
+        const expected = demoGuidance(request);
+        if (!expected) throw new ConversationOperationError(400);
+        const generated = await this.provider!.generateText(request, {
+          signal: new AbortController().signal,
+          deadlineAtMs: ownershipDeadline(context) ?? Date.now() + 5000,
+        });
+        if (
+          !generated.synthetic ||
+          generated.provider !== 'mock' ||
+          generated.usage.billing !== 'NON_BILLABLE' ||
+          generated.text !== expected
+        )
+          throw new ConversationOperationError(503);
+        reply = generated.text;
+      }
       const sequence = conversation.nextMessageSequence;
-      if (sequence >= 2147483647) throw new ConversationOperationError(503);
+      if (sequence >= 2147483647 - (demo ? 1 : 0)) throw new ConversationOperationError(503);
       const id = randomUUID();
       const envelope = this.encryption.encryptMessage(
         content,
@@ -139,9 +194,32 @@ export class ConversationOperationsService {
         data: { id, conversationId, ...owner, sequence, ...envelope },
         select: resultSelect,
       });
+      let assistant;
+      if (demo) {
+        const assistantId = randomUUID();
+        const encrypted = this.encryption.encryptMessage(
+          reply!,
+          this.contexts.forMessage(context, {
+            conversationId,
+            messageId: assistantId,
+            role: 'DEMO_ASSISTANT',
+            sequence: sequence + 1,
+          }),
+        );
+        assistant = await tx.aiConversationMessage.create({
+          data: {
+            id: assistantId,
+            conversationId,
+            ...owner,
+            sequence: sequence + 1,
+            role: 'DEMO_ASSISTANT',
+            ...encrypted,
+          },
+        });
+      }
       await tx.aiConversation.update({
         where: { id: conversationId },
-        data: { nextMessageSequence: sequence + 1 },
+        data: { nextMessageSequence: sequence + (demo ? 2 : 1) },
       });
       const receiptCreatedAt = await this.live(tx, conversation);
       await tx.aiSubmissionReceipt.create({
@@ -159,8 +237,45 @@ export class ConversationOperationsService {
         },
       });
       await this.live(tx, conversation);
+      if (assistant)
+        return {
+          ...message,
+          demo: {
+            mode: 'scripted-demo' as const,
+            synthetic: true as const,
+            reply: this.demoReply(context, assistant),
+          },
+        };
       return message;
     }, ownershipDeadline(context));
+  }
+
+  private demoReply(
+    context: OwnershipContext,
+    row: Prisma.AiConversationMessageGetPayload<object>,
+  ) {
+    return {
+      id: row.id,
+      conversationId: row.conversationId,
+      sequence: row.sequence,
+      role: row.role,
+      createdAt: row.createdAt,
+      content: this.encryption.decryptMessage(
+        {
+          encryptionVersion: row.encryptionVersion,
+          keyId: row.keyId,
+          ciphertext: row.ciphertext,
+          nonce: row.nonce,
+          authenticationTag: row.authenticationTag,
+        },
+        this.contexts.forMessage(context, {
+          conversationId: row.conversationId,
+          messageId: row.id,
+          role: row.role,
+          sequence: row.sequence,
+        }),
+      ),
+    };
   }
 
   async readOwnedMessagePage(
@@ -201,7 +316,7 @@ export class ConversationOperationsService {
         id: string;
         conversationId: string;
         sequence: number;
-        role: 'USER';
+        role: 'USER' | 'DEMO_ASSISTANT';
         createdAt: Date;
         content: string;
       }[] = [];

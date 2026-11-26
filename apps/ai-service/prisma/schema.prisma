@@ -12,6 +12,7 @@ datasource db {
 
 enum AiMessageRole {
   USER
+  DEMO_ASSISTANT
 
   @@schema("ai")
 }

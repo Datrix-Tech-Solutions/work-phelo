@@ -6,11 +6,12 @@ import {
   InferenceResult,
 } from './inference-provider';
 import { InferenceProviderError } from './provider-error';
+import { demoGuidance } from './demo-guidance';
 
 export type MockExecutionConfig = Pick<
   AiRuntimeConfig,
   'NODE_ENV' | 'AI_PROVIDER' | 'AI_ENABLED' | 'AI_MOCK_ENABLED' | 'AI_REQUEST_TIMEOUT_MS'
->;
+> & { AI_INTERNAL_DEMO_ENABLED?: boolean; AI_RUNTIME_SCOPE?: string };
 
 // Constructor-only fixtures are not exposed through environment variables or HTTP.
 export interface MockScenario {
@@ -26,6 +27,8 @@ export class MockInferenceProvider implements InferenceProvider {
 
   constructor(config: MockExecutionConfig, scenario: MockScenario = {}) {
     if (
+      (config.AI_INTERNAL_DEMO_ENABLED === true &&
+        (config.NODE_ENV === 'production' || config.AI_RUNTIME_SCOPE !== 'isolated-demo')) ||
       config.AI_PROVIDER !== 'mock' ||
       !['development', 'test', 'production'].includes(config.NODE_ENV) ||
       (config.NODE_ENV === 'production' && (config.AI_ENABLED || config.AI_MOCK_ENABLED)) ||
@@ -66,6 +69,9 @@ export class MockInferenceProvider implements InferenceProvider {
     if (deadline <= Date.now())
       throw new InferenceProviderError('DEADLINE_EXCEEDED', 'NOT_SUBMITTED');
     const ceiling = request.maxOutputTokens;
+    const demo = this.config.AI_INTERNAL_DEMO_ENABLED === true;
+    const text = demo ? demoGuidance(request) : response;
+    if (!text) throw new InferenceProviderError('UNAVAILABLE', 'NOT_SUBMITTED');
 
     return new Promise<InferenceResult>((resolve, reject) => {
       let settled = false;
@@ -91,13 +97,13 @@ export class MockInferenceProvider implements InferenceProvider {
         if (options.signal.aborted) return fail('CANCELLED');
         if (Date.now() >= deadline) return fail('DEADLINE_EXCEEDED');
         if (this.scenario.failure) return fail(this.scenario.failure);
-        const words = response.split(' ');
+        const words = text.split(' ');
         const selected = words.slice(0, ceiling);
         settled = true;
         cleanup();
         resolve({
           provider: 'mock',
-          model: 'deterministic-mock-v1',
+          model: demo ? 'deterministic-workphelo-demo-v1' : 'deterministic-mock-v1',
           synthetic: true,
           text: selected.join(' '),
           finishReason: selected.length < words.length ? 'length' : 'completed',

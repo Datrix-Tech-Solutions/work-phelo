@@ -5,7 +5,7 @@ import { MessageEncryptionError } from './encryption-error';
 export interface MessageStorageMetadata {
   conversationId: string;
   messageId: string;
-  role: 'USER';
+  role: 'USER' | 'DEMO_ASSISTANT';
   sequence: number;
 }
 declare const contextBrand: unique symbol;
@@ -36,7 +36,7 @@ export class MessageContextFactory {
         !uuid.test(conversationId) ||
         typeof messageId !== 'string' ||
         !uuid.test(messageId) ||
-        role !== 'USER' ||
+        !['USER', 'DEMO_ASSISTANT'].includes(role) ||
         !Number.isInteger(sequence) ||
         sequence < 1 ||
         sequence > 2147483647

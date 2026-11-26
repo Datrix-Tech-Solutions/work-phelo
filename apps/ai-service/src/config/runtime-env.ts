@@ -7,6 +7,8 @@ export interface AiRuntimeConfig {
   AI_PROVIDER: 'mock';
   AI_ENABLED: boolean;
   AI_MOCK_ENABLED: boolean;
+  AI_INTERNAL_DEMO_ENABLED: boolean;
+  AI_RUNTIME_SCOPE?: 'isolated-demo';
   AI_SERVICE_PORT: number;
   AI_REQUEST_TIMEOUT_MS: number;
   AI_POLICY_VERSION: string;
@@ -97,6 +99,16 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
   const schedulerEnabled = booleanValue(env, 'AI_RETENTION_SCHEDULER_ENABLED');
   const verificationEnabled = booleanValue(env, 'AI_REQUEST_VERIFICATION_ENABLED');
   const conversationHttpEnabled = booleanValue(env, 'AI_CONVERSATION_HTTP_ENABLED');
+  const demoEnabled = booleanValue(env, 'AI_INTERNAL_DEMO_ENABLED');
+  if (
+    demoEnabled &&
+    (nodeEnv === 'production' ||
+      env.AI_RUNTIME_SCOPE !== 'isolated-demo' ||
+      !enabled ||
+      !mockEnabled ||
+      !conversationHttpEnabled)
+  )
+    throw new RuntimeConfigurationError('AI_INTERNAL_DEMO_ENABLED/AI_RUNTIME_SCOPE');
   const safeguards = booleanValue(env, 'AI_RESOURCE_SAFEGUARDS_ENABLED');
   if (safeguards && !persistenceEnabled)
     throw new RuntimeConfigurationError('AI_RESOURCE_SAFEGUARDS_ENABLED');
@@ -182,6 +194,8 @@ export function parseRuntimeEnv(env: Record<string, unknown>): AiRuntimeConfig {
     AI_PROVIDER: 'mock',
     AI_ENABLED: enabled,
     AI_MOCK_ENABLED: mockEnabled,
+    AI_INTERNAL_DEMO_ENABLED: demoEnabled,
+    ...(demoEnabled ? { AI_RUNTIME_SCOPE: 'isolated-demo' as const } : {}),
     AI_SERVICE_PORT: integerValue(env, 'AI_SERVICE_PORT', 4011, 65535),
     AI_REQUEST_TIMEOUT_MS: integerValue(env, 'AI_REQUEST_TIMEOUT_MS', 5000, 25000),
     AI_POLICY_VERSION: policy,

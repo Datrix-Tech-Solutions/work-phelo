@@ -59,6 +59,8 @@ jobs:
         run: npm exec --workspace=apps/ai-service -- prisma migrate deploy --schema prisma/schema.prisma
       - name: Generate AI client
         run: npm run db:generate --workspace=apps/ai-service
+      - name: Build Gateway runtime workspace dependency
+        run: npm run build --workspace=@work-phelo/config
       - name: Run real dependency regressions and reject skipped tests
         run: node apps/ai-service/scripts/verify-shared-resource-tests.cjs
 
