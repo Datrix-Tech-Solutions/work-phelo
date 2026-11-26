@@ -173,12 +173,11 @@ test('successful workflows from other repositories/branches/events and current r
 test('latest completed successful run, including reruns, supplies the baseline', () => {
   assert.equal(successfulRun([run(1, 'success'), run(3, 'success')], repository, '9').id, 3);
 });
-test('release approval is exact-SHA; stale reruns cannot roll back a newer DEV head', () => {
+test('routine deployment needs no approval SHA but still rejects stale releases', () => {
   const plan = makePlan(state(), head, ['ai-service']);
-  assert.throws(() => authorizeDeployment(plan, head, head, undefined));
-  assert.throws(() => authorizeDeployment(plan, head, head, base));
-  assert.throws(() => authorizeDeployment(plan, head, failed, head));
-  assert.doesNotThrow(() => authorizeDeployment(plan, head, head, head));
+  assert.throws(() => authorizeDeployment(plan, head, failed));
+  assert.throws(() => authorizeDeployment(plan, failed, failed));
+  assert.doesNotThrow(() => authorizeDeployment(plan, head, head));
 });
 test('workflow pins an explicit successful SHA baseline, serializes active runs and publishes state last', () => {
   const workflow = readFileSync(new URL('../workflows/deploy-dev.yml', import.meta.url), 'utf8');
@@ -190,58 +189,23 @@ test('workflow pins an explicit successful SHA baseline, serializes active runs 
       workflow.indexOf('name: Deploy via SSH'),
   );
   assert(
-    workflow.indexOf('Authorize exact release') <
+    workflow.indexOf('Validate current release') <
       workflow.indexOf('name: Preflight deployment host'),
   );
 });
-test('remote approval, baseline and lock checks precede mutation; staged assets are per attempt', () => {
+test('baseline and host lock precede mutation; staged assets are per attempt', () => {
   const script = readFileSync(new URL('./deploy-dev.sh', import.meta.url), 'utf8');
-  assert(
-    script.indexOf('DEV_DATABASE_OPERATIONS_APPROVED_SHA') < script.indexOf('cp "${ASSET_PATH}'),
-  );
   assert(script.indexOf('flock -n 9') < script.indexOf('cp "${ASSET_PATH}'));
   assert(script.includes('.dev-deploy/${DEV_DEPLOYMENT_RUN_ID}-${DEV_DEPLOYMENT_RUN_ATTEMPT}'));
   assert(script.includes('resolve_image_ref "$BASELINE_IMAGE_ENV_FILE"'));
   assert(!script.includes('resolve_image_ref "$COMPOSE_ENV_FILE"'));
+  assert(script.indexOf('Read-only Database Compatibility') < script.indexOf('section "Deploy"'));
+  assert(!/migrate deploy|prisma\/seed|Database Seed/.test(script));
+  assert(script.includes('AUTH_STARTUP_PERMISSION_BACKFILL_ENABLED=false'));
 });
-
-test('actual deployment script rejects missing approval before changing active files', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'dev-approval-stop-'));
-  try {
-    const assets = join(dir, '.dev-deploy/1-1');
-    mkdirSync(join(assets, '.github/scripts'), { recursive: true });
-    mkdirSync(join(assets, 'infrastructure'), { recursive: true });
-    mkdirSync(join(dir, 'infrastructure'), { recursive: true });
-    writeFileSync(
-      join(assets, '.github/scripts/deploy-common.sh'),
-      readFileSync(new URL('./deploy-common.sh', import.meta.url)),
-    );
-    const active = join(dir, 'infrastructure/docker-compose.dev.yml');
-    writeFileSync(active, 'known-good');
-    writeFileSync(join(assets, 'infrastructure/docker-compose.dev.yml'), 'candidate');
-    const script = readFileSync(new URL('./deploy-dev.sh', import.meta.url), 'utf8').replace(
-      'DEPLOY_PATH="/var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo"',
-      `DEPLOY_PATH="${dir}"`,
-    );
-    const file = join(dir, 'candidate.sh');
-    writeFileSync(file, script);
-    assert.throws(
-      () =>
-        execFileSync('bash', [file], {
-          env: {
-            PATH: process.env.PATH,
-            BUILD_SHA: head,
-            DEV_DEPLOYMENT_RUN_ID: '1',
-            DEV_DEPLOYMENT_RUN_ATTEMPT: '1',
-          },
-          stdio: 'pipe',
-        }),
-      (error) =>
-        error.status === 1 &&
-        error.stderr.toString().includes('require approval for this exact release SHA'),
-    );
-    assert.equal(readFileSync(active, 'utf8'), 'known-good');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+test('routine workflow contains no obsolete approval gate or seed credentials', () => {
+  const workflow = readFileSync(new URL('../workflows/deploy-dev.yml', import.meta.url), 'utf8');
+  assert(!workflow.includes('DEV_DATABASE_OPERATIONS_APPROVED_SHA'));
+  assert(!workflow.includes('SUPER_ADMIN_PASSWORD'));
+  assert(workflow.includes('.github/scripts/dev-database-check.cjs'));
 });

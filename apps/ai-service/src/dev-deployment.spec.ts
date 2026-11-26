@@ -85,7 +85,12 @@ describe('DEV eligibility-only deployment contract', () => {
   it('passes the offline deployment-baseline and recovery regression suite', () => {
     execFileSync(
       process.execPath,
-      ['--test', join(root, '.github/scripts/dev-deployment-plan.spec.mjs')],
+      [
+        '--test',
+        join(root, '.github/scripts/dev-deployment-plan.spec.mjs'),
+        join(root, '.github/scripts/dev-database-check.spec.cjs'),
+        join(root, '.github/scripts/dev-maintenance-request.spec.mjs'),
+      ],
       { stdio: 'pipe' },
     );
   });
