@@ -5,10 +5,11 @@ on:
     branches: [dev]
 
 # ── 1. Concurrency control ─────────────────────────────────────────────────────
-# Allow a newer dev push to replace an older in-flight deployment.
+# Keep active deployments serialized. Pending runs may be replaced; the successful
+# deployment baseline carries their changes into the next surviving run.
 concurrency:
   group: deploy-dev-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -55,22 +56,26 @@ jobs:
     name: Detect Changed Services
     runs-on: ubuntu-latest
     needs: quality-gates
+    permissions:
+      contents: read
+      actions: read
 
     # ── 6. Per-service boolean outputs ──────────────────────────────────────────
     # Each output is 'true'/'false' so the build matrix can skip unchanged services
     # without fragile inline jq parsing of a JSON array.
     outputs:
-      changed: ${{ steps.filter.outputs.changes }}
-      api-gateway: ${{ steps.filter.outputs.api-gateway }}
-      auth-service: ${{ steps.filter.outputs.auth-service }}
-      hr-service: ${{ steps.filter.outputs.hr-service }}
-      notification-service: ${{ steps.filter.outputs.notification-service }}
-      subscription-service: ${{ steps.filter.outputs.subscription-service }}
-      marketing-service: ${{ steps.filter.outputs.marketing-service }}
-      reinsurance-service: ${{ steps.filter.outputs.reinsurance-service }}
-      accounting-service: ${{ steps.filter.outputs.accounting-service }}
-      inventory-service: ${{ steps.filter.outputs.inventory-service }}
-      nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
+      changed: ${{ steps.plan.outputs.changed }}
+      api-gateway: ${{ steps.plan.outputs.api-gateway }}
+      auth-service: ${{ steps.plan.outputs.auth-service }}
+      hr-service: ${{ steps.plan.outputs.hr-service }}
+      notification-service: ${{ steps.plan.outputs.notification-service }}
+      subscription-service: ${{ steps.plan.outputs.subscription-service }}
+      marketing-service: ${{ steps.plan.outputs.marketing-service }}
+      reinsurance-service: ${{ steps.plan.outputs.reinsurance-service }}
+      accounting-service: ${{ steps.plan.outputs.accounting-service }}
+      inventory-service: ${{ steps.plan.outputs.inventory-service }}
+      ai-service: ${{ steps.plan.outputs.ai-service }}
+      nextjs-web: ${{ steps.plan.outputs.nextjs-web }}
 
     steps:
       - name: Checkout code
@@ -79,16 +84,34 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
 
+      - name: Setup deployment planner runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Resolve last successful DEV deployment
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Repository variable: non-secret, operator-verified bootstrap only.
+          DEV_DEPLOYMENT_BOOTSTRAP_JSON: ${{ vars.DEV_DEPLOYMENT_BOOTSTRAP_JSON }}
+        run: node .github/scripts/dev-deployment-plan.mjs resolve
+
       - name: Detect changed services
         id: filter
         uses: dorny/paths-filter@v4
         with:
+          # A SHA compares that exact tree, not main or merely push.before.
+          base: ${{ steps.baseline.outputs.sha }}
+          ref: ${{ env.BUILD_SHA }}
           filters: |
             api-gateway:
               - 'apps/api-gateway/**'
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+              - '.github/scripts/deploy-dev.sh'
+              - 'infrastructure/docker-compose.dev.yml'
             auth-service:
               - 'apps/auth-service/**'
               - 'packages/**'
@@ -129,9 +152,32 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+            ai-service:
+              - 'apps/ai-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - '.github/scripts/deploy-dev.sh'
+              - '.github/workflows/deploy-dev.yml'
+              - 'infrastructure/docker-compose.dev.yml'
             nextjs-web:
               - 'apps/web/work-phelo-web/**'
           list-files: none
+
+      - name: Finalize deployment selection
+        id: plan
+        env:
+          FILTER_CHANGED: ${{ steps.filter.outputs.changes }}
+        run: node .github/scripts/dev-deployment-plan.mjs select
+
+      - name: Preserve this run's deployment plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-deployment-plan
+          path: dev-deployment-plan.json
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
 
   build-and-push:
     name: Build & Push — ${{ matrix.service }}
@@ -174,6 +220,8 @@ jobs:
             dockerfile: apps/accounting-service/Dockerfile
           - service: inventory-service
             dockerfile: apps/inventory-service/Dockerfile
+          - service: ai-service
+            dockerfile: apps/ai-service/Dockerfile
           - service: nextjs-web
             dockerfile: apps/web/work-phelo-web/Dockerfile
 
@@ -252,6 +300,7 @@ jobs:
     if: |
       always() &&
       needs.quality-gates.result == 'success' &&
+      needs.detect-changes.result == 'success' &&
       (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
 
     # ── 8. Use GITHUB_TOKEN for GHCR pull on the server ───────────────────────
@@ -259,6 +308,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: read
 
     environment:
       name: dev
@@ -307,6 +357,9 @@ jobs:
       BUILD_REF: ${{ github.ref_name }}
       IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
       CHANGED_SERVICES: ${{ needs.detect-changes.outputs.changed }}
+      DEV_DATABASE_OPERATIONS_APPROVED_SHA: ${{ vars.DEV_DATABASE_OPERATIONS_APPROVED_SHA }}
+      DEV_DEPLOYMENT_RUN_ID: ${{ github.run_id }}
+      DEV_DEPLOYMENT_RUN_ATTEMPT: ${{ github.run_attempt }}
       WEB_PUBLIC_API_URL: https://dev-api.workphelo.com/api/v1
       WEB_PUBLIC_APP_BASE_URL: https://dev-app.workphelo.com
       AUTH_SERVICE_URL: ${{ vars.AUTH_SERVICE_URL }}
@@ -333,6 +386,27 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
+
+      - name: Setup deployment planner runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Download this run's deployment plan
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-deployment-plan
+
+      - name: Authorize exact release and reject stale deployment plans
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin refs/heads/dev:refs/remotes/origin/dev
+          node .github/scripts/dev-deployment-plan.mjs authorize
+
+      - name: Export successful baseline SHA
+        run: node -e 'const p=require("./dev-deployment-plan.json");require("node:fs").appendFileSync(process.env.GITHUB_ENV,`DEV_DEPLOYMENT_BASELINE_SHA=${p.baseline.sha}\n`);'
 
       - name: Validate deployment inputs
         run: bash .github/scripts/validate-deploy-env.sh dev
@@ -360,8 +434,8 @@ jobs:
           username: ${{ vars.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           port: 22
-          source: .github/scripts/deploy-common.sh,infrastructure/docker-compose.dev.yml
-          target: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo/
+          source: .github/scripts/deploy-common.sh,infrastructure/docker-compose.dev.yml,.dev-baseline-images.env
+          target: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo/.dev-deploy/${{ github.run_id }}-${{ github.run_attempt }}/
           strip_components: 0
 
       # ── 10. SSH deploy via extracted script ───────────────────────────────
@@ -376,4 +450,15 @@ jobs:
           port: 22
           command_timeout: 60m
           script_path: .github/scripts/deploy-dev.sh
-          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_CAREERS_SITE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_SMS_PROVIDER,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,NOTIFY_PILOSMS_API_KEY,NOTIFY_PILOSMS_SENDER_ID,NOTIFY_SASUSYNC_API_KEY,NOTIFY_SASUSYNC_SENDER_ID,NOTIFY_SASUSYNC_BASE_URL,NOTIFY_SASUSYNC_SANDBOX,NOTIFY_AGOOSMS_API_KEY,NOTIFY_AGOOSMS_BASE_URL,NOTIFY_AGOOSMS_SANDBOX,NOTIFY_AGOOSMS_SANDBOX_PATH,NOTIFY_AGOOSMS_LIVE_PATH,MARKETING_SMS_SENDER_READINESS_MODE,MARKETING_SMS_SENDER_PROVIDER_STATUS_MAX_AGE_HOURS,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,HR_FIELD_ENCRYPTION_KEY,HR_FIELD_HMAC_KEY,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES,WEB_PUBLIC_API_URL,WEB_PUBLIC_APP_BASE_URL,AUTH_TENANT_ASSET_STORAGE_PROVIDER,AUTH_TENANT_ASSET_S3_BUCKET,AUTH_TENANT_ASSET_S3_REGION,AUTH_TENANT_ASSET_S3_PREFIX,AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS,AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,REINSURANCE_DOCUMENT_STORAGE_PROVIDER,REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER,REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS,INTERNAL_SERVICE_AUTH_SECRET,INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AUTH_SERVICE_URL,REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS
+          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_CAREERS_SITE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_SMS_PROVIDER,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,NOTIFY_PILOSMS_API_KEY,NOTIFY_PILOSMS_SENDER_ID,NOTIFY_SASUSYNC_API_KEY,NOTIFY_SASUSYNC_SENDER_ID,NOTIFY_SASUSYNC_BASE_URL,NOTIFY_SASUSYNC_SANDBOX,NOTIFY_AGOOSMS_API_KEY,NOTIFY_AGOOSMS_BASE_URL,NOTIFY_AGOOSMS_SANDBOX,NOTIFY_AGOOSMS_SANDBOX_PATH,NOTIFY_AGOOSMS_LIVE_PATH,MARKETING_SMS_SENDER_READINESS_MODE,MARKETING_SMS_SENDER_PROVIDER_STATUS_MAX_AGE_HOURS,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,HR_FIELD_ENCRYPTION_KEY,HR_FIELD_HMAC_KEY,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES,WEB_PUBLIC_API_URL,WEB_PUBLIC_APP_BASE_URL,AUTH_TENANT_ASSET_STORAGE_PROVIDER,AUTH_TENANT_ASSET_S3_BUCKET,AUTH_TENANT_ASSET_S3_REGION,AUTH_TENANT_ASSET_S3_PREFIX,AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS,AUTH_TENANT_ASSET_CLOUDINARY_ROOT_FOLDER,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,REINSURANCE_DOCUMENT_STORAGE_PROVIDER,REINSURANCE_DOCUMENT_CLOUDINARY_ROOT_FOLDER,REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS,INTERNAL_SERVICE_AUTH_SECRET,INTERNAL_SERVICE_AUTH_ALLOWED_SERVICES,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AUTH_SERVICE_URL,REINSURANCE_TENANT_PROFILE_CACHE_TTL_SECONDS,DEV_DATABASE_OPERATIONS_APPROVED_SHA,DEV_DEPLOYMENT_BASELINE_SHA,DEV_DEPLOYMENT_RUN_ID,DEV_DEPLOYMENT_RUN_ATTEMPT
+
+      # Publish only after SSH deployment, health checks, seeds and maintenance succeed.
+      # Failed/cancelled workflows are never eligible as future baselines.
+      - name: Record successful deployed image inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-deployment-state
+          path: dev-deployment-state.json
+          retention-days: 90
+          overwrite: true
+          if-no-files-found: error
