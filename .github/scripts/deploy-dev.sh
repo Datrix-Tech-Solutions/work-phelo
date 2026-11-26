@@ -7,7 +7,12 @@ DEPLOY_PATH="/var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo"
 COMPOSE_FILE="${DEPLOY_PATH}/infrastructure/docker-compose.dev.yml"
 COMPOSE_ENV_FILE="${DEPLOY_PATH}/.compose.dev.env"
 COMPOSE_PROJECT_NAME="workphelo-dev"
-HELPER_FILE="${DEPLOY_PATH}/.github/scripts/deploy-common.sh"
+[[ "${DEV_DEPLOYMENT_RUN_ID:-}" =~ ^[0-9]+$ && "${DEV_DEPLOYMENT_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]] || {
+  echo "Missing DEV deployment run identity" >&2; exit 1;
+}
+ASSET_PATH="${DEPLOY_PATH}/.dev-deploy/${DEV_DEPLOYMENT_RUN_ID}-${DEV_DEPLOYMENT_RUN_ATTEMPT}"
+HELPER_FILE="${ASSET_PATH}/.github/scripts/deploy-common.sh"
+BASELINE_IMAGE_ENV_FILE="${ASSET_PATH}/.dev-baseline-images.env"
 
 [[ -f "$HELPER_FILE" ]] || {
   echo "✗ Missing deploy helper at ${HELPER_FILE}. Upload step did not complete." >&2
@@ -16,6 +21,17 @@ HELPER_FILE="${DEPLOY_PATH}/.github/scripts/deploy-common.sh"
 
 # shellcheck source=/dev/null
 source "$HELPER_FILE"
+
+[[ "${BUILD_SHA:-}" =~ ^[0-9a-f]{40}$ && "${DEV_DATABASE_OPERATIONS_APPROVED_SHA:-}" == "$BUILD_SHA" ]] ||
+  die "DEV migration and seed operations require approval for this exact release SHA"
+[[ "${DEV_DEPLOYMENT_BASELINE_SHA:-}" =~ ^[0-9a-f]{40}$ && -f "$BASELINE_IMAGE_ENV_FILE" && "$(read_env_value "$BASELINE_IMAGE_ENV_FILE" DEPLOYED_SHA)" == "$DEV_DEPLOYMENT_BASELINE_SHA" ]] ||
+  die "Successful deployment image inventory is missing or mismatched"
+require_command flock
+exec 9>"${DEPLOY_PATH}/.deploy.dev.lock"
+flock -n 9 || die "Another DEV deployment is still executing on the host"
+# Cancelled SSH clients may leave a remote script running. Stage assets per run,
+# then replace active Compose only while holding the host lock.
+cp "${ASSET_PATH}/infrastructure/docker-compose.dev.yml" "$COMPOSE_FILE"
 
 section "WorkPhelo Dev Deployment"
 log "SHA: ${BUILD_SHA:-unknown}"
@@ -29,18 +45,20 @@ warn_optional_envs
 ensure_deploy_dirs
 mkdir -p "${DEPLOY_PATH}/apps/ai-service"
 
-API_GATEWAY_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "API_GATEWAY_IMAGE" "api-gateway" "api-gateway" "dev")"
-AUTH_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "AUTH_SERVICE_IMAGE" "auth-service" "auth-service" "dev")"
-HR_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "HR_SERVICE_IMAGE" "hr-service" "hr-service" "dev")"
-NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "dev")"
-SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "dev")"
-MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "dev")"
-REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "dev")"
-ACCOUNTING_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service" "dev")"
-INVENTORY_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service" "dev")"
-AI_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "AI_SERVICE_IMAGE" "ai-service" "ai-service" "dev")"
-is_sha_tagged_workphelo_ref "$AI_SERVICE_IMAGE" || die "AI requires an immutable SHA image; build ai-service before adoption"
-NEXTJS_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "dev")"
+API_GATEWAY_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "API_GATEWAY_IMAGE" "api-gateway" "api-gateway" "dev")"
+AUTH_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "AUTH_SERVICE_IMAGE" "auth-service" "auth-service" "dev")"
+HR_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "HR_SERVICE_IMAGE" "hr-service" "hr-service" "dev")"
+NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "dev")"
+SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "dev")"
+MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "dev")"
+REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "dev")"
+ACCOUNTING_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "ACCOUNTING_SERVICE_IMAGE" "accounting-service" "accounting-service" "dev")"
+INVENTORY_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "INVENTORY_SERVICE_IMAGE" "inventory-service" "inventory-service" "dev")"
+AI_SERVICE_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "AI_SERVICE_IMAGE" "ai-service" "ai-service" "dev")"
+NEXTJS_IMAGE="$(resolve_image_ref "$BASELINE_IMAGE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "dev")"
+for key in API_GATEWAY_IMAGE AUTH_SERVICE_IMAGE HR_SERVICE_IMAGE NOTIFICATION_SERVICE_IMAGE SUBSCRIPTION_SERVICE_IMAGE MARKETING_SERVICE_IMAGE REINSURANCE_SERVICE_IMAGE ACCOUNTING_SERVICE_IMAGE INVENTORY_SERVICE_IMAGE AI_SERVICE_IMAGE NEXTJS_IMAGE; do
+  is_sha_tagged_workphelo_ref "${!key}" || die "${key} requires a SHA-tagged image from the successful baseline or this build"
+done
 
 section "Compose Env"
 write_env_file "$COMPOSE_ENV_FILE" \

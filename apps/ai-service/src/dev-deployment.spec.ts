@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { readFileSync } from 'fs';
 import { createServer, Server } from 'http';
 import { join } from 'path';
+import { execFileSync } from 'child_process';
 import cookieParser from 'cookie-parser';
 import { RequestHandler } from 'express';
 import * as jwt from 'jsonwebtoken';
@@ -63,11 +64,11 @@ describe('DEV eligibility-only deployment contract', () => {
     ])
       expect(env[key]).toBeUndefined();
   });
-  it('never adds AI to migration/seed commands and requires an immutable image', () => {
+  it('never adds AI to migration/seed commands and requires SHA-tagged image references', () => {
     expect(script).not.toMatch(
       /docker_compose(?:_exec)?\s+(?:run\s+--rm\s+)?ai-service[^\n]*(?:prisma|migrate|seed|reconcile)/,
     );
-    expect(script).toContain('is_sha_tagged_workphelo_ref "$AI_SERVICE_IMAGE"');
+    expect(script).toContain('is_sha_tagged_workphelo_ref "${!key}"');
     expect(script).toContain('AI_SERVICE_URL=http://ai-service:4011');
     expect(script).toContain('AI_REQUEST_SIGNING_ENABLED=false');
     const compose = readFileSync(join(root, 'infrastructure/docker-compose.dev.yml'), 'utf8');
@@ -77,9 +78,16 @@ describe('DEV eligibility-only deployment contract', () => {
     expect(ai).toContain('AI_SERVICE_IMAGE');
     expect(ai).toContain('/api/ready');
     const workflow = readFileSync(join(root, '.github/workflows/deploy-dev.yml'), 'utf8');
-    expect(workflow).toContain('ai-service: ${{ steps.filter.outputs.ai-service }}');
+    expect(workflow).toContain('ai-service: ${{ steps.plan.outputs.ai-service }}');
     expect(workflow).toContain('dockerfile: apps/ai-service/Dockerfile');
     expect(workflow).toContain("- 'apps/ai-service/**'");
+  });
+  it('passes the offline deployment-baseline and recovery regression suite', () => {
+    execFileSync(
+      process.execPath,
+      ['--test', join(root, '.github/scripts/dev-deployment-plan.spec.mjs')],
+      { stdio: 'pipe' },
+    );
   });
 });
 
