@@ -213,6 +213,7 @@ export async function forwardAiConversation(
       { issuer: 'workphelo-gateway', audience: 'ai', expiresIn: 30 },
     );
     const descriptor = buildAiForwardingDescriptor({
+      demoIntent: demoEnabled(),
       method: req.method,
       externalTarget: req.originalUrl,
       headers: req.headers,

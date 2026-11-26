@@ -91,7 +91,6 @@ export class ConversationOperationsService {
     const input = { ...owner, conversationId, content };
     const fingerprint = this.fingerprints.create(input);
     const demo = this.config?.get<unknown>('AI_INTERNAL_DEMO_ENABLED') === true;
-    let reply: string | undefined;
     if (demo) {
       if (
         !['development', 'test'].includes(this.config?.get<string>('NODE_ENV') ?? '') ||
@@ -99,25 +98,6 @@ export class ConversationOperationsService {
         !this.provider
       )
         throw new ConversationOperationError(503);
-      const request = {
-        requestId: randomUUID(),
-        messages: [{ role: 'user' as const, content }],
-        maxOutputTokens: 256,
-      };
-      const expected = demoGuidance(request);
-      if (!expected) throw new ConversationOperationError(400);
-      const generated = await this.provider.generateText(request, {
-        signal: new AbortController().signal,
-        deadlineAtMs: ownershipDeadline(context) ?? Date.now() + 5000,
-      });
-      if (
-        !generated.synthetic ||
-        generated.provider !== 'mock' ||
-        generated.usage.billing !== 'NON_BILLABLE' ||
-        generated.text !== expected
-      )
-        throw new ConversationOperationError(503);
-      reply = generated.text;
     }
     return this.database.transaction(async (tx) => {
       // The receipt scope spans conversations. Acquire this lock before the parent lock.
@@ -173,6 +153,30 @@ export class ConversationOperationsService {
         }
         await this.live(tx, conversation);
         return result;
+      }
+      // Resolve durable replay before generation. The only provider allowed here
+      // is the bounded local mock; never put external inference in this DB lock.
+      let reply: string | undefined;
+      if (demo) {
+        const request = {
+          requestId: randomUUID(),
+          messages: [{ role: 'user' as const, content }],
+          maxOutputTokens: 256,
+        };
+        const expected = demoGuidance(request);
+        if (!expected) throw new ConversationOperationError(400);
+        const generated = await this.provider!.generateText(request, {
+          signal: new AbortController().signal,
+          deadlineAtMs: ownershipDeadline(context) ?? Date.now() + 5000,
+        });
+        if (
+          !generated.synthetic ||
+          generated.provider !== 'mock' ||
+          generated.usage.billing !== 'NON_BILLABLE' ||
+          generated.text !== expected
+        )
+          throw new ConversationOperationError(503);
+        reply = generated.text;
       }
       const sequence = conversation.nextMessageSequence;
       if (sequence >= 2147483647 - (demo ? 1 : 0)) throw new ConversationOperationError(503);

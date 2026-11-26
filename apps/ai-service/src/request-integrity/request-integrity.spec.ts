@@ -331,6 +331,9 @@ describe('AI request verification config and actual Gateway HTTP contract (nonce
   });
   it.each([
     { v: 2 },
+    { demoIntent: undefined },
+    { demoIntent: 'false' },
+    { demoIntent: 0 },
     { iss: 'other' },
     { aud: 'other' },
     { bodyLength: '1' },
@@ -358,6 +361,10 @@ describe('AI request verification config and actual Gateway HTTP contract (nonce
       expect(receiver.consume).not.toHaveBeenCalled();
     },
   );
+  it('rejects authenticated demo-mode drift before consuming a nonce', async () => {
+    expect((await forward(receiver.origin, { demoIntent: true })).status).toBe(503);
+    expect(receiver.consume).not.toHaveBeenCalled();
+  });
   it.each([
     { typ: 'JWT' },
     { kid: 'f'.repeat(64) },

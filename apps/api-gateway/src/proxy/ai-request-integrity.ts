@@ -189,6 +189,7 @@ export interface SignedAiForwardingDescriptor {
   readonly [signedBrand]: true;
 }
 interface Snapshot {
+  demoIntent: boolean;
   method: 'GET' | 'POST' | 'DELETE';
   path: string;
   rawQuery: string;
@@ -209,6 +210,8 @@ const signedDescriptors = new WeakMap<
 >();
 
 export interface AiForwardingInput {
+  // Trusted Gateway configuration only, never populated from browser headers/body.
+  demoIntent?: boolean;
   method: string;
   externalTarget: string;
   headers: http.IncomingHttpHeaders;
@@ -253,6 +256,8 @@ export function buildAiForwardingDescriptor(
   input: AiForwardingInput,
 ): AiForwardingDescriptor {
   try {
+    if (input.demoIntent !== undefined && typeof input.demoIntent !== 'boolean')
+      throw new AiRequestIntegrityError();
     const target = input.externalTarget;
     validateAiConversationTarget(input.method, target);
     if (
@@ -375,6 +380,7 @@ export function buildAiForwardingDescriptor(
     )
       throw new AiRequestIntegrityError();
     const snapshot: Snapshot = {
+      demoIntent: input.demoIntent ?? false,
       method: input.method as Snapshot['method'],
       path: '/api' + suffix,
       rawQuery,
@@ -445,6 +451,7 @@ export class AiRequestIntegritySigner {
     const proof = jwt.sign(
       {
         v: 1,
+        demoIntent: snapshot.demoIntent,
         method: snapshot.method,
         pathHash: fieldHash('path', snapshot.path),
         queryHash: fieldHash('raw-query', snapshot.rawQuery),

@@ -106,6 +106,7 @@ function wire(input: Input) {
   const proof = jwt.sign(
     {
       v: 1,
+      demoIntent: false,
       iss: 'workphelo-gateway',
       aud: 'workphelo-ai-request',
       iat,

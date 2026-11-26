@@ -783,6 +783,11 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       const replies = await Promise.all([afterCapacity(send), afterCapacity(send)]);
       expect(replies.map((r) => r.status)).toEqual([201, 201]);
       expect(replies[0].body).toEqual(replies[1].body);
+      expect(
+        await db.aiSubmissionReceipt.count({
+          where: { tenantId: c.tenant, operation: 'APPEND_MESSAGE' },
+        }),
+      ).toBe(1);
       expect((await send()).body).toEqual(replies[0].body);
       expect(
         await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
@@ -993,6 +998,309 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       ).toBe(201);
       await call(h, 'DELETE', c.target, undefined, undefined, c.token);
     });
+    it.each(['gateway-on', 'ai-on'])(
+      'rejects %s mode drift before nonce or business writes',
+      async (scenario) => {
+        const c = await conversation(),
+          config = h.ai.get(ConfigService);
+        const before = await db.aiRequestNonce.count({ where: { tenantId: c.tenant } });
+        if (scenario === 'gateway-on') config.set('AI_INTERNAL_DEMO_ENABLED', false);
+        else process.env.AI_INTERNAL_DEMO_ENABLED = 'false';
+        try {
+          expect(
+            (
+              await call(
+                h,
+                'POST',
+                c.target + '/messages',
+                { content: 'private review canary' },
+                'drift',
+                c.token,
+              )
+            ).status,
+          ).toBe(503);
+          expect(
+            await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+          ).toBe(0);
+          expect(
+            await db.aiSubmissionReceipt.count({
+              where: { tenantId: c.tenant, operation: 'APPEND_MESSAGE' },
+            }),
+          ).toBe(0);
+          expect(await db.aiRequestNonce.count({ where: { tenantId: c.tenant } })).toBe(before);
+        } finally {
+          config.set('AI_INTERNAL_DEMO_ENABLED', true);
+          process.env.AI_INTERNAL_DEMO_ENABLED = 'true';
+          await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+        }
+      },
+    );
+    it('rejects missing, malformed, substituted or authenticated wrong intent before nonce consumption', async () => {
+      const c = await conversation();
+      const before = await db.aiRequestNonce.count({ where: { tenantId: c.tenant } });
+      for (const intent of [undefined, 'true', false, 'unsigned']) {
+        h.state.mutate = (wire) => {
+          const compact = String(wire.headers['x-ai-request-integrity']);
+          const payload = jwt.decode(compact) as jwt.JwtPayload;
+          const changed = {
+            ...payload,
+            demoIntent: intent === 'unsigned' ? false : intent,
+          };
+          let proof: string;
+          if (intent === 'unsigned') {
+            const parts = compact.split('.');
+            parts[1] = Buffer.from(JSON.stringify(changed)).toString('base64url');
+            proof = parts.join('.');
+          } else
+            proof = jwt.sign(changed, Buffer.from(signing.key, 'base64'), {
+              algorithm: 'HS256',
+              header: { alg: 'HS256', typ: 'workphelo.ai.request+jwt', kid: signing.id },
+            });
+          return { ...wire, headers: { ...wire.headers, 'x-ai-request-integrity': proof } };
+        };
+        try {
+          expect(
+            (
+              await call(
+                h,
+                'POST',
+                c.target + '/messages',
+                { content: 'What can this demo do?' },
+                'intent',
+                c.token,
+              )
+            ).status,
+          ).toBe(intent === false ? 503 : 401);
+          expect(await db.aiRequestNonce.count({ where: { tenantId: c.tenant } })).toBe(before);
+          expect(
+            await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+          ).toBe(0);
+        } finally {
+          h.state.mutate = undefined;
+        }
+      }
+      await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+    });
+    it('does not take demo intent from client headers or body fields', async () => {
+      const c = await conversation();
+      const good = await call(
+        h,
+        'POST',
+        c.target + '/messages',
+        { content: 'What can this demo do?' },
+        'client-header',
+        c.token,
+      ).set('x-ai-demo-intent', 'false');
+      expect(good.status).toBe(201);
+      expect(
+        jwt.decode(String(h.captured.at(-1)!.headers['x-ai-request-integrity'])),
+      ).toMatchObject({ demoIntent: true });
+      const bad = await call(
+        h,
+        'POST',
+        c.target + '/messages',
+        { content: 'private canary', demoIntent: false },
+        'client-body',
+        c.token,
+      );
+      expect(bad.status).toBe(400);
+      expect(
+        await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+      ).toBe(2);
+      await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+    });
+    it('returns the committed pair without regeneration when the provider fails', async () => {
+      const c = await conversation(),
+        send = () =>
+          call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'What can this demo do?' },
+            'committed',
+            c.token,
+          );
+      const original = await send();
+      expect(original.status).toBe(201);
+      const spy = jest
+        .spyOn(h.ai.get<InferenceProvider>(INFERENCE_PROVIDER), 'generateText')
+        .mockRejectedValue(new Error('synthetic outage'));
+      try {
+        const replay = await send();
+        expect(replay.status).toBe(201);
+        expect(replay.body).toEqual(original.body);
+        expect(spy).not.toHaveBeenCalled();
+        expect(
+          await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+        ).toBe(2);
+        expect(
+          await db.aiSubmissionReceipt.count({
+            where: { tenantId: c.tenant, operation: 'APPEND_MESSAGE' },
+          }),
+        ).toBe(1);
+        expect(
+          (
+            await call(
+              h,
+              'POST',
+              c.target + '/messages',
+              { content: 'Who can read my demo conversation?' },
+              'committed',
+              c.token,
+            )
+          ).status,
+        ).toBe(409);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+        await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+      }
+    });
+    it('recovers a dropped append response as exactly one committed pair and receipt', async () => {
+      const c = await conversation(),
+        url = new URL(h.gatewayOrigin),
+        key = 'lost-append';
+      const body = JSON.stringify({ content: 'What can this demo do?' });
+      h.state.dropResponse = true;
+      const client = http.request({
+        hostname: url.hostname,
+        port: url.port,
+        method: 'POST',
+        path: c.target + '/messages',
+        headers: {
+          authorization: `Bearer ${c.token}`,
+          'content-type': 'application/json',
+          'content-length': String(Buffer.byteLength(body)),
+          'idempotency-key': key,
+        },
+      });
+      client.on('error', () => undefined);
+      client.end(body);
+      try {
+        for (
+          let n = 0;
+          n < 80 &&
+          (await db.aiSubmissionReceipt.count({
+            where: { tenantId: c.tenant, idempotencyKey: key },
+          })) === 0;
+          n++
+        )
+          await new Promise((r) => setTimeout(r, 25));
+        expect(
+          await db.aiSubmissionReceipt.count({
+            where: { tenantId: c.tenant, idempotencyKey: key },
+          }),
+        ).toBe(1);
+      } finally {
+        client.destroy();
+        h.state.dropResponse = false;
+      }
+      const spy = jest
+        .spyOn(h.ai.get<InferenceProvider>(INFERENCE_PROVIDER), 'generateText')
+        .mockRejectedValue(new Error('synthetic outage'));
+      try {
+        const replay = await afterCapacity(() =>
+          call(
+            h,
+            'POST',
+            c.target + '/messages',
+            { content: 'What can this demo do?' },
+            key,
+            c.token,
+          ),
+        );
+        expect(replay.status).toBe(201);
+        expect(spy).not.toHaveBeenCalled();
+        expect(
+          await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+        ).toBe(2);
+      } finally {
+        spy.mockRestore();
+        await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+      }
+    });
+    it.each(['deleted', 'expired'])(
+      'does not replay or regenerate a %s conversation',
+      async (kind) => {
+        const c = await conversation(),
+          send = () =>
+            call(
+              h,
+              'POST',
+              c.target + '/messages',
+              { content: 'What can this demo do?' },
+              'gone',
+              c.token,
+            );
+        expect((await send()).status).toBe(201);
+        await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+        if (kind === 'expired') {
+          // Restore an expired parent only in this owned fixture. Retained receipt
+          // still refers to this ID; real DB expiry must reject before replay.
+          const createdAt = new Date(Date.now() - 720 * 3600000 - 1000);
+          await db.aiConversation.create({
+            data: {
+              id: c.conversationId,
+              tenantId: c.tenant,
+              ownerUserId: c.user,
+              createdAt,
+              expiresAt: new Date(createdAt.getTime() + 720 * 3600000),
+            },
+          });
+        }
+        const provider = jest
+          .spyOn(h.ai.get<InferenceProvider>(INFERENCE_PROVIDER), 'generateText')
+          .mockRejectedValue(new Error('must not generate'));
+        try {
+          expect((await send()).status).toBe(404);
+          expect(provider).not.toHaveBeenCalled();
+        } finally {
+          provider.mockRestore();
+          if (kind === 'expired')
+            await db.aiConversation.delete({ where: { id: c.conversationId } });
+        }
+      },
+    );
+    it.each(['missing-reply', 'missing-user', 'corrupt-fingerprint'])(
+      'rejects incomplete receipt state: %s',
+      async (kind) => {
+        const c = await conversation(),
+          send = () =>
+            call(
+              h,
+              'POST',
+              c.target + '/messages',
+              { content: 'What can this demo do?' },
+              'incomplete',
+              c.token,
+            );
+        expect((await send()).status).toBe(201);
+        if (kind === 'corrupt-fingerprint')
+          await db.aiSubmissionReceipt.updateMany({
+            where: { tenantId: c.tenant, idempotencyKey: 'incomplete' },
+            data: { requestFingerprint: Buffer.alloc(32, 0) },
+          });
+        else
+          await db.aiConversationMessage.deleteMany({
+            where: {
+              conversationId: c.conversationId,
+              role: kind === 'missing-reply' ? 'DEMO_ASSISTANT' : 'USER',
+            },
+          });
+        const spy = jest
+          .spyOn(h.ai.get<InferenceProvider>(INFERENCE_PROVIDER), 'generateText')
+          .mockRejectedValue(new Error('must not repair'));
+        try {
+          expect((await send()).status).toBe(
+            kind === 'missing-reply' ? 503 : kind === 'missing-user' ? 404 : 409,
+          );
+          expect(spy).not.toHaveBeenCalled();
+        } finally {
+          spy.mockRestore();
+          await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+        }
+      },
+    );
   },
 );
 (databaseUrl ? describe : describe.skip)(

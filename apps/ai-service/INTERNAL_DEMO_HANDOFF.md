@@ -61,6 +61,10 @@ the committed USER metadata and `demo.reply`, whose content begins:
 `Scripted WorkPhelo demo. No LLM or live ERP data was used.` The reply has the next
 sequence number. Both rows are encrypted and committed with the append receipt in
 one transaction. On retry, the exact stored reply/IDs/timestamps are returned.
+Committed replay is resolved under the existing owner/receipt locks before any
+mock invocation. Provider unavailability does not prevent returning a valid stored
+turn. A new turn generates only after no receipt is found, inside the existing
+bounded transaction; this is safe only for the local mock, not a future external LLM.
 Each turn consumes two message slots, both encrypted envelope charges, and one
 append receipt under the existing quotas. History pages may split a turn; merge
 pages by message ID and sequence rather than assuming every page contains pairs.
@@ -75,6 +79,17 @@ Cookie requests use `credentials:'include'`. Mutations using cookies require an
 exact Origin allowed by Gateway `ALLOWED_ORIGINS`; localhost and 127.0.0.1 are
 different origins. Bearer authentication is supported; do not combine conflicting
 cookie/Bearer credentials. Never store a private service key in frontend env.
+
+Gateway writes a mandatory boolean `demoIntent` into the existing signed request
+proof, using only its server configuration. AI verifies that claim and compares
+its own mode BEFORE consuming a nonce or entering business execution. Authenticated
+mode disagreement returns sanitized 503; missing/malformed/forged claims return 401.
+Neither case creates an AI nonce, message or receipt. Gateway admission can still
+conservatively consume its own rate budget before AI rejects the request.
+Browsers must not send mode headers or add intent fields to the JSON body; such
+values cannot select the signed mode. Both ON permits only catalog turns; both OFF
+preserves the existing user-only behavior. Both processes must be updated together
+while conversation traffic is disabled: older proofs without the claim are rejected.
 
 ```ts
 const turnKey = crypto.randomUUID(); // Persist until the result is resolved.
@@ -176,7 +191,7 @@ Redis readiness automatically.
 
 Automated real Gateway/AI/PostgreSQL tests use an explicit Auth-current-state stub;
 they do NOT replace the normal-login acceptance step with fabricated trusted headers.
-CI's disposable resource runner also executes all seven demo integration scenarios
+CI's disposable resource runner also executes all 18 demo integration scenarios
 and rejects silent skips, alongside real PostgreSQL/Redis safeguard coverage.
 
 ## Separate real-LLM approval gate
@@ -191,14 +206,26 @@ No external provider SDK or connection is part of this MVP.
 
 ## Handoff validation
 
-Local final validation: AI 764 tests / 27 suites; Gateway 234 tests / 11 suites,
+Local remediation validation: AI 779 tests / 27 suites; Gateway 234 tests / 11 suites,
 with isolated dependencies and no skipped tests in those runs. The expanded
-zero-skip runner passed PostgreSQL=22, Redis=16 and DemoGateway=7 (the Gateway
+zero-skip runner passed PostgreSQL=22, Redis=16 and DemoGateway=18 (the Gateway
 integration file also runs the existing security regressions). AI/Gateway
 typechecks, builds and lint passed; Gateway retains 17 pre-existing warnings.
 Prisma generation/validation, fresh disposable migration sequence, formatting,
 RBAC alignment and whitespace checks passed. Only disposable local databases were
 migrated. No Docker image rebuild was performed for this MVP change.
+
+Real Auth AppModule -> Gateway -> AI -> disposable PostgreSQL passed 21 scenarios;
+only outbound messaging clients were replaced with rejecting doubles. The first
+full AI run had one socket reset in an existing authorization HTTP fixture; its
+isolated 69-test suite and the final full 779-test rerun passed without changing
+its assertions or timeouts. This observation is not a claim that transport flakiness
+has been eliminated.
+
+The initial clean-install CI job failed because Gateway's `@work-phelo/config`
+workspace was not built. The focused job now explicitly builds that workspace
+before the runner, which requires all 18 demo cases and zero skips. No Redis or
+PostgreSQL tests were removed or relaxed. The four existing migrations are unchanged.
 
 Forced root typecheck stopped in unrelated local Marketing Prisma generation with
 `Unexpected end of JSON input`; no Marketing source or generated artifacts are

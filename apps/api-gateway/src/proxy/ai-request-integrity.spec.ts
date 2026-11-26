@@ -513,6 +513,7 @@ describe('Signed immutable descriptor to actual local HTTP bytes (test-only down
       Buffer.from(parts[1], 'base64url').toString('utf8'),
     ) as Record<string, unknown>;
     for (const field of [
+      'demoIntent',
       'method',
       'pathHash',
       'queryHash',

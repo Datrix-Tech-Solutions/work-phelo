@@ -54,7 +54,7 @@ try {
       workspace: 'ai-service',
       file: 'conversations/gateway.integration.spec.ts',
       suite: 'Isolated demo through real Gateway, AI and PostgreSQL (Auth current-state stub)',
-      minimum: 7,
+      minimum: 18,
     },
   ];
   const totals = {};
