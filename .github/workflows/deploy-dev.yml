@@ -70,6 +70,7 @@ jobs:
       reinsurance-service: ${{ steps.filter.outputs.reinsurance-service }}
       accounting-service: ${{ steps.filter.outputs.accounting-service }}
       inventory-service: ${{ steps.filter.outputs.inventory-service }}
+      ai-service: ${{ steps.filter.outputs.ai-service }}
       nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
 
     steps:
@@ -89,6 +90,8 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+              - '.github/scripts/deploy-dev.sh'
+              - 'infrastructure/docker-compose.dev.yml'
             auth-service:
               - 'apps/auth-service/**'
               - 'packages/**'
@@ -129,6 +132,14 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+            ai-service:
+              - 'apps/ai-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+              - '.github/scripts/deploy-dev.sh'
+              - '.github/workflows/deploy-dev.yml'
+              - 'infrastructure/docker-compose.dev.yml'
             nextjs-web:
               - 'apps/web/work-phelo-web/**'
           list-files: none
@@ -174,6 +185,8 @@ jobs:
             dockerfile: apps/accounting-service/Dockerfile
           - service: inventory-service
             dockerfile: apps/inventory-service/Dockerfile
+          - service: ai-service
+            dockerfile: apps/ai-service/Dockerfile
           - service: nextjs-web
             dockerfile: apps/web/work-phelo-web/Dockerfile
 
