@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { BILLING_TYPE_LABELS } from '@/lib/projectTypes';
 import { TypeChip, type TypeChipColor } from '@/components/atoms/TypeChip';
 import { ProjectPriceVsTime } from '@/components/organisms/hr/projects/ProjectPriceVsTime';
+import { ExportTimesheetButton } from '@/components/organisms/hr/projects/ExportTimesheetButton';
 import { UpdatePriceModal } from '@/components/organisms/hr/projects/UpdatePriceModal';
 import { ProjectInvoiceModal } from '@/components/organisms/hr/projects/ProjectInvoiceModal';
 import { ProjectClientInvoiceModal } from '@/components/organisms/hr/projects/ProjectClientInvoiceModal';
@@ -89,6 +90,7 @@ export function ProjectBilling({ projectId }: { projectId: string }) {
               {BILLING_TYPE_LABELS[pricing.type]} ·{' '}
               <span className="font-semibold text-gray-900">{client.name}</span>
             </span>
+            <ExportTimesheetButton projectId={projectId} />
             {pricing.type === 'FLAT_RATE' && (
               <Button
                 size="xs"

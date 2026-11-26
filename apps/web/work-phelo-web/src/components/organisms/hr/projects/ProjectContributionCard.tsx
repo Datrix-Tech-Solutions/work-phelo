@@ -5,6 +5,7 @@ import { Avatar } from '@/components/atoms/Avatar';
 import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
 import { NumberField } from '@/components/atoms/NumberField';
+import { ExportTimesheetButton } from '@/components/organisms/hr/projects/ExportTimesheetButton';
 import { useProjectSetup, useUpdateProjectMemberRate } from '@/hooks';
 import { useSaveWithToast } from '@/hooks/hr/useProjectWork';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
@@ -58,6 +59,7 @@ function PersonDetails({ projectId, person, canManage }: Props) {
           {[person.member?.jobTitle, role].filter(Boolean).join(' · ')}
         </p>
       </div>
+      <ExportTimesheetButton projectId={projectId} employeeId={person.id} />
       {person.member && (
         <div className="flex flex-col items-end gap-1">
           {draft === null ? (

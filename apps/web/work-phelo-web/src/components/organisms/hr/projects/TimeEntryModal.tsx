@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
 import { NumberField } from '@/components/atoms/NumberField';
+import { todayLocal } from '@/lib/utils';
 
 interface Props {
   mode: 'add' | 'set';
@@ -11,7 +13,8 @@ interface Props {
   currentMs?: number;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (ms: number) => void;
+  /** `date` is the day the time was worked, YYYY-MM-DD. */
+  onSubmit: (ms: number, date: string) => void;
 }
 
 /** Enter time by hand: add time that was worked, or correct the total already logged. */
@@ -19,13 +22,15 @@ export function TimeEntryModal({ mode, currentMs = 0, isOpen, onClose, onSubmit 
   const currentMinutes = Math.floor(currentMs / 60000);
   const [hours, setHours] = useState(mode === 'set' ? Math.floor(currentMinutes / 60) : 0);
   const [minutes, setMinutes] = useState(mode === 'set' ? currentMinutes % 60 : 0);
+  const [date, setDate] = useState(todayLocal);
   const [error, setError] = useState('');
 
   const handleSave = () => {
     if (minutes > 59) return setError('Minutes must be 59 or less');
     const ms = (hours * 60 + minutes) * 60000;
     if (mode === 'add' && ms <= 0) return setError('Enter the time that was worked');
-    onSubmit(ms);
+    if (!date) return setError('Pick the day the time was worked');
+    onSubmit(ms, date);
   };
 
   return (
@@ -62,6 +67,14 @@ export function TimeEntryModal({ mode, currentMs = 0, isOpen, onClose, onSubmit 
           onChange={setMinutes}
           className="w-full py-2"
         />
+      </div>
+      <div className="mt-3">
+        <DatePicker label="Date Worked" value={date} onChange={setDate} />
+        {mode === 'set' && (
+          <p className="mt-1 text-xs text-gray-400">
+            The difference from your current total is recorded on this day.
+          </p>
+        )}
       </div>
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
     </Modal>

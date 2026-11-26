@@ -146,9 +146,9 @@ export function TaskTimer({ taskId, projectId, canTrack, finished }: Props) {
           currentMs={myMs}
           isOpen
           onClose={() => setEntry(null)}
-          onSubmit={(ms) => {
-            if (entry === 'add') save(add.mutateAsync({ taskId, ms }));
-            if (entry === 'set') save(setMine.mutateAsync({ taskId, ms }));
+          onSubmit={(ms, date) => {
+            if (entry === 'add') save(add.mutateAsync({ taskId, ms, date }));
+            if (entry === 'set') save(setMine.mutateAsync({ taskId, ms, date }));
             setEntry(null);
           }}
         />

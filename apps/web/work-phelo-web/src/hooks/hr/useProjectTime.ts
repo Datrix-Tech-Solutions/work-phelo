@@ -119,17 +119,17 @@ export function useTaskTimeActions(projectId: string) {
     onSuccess: store,
   });
   const add = useMutation({
-    mutationFn: ({ taskId, ms }: { taskId: string; ms: number }) =>
-      post(`${taskId}/time/entries`, toAmount(ms)),
+    mutationFn: ({ taskId, ms, date }: { taskId: string; ms: number; date: string }) =>
+      post(`${taskId}/time/entries`, { ...toAmount(ms), date }),
     onSuccess: store,
   });
   const setMine = useMutation({
-    mutationFn: async ({ taskId, ms }: { taskId: string; ms: number }) =>
+    mutationFn: async ({ taskId, ms, date }: { taskId: string; ms: number; date: string }) =>
       (
-        await api.put<TimeRow[]>(
-          `/hr/projects/${projectId}/tasks/${taskId}/time/mine`,
-          toAmount(ms),
-        )
+        await api.put<TimeRow[]>(`/hr/projects/${projectId}/tasks/${taskId}/time/mine`, {
+          ...toAmount(ms),
+          date,
+        })
       ).data,
     onSuccess: store,
   });

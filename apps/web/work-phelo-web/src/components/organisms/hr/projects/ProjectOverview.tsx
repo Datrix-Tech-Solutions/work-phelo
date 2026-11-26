@@ -4,6 +4,7 @@ import { TypeChip } from '@/components/atoms/TypeChip';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
+import { ExportTimesheetButton } from '@/components/organisms/hr/projects/ExportTimesheetButton';
 import { useProject, useProjectSetup } from '@/hooks';
 import { useProjectLabels } from '@/hooks/useModuleLabels';
 import { useProjectBillingLines } from '@/hooks/hr/useProjectBillingLines';
@@ -212,10 +213,22 @@ function TimeFigures({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  /** Sits at the end of the title row. */
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="flex min-w-0 flex-col gap-3 border-t border-gray-100 pt-4">
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -239,7 +252,7 @@ export function ProjectOverview({ projectId, ...time }: React.ComponentProps<typ
               <BillingFigures projectId={projectId} />
             </Section>
           )}
-          <Section title="Time">
+          <Section title="Time" action={<ExportTimesheetButton projectId={projectId} />}>
             <TimeFigures projectId={projectId} {...time} />
           </Section>
         </div>

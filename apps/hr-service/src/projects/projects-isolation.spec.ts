@@ -215,6 +215,7 @@ describe('Projects tenant-scoped parent validation', () => {
         work.completeSprint('tenant-a', id, 'sprint-a', u, { keepTaskIds: [] }),
     ],
     ['time summary', (id, u) => time.summary('tenant-a', id, u)],
+    ['time entries', (id, u) => time.entries('tenant-a', id, u)],
     [
       'timer start',
       (id, u) => time.start('tenant-a', id, 'task-a', u, { pauseOthers: true }),
