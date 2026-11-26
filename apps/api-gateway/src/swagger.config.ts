@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { addAiOpenApi } from './ai.openapi';
 
 export function setupSwagger(app: INestApplication) {
   const config = new DocumentBuilder()
@@ -67,6 +68,7 @@ All frontend requests go through this gateway at port **4000**.
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
+  addAiOpenApi(document);
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
