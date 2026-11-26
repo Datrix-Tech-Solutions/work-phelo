@@ -24,6 +24,9 @@ export function validateRequest({ tag, head, latestDev, run, jobs, environment, 
   ) {
     throw new Error('A completed DEV application build for this exact release is required');
   }
+  if (!jobs.some((job) => job.name === 'Quality Gates' && job.conclusion === 'success')) {
+    throw new Error('DEV application quality gates must pass before maintenance');
+  }
   if (
     !jobs.some(
       (job) =>

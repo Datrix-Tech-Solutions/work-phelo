@@ -18,6 +18,7 @@ const fixture = () => ({
     head_repository: { full_name: 'Datrix-Tech-Solutions/work-phelo' },
   },
   jobs: [
+    { name: 'Quality Gates', conclusion: 'success' },
     {
       name: 'Build & Push — auth-service',
       conclusion: 'success',
@@ -70,7 +71,10 @@ test('missing/weak Environment policy, metadata, wrong release and unbuilt image
       f.run.conclusion = 'cancelled';
     },
     (f) => {
-      f.jobs[0].steps[0].conclusion = 'skipped';
+      f.jobs[1].steps[0].conclusion = 'skipped';
+    },
+    (f) => {
+      f.jobs[0].conclusion = 'failure';
     },
     (f) => {
       f.tag = 'dev-maintenance-migrate-ai-service-123';

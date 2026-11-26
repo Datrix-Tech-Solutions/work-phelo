@@ -98,7 +98,7 @@ dev-maintenance-seed-hr-service-<completed-application-run-id>
 
 Only the seven listed services may migrate, only Auth/HR may seed, and AI is never
 supported. The referenced normal DEV run must be completed at the same commit with
-a successful build-and-push step for that service. A failed pending-migration gate
+successful Quality Gates and a successful build-and-push step for that service. A failed pending-migration gate
 is valid build evidence; cancelled or unbuilt runs are not. There is no arbitrary
 image, database, SQL or command input.
 
