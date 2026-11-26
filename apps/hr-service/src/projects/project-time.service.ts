@@ -17,6 +17,12 @@ import { ProjectsService } from './projects.service';
 const toSeconds = (amount: TimeAmountDto) =>
   amount.hours * 3600 + amount.minutes * 60;
 
+/** Manual time keeps the day it was worked in `startedAt`, at midday so no time zone moves the date. */
+const workedOn = (amount: TimeAmountDto) =>
+  amount.date
+    ? { startedAt: new Date(`${amount.date.slice(0, 10)}T12:00:00.000Z`) }
+    : {};
+
 /** Time spent on a project's timed tasks, per person: a running timer, time added by hand, corrections. */
 @Injectable()
 export class ProjectTimeService {
@@ -30,6 +36,48 @@ export class ProjectTimeService {
   async summary(tenantId: string, projectId: string, user: RequestUser) {
     await this.projects.assertCanView(tenantId, projectId, user);
     return this.loadSummary(tenantId, projectId);
+  }
+
+  /** Every piece of time on the project's timed tasks, oldest first, for a timesheet. A running timer
+   *  is counted up to now. Manual time has no end; its `startedAt` is the day it was worked, missing on
+   *  time added before that was kept, when only `createdAt` says when it was added. */
+  async entries(tenantId: string, projectId: string, user: RequestUser) {
+    await this.projects.assertCanView(tenantId, projectId, user);
+    const entries = await this.prisma.projectTimeEntry.findMany({
+      where: { tenantId, projectId, task: { isTimed: true } },
+      include: {
+        employee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            department: { select: { name: true } },
+          },
+        },
+        task: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const now = Date.now();
+    return entries.map((e) => {
+      const running =
+        e.source === ProjectTimeSource.TIMER && !e.endedAt && !!e.startedAt;
+      return {
+        taskId: e.taskId,
+        taskName: e.task.name,
+        employeeId: e.employeeId,
+        employeeName: `${e.employee.firstName} ${e.employee.lastName}`,
+        department: e.employee.department?.name ?? null,
+        source: e.source,
+        startedAt: e.startedAt?.toISOString() ?? null,
+        endedAt: e.endedAt?.toISOString() ?? null,
+        seconds:
+          running && e.startedAt
+            ? Math.max(0, Math.floor((now - e.startedAt.getTime()) / 1000))
+            : e.seconds,
+        note: e.note,
+        createdAt: e.createdAt.toISOString(),
+      };
+    });
   }
 
   /** The summary without the access check, for the actions that have just checked it themselves. */
@@ -232,6 +280,7 @@ export class ProjectTimeService {
         source: ProjectTimeSource.MANUAL,
         seconds,
         note: 'Added by hand',
+        ...workedOn(dto),
       },
     });
     return this.loadSummary(tenantId, projectId);
@@ -263,6 +312,7 @@ export class ProjectTimeService {
           source: ProjectTimeSource.MANUAL,
           seconds: delta,
           note: 'Correction',
+          ...workedOn(dto),
         },
       });
     }

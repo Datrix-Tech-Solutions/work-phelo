@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class StartTimerDto {
   @ApiPropertyOptional({
@@ -23,4 +30,12 @@ export class TimeAmountDto {
   @Min(0)
   @Max(59)
   minutes!: number;
+
+  @ApiPropertyOptional({
+    example: '2026-12-03',
+    description: 'The day the time was worked; left out, it is not recorded',
+  })
+  @IsOptional()
+  @IsDateString()
+  date?: string;
 }

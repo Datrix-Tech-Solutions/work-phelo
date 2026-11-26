@@ -325,6 +325,16 @@ export class ProjectWorkController {
 
   @PermissionExempt(
     'service-policy',
+    'ProjectWorkController.timeEntries delegates caller and tenant scope to its existing policy checks.',
+  )
+  @Get('time/entries')
+  @ApiOperation({ summary: 'Every time entry on the project, for a timesheet' })
+  timeEntries(@Param('id') id: string, @Req() req: Req_) {
+    return this.time.entries(req.user.tenantId, id, req.user);
+  }
+
+  @PermissionExempt(
+    'service-policy',
     'ProjectWorkController.startTimer delegates caller and tenant scope to its existing policy checks.',
   )
   @Post('tasks/:taskId/time/start')
