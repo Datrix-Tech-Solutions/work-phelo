@@ -1,0 +1,62 @@
+name: Authorized DEV database maintenance
+
+# Manual tag request works even while the repository default branch is main.
+# A tag never authorizes itself: the protected Environment and metadata preflight
+# below are mandatory. Only current DEV commits with built images are accepted.
+on:
+  push:
+    tags: ['dev-maintenance-*']
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+concurrency:
+  group: deploy-dev-refs/heads/dev
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    environment: dev-maintenance
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Verify independent approval policy and exact maintenance scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin refs/heads/dev:refs/remotes/origin/dev
+          node .github/scripts/dev-maintenance-request.mjs
+      - name: Stage isolated maintenance checker
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.DEV_SERVER_HOST }}
+          username: ${{ vars.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: .github/scripts/dev-database-check.cjs
+          target: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo/.dev-maintenance/${{ github.run_id }}-${{ github.run_attempt }}/
+      - name: Run only the approved operation
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          BUILD_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
+          SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
+        with:
+          host: ${{ vars.DEV_SERVER_HOST }}
+          username: ${{ vars.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          command_timeout: 30m
+          script_path: .github/scripts/dev-database-maintenance.sh
+          envs: BUILD_SHA,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,SUPER_ADMIN_EMAIL,SUPER_ADMIN_PASSWORD,MAINTENANCE_OPERATION,MAINTENANCE_SERVICE,MAINTENANCE_IMAGE

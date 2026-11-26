@@ -106,14 +106,10 @@ export function plannedState(plan, runId) {
   });
 }
 
-export function authorizeDeployment(plan, head, latestDev, approval) {
+export function authorizeDeployment(plan, head, latestDev) {
   requireValue(
     plan.head === head && head === latestDev,
     'Stale deployment: target must still be DEV HEAD',
-  );
-  requireValue(
-    approval === head && sha.test(approval),
-    'DEV database operations require explicit approval for this exact SHA',
   );
 }
 
@@ -232,12 +228,7 @@ async function main() {
   }
   if (command === 'authorize') {
     const plan = JSON.parse(readFileSync('dev-deployment-plan.json', 'utf8'));
-    authorizeDeployment(
-      plan,
-      process.env.BUILD_SHA,
-      git('rev-parse', 'origin/dev'),
-      process.env.DEV_DATABASE_OPERATIONS_APPROVED_SHA,
-    );
+    authorizeDeployment(plan, process.env.BUILD_SHA, git('rev-parse', 'origin/dev'));
     git('merge-base', '--is-ancestor', plan.baseline.sha, plan.head);
     const current = await api(
       'actions/workflows/deploy-dev.yml/runs?branch=dev&event=push&status=success&per_page=100',

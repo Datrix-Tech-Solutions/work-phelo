@@ -22,8 +22,7 @@ BASELINE_IMAGE_ENV_FILE="${ASSET_PATH}/.dev-baseline-images.env"
 # shellcheck source=/dev/null
 source "$HELPER_FILE"
 
-[[ "${BUILD_SHA:-}" =~ ^[0-9a-f]{40}$ && "${DEV_DATABASE_OPERATIONS_APPROVED_SHA:-}" == "$BUILD_SHA" ]] ||
-  die "DEV migration and seed operations require approval for this exact release SHA"
+[[ "${BUILD_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || die "Invalid release SHA"
 [[ "${DEV_DEPLOYMENT_BASELINE_SHA:-}" =~ ^[0-9a-f]{40}$ && -f "$BASELINE_IMAGE_ENV_FILE" && "$(read_env_value "$BASELINE_IMAGE_ENV_FILE" DEPLOYED_SHA)" == "$DEV_DEPLOYMENT_BASELINE_SHA" ]] ||
   die "Successful deployment image inventory is missing or mismatched"
 require_command flock
@@ -127,6 +126,7 @@ write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "NODE_ENV=production" \
   "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema w_auth)" \
+  "AUTH_STARTUP_PERMISSION_BACKFILL_ENABLED=false" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
@@ -323,17 +323,13 @@ wait_for_container_health redis
 wait_for_container_health rabbitmq
 log "✓ Infrastructure services healthy"
 
-section "Database Migrations"
-# AI is intentionally excluded: eligibility has no persistence. No AI migrate/seed/reconcile.
-docker_compose run --rm auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
-docker_compose run --rm hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
-docker_compose run --rm notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
-docker_compose run --rm subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
-docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma"
-docker_compose run --rm reinsurance-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/reinsurance-service/prisma/schema.prisma"
-docker_compose run --rm accounting-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/accounting-service/prisma/schema.prisma"
-docker_compose run --rm inventory-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/inventory-service/prisma/schema.prisma"
-log "✓ Migrations complete"
+section "Read-only Database Compatibility"
+for service in auth-service hr-service notification-service reinsurance-service accounting-service marketing-service inventory-service subscription-service; do
+  docker_compose run --rm --no-deps \
+    -v "${ASSET_PATH}/.github/scripts/dev-database-check.cjs:/checks/dev-database-check.cjs:ro" \
+    --entrypoint node "$service" /checks/dev-database-check.cjs "$service"
+done
+log "✓ Candidate images match applied migration history; no database changes executed"
 
 section "Deploy"
 if ! docker_compose up -d --remove-orphans --no-build; then
@@ -356,28 +352,6 @@ wait_for_container_health inventory-service
 wait_for_container_health ai-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
-
-section "Database Seed"
-if docker_compose_exec \
-  -e SUPER_ADMIN_EMAIL="${SUPER_ADMIN_EMAIL}" \
-  -e SUPER_ADMIN_PASSWORD="${SUPER_ADMIN_PASSWORD}" \
-  -e NODE_ENV=development \
-  auth-service \
-  node /app/apps/auth-service/dist/prisma/seed.js; then
-  log "✓ Auth seed complete"
-else
-  log "✗ Auth seed FAILED: database not seeded with super admin user"
-  exit 1
-fi
-
-if docker_compose_exec \
-  -e NODE_ENV=development \
-  hr-service \
-  node /app/apps/hr-service/dist/prisma/seed.js; then
-  log "✓ HR seed complete"
-else
-  log "⚠ HR seed FAILED: demo employees not seeded (non-fatal)"
-fi
 
 section "Reachability"
 wait_for_http_ok "dev auth-service" "http://127.0.0.1:4001/health"

@@ -9,6 +9,12 @@ export class SystemPermissionBackfillService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
+    if (process.env.AUTH_STARTUP_PERMISSION_BACKFILL_ENABLED === 'false') {
+      this.logger.log(
+        'Startup permission backfill disabled; use authorized maintenance.',
+      );
+      return;
+    }
     this.logger.log(
       'Ensuring legacy tenants and users have the required system permission sets...',
     );

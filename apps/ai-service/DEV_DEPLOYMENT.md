@@ -1,202 +1,169 @@
-# DEV eligibility-only deployment
+# DEV application deployment and authorized database maintenance
 
-## Scope
+## Eligibility-only AI rollout
 
-This change makes the existing authenticated eligibility endpoint reachable through
-Gateway. It does not authorize chat, persistence, cleanup, inference or ERP access.
-No production files, schema SQL or permission declarations change.
+Pushes to `dev` build selected SHA-tagged images, validate configuration and database
+compatibility, roll out applications, then check health. Routine deployment needs
+no database-approval variable and never runs migrations, seeds or permission
+reconciliation. Normal application business writes/jobs are not disabled by this
+separation. PROD deployment is unchanged.
 
-The Gateway already registers optional service `ai`, strips untrusted identity
-headers and checks current Auth `/me` before signing its short-lived assertion.
-The previous DEV env omitted `AI_SERVICE_URL`; DEV also omitted the image and
-container. Swagger is Gateway-owned and does not prove AI process availability.
+AI uses `http://ai-service:4011` on `workphelo-dev-network`, without a public host
+port. Gateway and AI use the existing shared JWT verification secret. Only
+authenticated eligibility is enabled. Conversations, persistence, conversation
+request signing, demo execution, inference, cleanup and shared-resource execution
+remain disabled. AI needs no database, Redis or encryption keys in this mode.
+Current Auth-state validation and signed identity assertions remain mandatory.
+AI migration, seed and reconciliation are excluded from both workflows.
 
-## Runtime inventory
+AI health is `/api/health`; readiness is `/api/ready`, with
+`inferenceAvailable: false`. Existing ERP services remain independent of AI.
+Gateway exposes documentation at `/api/v1/ai/docs` and `/api/v1/ai/docs-json`.
 
-| Value                                            | Source / policy                                                                                         |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `AI_SERVICE_IMAGE`                               | SHA-tagged image selected from this build or successful deployment inventory; mutable fallback rejected |
-| `AI_SERVICE_URL`                                 | Generated `http://ai-service:4011` in Gateway env                                                       |
-| `JWT_SECRET`                                     | Existing GitHub secret -> SSH env -> mode-600 AI env file; same verification secret as Gateway/Auth     |
-| `NODE_ENV`                                       | `production`, deliberately enforcing existing execution prohibitions                                    |
-| `AI_SERVICE_PORT`                                | `4011`, Docker network only; no host-published port                                                     |
-| `AI_PROVIDER`                                    | `mock`, identifier only; no execution                                                                   |
-| `AI_POLICY_VERSION`                              | `dev-eligibility-v1`, versioned non-secret configuration                                                |
-| `AI_AUTHENTICATED_ROUTES_ENABLED`                | `true`, permits only trusted authenticated eligibility                                                  |
-| Every other AI `*_ENABLED` flag                  | Explicit `false`                                                                                        |
-| Gateway signing, resource safeguards, demo flags | Explicit `false`                                                                                        |
+## Successful baseline and recovery
 
-No new GitHub secret or variable is required. A presence-only GitHub metadata check
-confirmed `JWT_SECRET` in the `dev` Environment; its value and live distribution were
-not inspected. Correct distribution must still be verified at deployment; a workflow
-reference alone would not be presence evidence. Values must never be printed. No database
-URL, encryption/fingerprint/request-proof key, Redis credential, broker URL, provider
-credential or AI runtime scope is passed to AI. Runtime validation is executed in
-the candidate image with no network before rollout. Missing/invalid JWT fails it.
+Change detection compares the latest completed successful `Deploy to Dev` push run
+to the candidate DEV SHA, not `main` or merely the previous push. Its successful
+Deploy job and `dev-deployment-state` image inventory must agree. Complete legacy
+build/push/deploy evidence supports first adoption; otherwise an independently
+verified `DEV_DEPLOYMENT_BOOTSTRAP_JSON` inventory is required. No trusted baseline
+means no deployment, not a guessed full rebuild.
 
-AI has no Compose dependency on PostgreSQL, Redis or RabbitMQ in this mode. Gateway
-does not gain a hard AI startup dependency; AI remains optional to overall Gateway
-health and unrelated ERP requests. AI failure still fails its own deployment health
-gate, and eligibility returns a service error rather than fabricated success.
+Shared-package/config filters remain unchanged. Missing AI in a legacy inventory
+selects its first build. Unchanged services reuse only the successful inventory's
+SHA-tagged references, never mutable `:dev` or partially written server env files.
+SHA tags are not digest-level immutability; registry tag replacement remains a risk.
 
-## Build and routing
+Failed, cancelled and in-progress runs never advance the baseline. The next run
+includes missed changes from the last successful release. Reverted failed changes
+restore successful images, not partially staged images. Stale reruns cannot deploy
+after DEV HEAD advances. Before SSH, the planner rechecks that the successful
+baseline has not advanced. Only a fully healthy completed application deployment
+publishes a new inventory. Maintenance never publishes a baseline.
 
-DEV uses `dorny/paths-filter@v4` with an explicit **last successful deployment SHA**
-as `base`, and the target SHA as `ref`. This compares the exact two trees: it does
-not use repository default `main`, `dev`'s latest commit or merely `push.before`.
-The original omission selected all 11 application images against `main`; the AI
-adoption delta against successful DEV selects Gateway and AI only. Shared packages,
-root dependency files and TypeScript config still trigger their existing dependents.
+Runs are serialized with `cancel-in-progress: false`; assets are isolated by run ID
+and attempt. Both workflows hold the same nonblocking host `flock`, including when
+a cancelled SSH client leaves a remote script running.
 
-The planner queries successful push runs of `deploy-dev.yml` on DEV, checks the
-successful deployment job, and loads that run's `dev-deployment-state` artifact.
-It validates repository, SHA ancestry, run identity, service names and SHA-tagged
-image refs. State contains non-secret image metadata only. It is uploaded only after
-SSH deployment, migrations/seeds, health checks and maintenance all succeed. The
-workflow must also finish successfully before it can supply a future baseline.
-Artifacts retain state for 90 days; missing/expired evidence fails closed unless
-complete legacy evidence or an operator-verified bootstrap inventory is available.
+## Read-only compatibility gate
 
-For first adoption, legacy successful runs have no state artifact. The planner can
-derive a baseline only if that successful run proves every pre-AI service's image
-push actually succeeded, plus its deployment job. Skipped builds are not evidence.
-Read-only GitHub inspection found that complete legacy evidence in run
-`45844226660`, SHA `a1e8054ae00250f12cd86f763e22fb09d78b17a5`; this is workflow
-evidence, not a claim that live server or database state was inspected. Missing AI
-is explicitly selected for its first build. With no trustworthy baseline, stop;
-do not guess `main`, use a mutable tag, or silently rebuild everything.
+Before application rollout, each candidate image's migration SQL catalog is compared
+to its existing service-specific `_prisma_migrations` history. This includes reused
+images. The checker overrides the entrypoint: application bootstrap does not run.
+Transactions start `READ ONLY`, have bounded connection/pool/statement/lock and
+transaction timeouts, and query only migration metadata. No tables are created.
 
-An authorized operator may supply repository variable `DEV_DEPLOYMENT_BOOTSTRAP_JSON`
-only after verifying the deployed SHA and all running service images independently.
-Shape: `{version:1,sha:<40-hex deployed SHA>,images:{<service>:<SHA-tagged image>}}`.
-All ten pre-AI service keys are mandatory; AI alone may be absent. If a latest
-successful run exists, bootstrap SHA must match it. No bootstrap value is created
-by this PR. Manual rollbacks/out-of-band deployment require fresh evidence before
-trusting the workflow baseline again.
+| Service      | Required schema |
+| ------------ | --------------- |
+| Auth         | `w_auth`        |
+| HR           | `hr`            |
+| Notification | `notify`        |
+| Reinsurance  | `reinsurance`   |
+| Accounting   | `accounting`    |
+| Marketing    | `marketing`     |
+| Inventory    | `inventory`     |
 
-Failed, cancelled and partially completed releases do not advance the baseline.
-Next selection spans successful SHA -> new target, carrying missed changes forward.
-Unchanged images come from the successful snapshot, **never** the possibly poisoned
-`.compose.dev.env` written by a failed attempt. Reverted failed changes restore the
-successful image rather than reusing the failed image. If the baseline advances
-between planning and deployment, rerun the complete workflow to replan. A stale
-target that is no longer DEV HEAD is rejected.
+Missing history, pending SQL, checksum mismatch, unresolved failures, duplicate
+applied records or applied migrations absent from the candidate block rollout.
+Rolled-back attempts remain intact and do not count as applied. A database ahead
+of an older image conservatively blocks rollback pending compatibility review.
+No automatic history rewriting, reset, restore or resolve is permitted.
 
-Active workflow runs are serialized (`cancel-in-progress:false`); pending runs may
-still be replaced by GitHub, safely covered by the cumulative baseline. A nonblocking
-host `flock` also rejects overlap after manual cancellation leaves SSH work running.
-Uploads are staged per run/attempt before taking the host lock; active Compose is
-replaced only under that lock. The host must have `flock` installed. Image build
-failure, baseline lookup failure or authorization failure never starts SSH deployment.
+Subscription currently imports no database runtime and has no migration directory;
+the old ignored migration attempt is removed. A future Subscription migration
+catalog blocks until database adoption is explicitly reviewed. AI is excluded.
 
-SHA tags follow the existing image policy. They are **not** digest-level immutability
-or registry-enforced non-overwrite protection. The existing Compose rollout recreates
-changed services in place; it is not zero-downtime rolling deployment.
+This verifies migration history, not manual schema drift, all data incompatibilities
+or SQL safety. Operators must still review SQL and backward compatibility. The base
+DEV database URL must not already contain `schema`; generated service URLs require
+exactly their correct schema and no `options` override. Invalid configuration fails
+without printing URLs.
 
-Gateway `/api/v1/ai/eligibility` -> Docker DNS `ai-service:4011/api/eligibility`.
-Authenticated active tenant users receive `{eligible:true,inferenceAvailable:false}`;
-no `demo` configuration is advertised. Normal login is required; careers/restricted
-sessions, forged context and current Auth rejection remain denied. An Auth-state
-stub in automated routing tests is explicitly not a real login acceptance result.
+DEV Auth receives `AUTH_STARTUP_PERMISSION_BACKFILL_ENABLED=false`, skipping only
+the global startup backfill. New-tenant/per-user baseline provisioning is unchanged.
+Other environments retain previous behavior unless they explicitly set this switch.
+Permission catalog changes now require reviewed maintenance rather than a restart.
 
-Public AI health/ready routes remain blocked. Docker probes `/api/ready` internally;
-the deployment also checks `/api/health` and `/api/ready` inside the container using
-bounded fetches. Dedicated Swagger remains at `/api/v1/ai/docs` and `/docs-json`,
-under existing Swagger policy, independent of this service's availability.
+## Explicit maintenance authorization
 
-## Migrations and activation boundary
+The default branch is `main`: a new `workflow_dispatch` file on `dev` alone would
+not be dispatchable. Instead, an operator deliberately pushes a lightweight tag at
+**current DEV HEAD** with one of these exact shapes:
 
-No AI migration, seed or reconciliation is executed by DEV deployment. The runtime
-image intentionally contains no Prisma migration CLI or migration directories.
-Prisma client generation at image build is not a database connection or migration.
+```text
+dev-maintenance-migrate-<service>-<completed-application-run-id>
+dev-maintenance-seed-auth-service-<completed-application-run-id>
+dev-maintenance-seed-hr-service-<completed-application-run-id>
+```
 
-Before any separately authorized persistence deployment, all four AI migrations
-must be applied in order to an approved schema `ai` target with verified history:
+Only the seven listed services may migrate, only Auth/HR may seed, and AI is never
+supported. The referenced normal DEV run must be completed at the same commit with
+successful Quality Gates and a successful build-and-push step for that service. A failed pending-migration gate
+is valid build evidence; cancelled or unbuilt runs are not. There is no arbitrary
+image, database, SQL or command input.
 
-1. `20261118120000_add_ai_persistence_foundation`
-2. `20261118150000_add_ai_request_nonce_replay`
-3. `20261125120000_ai_shared_resource_safeguards`
-4. `20261126120000_ai_internal_demo_reply`
+Before any upload/SSH, the workflow verifies `dev-maintenance` Environment metadata:
 
-Do not execute them from this availability patch. Later activation also requires
-encryption/fingerprint/proof keys, matching Gateway/AI signed `demoIntent` protocol,
-dedicated Redis admission memory/ACL/epoch setup, quota reconciliation for populated
-scopes, and explicit environment authorization. Current eligibility uses JWT-bound
-identity assertions, not conversation request proofs. No new intent keys are needed
-for eligibility. Gateway and AI must be upgraded together before later conversation
-activation; all such flags remain off here. Shared scripted demo is not authorized.
+- Configured required human/team reviewers, prevention of self-review and no
+  administrator bypass.
+- Custom deployment policies containing only tag pattern `dev-maintenance-*`.
+- Token permissions: `actions: read` for runs/jobs/Environment metadata,
+  `contents: read` for checkout and `packages: read` for image pulls.
+- Reviewers authorize the exact release, service, SQL/seed effects, existing state,
+  compatibility and recovery point before approving the run.
 
-The existing DEV script still migrates Auth (`w_auth`), HR (`hr`), Notification
-(`notify`), Subscription (`subscription`), Marketing (`marketing`), Reinsurance
-(`reinsurance`), Accounting (`accounting`) and Inventory (`inventory`), then seeds
-Auth and HR. These commands are retained, not silently skipped. The existing
-Subscription migration failure allowance and non-fatal HR seed failure are unchanged.
+Missing permissions, unsupported protection features or an unprotected auto-created
+Environment block maintenance before SSH. An administrator must configure protection
+and scope existing DEV credentials to this Environment separately. This PR does
+not create settings or authorize maintenance. Required names: `DEV_SERVER_HOST`,
+`DEV_SERVER_USER`, `DEV_SSH_KEY`, `DEV_DATABASE_URL`. Auth seed also requires
+`SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD`. Never put values in tags or source.
 
-Auth seeding can rewrite the platform admin's password/status/verification and lock
-fields, seed demo tenants, and backfill permission sets. HR seed upserts demo records
-and employee `userId` linkage. Repeating a deployment is therefore not read-only;
-idempotent upserts can still change existing application data. Application rollback
-does not undo completed SQL, seeds, password changes or permission reconciliation.
+After independent authorization, from a verified checkout (replace the run ID):
 
-No working authorized read-only DEV database session was available for this review.
-No live history, pending migration list, checksum match, backup or affected tenant
-counts are asserted. CI and successful deployment metadata do not prove these safe.
-Before release approval, an authorized operator must:
+```bash
+git fetch origin
+git tag dev-maintenance-migrate-auth-service-APPLICATION_RUN_ID origin/dev
+git push origin dev-maintenance-migrate-auth-service-APPLICATION_RUN_ID
+```
 
-1. Verify DEV-only database/schema targets without disclosing URLs; inspect migration
-   status for all eight services using the currently selected SHA-tagged images.
-2. Read each schema's `_prisma_migrations`, including failed and rolled-back attempts,
-   and compare names/checksums to SQL inside those exact images. Preserve history;
-   stop on drift/failure. Do not reset, resolve, seed or migrate during inspection.
-3. Review pending SQL and expected Auth/HR seed writes, affected identities/linkage,
-   and permission changes. Confirm a recoverable DEV data snapshot/restore path.
-4. Approve those operations for the exact release, or withhold deployment and propose
-   a separate controlled data-operation change. Do not use the AI rollout to bypass it.
+Migration and seed are separate requests/reviews. The runner uses the candidate's
+installed Prisma CLI, never downloads a CLI, starts the application, rolls out
+containers or advances deployment state. Existing service env files supply settings;
+a mode-600 temporary file supplies the exact schema URL. Temporary connection and
+output files are removed on exit. A read-only post-check verifies migration state.
 
-The existing `dev` Environment currently has no required-reviewer protection (read-only
-metadata inspection). Configure independent required reviewers, prevent self-approval
-and restrict deployment branches to `dev` through an authorized repository admin.
-This PR changes no GitHub settings. As a code-enforced stop, the deployment job and
-remote script both require DEV Environment variable
-`DEV_DATABASE_OPERATIONS_APPROVED_SHA` to equal the exact target 40-hex SHA. Missing
-or stale approval stops before SSH upload, migrations, seeds or active config changes.
-It is an approval marker, not evidence collection or a substitute for reviewer policy.
-No approval value is set by this PR. The operator records review evidence separately.
+## Data impact and recovery
 
-After approving a newly merged SHA, rerun that same workflow; a newer DEV head needs
-a new plan/approval. If the successful baseline advanced, rerun the complete workflow,
-not just deployment. Partial data-operation failure requires review before retry;
-no automatic rollback/retry is introduced. Until approval, a merge can build images
-but cannot change the DEV server through this deployment path.
-Do not rerun pre-adoption workflow revisions: they lack these new controls. Treat
-legacy reruns, manual deployments and rollbacks as out-of-band changes requiring
-fresh deployment evidence and an operator-reviewed baseline before continuation.
+No live DEV database evidence was collected for this patch. Actual pending history
+and affected tenant/user data remain operator prerequisites. CI does not prove
+shared migrations or seeds safe.
 
-Planner token permissions: `contents:read` and `actions:read` for workflow/job/artifact
-metadata. Build keeps existing `packages:write`; deployment keeps `packages:read`
-plus `actions:read` for its plan. No environment-admin token is requested. Required
-reviewer configuration and approval-variable writes remain authorized operator tasks.
+Auth seed upserts platform/demo tenants, resource catalogs/templates/system sets
+and permissions. It can change the administrator password/status and reactivate
+demo tenants. HR seed upserts demo departments/employees and links `w_auth` users.
+These are not harmless health checks. Review current affected records read-only
+and the exact seed source before approving each explicit operation.
 
-## Authorized rollout and rollback plan
+For pending SQL: routine rollout stops; review histories, SQL and compatibility;
+authorize maintenance; then rerun the normal application workflow at the same
+current DEV SHA. If DEV advances, build/review the new release, not a stale image.
 
-1. Review CI, image build/context checks and JWT presence without reading its value.
-2. Approve merge separately. DEV push builds selected images; deployment stops without
-   exact-SHA data-operation approval. Configure required Environment reviewers to add
-   the independent human approval gate; the SHA marker does not prove that setting.
-3. Verify the internal container, expected SHA-tagged image and readiness/inference=false.
-4. Normal test-account login through Gateway -> eligibility 200 with no demo field;
-   unauthenticated request 401; conversations remain 503. Confirm other ERP health.
-5. No real LLM, encrypted conversation, admission or cleanup activation is implied.
+Failures stop maintenance. Successful DDL or partial seed writes are never undone
+automatically after later failure. Inspect state read-only; obtain approval for a
+forward fix or recovery. Never automatically retry a failed seed, reset, restore,
+resolve or rewrite histories. Raw migration/seed output is not printed in Actions
+because it may contain sensitive connection or row data; safe failure classes and
+post-check results are reported. PROD is unaffected.
 
-If rollout fails, retain diagnostics without env/credentials. Restore the last
-known-good Gateway image/env and Compose revision through the approved deployment
-process, removing only the AI service when approved. Do not restart unrelated
-healthy services, reset databases or remove volumes. No AI database rollback is
-needed because this patch performs no AI DDL/data writes. Deploy-script failure
-does not automatically undo existing non-AI migrations or seeds.
+## Post-deployment acceptance
 
-Approval still needed: independent code review, merge/deployment authorization,
-operator data-impact/rollback review, exact-SHA approval and Environment protection,
-live secret-distribution verification and a normal-login DEV acceptance check.
-Frontend can test eligibility and disabled/error contracts after deployment;
-successful conversation CRUD or scripted turns require a later authorization.
+1. Verify successful run/inventory SHA and seven read-only history checks; confirm
+   no migration/seed ran.
+2. Check existing ERP health, frontend login, Gateway, internal AI health/readiness.
+3. Log in normally; request `GET /api/v1/ai/eligibility` with the access cookie or
+   Bearer token. Expect `{ "eligible": true, "inferenceAvailable": false }`.
+4. Confirm unauthenticated, spoofed and Auth-rejected contexts fail closed, and
+   careers sessions are rejected. Never fabricate trusted internal headers.
+5. Confirm conversation creation remains disabled (503), no AI host port exists,
+   and no AI database, Redis, keyring or external inference is used.
