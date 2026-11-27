@@ -147,18 +147,28 @@ if (response.ok && body.demo?.synthetic === true) {
 
 ## Allowed sample questions
 
-The backend accepts ONLY these exact strings in demo mode; show them as suggestion
-buttons. This narrow allowlist is a privacy boundary, not general PII detection.
+New appends in both modes must exactly match one of these strings. Show them as
+suggestion buttons in the isolated demo. The allowlist rejects all other input,
+including benign paraphrases.
 
 - `What can this demo do?`
 - `How do I get started with WorkPhelo?`
 - `How are employee records different from user access?`
 - `Who can read my demo conversation?`
 
-Other input, added personal details, prompts to access ERP data and extra fields
-are rejected. Content is curated from repository functionality, not yet claimed
-as manager-approved copy. Review it before authorizing a human demo. Continuation
-means appending turns to private history; replies do not reason over prior turns.
+Catalog version `workphelo-product-guidance-v1` assigns a stable ID to each
+question and answer. All entries are pending Product review and their approval
+metadata has empty approver and timestamp fields. Review the copy before
+authorizing any human demo. Future external inference requires separately
+approved entries and provider authorization. The local mock receives the matched
+server-owned question as its only message. Historical conversation messages are
+excluded from generation.
+
+The screen applies after committed receipt resolution. Exact retries use the
+original key and content and can return a still-live committed result even if its
+question is retired. A changed payload with an existing live key returns `409`.
+A rejected new append returns a generic `400` without creating a message or
+append receipt. The request still goes through admission and nonce verification.
 
 ## Errors and retries
 

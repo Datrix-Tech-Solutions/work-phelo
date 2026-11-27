@@ -28,6 +28,7 @@ import {
 } from '../persistence/ai-database.service';
 import { RequestNonceStore } from '../persistence/request-nonce.store';
 import { AuthorizedConversationOperations } from '../security/conversation-authorization.service';
+import * as guidance from '../inference/demo-guidance';
 import { INFERENCE_PROVIDER, InferenceProvider } from '../inference/inference-provider';
 
 // Load actual Gateway TS recursively in memory, not stale dist or a cross-workspace production dependency.
@@ -806,20 +807,58 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       ).toBe(409);
       await call(h, 'DELETE', c.target, undefined, undefined, c.token);
     });
-    it('rejects arbitrary/private input and cross-owner access without storing a turn', async () => {
+    it.each([true, false])(
+      'rejects sensitive, unknown and ambiguous submissions (demo=%s)',
+      async (demo) => {
+        const c = await conversation();
+        const config = h.ai.get(ConfigService);
+        const provider = jest.spyOn(
+          h.ai.get<InferenceProvider>(INFERENCE_PROVIDER),
+          'generateText',
+        );
+        config.set('AI_INTERNAL_DEMO_ENABLED', demo);
+        process.env.AI_INTERNAL_DEMO_ENABLED = String(demo);
+        try {
+          for (const content of [
+            'fixture confidential salary record',
+            'Where is my report?',
+            'What can this demo do? fixture private context',
+          ]) {
+            const response = await call(
+              h,
+              'POST',
+              c.target + '/messages',
+              { content },
+              'rejected',
+              c.token,
+            );
+            expect(response.status).toBe(400);
+            expect(response.body).toMatchObject({
+              code: 'INVALID_REQUEST',
+              message: 'Request rejected',
+            });
+            expect(response.text).not.toContain(content);
+            expect(JSON.stringify(h.logs)).not.toContain(content);
+          }
+          expect(provider).not.toHaveBeenCalled();
+          expect(
+            await db.aiConversationMessage.count({ where: { conversationId: c.conversationId } }),
+          ).toBe(0);
+          expect(
+            await db.aiSubmissionReceipt.count({
+              where: { resultConversationId: c.conversationId, operation: 'APPEND_MESSAGE' },
+            }),
+          ).toBe(0);
+        } finally {
+          provider.mockRestore();
+          config.set('AI_INTERNAL_DEMO_ENABLED', true);
+          process.env.AI_INTERNAL_DEMO_ENABLED = 'true';
+          await call(h, 'DELETE', c.target, undefined, undefined, c.token);
+        }
+      },
+    );
+    it('rejects cross-owner access without storing a turn', async () => {
       const c = await conversation();
-      expect(
-        (
-          await call(
-            h,
-            'POST',
-            c.target + '/messages',
-            { content: 'private salary data' },
-            'rejected',
-            c.token,
-          )
-        ).status,
-      ).toBe(400);
       for (const token of [h.token(randomUUID(), c.tenant), h.token(randomUUID(), randomUUID())]) {
         expect((await call(h, 'GET', c.target, undefined, undefined, token)).status).toBe(404);
         expect(
@@ -1125,6 +1164,7 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       const spy = jest
         .spyOn(h.ai.get<InferenceProvider>(INFERENCE_PROVIDER), 'generateText')
         .mockRejectedValue(new Error('synthetic outage'));
+      const retired = jest.spyOn(guidance, 'matchGuidanceCandidate').mockReturnValue(undefined);
       try {
         const replay = await send();
         expect(replay.status).toBe(201);
@@ -1151,7 +1191,9 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
           ).status,
         ).toBe(409);
         expect(spy).not.toHaveBeenCalled();
+        expect(retired).not.toHaveBeenCalled();
       } finally {
+        retired.mockRestore();
         spy.mockRestore();
         await call(h, 'DELETE', c.target, undefined, undefined, c.token);
       }
@@ -1331,7 +1373,7 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       const result = created.body as { id: string; createdAt: string; expiresAt: string };
       expect(Date.parse(result.expiresAt) - Date.parse(result.createdAt)).toBe(720 * 3600000);
       const target = `${external}/${result.id}`;
-      const content = ' exact 🌍\n\t';
+      const content = 'What can this demo do?';
       expect(
         (await call(h, 'POST', target + '/messages', { content }, 'message', token)).status,
       ).toBe(201);
@@ -1374,14 +1416,17 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
       const target = `${external}/${result.id}/messages`;
       const messages = await Promise.all(
         Array.from({ length: 6 }, () =>
-          afterCapacity(() => call(h, 'POST', target, { content: 'retry' }, 'same-key', token)),
+          afterCapacity(() =>
+            call(h, 'POST', target, { content: 'What can this demo do?' }, 'same-key', token),
+          ),
         ),
       );
       expect(messages.every((r) => r.status === 201)).toBe(true);
       expect(new Set(messages.map((r) => (r.body as { id: string }).id)).size).toBe(1);
-      expect((await call(h, 'POST', target, { content: 'retry' }, 'same-key', token)).body).toEqual(
-        messages[0].body,
-      );
+      expect(
+        (await call(h, 'POST', target, { content: 'What can this demo do?' }, 'same-key', token))
+          .body,
+      ).toEqual(messages[0].body);
       expect(
         (await call(h, 'POST', target, { content: 'different' }, 'same-key', token)).status,
       ).toBe(409);

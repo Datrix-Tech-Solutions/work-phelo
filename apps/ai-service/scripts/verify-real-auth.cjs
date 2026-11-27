@@ -205,9 +205,10 @@ let auth, ai, gateway, db, admissionRedis;
     return status === 204 ? undefined : reply.json();
   }
   const created = await operation('POST', '', {}, 201);
-  await operation('POST', '/' + created.id + '/messages', { content: 'local-auth-fixture' }, 201);
+  const content = 'What can this demo do?';
+  await operation('POST', '/' + created.id + '/messages', { content }, 201);
   const detail = await operation('GET', '/' + created.id, undefined, 200);
-  assert.equal(detail.messages.items[0].content, 'local-auth-fixture');
+  assert.equal(detail.messages.items[0].content, content);
   await operation('DELETE', '/' + created.id, undefined, 204);
   await operation('GET', '/' + created.id, undefined, 404);
   for (const status of ['INACTIVE', 'SUSPENDED']) {

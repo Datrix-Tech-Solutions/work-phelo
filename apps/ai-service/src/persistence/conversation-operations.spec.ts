@@ -5,6 +5,7 @@ import request from 'supertest';
 import { createApplication } from '../main';
 import { Prisma, PrismaClient } from '../../prisma/generated/client';
 import { TrustedContextService } from '../auth/trusted-context.service';
+import { PRODUCT_GUIDANCE_CATALOG } from '../inference/demo-guidance';
 import { parseRuntimeEnv } from '../config/runtime-env';
 import { MessageContextFactory } from '../encryption/message-context';
 import { MessageEncryptionService } from '../encryption/message-encryption.service';
@@ -312,6 +313,9 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
     let metadata: ConversationsRepository;
     let operations: ConversationOperationsService;
     let config: ConfigService;
+    const [firstQuestion, secondQuestion, thirdQuestion] = PRODUCT_GUIDANCE_CATALOG.entries.map(
+      ({ question }) => question,
+    );
     const newOwner = () => operationOwner(randomUUID(), randomUUID());
     const makeOperations = (settings = config) =>
       new ConversationOperationsService(
@@ -346,7 +350,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       const conversation = await metadata.create(owner);
       return { owner, conversation };
     }
-    async function appendFixture(content = 'private-content-canary') {
+    async function appendFixture(content = firstQuestion) {
       const f = await fixture();
       const message = await operations.appendUserMessage(
         f.owner,
@@ -356,24 +360,68 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       );
       return { ...f, message };
     }
-    it('creates owned metadata, persists encrypted-only content and preserves exact Unicode/whitespace', async () => {
+    it('replays a pre-screening receipt with exact legacy Unicode and whitespace, and rejects changed input', async () => {
       const content = '  \ufeffprivate-exact-content\n🌍 e\u0301  ';
-      const { owner, conversation, message } = await appendFixture(content);
-      const stored = await db.aiConversationMessage.findUniqueOrThrow({
-        where: { id: message.id },
+      const { owner, conversation } = await fixture();
+      const identity = requireOwnership(owner);
+      const conversationId = conversation.id;
+      const messageId = randomUUID();
+      const sequence = 1;
+      const role = 'USER';
+      const idempotencyKey = randomUUID();
+      const context = new MessageContextFactory().forMessage(owner, {
+        conversationId,
+        messageId,
+        role,
+        sequence,
+      });
+      const envelope = new MessageEncryptionService(new MessageKeyRing(config)).encryptMessage(
+        content,
+        context,
+      );
+      const fingerprint = new SubmissionFingerprintService(config).create({
+        ...identity,
+        conversationId,
+        content,
+      });
+      const stored = await db.$transaction(async (tx) => {
+        const message = await tx.aiConversationMessage.create({
+          data: { ...identity, id: messageId, conversationId, role, sequence, ...envelope },
+        });
+        await tx.aiConversation.update({
+          where: { id: conversationId },
+          data: { nextMessageSequence: 2 },
+        });
+        await tx.aiSubmissionReceipt.create({
+          data: {
+            ...identity,
+            ...fingerprint,
+            idempotencyKey,
+            resultConversationId: conversationId,
+            resultMessageId: message.id,
+            operation: 'APPEND_MESSAGE',
+            outcome: 'STORED',
+            createdAt: message.createdAt,
+            expiresAt: new Date(message.createdAt.getTime() + 720 * 3600000),
+          },
+        });
+        return message;
       });
       expect(stored.ciphertext.equals(Buffer.from(content))).toBe(false);
-      expect(stored).not.toHaveProperty('content');
-      expect(message).not.toHaveProperty('ciphertext');
-      expect((await metadata.requireOwned(owner, conversation.id)).expiresAt).toEqual(
-        conversation.expiresAt,
-      );
-      const receipt = await db.aiSubmissionReceipt.findFirstOrThrow({
-        where: { resultMessageId: message.id },
-      });
-      expect(receipt.expiresAt.getTime() - receipt.createdAt.getTime()).toBe(720 * 3600000);
-      expect(receipt.expiresAt.getTime()).toBeGreaterThanOrEqual(conversation.expiresAt.getTime());
-      expect((await operations.readOwnedMessagePage(owner, conversation.id)).items[0].content).toBe(
+      expect(
+        await operations.appendUserMessage(owner, conversationId, content, idempotencyKey),
+      ).toEqual({ id: messageId, conversationId, sequence, role, createdAt: stored.createdAt });
+      await expect(
+        operations.appendUserMessage(owner, conversationId, content.trim(), idempotencyKey),
+      ).rejects.toMatchObject({ status: 409 });
+      await expect(
+        operations.appendUserMessage(owner, conversationId, content, randomUUID()),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(await db.aiConversationMessage.count({ where: { conversationId } })).toBe(1);
+      expect(
+        await db.aiSubmissionReceipt.count({ where: { resultConversationId: conversationId } }),
+      ).toBe(1);
+      expect((await operations.readOwnedMessagePage(owner, conversationId)).items[0].content).toBe(
         content,
       );
     });
@@ -404,10 +452,10 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('returns original authorized result on matching retry without advancing sequence', async () => {
       const { owner, conversation } = await fixture(),
         key = randomUUID();
-      const first = await operations.appendUserMessage(owner, conversation.id, 'same', key);
-      expect(await operations.appendUserMessage(owner, conversation.id, 'same', key)).toEqual(
-        first,
-      );
+      const first = await operations.appendUserMessage(owner, conversation.id, firstQuestion, key);
+      expect(
+        await operations.appendUserMessage(owner, conversation.id, firstQuestion, key),
+      ).toEqual(first);
       expect(
         (await db.aiConversation.findUniqueOrThrow({ where: { id: conversation.id } }))
           .nextMessageSequence,
@@ -419,13 +467,13 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('rejects changed payload and cross-conversation reuse with 409', async () => {
       const { owner, conversation } = await fixture(),
         key = randomUUID();
-      await operations.appendUserMessage(owner, conversation.id, ' original ', key);
+      await operations.appendUserMessage(owner, conversation.id, firstQuestion, key);
       await expect(
         operations.appendUserMessage(owner, conversation.id, 'original', key),
       ).rejects.toMatchObject({ status: 409 });
       const other = await metadata.create(owner);
       await expect(
-        operations.appendUserMessage(owner, other.id, ' original ', key),
+        operations.appendUserMessage(owner, other.id, firstQuestion, key),
       ).rejects.toMatchObject({ status: 409 });
       expect(await db.aiConversationMessage.count({ where: { conversationId: other.id } })).toBe(0);
     });
@@ -434,7 +482,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         key = randomUUID();
       const results = await Promise.all(
         Array.from({ length: 6 }, () =>
-          operations.appendUserMessage(owner, conversation.id, 'same', key),
+          operations.appendUserMessage(owner, conversation.id, firstQuestion, key),
         ),
       );
       expect(new Set(results.map((r) => r.id)).size).toBe(1);
@@ -446,7 +494,9 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       const { owner, conversation } = await fixture(),
         key = randomUUID();
       const results = await Promise.allSettled(
-        ['a', 'b'].map((text) => operations.appendUserMessage(owner, conversation.id, text, key)),
+        [firstQuestion, secondQuestion].map((text) =>
+          operations.appendUserMessage(owner, conversation.id, text, key),
+        ),
       );
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       expect(results.find((r) => r.status === 'rejected')).toMatchObject({
@@ -462,7 +512,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         key = randomUUID();
       const results = await Promise.allSettled(
         [conversation, other].map((parent) =>
-          operations.appendUserMessage(owner, parent.id, 'same', key),
+          operations.appendUserMessage(owner, parent.id, firstQuestion, key),
         ),
       );
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
@@ -478,8 +528,8 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('allocates gapless monotonic sequences for simultaneous different keys', async () => {
       const { owner, conversation } = await fixture();
       const results = await Promise.all(
-        Array.from({ length: 8 }, (_, n) =>
-          operations.appendUserMessage(owner, conversation.id, `message-${n}`, randomUUID()),
+        Array.from({ length: 8 }, () =>
+          operations.appendUserMessage(owner, conversation.id, firstQuestion, randomUUID()),
         ),
       );
       expect(results.map((r) => r.sequence).sort((a, b) => a - b)).toEqual([
@@ -495,7 +545,9 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         a = await fixture(),
         b = await fixture();
       const results = await Promise.all(
-        [a, b].map((f) => operations.appendUserMessage(f.owner, f.conversation.id, 'same', key)),
+        [a, b].map((f) =>
+          operations.appendUserMessage(f.owner, f.conversation.id, firstQuestion, key),
+        ),
       );
       expect(results[0].id).not.toBe(results[1].id);
       expect(results.every((r) => r.sequence === 1)).toBe(true);
@@ -507,23 +559,23 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       const parents = await Promise.all(contexts.map((context) => metadata.create(context)));
       const results = await Promise.all(
         parents.map((parent, index) =>
-          operations.appendUserMessage(contexts[index], parent.id, 'same', key),
+          operations.appendUserMessage(contexts[index], parent.id, firstQuestion, key),
         ),
       );
       expect(new Set(results.map((r) => r.id)).size).toBe(2);
     });
     it('pages by sequence and decrypts only the selected bounded page', async () => {
       const { owner, conversation } = await fixture();
-      for (const text of ['first', 'second', 'third'])
+      for (const text of [firstQuestion, secondQuestion, thirdQuestion])
         await operations.appendUserMessage(owner, conversation.id, text, randomUUID());
       const first = await operations.readOwnedMessagePage(owner, conversation.id, 0, 2);
-      expect(first.items.map((r) => r.content)).toEqual(['first', 'second']);
+      expect(first.items.map((r) => r.content)).toEqual([firstQuestion, secondQuestion]);
       expect(first.nextAfterSequence).toBe(2);
       expect(
         (await operations.readOwnedMessagePage(owner, conversation.id, 2, 2)).items.map(
           (r) => r.content,
         ),
-      ).toEqual(['third']);
+      ).toEqual([thirdQuestion]);
       const third = await db.aiConversationMessage.findFirstOrThrow({
         where: { conversationId: conversation.id, sequence: 3 },
       });
@@ -555,12 +607,14 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('verifies historical fingerprint keys after active-key transition and fails closed after their loss', async () => {
       const { owner, conversation } = await fixture(),
         key = randomUUID();
-      const first = await operations.appendUserMessage(owner, conversation.id, 'same', key);
+      const first = await operations.appendUserMessage(owner, conversation.id, firstQuestion, key);
       const fixtureConfig = operationConfig();
       const rotated = makeOperations(
         operationConfig({ AI_FINGERPRINT_ACTIVE_KEY_ID: fixtureConfig.historical.id }).config,
       );
-      expect(await rotated.appendUserMessage(owner, conversation.id, 'same', key)).toEqual(first);
+      expect(await rotated.appendUserMessage(owner, conversation.id, firstQuestion, key)).toEqual(
+        first,
+      );
       const lost = makeOperations(
         operationConfig({
           AI_FINGERPRINT_ACTIVE_KEY_ID: fixtureConfig.historical.id,
@@ -568,19 +622,19 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         }).config,
       );
       await expect(
-        lost.appendUserMessage(owner, conversation.id, 'same', key),
+        lost.appendUserMessage(owner, conversation.id, firstQuestion, key),
       ).rejects.toMatchObject({ status: 503 });
     });
     it('revalidates receipt result IDs against current scope and existence', async () => {
       const { owner, conversation } = await fixture(),
         key = randomUUID();
-      await operations.appendUserMessage(owner, conversation.id, 'same', key);
+      await operations.appendUserMessage(owner, conversation.id, firstQuestion, key);
       await db.aiSubmissionReceipt.updateMany({
         where: { resultConversationId: conversation.id },
         data: { resultMessageId: randomUUID() },
       });
       await expect(
-        operations.appendUserMessage(owner, conversation.id, 'same', key),
+        operations.appendUserMessage(owner, conversation.id, firstQuestion, key),
       ).rejects.toMatchObject({ status: 404 });
     });
     it('rolls back the message, sequence and receipt when receipt insertion fails after message insertion', async () => {
@@ -594,7 +648,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       );
       try {
         await expect(
-          operations.appendUserMessage(owner, conversation.id, 'rollback-plaintext-canary', key),
+          operations.appendUserMessage(owner, conversation.id, firstQuestion, key),
         ).rejects.toThrow('Conversation operation unavailable');
         expect(
           await db.aiConversationMessage.count({ where: { conversationId: conversation.id } }),
@@ -611,13 +665,13 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         await db.$executeRawUnsafe('DROP FUNCTION ai.test_receipt_failure()');
       }
       expect(
-        (await operations.appendUserMessage(owner, conversation.id, 'recovered', key)).sequence,
+        (await operations.appendUserMessage(owner, conversation.id, firstQuestion, key)).sequence,
       ).toBe(1);
     });
     it('deletes owned aggregate with cascade but leaves receipts non-replayable and denies deletion retries', async () => {
       const { owner, conversation } = await fixture(),
         key = randomUUID();
-      await operations.appendUserMessage(owner, conversation.id, 'same', key);
+      await operations.appendUserMessage(owner, conversation.id, firstQuestion, key);
       await operations.deleteOwned(owner, conversation.id);
       expect(
         await db.aiConversationMessage.count({ where: { conversationId: conversation.id } }),
@@ -626,7 +680,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         await db.aiSubmissionReceipt.count({ where: { resultConversationId: conversation.id } }),
       ).toBe(1);
       await expect(
-        operations.appendUserMessage(owner, conversation.id, 'same', key),
+        operations.appendUserMessage(owner, conversation.id, firstQuestion, key),
       ).rejects.toMatchObject({ status: 404 });
       await expect(operations.deleteOwned(owner, conversation.id)).rejects.toMatchObject({
         status: 404,
@@ -637,7 +691,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       const { owner, conversation } = await fixture();
       const results = await Promise.allSettled([
         operations.deleteOwned(owner, conversation.id),
-        operations.appendUserMessage(owner, conversation.id, 'race', randomUUID()),
+        operations.appendUserMessage(owner, conversation.id, firstQuestion, randomUUID()),
       ]);
       expect(results[0].status).toBe('fulfilled');
       if (results[1].status === 'rejected')
@@ -707,7 +761,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('denies expired receipt replay without resurrecting or recycling the key', async () => {
       const { owner, conversation } = await fixture(),
         key = randomUUID();
-      await operations.appendUserMessage(owner, conversation.id, 'same', key);
+      await operations.appendUserMessage(owner, conversation.id, firstQuestion, key);
       await db.aiSubmissionReceipt.updateMany({
         where: { resultConversationId: conversation.id },
         data: {
@@ -716,7 +770,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         },
       });
       await expect(
-        operations.appendUserMessage(owner, conversation.id, 'same', key),
+        operations.appendUserMessage(owner, conversation.id, firstQuestion, key),
       ).rejects.toMatchObject({ status: 404 });
       expect(
         await db.aiConversationMessage.count({ where: { conversationId: conversation.id } }),
@@ -725,7 +779,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('ends deduplication after physical receipt purge rather than claiming permanent key retention', async () => {
       const { owner, conversation } = await fixture(),
         key = randomUUID();
-      await operations.appendUserMessage(owner, conversation.id, 'same', key);
+      await operations.appendUserMessage(owner, conversation.id, firstQuestion, key);
       await db.aiSubmissionReceipt.updateMany({
         where: { resultConversationId: conversation.id },
         data: {
@@ -744,7 +798,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       );
       await cleanup.runBatch();
       expect(
-        (await operations.appendUserMessage(owner, conversation.id, 'same', key)).sequence,
+        (await operations.appendUserMessage(owner, conversation.id, firstQuestion, key)).sequence,
       ).toBe(2);
     });
     it('safely races expired cleanup with an owner deletion attempt', async () => {
@@ -786,14 +840,8 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         await database.onModuleInit();
       }
       expect(
-        (
-          await operations.appendUserMessage(
-            owner,
-            conversation.id,
-            'after-reconnect',
-            randomUUID(),
-          )
-        ).sequence,
+        (await operations.appendUserMessage(owner, conversation.id, firstQuestion, randomUUID()))
+          .sequence,
       ).toBe(1);
     });
     it('recovers a real PostgreSQL deadlock with one bounded transaction retry', async () => {
@@ -835,7 +883,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
       );
       try {
         await expect(
-          operations.appendUserMessage(owner, conversation.id, 'interrupted', key),
+          operations.appendUserMessage(owner, conversation.id, firstQuestion, key),
         ).rejects.toThrow('Conversation operation unavailable');
         expect(
           await db.aiConversationMessage.count({ where: { conversationId: conversation.id } }),
@@ -854,7 +902,7 @@ const testDatabaseUrl = process.env.AI_TEST_DATABASE_URL;
         await db.$executeRawUnsafe('DROP FUNCTION ai.test_backend_interrupt()');
       }
       expect(
-        (await operations.appendUserMessage(owner, conversation.id, 'interrupted', key)).sequence,
+        (await operations.appendUserMessage(owner, conversation.id, firstQuestion, key)).sequence,
       ).toBe(1);
     });
     it('enabled internal operations do not enable conversation HTTP or inference', async () => {

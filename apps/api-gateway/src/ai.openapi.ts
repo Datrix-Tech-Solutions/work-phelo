@@ -75,8 +75,7 @@ const text: SchemaObject = {
   minLength: 1,
   maxLength: 16384,
   'x-max-utf8-bytes': 16384,
-  description:
-    'Valid UTF-8, at most 16 KiB. In scripted-demo mode only the exact four catalog questions are accepted.',
+  description: 'Valid UTF-8, at most 16 KiB.',
 } as SchemaObject;
 
 const schemas: Record<string, SchemaObject> = {
@@ -166,7 +165,12 @@ const schemas: Record<string, SchemaObject> = {
     }),
   }),
   AiAppendMessageRequest: object({
-    content: { ...text, example: AI_DEMO_QUESTIONS[0] },
+    content: {
+      ...text,
+      example: AI_DEMO_QUESTIONS[0],
+      description:
+        'New submissions require an exact catalog question. Committed retries require the original content.',
+    },
   }),
   AiDemoAppendMessageRequest: object({ content: ref('AiDemoQuestion') }),
   AiDemoTurn: object({
@@ -221,7 +225,7 @@ const rates =
 const auth =
   "Active, fully authenticated tenant users only. Gateway revalidates current Auth state; restricted/careers sessions are rejected. Bearer token OR access_token session cookie; do not send conflicting credentials. Cookies require credentials: include and configured CORS origins. Tenant/owner scope is server-derived; administrator role does not grant access to another owner's conversations.";
 const demo =
-  'Scripted demo, NOT a real LLM. No live ERP records or ERP mutations. Display the demo disclaimer. Only four exact catalog questions are accepted when demo mode is enabled. Demo configuration is default-off and requires separately authorized isolated runtime setup. This documentation does not enable functionality.';
+  'Scripted demo, NOT a real LLM. No live ERP records or ERP mutations. Display the demo disclaimer. New appends in either mode require one of the four exact catalog questions pending Product review. Demo configuration is default-off and requires separately authorized isolated runtime setup. This documentation does not enable functionality.';
 const idempotency: ParameterObject = {
   in: 'header',
   name: 'Idempotency-Key',
@@ -283,7 +287,7 @@ const errors = (statuses: number[]): Record<string, ResponseObject> =>
       {
         description: (
           {
-            400: 'Invalid payload/query/auth representation; non-catalog demo input is rejected.',
+            400: 'Invalid payload/query/auth representation; new non-catalog append input is rejected.',
             401: 'Missing/invalid access token or rejected trusted request.',
             403: 'Restricted session, origin or authorization rejected.',
             404: 'Missing, expired or out-of-scope conversation; non-disclosing.',
@@ -424,7 +428,7 @@ export function addAiOpenApi(document: OpenAPIObject): void {
       ...operation(
         'aiAppendMessage',
         'Append a message and receive a scripted demo reply when enabled',
-        'In isolated demo mode, the four catalog questions produce an encrypted USER/DEMO_ASSISTANT pair and one receipt atomically; quotas count both rows. If demo generation is OFF on both processes, the pre-existing user-only endpoint returns USER metadata without a reply. Do not represent that as chat or silently fall back. Mode disagreement is 503 before AI nonce/business writes. Browser submits only content, never mode, role, tenant or proof fields. No query parameters. Responses are no-store.',
+        'Both modes screen new submissions against the exact catalog questions. Committed retries use their original content and return the stored result. Isolated demo mode stores an encrypted USER/DEMO_ASSISTANT pair and one receipt atomically; quotas count both rows. With demo mode off, a new append returns USER metadata without a reply. Do not represent that as chat or silently fall back. Mode disagreement is 503 before AI nonce/business writes. Browser submits only content, never mode, role, tenant or proof fields. No query parameters. Responses are no-store.',
         [id, idempotency, origin],
         {
           '201': {
@@ -445,7 +449,7 @@ export function addAiOpenApi(document: OpenAPIObject): void {
             ref('AiAppendMessageRequest'),
           ],
           description:
-            'The authoritative server mode selects the accepted schema. Demo mode requires a catalog question; non-demo mode preserves the existing user-only UTF-8 contract.',
+            'Both modes require exact catalog matches for new submissions. Send the original content and idempotency key for committed retries.',
         }),
       },
     },
