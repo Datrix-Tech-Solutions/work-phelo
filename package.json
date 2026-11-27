@@ -30,7 +30,8 @@
     "check-types": "turbo run check-types",
     "check-rbac": "node scripts/check-rbac-alignment.mjs",
     "sync:payroll-engine": "node scripts/sync-payroll-engine.mjs",
-    "check-payroll-engine": "node scripts/sync-payroll-engine.mjs --check"
+    "check-payroll-engine": "node scripts/sync-payroll-engine.mjs --check",
+    "verify:codex": "node scripts/verify-codex.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.4.0",
