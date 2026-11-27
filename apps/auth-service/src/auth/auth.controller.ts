@@ -17,7 +17,7 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { RequestUser } from '@work-phelo/types';
 import { AuthService } from './auth.service';
@@ -221,6 +221,10 @@ export class AuthController {
   }
 
   @Get('me')
+  // The Gateway calls this for every signed-in request, all from its own address,
+  // so a per-IP limit here is one limit shared by every user. Throttler names must
+  // match the ones in AppModule.
+  @SkipThrottle({ short: true, medium: true })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current authenticated user' })
