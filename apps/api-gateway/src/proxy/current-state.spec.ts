@@ -217,6 +217,31 @@ describe('Gateway current-state authorization boundary', () => {
     expect(outgoing).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(503);
   });
+  it.each([429, 500])('logs the Auth %s behind a 503', async (status) => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    authStatus = status;
+    const { res } = await send();
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(warn).toHaveBeenCalledWith(
+      `Auth state lookup failed: Auth responded ${status}`,
+    );
+  });
+  it.each([
+    ['timeout', 'timed out after 5000ms'],
+    ['network', 'request error connection failed'],
+  ] as const)('logs a %s failure of the Auth lookup', async (kind, reason) => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    failure = kind;
+    await send();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(`Auth state lookup failed: ${reason}`);
+  });
+  it('does not log a rejected session as a lookup failure', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    authStatus = 401;
+    await send();
+    expect(warn).not.toHaveBeenCalled();
+  });
   it('forwards only current permissions and signs current role/entitlements', async () => {
     const { req } = await send();
     expect(outgoing).toHaveBeenCalledTimes(1);

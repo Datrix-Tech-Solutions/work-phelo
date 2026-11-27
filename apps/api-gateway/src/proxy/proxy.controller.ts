@@ -133,14 +133,17 @@ export class ProxyController {
     return new Promise((resolve, reject) => {
       let settled = false;
       const timer: { deadline?: NodeJS.Timeout } = {};
+      // `reason` is only logged, so an outage can be traced; it is never sent to the client.
       const fail = (
-        error = new ServiceUnavailableException(
+        reason?: string,
+        error: HttpException = new ServiceUnavailableException(
           'Current authorization state is unavailable',
         ),
       ) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer.deadline);
+        if (reason) this.logger.warn(`Auth state lookup failed: ${reason}`);
         reject(error);
       };
       let url: URL;
@@ -149,7 +152,7 @@ export class ProxyController {
         if (!['http:', 'https:'].includes(url.protocol))
           throw new Error('Invalid Auth URL');
       } catch {
-        fail();
+        fail('invalid Auth service URL');
         return;
       }
       const isHttps = url.protocol === 'https:';
@@ -164,8 +167,8 @@ export class ProxyController {
           headers: { Cookie: `access_token=${token}` },
         },
         (res) => {
-          res.on('error', () => fail());
-          res.on('aborted', () => fail());
+          res.on('error', () => fail('response error'));
+          res.on('aborted', () => fail('response aborted'));
           if (res.statusCode !== 200) {
             const status =
               res.statusCode === 401
@@ -173,7 +176,9 @@ export class ProxyController {
                 : res.statusCode === 403 || res.statusCode === 404
                   ? 403
                   : 503;
+            // 401, 403 and 404 are ordinary rejected sessions, not failures.
             fail(
+              status === 503 ? `Auth responded ${res.statusCode}` : undefined,
               new HttpException(
                 status === 503
                   ? 'Current authorization state is unavailable'
@@ -188,7 +193,7 @@ export class ProxyController {
           res.on('data', (chunk: Buffer | string) => {
             data += chunk.toString();
             if (Buffer.byteLength(data) > 1_048_576) {
-              fail();
+              fail('response too large');
               req.destroy();
             }
           });
@@ -200,18 +205,23 @@ export class ProxyController {
               clearTimeout(timer.deadline);
               resolve(body);
             } catch {
-              fail();
+              fail('response was not valid JSON');
             }
           });
         },
       );
       const timeout = () => {
-        fail(deadlineTimeout ? new GatewayTimeoutException() : undefined);
+        fail(
+          `timed out after ${timeoutMs}ms`,
+          deadlineTimeout ? new GatewayTimeoutException() : undefined,
+        );
         req.destroy();
       };
       timer.deadline = setTimeout(timeout, timeoutMs);
       req.setTimeout(timeoutMs, timeout);
-      req.on('error', () => fail());
+      req.on('error', (err: NodeJS.ErrnoException) =>
+        fail(`request error ${err.code ?? err.message}`),
+      );
       req.end();
     });
   }
