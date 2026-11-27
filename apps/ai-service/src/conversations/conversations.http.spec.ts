@@ -13,6 +13,10 @@ import { createHash, randomBytes, randomUUID } from 'crypto';
 import { Server } from 'http';
 import * as jwt from 'jsonwebtoken';
 import request, { Response } from 'supertest';
+import { TrustedContextService } from '../auth/trusted-context.service';
+import { OwnershipContextFactory } from '../persistence/ownership-context';
+import { MessageContextFactory } from '../encryption/message-context';
+import { PRODUCT_GUIDANCE_CATALOG } from '../inference/demo-guidance';
 import { AppModule } from '../app.module';
 import { configureApplication } from '../app.setup';
 import { parseRuntimeEnv } from '../config/runtime-env';
@@ -478,6 +482,7 @@ describe('Bounded position cursors (not authorization)', () => {
   });
 });
 
+const guidanceQuestion = PRODUCT_GUIDANCE_CATALOG.entries[0].question;
 const databaseUrl = process.env.AI_TEST_DATABASE_URL;
 (databaseUrl ? describe : describe.skip)(
   'Conversation HTTP with REAL disposable PostgreSQL, encryption and nonce storage',
@@ -693,7 +698,7 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('appends once concurrently, preserves content and rejects conflicting retries', async () => {
       const row = await create(),
         target = `${prefix}/${row.conversationId}/messages`,
-        content = '  café 🌍\n\t';
+        content = guidanceQuestion;
       const input = {
         method: 'POST',
         target,
@@ -778,22 +783,36 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
     it('bounds decrypted response bytes and does not decrypt rows outside the requested count', async () => {
       const row = await create(),
         target = `${prefix}/${row.conversationId}`;
-      for (let i = 0; i < 18; i++)
-        expect(
-          (
-            await send(
-              h.app,
-              wire({
-                method: 'POST',
-                target: target + '/messages',
-                user: row.user,
-                tenant: row.tenant,
-                key: `page-${i}`,
-                body: JSON.stringify({ content: 'a'.repeat(16384) }),
-              }),
-            )
-          ).status,
-        ).toBe(201);
+      // Seed encrypted legacy rows above today's catalog input size to exercise reads.
+      const owner = new OwnershipContextFactory({
+        verifyRequest: () => ({ tenantId: row.tenant, id: row.user }),
+      } as unknown as TrustedContextService).fromRequest(
+        {} as Parameters<OwnershipContextFactory['fromRequest']>[0],
+      );
+      const encryption = h.app.get(MessageEncryptionService);
+      const contexts = h.app.get(MessageContextFactory);
+      await db.aiConversationMessage.createMany({
+        data: Array.from({ length: 18 }, (_, index) => {
+          const messageId = randomUUID();
+          const sequence = index + 1;
+          const role = 'USER';
+          const context = contexts.forMessage(owner, {
+            conversationId: row.conversationId,
+            messageId,
+            sequence,
+            role,
+          });
+          return {
+            id: messageId,
+            conversationId: row.conversationId,
+            tenantId: row.tenant,
+            ownerUserId: row.user,
+            sequence,
+            role,
+            ...encryption.encryptMessage('a'.repeat(16384), context),
+          };
+        }),
+      });
       const decrypt = jest.spyOn(h.app.get(MessageEncryptionService), 'decryptMessage');
       try {
         const one = await send(
@@ -847,7 +866,7 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
               user: row.user,
               tenant: row.tenant,
               key: 'corrupt',
-              body: '{"content":"private-ciphertext-canary"}',
+              body: JSON.stringify({ content: guidanceQuestion }),
             }),
           )
         ).status,
@@ -860,7 +879,7 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
         await send(h.app, wire({ method: 'GET', target, user: row.user, tenant: row.tenant })),
         503,
       );
-      expect(JSON.stringify(h.logs)).not.toContain('private-ciphertext-canary');
+      expect(JSON.stringify(h.logs)).not.toContain(guidanceQuestion);
     });
     it('preserves atomic cascade deletion and concurrent read/append safety', async () => {
       const row = await create(),
@@ -875,7 +894,7 @@ const databaseUrl = process.env.AI_TEST_DATABASE_URL;
             wire({
               method: 'POST',
               target: target + '/messages',
-              body: '{"content":"race"}',
+              body: JSON.stringify({ content: guidanceQuestion }),
               key: 'race',
               ...identity,
             }),

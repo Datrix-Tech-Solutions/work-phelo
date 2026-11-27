@@ -13,6 +13,7 @@ import { setupSwagger } from './swagger.config';
 import { ProxyController } from './proxy/proxy.controller';
 import { AiRateAdmission } from './proxy/ai-rate-admission';
 import { aiConversationJsonBoundary } from './proxy/ai-conversation-body';
+import { PRODUCT_GUIDANCE_CATALOG } from '../../ai-service/src/inference/demo-guidance';
 import { AI_DEMO_QUESTIONS } from './ai.openapi';
 import { isSwaggerEnabled } from '@work-phelo/config';
 
@@ -262,7 +263,13 @@ describe('Generated Gateway AI OpenAPI contract', () => {
       required: ['content'],
       additionalProperties: false,
       properties: {
-        content: { type: 'string', minLength: 1, 'x-max-utf8-bytes': 16384 },
+        content: {
+          type: 'string',
+          minLength: 1,
+          'x-max-utf8-bytes': 16384,
+          description:
+            'New submissions require an exact catalog question. Committed retries require the original content.',
+        },
       },
     });
     expect(schema('AiDemoAppendMessageRequest')).toMatchObject({
@@ -270,13 +277,9 @@ describe('Generated Gateway AI OpenAPI contract', () => {
       properties: { content: { $ref: '#/components/schemas/AiDemoQuestion' } },
     });
     expect(schema('AiDemoQuestion').enum).toEqual([...AI_DEMO_QUESTIONS]);
-    const source = readFileSync(
-      join(__dirname, '../../ai-service/src/inference/demo-guidance.ts'),
-      'utf8',
+    expect(AI_DEMO_QUESTIONS).toEqual(
+      PRODUCT_GUIDANCE_CATALOG.entries.map(({ question }) => question),
     );
-    expect(
-      [...source.matchAll(/^\s*'([^']+\?)':/gm)].map((match) => match[1]),
-    ).toEqual([...AI_DEMO_QUESTIONS]);
     const response = operation('post', root + '/conversations/{id}/messages')
       .responses['201'];
     expect(response).toMatchObject({

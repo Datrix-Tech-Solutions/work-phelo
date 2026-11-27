@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { INFERENCE_PROVIDER, InferenceProvider } from '../inference/inference-provider';
-import { demoGuidance } from '../inference/demo-guidance';
+import { demoGuidance, matchGuidanceCandidate } from '../inference/demo-guidance';
 import { randomUUID } from 'crypto';
 import { Prisma } from '../../prisma/generated/client';
 import { MessageContextFactory } from '../encryption/message-context';
@@ -89,13 +89,11 @@ export class ConversationOperationsService {
     if (typeof conversationId !== 'string' || !uuid.test(conversationId))
       throw new ConversationOperationError(404);
     const input = { ...owner, conversationId, content };
-    const fingerprint = this.fingerprints.create(input);
     const demo = this.config?.get<unknown>('AI_INTERNAL_DEMO_ENABLED') === true;
     if (demo) {
       if (
         !['development', 'test'].includes(this.config?.get<string>('NODE_ENV') ?? '') ||
-        this.config?.get<string>('AI_RUNTIME_SCOPE') !== 'isolated-demo' ||
-        !this.provider
+        this.config?.get<string>('AI_RUNTIME_SCOPE') !== 'isolated-demo'
       )
         throw new ConversationOperationError(503);
     }
@@ -154,18 +152,22 @@ export class ConversationOperationsService {
         await this.live(tx, conversation);
         return result;
       }
-      // Resolve durable replay before generation. The only provider allowed here
-      // is the bounded local mock; never put external inference in this DB lock.
+      const candidate = matchGuidanceCandidate(content);
+      if (!candidate) throw new ConversationOperationError(400);
+      const fingerprint = this.fingerprints.create(input);
+      // The local mock receives only the server-owned question. Candidates are
+      // pending Product review and cannot be used for external inference.
       let reply: string | undefined;
       if (demo) {
+        if (!this.provider) throw new ConversationOperationError(503);
         const request = {
           requestId: randomUUID(),
-          messages: [{ role: 'user' as const, content }],
+          messages: [{ role: 'user' as const, content: candidate.question }],
           maxOutputTokens: 256,
         };
         const expected = demoGuidance(request);
         if (!expected) throw new ConversationOperationError(400);
-        const generated = await this.provider!.generateText(request, {
+        const generated = await this.provider.generateText(request, {
           signal: new AbortController().signal,
           deadlineAtMs: ownershipDeadline(context) ?? Date.now() + 5000,
         });
@@ -182,7 +184,7 @@ export class ConversationOperationsService {
       if (sequence >= 2147483647 - (demo ? 1 : 0)) throw new ConversationOperationError(503);
       const id = randomUUID();
       const envelope = this.encryption.encryptMessage(
-        content,
+        candidate.question,
         this.contexts.forMessage(context, {
           conversationId,
           messageId: id,

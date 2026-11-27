@@ -94,7 +94,11 @@ class FixtureController {
     return this.operations.read(conversationGrant(req, 'read'));
   }
   @Post(':conversationId/messages') @ConversationPolicy('append') append(@Req() req: Request) {
-    return this.operations.append(conversationGrant(req, 'append'), 'fixture', 'fixture-key');
+    return this.operations.append(
+      conversationGrant(req, 'append'),
+      'What can this demo do?',
+      'fixture-key',
+    );
   }
   @Delete(':conversationId') @ConversationPolicy('delete') remove(@Req() req: Request) {
     return this.operations.delete(conversationGrant(req, 'delete'));
@@ -642,7 +646,7 @@ const testUrl = process.env.AI_TEST_DATABASE_URL;
     expect(page.status).toBe(200);
     expect(
       (page.body as { messages: { items: { content: string }[] } }).messages.items[0].content,
-    ).toBe('fixture');
+    ).toBe('What can this demo do?');
     expect(
       (await request(h.app.getHttpServer()).delete(target).set(signed('DELETE', target))).status,
     ).toBe(200);

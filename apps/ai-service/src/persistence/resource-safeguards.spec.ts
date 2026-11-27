@@ -8,6 +8,7 @@ import { TrustedContextService } from '../auth/trusted-context.service';
 import { MessageContextFactory } from '../encryption/message-context';
 import { MessageKeyRing } from '../encryption/key-ring.service';
 import { MessageEncryptionService } from '../encryption/message-encryption.service';
+import { PRODUCT_GUIDANCE_CATALOG } from '../inference/demo-guidance';
 import { AiDatabaseService, createAiClient } from './ai-database.service';
 import { ConversationsRepository } from './conversations.repository';
 import { ConversationOperationsService } from './conversation-operations.service';
@@ -20,6 +21,7 @@ import { RetentionCleanupService } from './retention-cleanup.service';
 import { retentionDeadline } from './retention-policy';
 import { SubmissionFingerprintService } from './submission-fingerprint.service';
 
+const guidanceQuestion = PRODUCT_GUIDANCE_CATALOG.entries[0].question;
 const testUrl = process.env.AI_TEST_DATABASE_URL;
 const owner = (tenantId = 'tenant-a', id = 'owner-a') =>
   new OwnershipContextFactory({
@@ -169,7 +171,7 @@ function gate() {
     await db.aiConversation.update({ where: { id: parent.id }, data: { nextMessageSequence: 2 } });
     expect((await usage()).encryptedBytes).toBe(10485760n);
     await expect(
-      operations.appendUserMessage(owner(), parent.id, 'one more', 'over-limit'),
+      operations.appendUserMessage(owner(), parent.id, guidanceQuestion, 'over-limit'),
     ).rejects.toMatchObject({ status: 409 });
     expect(await db.aiConversationMessage.count()).toBe(1);
     expect(await db.aiSubmissionReceipt.count()).toBe(0);
@@ -196,7 +198,12 @@ function gate() {
     }
     const parent = await repository.create(owner('tenant-a', 'new-owner'));
     await expect(
-      operations.appendUserMessage(owner('tenant-a', 'new-owner'), parent.id, 'x', 'tenant-full'),
+      operations.appendUserMessage(
+        owner('tenant-a', 'new-owner'),
+        parent.id,
+        guidanceQuestion,
+        'tenant-full',
+      ),
     ).rejects.toMatchObject({ status: 409 });
     expect((await usage()).encryptedBytes).toBe(104857600n);
   });
@@ -207,10 +214,10 @@ function gate() {
     const message = await operations.appendUserMessage(
       owner(),
       first.id,
-      'persisted',
+      guidanceQuestion,
       'append-once',
     );
-    await operations.appendUserMessage(owner(), first.id, 'persisted', 'append-once');
+    await operations.appendUserMessage(owner(), first.id, guidanceQuestion, 'append-once');
     expect(await usage()).toMatchObject({ conversations: 1n, messages: 1n, receipts: 2n });
     for (let offset = 0; offset < 999; offset += 100)
       await db.aiConversationMessage.createMany({
@@ -232,10 +239,10 @@ function gate() {
       data: { nextMessageSequence: 1001 },
     });
     await expect(
-      operations.appendUserMessage(owner(), first.id, 'overflow', 'overflow'),
+      operations.appendUserMessage(owner(), first.id, guidanceQuestion, 'overflow'),
     ).rejects.toMatchObject({ status: 409 });
     expect(
-      (await operations.appendUserMessage(owner(), first.id, 'persisted', 'append-once')).id,
+      (await operations.appendUserMessage(owner(), first.id, guidanceQuestion, 'append-once')).id,
     ).toBe(message.id);
     expect((await usage()).messages).toBe(1000n);
   });
@@ -572,7 +579,9 @@ function gate() {
     );
     try {
       const parent = await ops.createConversation(owner(), 'first');
-      await expect(ops.appendUserMessage(owner(), parent.id, 'x', 'second')).rejects.toMatchObject({
+      await expect(
+        ops.appendUserMessage(owner(), parent.id, guidanceQuestion, 'second'),
+      ).rejects.toMatchObject({
         status: 503,
       });
       expect(await usage()).toMatchObject({ conversations: 1n, receipts: 1n, messages: 0n });
@@ -620,7 +629,7 @@ function gate() {
     const parent = await repository.create(owner());
     await db.aiOwnerUsage.deleteMany();
     await expect(
-      operations.appendUserMessage(owner(), parent.id, 'x', 'missing-owner'),
+      operations.appendUserMessage(owner(), parent.id, guidanceQuestion, 'missing-owner'),
     ).rejects.toMatchObject({ status: 503 });
     const reconcile = new ResourceReconciliationService(database);
     await reconcile.step('tenant-a', 1);
@@ -646,7 +655,7 @@ function gate() {
         new ResourceReconciliationService(replica).step('tenant-a', 1),
       ]);
     expect(await usage()).toMatchObject({ initialized: true, conversations: 1n, messages: 0n });
-    await operations.appendUserMessage(owner(), parent.id, 'x', 'after-recovery');
+    await operations.appendUserMessage(owner(), parent.id, guidanceQuestion, 'after-recovery');
     expect((await usage()).messages).toBe(1n);
   });
   it('blocks new metadata when cleanup is overdue without discarding live replay records', async () => {
