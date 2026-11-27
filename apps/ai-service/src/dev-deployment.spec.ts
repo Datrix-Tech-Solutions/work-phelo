@@ -2,9 +2,10 @@ import 'reflect-metadata';
 import { INestApplication, Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
+import { execFileSync } from 'child_process';
 import { createServer, Server } from 'http';
 import { join } from 'path';
-import { createHash } from 'crypto';
 import cookieParser from 'cookie-parser';
 import { RequestHandler } from 'express';
 import * as jwt from 'jsonwebtoken';
@@ -32,75 +33,21 @@ const { aiConversationJsonBoundary } = loadGateway(
 const root = join(__dirname, '../../..');
 const script = readFileSync(join(root, '.github/scripts/deploy-dev.sh'), 'utf8');
 const secret = 'synthetic-dev-eligibility-secret';
-// This synthetic fixture is not DEV deployment configuration. The historical
-// rollout deliberately has no AI container or upstream; retain protocol coverage
-// without claiming that the restored workflow deploys or enables AI.
-function isolatedEligibilityEnv(): Record<string, string> {
-  return {
-    NODE_ENV: 'production',
-    AI_SERVICE_PORT: '4011',
-    AI_PROVIDER: 'mock',
-    AI_POLICY_VERSION: 'isolated-eligibility-test',
-    JWT_SECRET: secret,
-    AI_AUTHENTICATED_ROUTES_ENABLED: 'true',
-    ...Object.fromEntries(
-      [
-        'AI_ENABLED',
-        'AI_MOCK_ENABLED',
-        'AI_INTERNAL_DEMO_ENABLED',
-        'AI_PERSISTENCE_ENABLED',
-        'AI_MESSAGE_ENCRYPTION_ENABLED',
-        'AI_MESSAGE_OPERATIONS_ENABLED',
-        'AI_REQUEST_VERIFICATION_ENABLED',
-        'AI_CONVERSATION_HTTP_ENABLED',
-        'AI_RESOURCE_SAFEGUARDS_ENABLED',
-        'AI_RETENTION_CLEANUP_ENABLED',
-        'AI_RETENTION_SCHEDULER_ENABLED',
-      ].map((key) => [key, 'false']),
-    ),
-  };
+function deployedAiEnv(): Record<string, string> {
+  const block = script
+    .split('write_env_file "${DEPLOY_PATH}/apps/ai-service/.env.dev"')[1]
+    .split('\n\n')[0];
+  return Object.fromEntries(
+    [...block.matchAll(/"([A-Z_]+)=([^"\n]*)"/g)].map((match) => [
+      match[1],
+      match[2].replace('${JWT_SECRET}', secret),
+    ]),
+  );
 }
 
-describe('Historical DEV deployment restoration contract', () => {
-  it('matches the three files at 64b410cd2b0a52c727bd15b490b1a9e7fc2da061 byte-for-byte', () => {
-    const expected = {
-      '.github/workflows/deploy-dev.yml':
-        '773c7d3d33f43837c262bdf396f30bbe347cfb8328cdca6a97727bc7b88f70ac',
-      '.github/scripts/deploy-dev.sh':
-        'a938c4a36251148dc72f73315c7ec9b632025d23df3f86fd71c956d5446f65fa',
-      'infrastructure/docker-compose.dev.yml':
-        '2b80ffb0815397b3e20771bc179e411edc0ff1a3022e889ddfc96a617185acf8',
-    };
-    for (const [path, digest] of Object.entries(expected)) {
-      expect(
-        createHash('sha256')
-          .update(readFileSync(join(root, path)))
-          .digest('hex'),
-      ).toBe(digest);
-    }
-  });
-  it('restores original cancellation, image selection, migrations and seeds without planner dependencies', () => {
-    const workflow = readFileSync(join(root, '.github/workflows/deploy-dev.yml'), 'utf8');
-    const compose = readFileSync(join(root, 'infrastructure/docker-compose.dev.yml'), 'utf8');
-    expect(workflow).toContain('cancel-in-progress: true');
-    expect(workflow).toContain('changed: ${{ steps.filter.outputs.changes }}');
-    expect(script).toContain('resolve_image_ref "$COMPOSE_ENV_FILE"');
-    for (const value of [
-      'dev-deployment-plan',
-      'DEV_DATABASE_OPERATIONS_APPROVED_SHA',
-      'DEV_DEPLOYMENT_BASELINE_SHA',
-      '.dev-deploy/',
-      'flock -n',
-    ]) {
-      expect(workflow + script).not.toContain(value);
-    }
-    expect(script.match(/npx prisma@5\.22\.0 migrate deploy/g)).toHaveLength(8);
-    expect(script.match(/dist\/prisma\/seed\.js/g)).toHaveLength(2);
-    expect(workflow + script).not.toContain('AI_SERVICE_URL=');
-    expect(compose).not.toContain('\n  ai-service:');
-  });
-  it('keeps the isolated eligibility fixture DB-free with every execution flag disabled', () => {
-    const env = isolatedEligibilityEnv();
+describe('DEV eligibility-only deployment contract', () => {
+  it('validates the exact generated startup configuration without DB, Redis or execution keys', () => {
+    const env = deployedAiEnv();
     const config = parseRuntimeEnv(env);
     expect(config.NODE_ENV).toBe('production');
     expect(config.AI_AUTHENTICATED_ROUTES_ENABLED).toBe(true);
@@ -118,9 +65,108 @@ describe('Historical DEV deployment restoration contract', () => {
     ])
       expect(env[key]).toBeUndefined();
   });
+  it('never adds AI to migration/seed commands and uses the existing SHA-tagged image convention', () => {
+    expect(script).not.toMatch(
+      /docker_compose(?:_exec)?\s+(?:run\s+--rm\s+)?ai-service[^\n]*(?:prisma|migrate|seed|reconcile)/,
+    );
+    expect(script).toContain('is_sha_tagged_workphelo_ref "$AI_SERVICE_IMAGE"');
+    expect(script).toContain('AI_SERVICE_URL=http://ai-service:4011');
+    expect(script).toContain('AI_REQUEST_SIGNING_ENABLED=false');
+    const compose = readFileSync(join(root, 'infrastructure/docker-compose.dev.yml'), 'utf8');
+    const ai = compose.split('\n  ai-service:\n')[1].split('\n  api-gateway:')[0];
+    expect(ai).not.toContain('ports:');
+    expect(ai).not.toContain('depends_on:');
+    expect(ai).toContain('AI_SERVICE_IMAGE');
+    expect(ai).toContain('/api/ready');
+    const workflow = readFileSync(join(root, '.github/workflows/deploy-dev.yml'), 'utf8');
+    expect(workflow).toContain('ai-service: ${{ steps.filter.outputs.ai-service }}');
+    expect(workflow).toContain('dockerfile: apps/ai-service/Dockerfile');
+    expect(workflow).toContain("- 'apps/ai-service/**'");
+    const aiFilters = workflow
+      .split('            ai-service:\n')[1]
+      .split('            nextjs-web:')[0];
+    for (const path of [
+      '.github/scripts/deploy-dev.sh',
+      '.github/workflows/deploy-dev.yml',
+      'infrastructure/docker-compose.dev.yml',
+    ])
+      expect(aiFilters).toContain(`- '${path}'`);
+  });
+  it('preserves historical workflow structure, migration/seed blocks and existing health checks', () => {
+    const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+    const workflow = readFileSync(join(root, '.github/workflows/deploy-dev.yml'), 'utf8');
+    const withoutAi = workflow
+      .replace(/^ {6}ai-service:.*\n/m, '')
+      .replace(/^ {12}ai-service:\n(?: {14}.*\n)+/m, '')
+      .replace(/^ {10}- service: ai-service\n {12}dockerfile: apps\/ai-service\/Dockerfile\n/m, '')
+      .replace("              - '.github/scripts/deploy-dev.sh'\n", '')
+      .replace("              - 'infrastructure/docker-compose.dev.yml'\n", '');
+    expect(hash(withoutAi)).toBe(
+      '773c7d3d33f43837c262bdf396f30bbe347cfb8328cdca6a97727bc7b88f70ac',
+    );
+    const compose = readFileSync(join(root, 'infrastructure/docker-compose.dev.yml'), 'utf8');
+    expect(
+      hash(
+        compose.replace(
+          /^ {2}# Eligibility only[^\n]*\n {2}ai-service:[\s\S]*?(?= {2}api-gateway:)/m,
+          '',
+        ),
+      ),
+    ).toBe('2b80ffb0815397b3e20771bc179e411edc0ff1a3022e889ddfc96a617185acf8');
+    expect(
+      hash(script.split('section "Database Migrations"')[1].split('section "Deploy"')[0]),
+    ).toBe('fef009e7b7f442b49269363530a6d36662344e6fe561aa3fdf9cb3111753dd85');
+    expect(
+      hash(script.split('section "Database Seed"')[1].split('section "Reachability"')[0]),
+    ).toBe('2a57559423e9f7c74b29aa77be46cb367c71a5acdd43a64be110a92b5085a6f1');
+    expect(
+      hash(
+        script
+          .split('\n')
+          .filter(
+            (line) =>
+              /^(wait_for_http_ok|wait_for_container_health) /.test(line) &&
+              !line.startsWith('wait_for_container_health ai-service'),
+          )
+          .join('\n'),
+      ),
+    ).toBe('49495ba088e499d1564417bdb06c5a269dd5d257768441177cdc9d8e5157c13b');
+    for (const value of [
+      'dev-deployment-plan',
+      'DEV_DATABASE_OPERATIONS_APPROVED_SHA',
+      '.dev-deploy/',
+      'flock -n',
+    ])
+      expect(workflow + script).not.toContain(value);
+    const helper = join(root, '.github/scripts/deploy-common.sh');
+    const resolve = (changed: string) =>
+      execFileSync(
+        'bash',
+        [
+          '-c',
+          'source "$1"; read_env_value() { return 1; }; resolve_image_ref unused AI_SERVICE_IMAGE ai-service ai-service dev',
+          'fixture',
+          helper,
+        ],
+        {
+          env: {
+            ...process.env,
+            IMAGE_PREFIX: 'ghcr.io/datrix-tech-solutions/work-phelo',
+            BUILD_SHA: 'a'.repeat(40),
+            CHANGED_SERVICES: changed,
+          },
+          encoding: 'utf8',
+        },
+      );
+    // The initial release explicitly selects AI, so a missing host inventory
+    // cannot cause adoption of the mutable fallback.
+    expect(resolve('["ai-service"]')).toBe(
+      'ghcr.io/datrix-tech-solutions/work-phelo/ai-service:' + 'a'.repeat(40) + '\n',
+    );
+  });
 });
 
-describe('Isolated Gateway -> AI eligibility protocol (not deployed by historical DEV rollout)', () => {
+describe('Actual Gateway -> AI with DEV eligibility-only configuration', () => {
   const original = process.env;
   let ai: INestApplication<Server>, gateway: INestApplication<Server>, auth: Server;
   let allowed = true;
@@ -145,7 +191,7 @@ describe('Isolated Gateway -> AI eligibility protocol (not deployed by historica
     );
 
   beforeAll(async () => {
-    process.env = isolatedEligibilityEnv();
+    process.env = deployedAiEnv();
     const module = await Test.createTestingModule({
       imports: [AppModule.register({ ignoreEnvFile: true })],
     })
